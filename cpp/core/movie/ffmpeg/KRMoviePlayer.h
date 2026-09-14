@@ -12,7 +12,7 @@ class iTVPSoundBuffer;
 class TVPYUVSprite;
 
 // Forward-declare a generic node pointer.
-// These are opaque pointers wired up via the Flutter rendering path.
+// These are opaque pointers wired up via the host rendering path.
 using OverlayNode = void;
 
 NS_KRMOVIE_BEGIN

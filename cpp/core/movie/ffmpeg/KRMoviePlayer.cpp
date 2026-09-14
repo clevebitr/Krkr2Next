@@ -229,7 +229,7 @@ int TVPMoviePlayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
 VideoPresentOverlay::~VideoPresentOverlay() { ClearNode(); }
 
 void VideoPresentOverlay::ClearNode() {
-    // Overlay lifecycle is managed by Flutter.
+    // Overlay lifecycle is managed by the host shell.
     m_pRootNode = nullptr;
     m_pSprite = nullptr;
 }
@@ -255,7 +255,7 @@ void VideoPresentOverlay::PresentPicture(float dt) {
         return;
     }
     // Video frames are decoded but display overlay is not rendered.
-    // This will be re-implemented via Flutter texture sharing.
+    // This will be re-implemented via host texture sharing.
 }
 
 void KRMovie::VideoPresentOverlay::Play() {
@@ -276,7 +276,7 @@ MoviePlayerOverlay::~MoviePlayerOverlay() {
 void MoviePlayerOverlay::SetWindow(tTJSNI_Window *window) {
     ClearNode();
     m_pOwnerWindow = window;
-    // Video overlay will be connected via Flutter rendering path.
+    // Video overlay will be connected via the host rendering path.
     spdlog::warn("MoviePlayerOverlay::SetWindow: video overlay display is "
                  "currently disabled (scene tree removed)");
 }

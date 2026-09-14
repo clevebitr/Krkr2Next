@@ -1,9 +1,11 @@
 # build target
 /**/build/
-!/build/
 /**/out/
 /**/bin/
 vcpkg_installed/
+
+# 引擎共享库由 scripts/build_engine_android.sh 投放，不入库
+app/app/src/main/jniLibs/
 
 # MkDocs / docs 站构建输出
 site/
@@ -31,5 +33,3 @@ java_pid*.hprof
 # Cubism SDK (proprietary binary, download from live2d.com)
 cpp/plugins/cubism/Core/lib/
 cpp/plugins/cubism/Framework/
-bridge/flutter_engine_bridge/ios/Libs/*.a
-apps/flutter_app/devtools_options.yaml
