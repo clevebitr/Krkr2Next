@@ -1,16 +1,15 @@
 #pragma once
 
 // ---------------------------------------------------------------------------
-// OpenGL headers — all platforms use ANGLE GLES2 + EGL
+// OpenGL headers — 平台原生 EGL + GLES（不经 ANGLE）
 // ---------------------------------------------------------------------------
-// ANGLE provides a consistent GLES2 + EGL interface across all platforms:
-//   macOS   → Metal backend
-//   Windows → D3D11 backend
-//   Linux   → Desktop GL / Vulkan backend
-//   Android → native GLES / Vulkan backend
+// 上下文请求 GLES 3.0（minSdk 24 起强制可用）。gl3.h 同时提供 ES3 符号
+// （glGetStringi / GL_NUM_EXTENSIONS），扩展枚举需要它——ES3 上下文中
+// glGetString(GL_EXTENSIONS) 已废弃并返回 NULL。
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#include <GLES3/gl3.h>
 
 #ifndef GL_UNPACK_ROW_LENGTH
 #define GL_UNPACK_ROW_LENGTH 0x0CF2

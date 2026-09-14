@@ -4,11 +4,11 @@
  *        functions that were previously provided by MainScene.cpp,
  *        AppDelegate.cpp, and the environ/ui/ directory.
  *
- * With the migration to Flutter-based UI, all of these are replaced by
+ * With the UI owned by the Android host shell, all of these are replaced by
  * minimal stubs that either log a warning or return a sensible default.
  *
  * Functions stubbed here are called from the engine core and must link,
- * but their functionality will be provided by the Flutter host layer.
+ * but their functionality will be provided by the host shell.
  */
 
 #include <spdlog/spdlog.h>
@@ -51,13 +51,13 @@ static bool s_blackReported = false;    // 本段黑屏是否已上报
 static const int kBlackReportThreshold = 3;
 
 // ---------------------------------------------------------------------------
-// FlutterWindowLayer — concrete iWindowLayer for Flutter host mode.
-// Provides a logical window backed by the ANGLE EGL Pbuffer surface.
-// Rendering output goes through glReadPixels in the engine_api layer.
+// HostWindowLayer — concrete iWindowLayer for the Android host shell.
+// Provides a logical window backed by the native EGL surface (ANativeWindow
+// when a SurfaceTexture is attached, Pbuffer otherwise).
 // ---------------------------------------------------------------------------
-class FlutterWindowLayer : public iWindowLayer {
+class HostWindowLayer : public iWindowLayer {
 public:
-    explicit FlutterWindowLayer(tTJSNI_Window *owner)
+    explicit HostWindowLayer(tTJSNI_Window *owner)
         : owner_(owner), visible_(true), caption_("krkr2"),
           width_(0), height_(0), active_(true), closing_(false) {
         // Get initial size from EGL context
@@ -69,10 +69,10 @@ public:
             width_  = 1280;
             height_ = 720;
         }
-        spdlog::info("FlutterWindowLayer created: {}x{}", width_, height_);
+        spdlog::info("HostWindowLayer created: {}x{}", width_, height_);
     }
 
-    ~FlutterWindowLayer() {
+    ~HostWindowLayer() {
         if(blit_program_) {
             glDeleteProgram(blit_program_);
             blit_program_ = 0;
@@ -85,7 +85,7 @@ public:
             glDeleteTextures(1, &blit_texture_);
             blit_texture_ = 0;
         }
-        spdlog::debug("FlutterWindowLayer destroyed");
+        spdlog::debug("HostWindowLayer destroyed");
     }
 
     // -- Pure virtual implementations --
@@ -109,7 +109,7 @@ public:
         if (surf_h <= 0) surf_h = h;
 
         dd->SetWindowSize(surf_w, surf_h);
-        spdlog::debug("FlutterWindowLayer::SetPaintBoxSize: layer={}x{}, surface={}x{}",
+        spdlog::debug("HostWindowLayer::SetPaintBoxSize: layer={}x{}, surface={}x{}",
                       w, h, surf_w, surf_h);
     }
 
@@ -145,7 +145,7 @@ public:
     void BringToFront() override {}
 
     void ShowWindowAsModal() override {
-        spdlog::warn("FlutterWindowLayer::ShowWindowAsModal: stub");
+        spdlog::warn("HostWindowLayer::ShowWindowAsModal: stub");
     }
 
     bool GetVisible() override { return visible_; }
@@ -187,8 +187,8 @@ public:
     void UpdateDrawBuffer(iTVPTexture2D *tex) override {
         // Blit the composited scene texture to the render target.
         // When an IOSurface is attached, this goes directly to the shared
-        // IOSurface (zero-copy to Flutter). Otherwise, falls back to
-        // the EGL Pbuffer for glReadPixels-based retrieval.
+        // SurfaceTexture (zero-copy to the host shell). Otherwise, falls back
+        // to the EGL Pbuffer for glReadPixels-based retrieval.
         if (!tex) return;
 
         const tjs_uint tw = tex->GetWidth();
@@ -203,8 +203,8 @@ public:
         // This MUST happen BEFORE BindRenderTarget(), because
         // GetScanLineForRead() internally calls TVPSetRenderTarget()
         // which changes the FBO binding. We need the engine's FBO
-        // to be active for reading pixels, then switch to IOSurface
-        // FBO for the actual blit.
+        // to be active for reading pixels, then bind the default
+        // framebuffer (0) for the actual blit.
         const uint32_t nativeGLTex = tex->GetNativeGLTextureId();
         GLuint blitSrcTexture;
 
@@ -237,7 +237,7 @@ public:
                     }
                 }
                 spdlog::info(
-                    "FlutterWindowLayer::RTProbe: blitSrcTex={} engineCurFbo={} fboAttachedTex={} rtType=0x{:x}{}",
+                    "HostWindowLayer::RTProbe: blitSrcTex={} engineCurFbo={} fboAttachedTex={} rtType=0x{:x}{}",
                     static_cast<unsigned>(nativeGLTex),
                     static_cast<int>(curFbo),
                     static_cast<int>(rtTex),
@@ -320,7 +320,7 @@ public:
                 ::TVPGetRenderManager()->GetRenderStat(engDraw, engVmem);
             }
             spdlog::info(
-                "FlutterWindowLayer::UpdateDrawBuffer: path={} nativeTex={} srcTex={} blitTex={} {}x{} layers={} draw={}",
+                "HostWindowLayer::UpdateDrawBuffer: path={} nativeTex={} srcTex={} blitTex={} {}x{} layers={} draw={}",
                 nativeGLTex ? "GPU" : "CPU", nativeGLTex, blitSrcTexture,
                 blit_texture_, static_cast<unsigned>(tw), static_cast<unsigned>(th),
                 TVPGetLayerCount(), engDraw);
@@ -346,10 +346,10 @@ public:
                         sR+=px[0]; sG+=px[1]; sB+=px[2]; sA+=px[3];
                         if (px[0]>8 || px[1]>8 || px[2]>8) ++nonBlack;
                     }
-                    spdlog::info("FlutterWindowLayer::SourceSample: nonBlack={}/25 avg=({},{},{},{})",
+                    spdlog::info("HostWindowLayer::SourceSample: nonBlack={}/25 avg=({},{},{},{})",
                                  nonBlack, (int)(sR/25),(int)(sG/25),(int)(sB/25),(int)(sA/25));
                 } else {
-                    spdlog::warn("FlutterWindowLayer::SourceSample: FBO incomplete 0x{:x}",
+                    spdlog::warn("HostWindowLayer::SourceSample: FBO incomplete 0x{:x}",
                                  glCheckFramebufferStatus(GL_FRAMEBUFFER));
                 }
                 glBindFramebuffer(GL_FRAMEBUFFER, prevFbo);
@@ -367,7 +367,7 @@ public:
                         s_blackReported = true;
                         std::string ovl = tTJSNI_VideoOverlay::DumpDebugStats();
                         spdlog::warn(
-                            "FlutterWindowLayer::BlackScreen: engine keeps drawing (draw={}, layers={}) but blit source is black. {}",
+                            "HostWindowLayer::BlackScreen: engine keeps drawing (draw={}, layers={}) but blit source is black. {}",
                             engDraw, TVPGetLayerCount(), ovl);
                     }
                 } else {
@@ -446,7 +446,7 @@ public:
         // In IOSurface mode, the surface has a top-down coordinate system
         // while OpenGL renders bottom-up, so we need to flip Y.
         // Android SurfaceTexture (WindowSurface) does NOT need flipping
-        // because eglSwapBuffers → SurfaceTexture → Flutter Texture widget
+        // because eglSwapBuffers → SurfaceTexture → host texture widget
         // handles the coordinate transform automatically.
         // When using a native OGL texture from the engine (GPU path), the
         // texture is already in OGL convention (bottom-up), so we may need
@@ -488,7 +488,7 @@ public:
 
         // 诊断：blit 全屏 quad 后立刻读当前绑定 FBO（IOSurface fbo2）中心像素
         //  + glGetError，区分「blit 绘制没写进 fbo2」还是「写进去了但 IOSurface 层未落地」。
-        // 中心像素非黑 -> blit 写入成功，问题在 IOSurface/Flutter 落地与同步；
+        // 中心像素非黑 -> blit 写入成功，问题在 SurfaceTexture/宿主侧落地与同步；
         // 中心像素黑   -> blit 全屏 quad 绘制本身失败（shader/uniform/状态）。
         if (kBlitDump) {
             GLenum postErr = glGetError();
@@ -500,7 +500,7 @@ public:
                              1, 1, GL_RGBA, GL_UNSIGNED_BYTE, dbgPx);
             }
             spdlog::info(
-                "FlutterWindowLayer::PostBlit: err=0x{:x} curFbo={} size={}x{} center=({},{},{},{})",
+                "HostWindowLayer::PostBlit: err=0x{:x} curFbo={} size={}x{} center=({},{},{},{})",
                 static_cast<unsigned>(postErr), dbgFbo,
                 static_cast<unsigned>(fbW), static_cast<unsigned>(fbH),
                 dbgPx[0], dbgPx[1], dbgPx[2], dbgPx[3]);
@@ -535,7 +535,7 @@ public:
 
     void Close() override {
         closing_ = true;
-        spdlog::debug("FlutterWindowLayer::Close called");
+        spdlog::debug("HostWindowLayer::Close called");
         TVPTerminateAsync(0);
     }
 
@@ -580,7 +580,7 @@ public:
     }
 
     void TickBeat() override {
-        // Called every ~50ms; nothing to do in Flutter mode
+        // Called every ~50ms; nothing to do — the host shell owns the UI
     }
 
     TVPOverlayNode *GetPrimaryArea() override { return nullptr; }
@@ -676,7 +676,7 @@ private:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glBindTexture(GL_TEXTURE_2D, 0);
 
-        spdlog::info("FlutterWindowLayer: blit resources initialized (program={})",
+        spdlog::info("HostWindowLayer: blit resources initialized (program={})",
                      blit_program_);
     }
 
@@ -710,16 +710,16 @@ private:
 // Registered custom UI widgets (PageView, etc.)
 // ---------------------------------------------------------------------------
 void TVPInitUIExtension() {
-    spdlog::debug("TVPInitUIExtension: stub (UI handled by Flutter)");
+    spdlog::debug("TVPInitUIExtension: stub (UI handled by the host shell)");
 }
 
 // ---------------------------------------------------------------------------
 // TVPCreateAndAddWindow — originally in MainScene.cpp
-// Creates a FlutterWindowLayer and registers it with the application.
+// Creates a HostWindowLayer and registers it with the application.
 // ---------------------------------------------------------------------------
 iWindowLayer *TVPCreateAndAddWindow(tTJSNI_Window *w) {
-    auto *layer = new FlutterWindowLayer(w);
-    spdlog::info("TVPCreateAndAddWindow: created FlutterWindowLayer ({}x{})",
+    auto *layer = new HostWindowLayer(w);
+    spdlog::info("TVPCreateAndAddWindow: created HostWindowLayer ({}x{})",
                  layer->GetWidth(), layer->GetHeight());
     return layer;
 }
@@ -850,23 +850,23 @@ bool TVPCopyFile(const std::string &from, const std::string &to) {
 
 // ---------------------------------------------------------------------------
 // TVPShowFileSelector — originally in ui/FileSelectorForm.cpp
-// Shows a file selection dialog. In Flutter mode, this is handled by the
-// Flutter host layer. Returns empty string (no selection).
+// Shows a file selection dialog. This is handled by the host shell.
+// Returns empty string (no selection).
 // ---------------------------------------------------------------------------
 std::string TVPShowFileSelector(const std::string &title,
                                 const std::string &init_dir,
                                 std::string default_ext,
                                 bool is_save) {
-    spdlog::warn("TVPShowFileSelector: stub — file selection handled by Flutter");
+    spdlog::warn("TVPShowFileSelector: stub — file selection handled by the host shell");
     return "";
 }
 
 // ---------------------------------------------------------------------------
 // TVPShowPopMenu — originally in ui/InGameMenuForm.cpp
-// Shows a popup context menu. In Flutter mode, handled by Flutter host.
+// Shows a popup context menu. Handled by the host shell.
 // ---------------------------------------------------------------------------
 void TVPShowPopMenu(tTJSNI_MenuItem *menu) {
-    spdlog::warn("TVPShowPopMenu: stub — popup menus handled by Flutter");
+    spdlog::warn("TVPShowPopMenu: stub — popup menus handled by the host shell");
 }
 
 // ---------------------------------------------------------------------------
@@ -874,5 +874,5 @@ void TVPShowPopMenu(tTJSNI_MenuItem *menu) {
 // Opens the URL for the patch library website.
 // ---------------------------------------------------------------------------
 void TVPOpenPatchLibUrl() {
-    spdlog::warn("TVPOpenPatchLibUrl: stub — URL opening handled by Flutter");
+    spdlog::warn("TVPOpenPatchLibUrl: stub — URL opening handled by the host shell");
 }

@@ -1,24 +1,19 @@
 /**
  * @file krkr_egl_context.h
- * @brief Headless EGL context manager using ANGLE.
+ * @brief Headless EGL context manager using native EGL/GLES.
  *
- * Replaces GLFW window + GLViewImpl with an offscreen EGL Pbuffer
- * and OpenGL ES 2.0 context managed through ANGLE. Apple builds use
- * ANGLE Metal; Android and Linux use the configured Vulkan path when
- * available, with the platform fallback selected by ANGLE.
- * 使用 ANGLE 管理离屏 EGL Pbuffer 和 OpenGL ES 2.0 context，替代窗口依赖。
- * Apple 构建使用 ANGLE Metal；Android/Linux 优先使用配置的 Vulkan 路径，
- * 具体回退由 ANGLE 和平台能力决定。
+ * 用离屏 EGL Pbuffer 或 Android ANativeWindow Surface 承载 GLES 上下文，
+ * 不依赖窗口系统。Android 走平台自带的 EGL/GLES 驱动（不经 ANGLE 翻译层）：
+ *  - 有窗口（SurfaceTexture 零拷贝）时用 WindowSurface，eglSwapBuffers 直出；
+ *  - 无窗口（Linux 宿主验证构建）时用 Pbuffer。
+ * 上下文请求 GLES 3.0（minSdk 24 起强制可用），GLSL ES 1.00 shader 仍可直接运行。
  */
 #pragma once
 
 #include <cstdint>
 
-// ANGLE / native EGL — always available (all platforms use ANGLE)
 #define KRKR_HAS_EGL 1
 #include <EGL/egl.h>
-
-#include "angle_backend.h"  // krkr::AngleBackend
 
 namespace krkr {
 
@@ -33,14 +28,13 @@ public:
 
     /**
      * Initialize the EGL display, create a Pbuffer surface and
-     * an OpenGL ES 2.0 context.  Makes the context current.
+     * a GLES 3.0 context.  Makes the context current.
      *
      * @param width   Initial surface width in pixels
      * @param height  Initial surface height in pixels
      * @return true on success
      */
-    bool Initialize(uint32_t width, uint32_t height,
-                    AngleBackend backend = AngleBackend::OpenGLES);
+    bool Initialize(uint32_t width, uint32_t height);
 
     /**
      * Destroy the EGL context, surface, and display.
@@ -69,42 +63,19 @@ public:
     bool Resize(uint32_t width, uint32_t height);
 
     /**
-     * Attach an IOSurface as the render target FBO.
-     * When attached, all rendering goes to the IOSurface instead
-     * of the Pbuffer. The FBO is bound as GL_FRAMEBUFFER.
-     *
-     * @param iosurface_id  IOSurfaceID from IOSurfaceGetID()
-     * @param width         IOSurface width in pixels
-     * @param height        IOSurface height in pixels
-     * @return true on success
+     * IOSurface 渲染目标查询——本项目仅面向 Android，恒为未附着。
+     * 保留这些访问器是因为 DrawDevice、textrender 与宿主 blit 层都有
+     * `if (egl.HasIOSurface())` 形式的运行时分支；恒 false 使其走 Android 路径。
      */
-    bool AttachIOSurface(uint32_t iosurface_id, uint32_t width, uint32_t height);
+    bool HasIOSurface() const { return false; }
+    uint32_t GetIOSurfaceWidth() const { return 0; }
+    uint32_t GetIOSurfaceHeight() const { return 0; }
 
     /**
-     * Detach the IOSurface FBO, reverting to the default Pbuffer.
-     */
-    void DetachIOSurface();
-
-    /**
-     * Bind the IOSurface FBO (if attached) or the default FBO.
-     * Call this before rendering a frame.
+     * Bind the default framebuffer (0) and set the viewport to the
+     * current render target size. Call this before rendering a frame.
      */
     void BindRenderTarget();
-
-    /**
-     * @return true if an IOSurface is currently attached as render target.
-     */
-    bool HasIOSurface() const { return iosurface_fbo_ != 0; }
-
-    /**
-     * @return the IOSurface FBO width (0 if not attached).
-     */
-    uint32_t GetIOSurfaceWidth() const { return iosurface_width_; }
-
-    /**
-     * @return the IOSurface FBO height (0 if not attached).
-     */
-    uint32_t GetIOSurfaceHeight() const { return iosurface_height_; }
 
     /**
      * Initialize EGL directly with an ANativeWindow (Android only).
@@ -119,8 +90,7 @@ public:
      * @param height  Surface height in pixels
      * @return true on success
      */
-    bool InitializeWithWindow(void* window, uint32_t width, uint32_t height,
-                              AngleBackend backend = AngleBackend::OpenGLES);
+    bool InitializeWithWindow(void* window, uint32_t width, uint32_t height);
 
     /**
      * Attach an Android ANativeWindow as the render target.
@@ -203,16 +173,13 @@ public:
 private:
     bool CreateSurface(uint32_t width, uint32_t height);
     void DestroySurface();
-    void DestroyIOSurfaceResources();
     void DestroyNativeWindowResources();
 
     /**
-     * Acquire ANGLE EGL display with the specified backend.
-     * On Android, uses eglGetPlatformDisplayEXT with Vulkan → OpenGLES fallback.
-     * On other platforms, falls back to eglGetDisplay(EGL_DEFAULT_DISPLAY).
-     * Updates `backend` in-place if a fallback was triggered.
+     * 获取原生 EGL display（eglGetDisplay(EGL_DEFAULT_DISPLAY)）。
+     * 不再经过 ANGLE 的 EGL_PLATFORM_ANGLE_* 路径。
      */
-    EGLDisplay AcquireAngleDisplay(AngleBackend& backend);
+    EGLDisplay AcquireDisplay();
 
     EGLDisplay display_  = EGL_NO_DISPLAY;
     EGLSurface surface_  = EGL_NO_SURFACE;
@@ -220,19 +187,6 @@ private:
     EGLConfig  config_    = nullptr;
     uint32_t   width_     = 0;
     uint32_t   height_    = 0;
-
-    // ANGLE backend type (Android only; macOS/iOS always use Metal)
-    AngleBackend angle_backend_ = AngleBackend::OpenGLES;
-
-    // IOSurface FBO resources (macOS zero-copy rendering)
-    EGLSurface iosurface_pbuffer_   = EGL_NO_SURFACE;
-    uint32_t   iosurface_fbo_       = 0;
-    uint32_t   iosurface_texture_   = 0;
-    uint32_t   iosurface_tex_target_= 0; // GL_TEXTURE_2D or GL_TEXTURE_RECTANGLE_ANGLE
-    uint32_t   iosurface_rbo_depth_ = 0;
-    uint32_t   iosurface_width_     = 0;
-    uint32_t   iosurface_height_    = 0;
-    uint32_t   iosurface_id_        = 0;
 
     // Android WindowSurface resources (SurfaceTexture zero-copy rendering)
     void*      native_window_       = nullptr; // ANativeWindow*

@@ -63,7 +63,6 @@ extern "C" void krkr_GetSurfaceDimensions(uint32_t*, uint32_t*);
 #include "visual/GraphicsLoaderIntf.h"
 #include "visual/ogl/ogl_common.h"
 #include "visual/ogl/krkr_egl_context.h"
-#include "visual/ogl/angle_backend.h"
 #include "visual/impl/WindowImpl.h"
 #include "visual/RenderManager.h"
 #include "visual/WindowIntf.h"
@@ -121,7 +120,6 @@ struct engine_handle_s {
 
   // Render target state
   struct RenderTargetState {
-    krkr::AngleBackend angle_backend = krkr::AngleBackend::OpenGLES;
     bool iosurface_attached = false;
     bool native_window_attached = false;
   } render;
@@ -481,12 +479,11 @@ std::thread DetachStartupWorker(engine_handle_s* impl) {
   return std::move(impl->startup.worker);
 }
 
-bool EnsureEngineRuntimeInitialized(uint32_t width, uint32_t height,
-                                    krkr::AngleBackend backend = krkr::AngleBackend::OpenGLES) {
+bool EnsureEngineRuntimeInitialized(uint32_t width, uint32_t height) {
   if (g_engine_bootstrapped) {
     return true;
   }
-  if (!TVPEngineBootstrap::Initialize(width, height, backend)) {
+  if (!TVPEngineBootstrap::Initialize(width, height)) {
     return false;
   }
   g_engine_bootstrapped = true;
@@ -619,8 +616,7 @@ engine_result_t OpenGameCore(engine_handle_t handle,
   }
 
   if (!EnsureEngineRuntimeInitialized(impl->frame.surface_width,
-                                      impl->frame.surface_height,
-                                      impl->render.angle_backend)) {
+                                      impl->frame.surface_height)) {
     std::lock_guard<std::recursive_mutex> guard(impl->mutex);
     SetHandleErrorLocked(impl, "failed to initialize engine runtime for host mode");
     return ENGINE_RESULT_INTERNAL_ERROR;
@@ -1405,7 +1401,7 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
   // The Kotlin plugin calls nativeSetSurface() which stores the
   // ANativeWindow in a global variable. Here we detect it and
   // attach it as the EGL WindowSurface render target so that
-  // eglSwapBuffers delivers frames to Flutter's SurfaceTexture.
+  // eglSwapBuffers delivers frames to the host's SurfaceTexture.
   if (!impl->render.native_window_attached) {
     ANativeWindow* pending_window = krkr_GetNativeWindow();
     if (pending_window) {
@@ -1419,7 +1415,7 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
           // to create EGL display + context + WindowSurface in one step,
           // bypassing Pbuffer which may not be supported on this device.
           AndroidInfoLog("engine_tick: EGL not valid, InitializeWithWindow %ux%u", win_w, win_h);
-          if (egl.InitializeWithWindow(pending_window, win_w, win_h, impl->render.angle_backend)) {
+          if (egl.InitializeWithWindow(pending_window, win_w, win_h)) {
             attached = true;
             AndroidInfoLog("engine_tick: InitializeWithWindow success");
           } else {
@@ -1582,7 +1578,7 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
   if (impl->render.native_window_attached) {
     // Android WindowSurface mode — TVPForceSwapBuffer() (called by
     // TVPDrawSceneOnce above) already performed eglSwapBuffers to deliver
-    // the frame to Flutter's SurfaceTexture. Just update frame tracking.
+    // the frame to the host's SurfaceTexture. Just update frame tracking.
     impl->frame.serial += 1;
     impl->frame.ready = true;
   } else if (!impl->render.iosurface_attached) {
@@ -1614,7 +1610,7 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
     // IOSurface mode — just increment frame serial, no readback needed.
     // The render output is already in the shared IOSurface.
     // 低频采样 IOSurface，区分黑屏两端归属：
-    //   采样非黑 -> 引擎已把画面写进共享 IOSurface，黑屏在 Flutter 读/显示侧；
+    //   采样非黑 -> 引擎已把画面写进共享目标，黑屏在宿主读/显示侧；
     //   采样全黑 -> 引擎 blit 到 IOSurface 的链路本身有问题。
     // 频率提到每 5 tick：高密度帧间序列可区分「稳定黑屏」与「单帧瞬时闪黑」，
     // 同时对照 UI_stubs 的 SourceSample(每5帧) 分辨源纹理 vs IOSurface 落地。
@@ -1796,19 +1792,12 @@ engine_result_t engine_set_option(engine_handle_t handle,
     return ENGINE_RESULT_OK;
   }
 
-  // Handle angle_backend option: controls ANGLE EGL backend (Android only)
+  // angle_backend 选项：ANGLE 已移除，渲染走平台原生 EGL/GLES。
+  // 保留为兼容空操作——旧设置文件里仍会有这个键，必须接受以免初始化失败。
   if (key == ENGINE_OPTION_ANGLE_BACKEND) {
-    if (g_engine_bootstrapped) {
-      spdlog::warn("engine_set_option: angle_backend changed after engine initialization, "
-                   "restart required to apply new backend");
-    }
-    const std::string val(option->value_utf8);
-    if (val == ENGINE_ANGLE_BACKEND_VULKAN) {
-      impl->render.angle_backend = krkr::AngleBackend::Vulkan;
-    } else {
-      impl->render.angle_backend = krkr::AngleBackend::OpenGLES;
-    }
-    spdlog::info("engine_set_option: angle_backend={}", option->value_utf8);
+    spdlog::info("engine_set_option: angle_backend='{}' ignored "
+                 "(ANGLE removed; using native EGL)",
+                 option->value_utf8);
     ClearHandleErrorLocked(impl);
     SetThreadError(nullptr);
     return ENGINE_RESULT_OK;
@@ -2078,11 +2067,11 @@ engine_result_t engine_get_host_native_window(engine_handle_t handle,
   }
 
 #if defined(TARGET_OS_MAC) && TARGET_OS_MAC && !TARGET_OS_IPHONE
-  // No native GLFW window in ANGLE Pbuffer mode.
+  // No native GLFW window in headless Pbuffer mode.
   return SetHandleErrorAndReturnLocked(
       impl,
       ENGINE_RESULT_NOT_SUPPORTED,
-      "engine_get_host_native_window is not supported in headless ANGLE mode");
+      "engine_get_host_native_window is not supported in headless mode");
 #else
   return SetHandleErrorAndReturnLocked(
       impl,
@@ -2119,11 +2108,11 @@ engine_result_t engine_get_host_native_view(engine_handle_t handle,
         "engine_open_game must succeed before engine_get_host_native_view");
   }
 
-  // No native GLFW window in ANGLE Pbuffer mode — native view is unavailable.
+  // No native GLFW window in headless Pbuffer mode — native view is unavailable.
   return SetHandleErrorAndReturnLocked(
       impl,
       ENGINE_RESULT_NOT_SUPPORTED,
-      "engine_get_host_native_view is not supported in headless ANGLE mode");
+      "engine_get_host_native_view is not supported in headless mode");
 }
 
 engine_result_t engine_send_input(engine_handle_t handle,
@@ -2225,62 +2214,15 @@ engine_result_t engine_set_render_target_iosurface(engine_handle_t handle,
         "engine_open_game must succeed before engine_set_render_target_iosurface");
   }
 
-#if defined(__APPLE__)
-  auto& egl = krkr::GetEngineEGLContext();
-  if (!egl.IsValid()) {
-    return SetHandleErrorAndReturnLocked(
-        impl,
-        ENGINE_RESULT_INVALID_STATE,
-        "EGL context not initialized");
-  }
-
-  if (iosurface_id == 0) {
-    // Detach — revert to Pbuffer mode
-    egl.DetachIOSurface();
-    impl->render.iosurface_attached = false;
-    spdlog::info("engine_set_render_target_iosurface: detached, Pbuffer mode");
-  } else {
-    if (width == 0 || height == 0) {
-      return SetHandleErrorAndReturnLocked(
-          impl,
-          ENGINE_RESULT_INVALID_ARGUMENT,
-          "width and height must be > 0 when setting IOSurface");
-    }
-    if (!egl.AttachIOSurface(iosurface_id, width, height)) {
-      return SetHandleErrorAndReturnLocked(
-          impl,
-          ENGINE_RESULT_INTERNAL_ERROR,
-          "failed to attach IOSurface as render target");
-    }
-    impl->render.iosurface_attached = true;
-    spdlog::info("engine_set_render_target_iosurface: attached id={} {}x{}",
-                 iosurface_id, width, height);
-
-    // Only update WindowSize here — DestRect is exclusively managed by
-    // UpdateDrawBuffer() which calculates the correct letterbox viewport.
-    // Setting DestRect here would overwrite the viewport offset and cause
-    // mouse Y-axis misalignment when game aspect ratio != surface aspect ratio.
-    if (TVPMainWindow) {
-      auto* dd = TVPMainWindow->GetDrawDevice();
-      if (dd) {
-        dd->SetWindowSize(static_cast<tjs_int>(width),
-                          static_cast<tjs_int>(height));
-      }
-    }
-  }
-
-  ClearHandleErrorLocked(impl);
-  SetThreadError(nullptr);
-  return ENGINE_RESULT_OK;
-#else
+  // 本项目仅面向 Android：IOSurface 是 macOS 的零拷贝路径，已随 Apple 平台一并移除。
+  // Android 的等价能力走 engine_set_render_target_surface（ANativeWindow）。
   (void)iosurface_id;
   (void)width;
   (void)height;
   return SetHandleErrorAndReturnLocked(
       impl,
       ENGINE_RESULT_NOT_SUPPORTED,
-      "IOSurface render target is only supported on macOS");
-#endif
+      "IOSurface render target is not supported (Android uses ANativeWindow)");
 }
 
 engine_result_t engine_set_render_target_surface(engine_handle_t handle,
@@ -2428,7 +2370,7 @@ engine_result_t engine_get_renderer_info(engine_handle_t handle,
         "failed to make EGL context current");
   }
 
-  // Query GL renderer and version strings from the active ANGLE context.
+  // Query GL renderer and version strings from the active GL context.
   const char* gl_renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
   const char* gl_version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
   if (!gl_renderer) gl_renderer = "(unknown)";

@@ -45,7 +45,7 @@ void BindTexture2D(GLuint textureId) {
 
 void BindTexture2DN(unsigned int slot, GLuint textureId) {
     GLenum unit = GL_TEXTURE0 + slot;
-    // Always call GL directly: external code (e.g. Flutter) may
+    // Always call GL directly: external code (e.g. the host shell) may
     // reset GL state behind our back, making cached values stale.
     s_activeTextureUnit = unit;
     glActiveTexture(unit);

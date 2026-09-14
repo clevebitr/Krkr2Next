@@ -14,17 +14,23 @@ add_compile_definitions(
         $<$<NOT:$<CONFIG:Debug>>:NDEBUG>
 )
 
-# Mobile-first project (iOS + Android; macOS kept as the Apple dev host):
-# Flutter is the app shell on all three platforms.
-# Third-party dependencies are provided through the vcpkg toolchain.
-set(CMAKE_TOOLCHAIN_FILE $ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake)
+# Android-only project。宿主壳是原生 Kotlin/Compose 应用（app/），引擎在 Gradle
+# 之外独立构建，产物投放到 app/app/src/main/jniLibs。
+# 第三方依赖通过 vcpkg toolchain 提供。
+#
+# 带守卫：Gradle 的 externalNativeBuild 会传入 NDK 自己的 toolchain file，
+# 无条件覆盖会被 CMake 判定为 toolchain 重定义而行为异常。保留守卫以便将来
+# 接入 externalNativeBuild，也便于调用方显式指定别的 toolchain。
+if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    set(CMAKE_TOOLCHAIN_FILE $ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake)
+endif()
 
 set(APP_NAME krkr2)
 
 project(${APP_NAME})
 
-option(ENABLE_TESTS "enable tests execute build(exclude ios/android)" ON)
-option(BUILD_TOOLS "build tools execute build(exclude ios/android)" ON)
+option(ENABLE_TESTS "enable tests (excluded on Android)" ON)
+option(BUILD_TOOLS "build tools (excluded on Android)" ON)
 option(BUILD_ENGINE_API "build engine_api bridge library" ON)
 
 # 统一诊断探针（渲染、字体、PSB 和 MotionPlayer）编译开关。
@@ -79,9 +85,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(KRKR2CORE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cpp/core)
 set(KRKR2PLUGIN_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cpp/plugins)
 
-# iOS/macOS/Android use Flutter as the app shell; only the engine libraries are built.
-# engine_api is built as a static library (iOS) / shared library (Android) and
-# linked into the Flutter Runner.
+# 宿主壳是 app/ 下的 Kotlin 应用；这里只构建引擎库。
+# engine_api 在 Android 上编译为自包含的 libengine_api.so，由 Kotlin 壳经
+# System.loadLibrary + JNI 加载。
 
 # external lib
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/cpp/external)
@@ -93,13 +99,13 @@ if(BUILD_ENGINE_API)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/bridge/engine_api)
 endif()
 
-if(ENABLE_TESTS AND NOT IOS AND NOT ANDROID)
+if(ENABLE_TESTS AND NOT ANDROID)
     enable_testing()
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
         add_subdirectory(tests)
     endif()
 endif()
 
-if(BUILD_TOOLS AND NOT IOS AND NOT ANDROID)
+if(BUILD_TOOLS AND NOT ANDROID)
     add_subdirectory(tools)
 endif()

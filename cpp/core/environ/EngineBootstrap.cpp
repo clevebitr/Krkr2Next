@@ -3,7 +3,8 @@
  * @brief Engine bootstrapper implementation.
  *
  * Replaces the original AppDelegate for host-mode startup.
- * Creates an ANGLE EGL Pbuffer context for headless rendering.
+ * Creates a native EGL context (Pbuffer, or ANativeWindow on Android) for
+ * headless rendering.
  */
 
 #include "EngineBootstrap.h"
@@ -38,8 +39,7 @@ bool TVPEngineBootstrap::s_initialized = false;
 // Public API
 // ---------------------------------------------------------------------------
 
-bool TVPEngineBootstrap::Initialize(uint32_t width, uint32_t height,
-                                    krkr::AngleBackend backend) {
+bool TVPEngineBootstrap::Initialize(uint32_t width, uint32_t height) {
     if (s_initialized) {
         spdlog::warn("TVPEngineBootstrap::Initialize called but already initialized");
         return true;
@@ -51,8 +51,8 @@ bool TVPEngineBootstrap::Initialize(uint32_t width, uint32_t height,
     spdlog::debug("EngineBootstrap: starting initialization");
     spdlog::default_logger()->flush();
 
-    // 2. Create ANGLE EGL context for headless rendering
-    InitializeGraphics(width, height, backend);
+    // 2. Create native EGL context for headless rendering
+    InitializeGraphics(width, height);
     spdlog::default_logger()->flush();
 
     // 2.5. Force-link the OpenGL render manager so it survives static library
@@ -108,10 +108,9 @@ bool TVPEngineBootstrap::IsInitialized() {
 // Private helpers
 // ---------------------------------------------------------------------------
 
-void TVPEngineBootstrap::InitializeGraphics(uint32_t width, uint32_t height,
-                                             krkr::AngleBackend backend) {
+void TVPEngineBootstrap::InitializeGraphics(uint32_t width, uint32_t height) {
     auto& egl = krkr::GetEngineEGLContext();
-    if (!egl.Initialize(width, height, backend)) {
+    if (!egl.Initialize(width, height)) {
         spdlog::error("EngineBootstrap: EGL context initialization failed, "
                        "rendering may not work correctly");
         return;
@@ -130,7 +129,7 @@ void TVPEngineBootstrap::InitializeGraphics(uint32_t width, uint32_t height,
     // 二次打开渲染黑屏/乱屏（首次 open 该回调列表为空，无副作用）。
     krkr::gl::FireRendererRecreated();
 
-    spdlog::info("EngineBootstrap: ANGLE EGL context ready");
+    spdlog::info("EngineBootstrap: EGL context ready");
 }
 
 void TVPEngineBootstrap::InitializeLocale() {

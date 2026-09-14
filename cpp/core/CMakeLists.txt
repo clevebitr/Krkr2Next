@@ -45,10 +45,3 @@ if(NOT APPLE)
     target_compile_options(${PROJECT_NAME} INTERFACE ${OpenMP_CXX_FLAGS})
 endif ()
 
-# ANGLE — KRKR_USE_ANGLE compile definition propagated to all modules
-# Apple platforms use ANGLE with the Metal backend for EGL + GLES2.
-find_package(unofficial-angle CONFIG QUIET)
-if(unofficial-angle_FOUND)
-    target_compile_definitions(${PROJECT_NAME} INTERFACE KRKR_USE_ANGLE=1)
-    message(STATUS "ANGLE found — KRKR_USE_ANGLE=1 propagated to all modules")
-endif()

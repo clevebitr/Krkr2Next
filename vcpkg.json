@@ -22,22 +22,6 @@
     },
     "minizip",
     "tinyxml2",
-    {
-      "name": "angle",
-      "default-features": false,
-      "features": [
-        "metal"
-      ],
-      "platform": "osx | ios"
-    },
-    {
-      "name": "angle",
-      "default-features": false,
-      "features": [
-        "vulkan"
-      ],
-      "platform": "android | linux"
-    },
     "ffmpeg",
     "fmt",
     "jxrlib",

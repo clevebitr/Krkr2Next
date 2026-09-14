@@ -10,7 +10,10 @@
 
 /* ── Option Keys ────────────────────────────────────────────────── */
 
-/** ANGLE EGL backend selection (Android only; other platforms ignore). */
+/**
+ * 已废弃：ANGLE 已从本项目移除，渲染走平台原生 EGL/GLES。
+ * 该键仍被接受但取值被忽略（返回 OK），以免旧设置文件导致初始化失败。
+ */
 #define ENGINE_OPTION_ANGLE_BACKEND       "angle_backend"
 
 /** Frame rate limit (0 = unlimited / follow vsync). */
@@ -43,12 +46,9 @@
 /** Auto path cache max entry count. */
 #define ENGINE_OPTION_AUTOPATH_CACHE_COUNT "autopath_cache_count"
 
-/* ── ANGLE Backend Values ───────────────────────────────────────── */
+/* ── 已废弃的 ANGLE Backend 取值（仅为兼容旧设置文件保留） ───────── */
 
-/** Use ANGLE's OpenGL ES backend (default). */
 #define ENGINE_ANGLE_BACKEND_GLES         "gles"
-
-/** Use ANGLE's Vulkan backend. */
 #define ENGINE_ANGLE_BACKEND_VULKAN       "vulkan"
 
 /* ── Renderer Values ────────────────────────────────────────────── */

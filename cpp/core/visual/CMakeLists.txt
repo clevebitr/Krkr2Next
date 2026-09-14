@@ -87,19 +87,10 @@ target_link_libraries(${PROJECT_NAME} PRIVATE libbpg)
 find_package(WebP CONFIG REQUIRED)
 target_link_libraries(${PROJECT_NAME} INTERFACE WebP::webp WebP::webpdecoder WebP::webpdemux)
 
-# ANGLE (EGL + GLES2) — provides GL context and rendering.
-# All platforms (including Android) use ANGLE for consistent EGL/GLES2.
-find_package(unofficial-angle CONFIG QUIET)
-if(unofficial-angle_FOUND)
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-        unofficial::angle::libEGL
-        unofficial::angle::libGLESv2
-    )
-    target_compile_definitions(${PROJECT_NAME} PRIVATE KRKR_USE_ANGLE=1)
-    message(STATUS "ANGLE found — EGL + GLES2 libraries linked")
-else()
-    message(WARNING "ANGLE not found — GL rendering may not work")
-endif()
+# EGL + GLES3 — 使用平台自带的原生图形驱动，不经过 ANGLE 翻译层。
+# Android 由 NDK sysroot 提供 libEGL.so / libGLESv2.so；Linux 宿主验证构建由
+# 系统的 GLVND/Mesa 提供。两者都不需要额外 find_package。
+target_link_libraries(${PROJECT_NAME} PRIVATE EGL GLESv2)
 
 find_package(JXR REQUIRED)
 target_compile_definitions(${PROJECT_NAME} PRIVATE -D__ANSI__)

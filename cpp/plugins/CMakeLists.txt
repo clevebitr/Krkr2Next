@@ -90,24 +90,10 @@ if(CUBISM_FW_SOURCES AND CUBISM_CORE_LIB AND EXISTS "${CUBISM_CORE_LIB}")
     )
     target_compile_definitions(CubismFramework PUBLIC CSM_TARGET_ANGLE_ES2)
 
-    # ANGLE headers for CubismFramework's OpenGLES2 renderer
-    find_package(unofficial-angle CONFIG QUIET)
-    if(unofficial-angle_FOUND)
-        target_link_libraries(CubismFramework PRIVATE
-            unofficial::angle::libEGL
-            unofficial::angle::libGLESv2
-        )
-        # EGL/GLES2 headers come from egl-registry/opengl-registry via vcpkg
-        # but aren't automatically propagated to standalone static library targets.
-        get_target_property(_EGL_INCS unofficial::angle::libEGL INTERFACE_INCLUDE_DIRECTORIES)
-        if(_EGL_INCS)
-            target_include_directories(CubismFramework PRIVATE ${_EGL_INCS})
-        endif()
-        if(VCPKG_INSTALLED_DIR AND VCPKG_TARGET_TRIPLET)
-            target_include_directories(CubismFramework PRIVATE
-                ${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/include)
-        endif()
-    endif()
+    # EGL/GLES 头与库来自平台自带：Android 由 NDK sysroot 提供 libEGL.so/libGLESv2.so，
+    # Linux 由系统 GLVND/Mesa 提供，均无需额外 find_package。
+    # 注意 CSM_TARGET_ANGLE_ES2 是 Live2D SDK 自己的目标名（指 GLES2 渲染器），不是本项目依赖 ANGLE。
+    target_link_libraries(CubismFramework PRIVATE EGL GLESv2)
 
     target_link_libraries(CubismFramework PUBLIC ${CUBISM_CORE_LIB})
 

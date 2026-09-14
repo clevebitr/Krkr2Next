@@ -106,24 +106,58 @@ bool TVPCheckGLExtension(const std::string &extname) {
     return sTVPGLExtensions.find(extname) != sTVPGLExtensions.end();
 }
 static bool TVPGLExtensionInfoInited = false;
-static void TVPInitGLExtensionInfo() {
-    if(TVPGLExtensionInfoInited)
+
+// 版本串形如 "OpenGL ES 3.2 V@..." / "OpenGL ES-CM 1.1" / "OpenGL ES 2.0"，
+// 首个数字即主版本号。
+static bool TVPIsGLES3OrLater(const char *ver) {
+    if(!ver) return false;
+    for(const char *p = ver; *p; ++p) {
+        if(*p >= '0' && *p <= '9')
+            return *p >= '3';
+    }
+    return false;
+}
+
+// 枚举当前 context 的 GL 扩展名。
+//
+// GLES 3.0 起 glGetString(GL_EXTENSIONS) 已废弃：在 ES3 上下文中返回 NULL
+// 并产生 GL_INVALID_ENUM。若不改用 glGetStringi 逐条枚举，扩展集会静默变空，
+// 进而禁用 GL_EXT_unpack_subimage、shader framebuffer fetch 等已启用路径——
+// 表现为无任何报错的性能回退。ES2 上下文仍走旧的空格分隔字符串。
+static void TVPEnumerateGLExtensions(std::unordered_set<std::string> &out) {
+    const char *ver_str = (const char *)glGetString(GL_VERSION);
+    if(TVPIsGLES3OrLater(ver_str)) {
+        GLint num_exts = 0;
+        glGetIntegerv(GL_NUM_EXTENSIONS, &num_exts);
+        for(GLint i = 0; i < num_exts; ++i) {
+            const char *name = (const char *)glGetStringi(GL_EXTENSIONS, i);
+            if(name && *name)
+                out.emplace(name);
+        }
         return;
-    TVPGLExtensionInfoInited = true;
+    }
+
     const char *ext_str = (const char *)glGetString(GL_EXTENSIONS);
-    if(!ext_str) return; // No GL context (e.g. Flutter mode without EGL surface)
+    if(!ext_str) return; // No GL context (e.g. no EGL surface yet)
     std::string gl_extensions = ext_str;
     const char *p = gl_extensions.c_str();
     for(char &c : gl_extensions) {
         if(c == ' ') {
             c = 0;
-            sTVPGLExtensions.emplace(p);
+            out.emplace(p);
             p = &c;
             ++p;
         }
     }
     if(*p)
-        sTVPGLExtensions.emplace(p);
+        out.emplace(p);
+}
+
+static void TVPInitGLExtensionInfo() {
+    if(TVPGLExtensionInfoInited)
+        return;
+    TVPGLExtensionInfoInited = true;
+    TVPEnumerateGLExtensions(sTVPGLExtensions);
     IndividualConfigManager *cfgMgr = IndividualConfigManager::GetInstance();
     for(const char *const *name = (&UsedGLExtInfo.NameBegin) + 1; *name;
         ++name) {
@@ -272,23 +306,8 @@ static void TVPInitGLExtensionFunc() {
 }
 
 std::string TVPGetOpenGLInfo() {
-    //	TVPInitGLExtensionInfo();
     std::unordered_set<std::string> Extensions;
-    const char *ext_raw = (const char *)glGetString(GL_EXTENSIONS);
-    if(ext_raw) {
-        std::string gl_extensions = ext_raw;
-        const char *p = gl_extensions.c_str();
-        for(char &c : gl_extensions) {
-            if(c == ' ') {
-                c = 0;
-                Extensions.emplace(p);
-                p = &c;
-                ++p;
-            }
-        }
-        if(*p)
-            Extensions.emplace(p);
-    }
+    TVPEnumerateGLExtensions(Extensions);
 
     auto safe_gl_str = [](GLenum name) -> const char * {
         const char *s = (const char *)glGetString(name);
@@ -518,7 +537,7 @@ static void _RestoreGLStatues() {
     }
     krkr::gl::BlendResetToCache();
     TVPSetRenderTarget(0);
-    // viewport will be set by the host rendering system (Flutter)
+    // viewport will be set by the host rendering system
 }
 
 static tjs_uint8 *TVPShrinkXYBy2(tjs_uint *dpitch, const tjs_uint8 *src,

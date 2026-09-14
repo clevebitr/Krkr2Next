@@ -358,7 +358,7 @@ static bool DecodeBPTC_RGBA(const uint8_t *data, uint32_t dataSize,
 static bool IsBPTCFormat(GLenum fmt) { return fmt == 0x8E8C; }
 
 // ---------------------------------------------------------------------------
-// Software ETC2 + EAC RGBA8 decoder (fallback for ANGLE GLES backend)
+// Software ETC2 + EAC RGBA8 decoder (fallback when the GPU lacks ETC2/EAC)
 // ---------------------------------------------------------------------------
 
 const int kETC2ModifierTable[8][4] = {

@@ -302,7 +302,7 @@ ENGINE_API_EXPORT engine_result_t engine_set_render_target_iosurface(
 /*
  * Sets an Android Surface (from SurfaceTexture) as the render target.
  * When set, engine_tick renders to an EGL WindowSurface created from the
- * ANativeWindow. eglSwapBuffers() delivers frames directly to Flutter's
+ * ANativeWindow. eglSwapBuffers() delivers frames directly to the host's
  * SurfaceTexture (GPU zero-copy).
  *
  * native_window: ANativeWindow* obtained from ANativeWindow_fromSurface().
@@ -324,7 +324,7 @@ ENGINE_API_EXPORT engine_result_t engine_set_render_target_surface(
  *   - 1: a new frame was rendered
  *
  * This is useful in IOSurface mode to know when to call
- * textureFrameAvailable() on the Flutter side.
+ * textureFrameAvailable() on the host-shell side.
  */
 ENGINE_API_EXPORT engine_result_t engine_get_frame_rendered_flag(
     engine_handle_t handle, uint32_t* out_

@@ -1,6 +1,6 @@
 /**
  * @file krkr_egl_context.cpp
- * @brief Headless EGL context manager using ANGLE.
+ * @brief Headless EGL context manager using native EGL/GLES.
  */
 
 #include "krkr_egl_context.h"
@@ -10,30 +10,8 @@
 #include <GLES3/gl3.h>
 #include <spdlog/spdlog.h>
 
-#if defined(__APPLE__)
-#include <TargetConditionals.h>
-#include <EGL/eglext.h>
-#include <EGL/eglext_angle.h>
-#include <GLES2/gl2ext.h>
-#include <GLES2/gl2ext_angle.h>
-#if TARGET_OS_OSX
-#include <IOSurface/IOSurface.h>
-#else
-// iOS：IOSurface.framework 只通过 ObjC / `@import IOSurface` 暴露，
-// C++ 里 `#include <IOSurface/IOSurface.h>` 找不到头文件（framework 在 SDK 里
-// 但 Headers 目录无 C 头）。这里手动前置声明引擎所需的最小 C 接口，实际符号
-// 由已链接的 IOSurface.framework 提供。
-#include <CoreFoundation/CoreFoundation.h>
-#include <cstdint>
-typedef uint32_t IOSurfaceID;
-typedef struct __IOSurface* IOSurfaceRef;
-extern "C" IOSurfaceRef IOSurfaceLookup(IOSurfaceID aSurfaceID);
-#endif // TARGET_OS_OSX
-#endif // __APPLE__
-
 #if defined(__ANDROID__)
 #include <EGL/eglext.h>
-#include <EGL/eglext_angle.h>
 #include <android/log.h>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
@@ -55,67 +33,30 @@ EGLContextManager::~EGLContextManager() {
 }
 
 // ---------------------------------------------------------------------------
-// AcquireAngleDisplay — shared EGL display acquisition logic
+// AcquireDisplay — 原生 EGL display 获取
+//
+// 直接使用平台自带的 EGL/GLES 驱动，不再经过 ANGLE 翻译层。
+// eglGetDisplay(EGL_DEFAULT_DISPLAY) 是 EGL 1.0 起就有的接口，无需任何扩展，
+// 在 Android 7.0+ (API 24) 全平台可用。
 // ---------------------------------------------------------------------------
 
-EGLDisplay EGLContextManager::AcquireAngleDisplay(AngleBackend& backend) {
-#if defined(__ANDROID__)
-    EGLint angleType = (backend == AngleBackend::Vulkan)
-        ? EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE
-        : EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE;
-    EGL_LOGI("AcquireAngleDisplay: trying eglGetPlatformDisplayEXT backend=%s",
-             backend == AngleBackend::Vulkan ? "Vulkan" : "OpenGLES");
-    auto eglGetPlatformDisplayEXT_ =
-        reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(
-            eglGetProcAddress("eglGetPlatformDisplayEXT"));
-    EGLDisplay display = EGL_NO_DISPLAY;
-    if (eglGetPlatformDisplayEXT_) {
-        const EGLint displayAttribs[] = {
-            EGL_PLATFORM_ANGLE_TYPE_ANGLE,
-            angleType,
-            EGL_NONE
-        };
-        display = eglGetPlatformDisplayEXT_(
-            EGL_PLATFORM_ANGLE_ANGLE, EGL_DEFAULT_DISPLAY, displayAttribs);
-        EGL_LOGI("AcquireAngleDisplay: eglGetPlatformDisplayEXT returned %p", display);
-    }
-    // Fallback: if Vulkan backend failed, retry with OpenGL ES
-    if (display == EGL_NO_DISPLAY && backend == AngleBackend::Vulkan && eglGetPlatformDisplayEXT_) {
-        EGL_LOGI("AcquireAngleDisplay: Vulkan backend failed, falling back to OpenGL ES");
-        backend = AngleBackend::OpenGLES;
-        const EGLint fallbackAttribs[] = {
-            EGL_PLATFORM_ANGLE_TYPE_ANGLE,
-            EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE,
-            EGL_NONE
-        };
-        display = eglGetPlatformDisplayEXT_(
-            EGL_PLATFORM_ANGLE_ANGLE, EGL_DEFAULT_DISPLAY, fallbackAttribs);
-        EGL_LOGI("AcquireAngleDisplay: fallback eglGetPlatformDisplayEXT returned %p", display);
-    }
-    if (display == EGL_NO_DISPLAY) {
-        EGL_LOGI("AcquireAngleDisplay: fallback to eglGetDisplay(EGL_DEFAULT_DISPLAY)");
-        display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    }
+EGLDisplay EGLContextManager::AcquireDisplay() {
+    EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    EGL_LOGI("AcquireDisplay: eglGetDisplay(EGL_DEFAULT_DISPLAY) returned %p", display);
     return display;
-#else
-    (void)backend;
-    return eglGetDisplay(EGL_DEFAULT_DISPLAY);
-#endif
 }
 
 // ---------------------------------------------------------------------------
 // Initialize (Pbuffer mode)
 // ---------------------------------------------------------------------------
 
-bool EGLContextManager::Initialize(uint32_t width, uint32_t height,
-                                   AngleBackend backend) {
+bool EGLContextManager::Initialize(uint32_t width, uint32_t height) {
     if (context_ != EGL_NO_CONTEXT) {
         spdlog::warn("EGLContextManager::Initialize called but context already exists, destroying first");
         Destroy();
     }
 
-    angle_backend_ = backend;
-    display_ = AcquireAngleDisplay(angle_backend_);
+    display_ = AcquireDisplay();
     if (display_ == EGL_NO_DISPLAY) {
         EGL_LOGE("eglGetDisplay failed: 0x%x", eglGetError());
         spdlog::error("eglGetDisplay failed: 0x{:x}", eglGetError());
@@ -134,8 +75,9 @@ bool EGLContextManager::Initialize(uint32_t width, uint32_t height,
     spdlog::info("EGL vendor: {}", eglQueryString(display_, EGL_VENDOR));
     spdlog::info("EGL version string: {}", eglQueryString(display_, EGL_VERSION));
 
-    // Choose a config that supports Pbuffer + GLES2
-    // On Android, also require EGL_WINDOW_BIT for SurfaceTexture rendering
+    // 选择支持 Pbuffer 的 config；Android 上还需要 EGL_WINDOW_BIT 以支持
+    // SurfaceTexture 渲染。请求 ES3 可渲染类型：minSdk 24 起 GLES 3.0 是
+    // 强制要求（Android 4.3/API 18+），因此这里不需要 ES2 回退分支。
     EGLint configAttribs[] = {
 #if defined(__ANDROID__)
         EGL_SURFACE_TYPE,    EGL_PBUFFER_BIT | EGL_WINDOW_BIT,
@@ -148,7 +90,7 @@ bool EGLContextManager::Initialize(uint32_t width, uint32_t height,
         EGL_ALPHA_SIZE,      8,
         EGL_DEPTH_SIZE,      0,
         EGL_STENCIL_SIZE,    8,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
         EGL_NONE
     };
 
@@ -172,9 +114,10 @@ bool EGLContextManager::Initialize(uint32_t width, uint32_t height,
     }
     EGL_LOGI("Pbuffer surface created: %ux%u", width, height);
 
-    // Create GLES2 context
+    // Create GLES3 context. GLES 3.0 上下文向后兼容 GLSL ES 1.00 shader，
+    // 因此现有 shader 无需改写即可运行。
     EGLint contextAttribs[] = {
-        EGL_CONTEXT_CLIENT_VERSION, 2,
+        EGL_CONTEXT_CLIENT_VERSION, 3,
         EGL_NONE
     };
     context_ = eglCreateContext(display_, config_, EGL_NO_CONTEXT, contextAttribs);
@@ -197,7 +140,7 @@ bool EGLContextManager::Initialize(uint32_t width, uint32_t height,
     }
     EGL_LOGI("MakeCurrent OK");
 
-    spdlog::info("ANGLE EGL context created successfully: {}x{}", width, height);
+    spdlog::info("EGL context created successfully: {}x{}", width, height);
     spdlog::default_logger()->flush();
 
     // glGetString may return nullptr if the context is not fully ready
@@ -226,10 +169,6 @@ void EGLContextManager::Destroy() {
     // unbind and destroy the context itself. No GL handle survives this point.
     // 必须在 context 有效时释放渲染目标，再解除绑定并销毁 context；之后不得复用任何 GL 句柄。
     DestroyNativeWindowResources();
-    // 在 context 仍 current 时清理 IOSurface FBO/纹理/Pbuffer 资源并复位字段，
-    // 避免 runtime-restart 二次 AttachIOSurface 沿用上一 context 的陈旧 GL 句柄。
-    // Android 走 NativeWindow，iosurface_* 恒为 0，此处 no-op。
-    DestroyIOSurfaceResources();
     if (display_ != EGL_NO_DISPLAY) {
         eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
 
@@ -328,158 +267,16 @@ void EGLContextManager::DestroySurface() {
 }
 
 // ---------------------------------------------------------------------------
-// IOSurface FBO attachment (macOS zero-copy rendering)
+// BindRenderTarget — 绑定当前渲染目标
+//
+// 本项目仅面向 Android：渲染目标要么是 EGL WindowSurface（SurfaceTexture
+// 零拷贝直出），要么是 Pbuffer（无窗口时的 Linux 宿主验证构建）。
+// 两者都用默认 FBO (0)，不存在独立的 FBO 渲染目标路径。
 // ---------------------------------------------------------------------------
 
-bool EGLContextManager::AttachIOSurface(uint32_t iosurface_id,
-                                         uint32_t width, uint32_t height) {
-#if defined(__APPLE__)
-    if (context_ == EGL_NO_CONTEXT) {
-        spdlog::error("AttachIOSurface: EGL context not initialized");
-        return false;
-    }
-    if (iosurface_id == 0 || width == 0 || height == 0) {
-        spdlog::error("AttachIOSurface: invalid parameters (id={}, {}x{})",
-                      iosurface_id, width, height);
-        return false;
-    }
-
-    // Replace the previous target while the current context is still valid;
-    // the manager owns only the EGL/GL objects, not the caller's IOSurface object.
-    // 在当前 context 仍有效时替换旧目标；管理器只持有 EGL/GL 对象，不拥有调用方的 IOSurface 对象。
-    DestroyIOSurfaceResources();
-
-    // Look up the IOSurface by ID
-    IOSurfaceRef surface = IOSurfaceLookup(iosurface_id);
-    if (!surface) {
-        spdlog::error("AttachIOSurface: IOSurfaceLookup({}) failed", iosurface_id);
-        return false;
-    }
-
-    // Query the texture target supported by this config
-    EGLint textureTarget = 0;
-    eglGetConfigAttrib(display_, config_, EGL_BIND_TO_TEXTURE_TARGET_ANGLE,
-                       &textureTarget);
-    if (textureTarget == 0) {
-        // Fallback: try EGL_TEXTURE_RECTANGLE_ANGLE (common on macOS Metal)
-        textureTarget = EGL_TEXTURE_RECTANGLE_ANGLE;
-    }
-    spdlog::info("AttachIOSurface: EGL_BIND_TO_TEXTURE_TARGET_ANGLE = 0x{:x}",
-                 textureTarget);
-
-    // Determine the corresponding GL texture target
-    GLenum glTextureTarget = GL_TEXTURE_2D;
-    if (textureTarget == EGL_TEXTURE_RECTANGLE_ANGLE) {
-        glTextureTarget = GL_TEXTURE_RECTANGLE_ANGLE;
-    }
-
-    // Create a Pbuffer from the IOSurface using ANGLE's extension
-    // EGL_ANGLE_iosurface_client_buffer
-    const EGLint pbufferAttribs[] = {
-        EGL_WIDTH,                         static_cast<EGLint>(width),
-        EGL_HEIGHT,                        static_cast<EGLint>(height),
-        EGL_IOSURFACE_PLANE_ANGLE,         0,
-        EGL_TEXTURE_TARGET,                textureTarget,
-        EGL_TEXTURE_INTERNAL_FORMAT_ANGLE, GL_BGRA_EXT,
-        EGL_TEXTURE_FORMAT,                EGL_TEXTURE_RGBA,
-        EGL_TEXTURE_TYPE_ANGLE,            GL_UNSIGNED_BYTE,
-        EGL_NONE,                          EGL_NONE,
-    };
-
-    EGLSurface pbuffer = eglCreatePbufferFromClientBuffer(
-        display_, EGL_IOSURFACE_ANGLE,
-        static_cast<EGLClientBuffer>(surface),
-        config_, pbufferAttribs);
-
-    CFRelease(surface);
-
-    if (pbuffer == EGL_NO_SURFACE) {
-        spdlog::error("AttachIOSurface: eglCreatePbufferFromClientBuffer failed: 0x{:x}",
-                      eglGetError());
-        return false;
-    }
-
-    // Create a GL texture and bind the IOSurface pbuffer to it
-    GLuint tex = 0;
-    glGenTextures(1, &tex);
-    glBindTexture(glTextureTarget, tex);
-    glTexParameteri(glTextureTarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(glTextureTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    // Bind the pbuffer to the texture (this connects the IOSurface content)
-    EGLBoolean bindResult = eglBindTexImage(display_, pbuffer, EGL_BACK_BUFFER);
-    if (!bindResult) {
-        spdlog::error("AttachIOSurface: eglBindTexImage failed: 0x{:x}",
-                      eglGetError());
-        glDeleteTextures(1, &tex);
-        eglDestroySurface(display_, pbuffer);
-        return false;
-    }
-
-    // Create FBO and attach the IOSurface-backed texture
-    GLuint fbo = 0;
-    glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                            glTextureTarget, tex, 0);
-
-    // Create stencil renderbuffer
-    GLuint rbo = 0;
-    glGenRenderbuffers(1, &rbo);
-    glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_STENCIL_INDEX8,
-                          static_cast<GLsizei>(width),
-                          static_cast<GLsizei>(height));
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT,
-                               GL_RENDERBUFFER, rbo);
-
-    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    if (status != GL_FRAMEBUFFER_COMPLETE) {
-        spdlog::error("AttachIOSurface: FBO incomplete: 0x{:x}", status);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDeleteFramebuffers(1, &fbo);
-        eglReleaseTexImage(display_, pbuffer, EGL_BACK_BUFFER);
-        glDeleteTextures(1, &tex);
-        glDeleteRenderbuffers(1, &rbo);
-        eglDestroySurface(display_, pbuffer);
-        return false;
-    }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    iosurface_pbuffer_ = pbuffer;
-    iosurface_fbo_ = fbo;
-    iosurface_texture_ = tex;
-    iosurface_tex_target_ = glTextureTarget;
-    iosurface_rbo_depth_ = rbo;
-    iosurface_width_ = width;
-    iosurface_height_ = height;
-    iosurface_id_ = iosurface_id;
-
-    spdlog::info("AttachIOSurface: success (id={}, {}x{}, fbo={}, tex={}, target=0x{:x})",
-                 iosurface_id, width, height, fbo, tex, glTextureTarget);
-    return true;
-#else
-    (void)iosurface_id;
-    (void)width;
-    (void)height;
-    spdlog::error("AttachIOSurface: not supported on this platform");
-    return false;
-#endif // __APPLE__ (macOS + iOS 共享 ANGLE IOSurface 零拷贝路径)
-}
-
-void EGLContextManager::DetachIOSurface() {
-    DestroyIOSurfaceResources();
-    spdlog::info("DetachIOSurface: reverted to Pbuffer mode");
-}
-
 void EGLContextManager::BindRenderTarget() {
-    if (iosurface_fbo_ != 0) {
-        glBindFramebuffer(GL_FRAMEBUFFER, iosurface_fbo_);
-        glViewport(0, 0, static_cast<GLsizei>(iosurface_width_),
-                   static_cast<GLsizei>(iosurface_height_));
-    } else if (native_window_ != nullptr && window_surface_ != EGL_NO_SURFACE) {
-        // Android WindowSurface mode: render to default FBO (0)
+    if (native_window_ != nullptr && window_surface_ != EGL_NO_SURFACE) {
+        // Android WindowSurface 模式：渲染到默认 FBO (0)
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, static_cast<GLsizei>(window_width_),
                    static_cast<GLsizei>(window_height_));
@@ -490,40 +287,12 @@ void EGLContextManager::BindRenderTarget() {
     }
 }
 
-void EGLContextManager::DestroyIOSurfaceResources() {
-    if (iosurface_fbo_ != 0) {
-        glDeleteFramebuffers(1, &iosurface_fbo_);
-        iosurface_fbo_ = 0;
-    }
-    if (iosurface_rbo_depth_ != 0) {
-        glDeleteRenderbuffers(1, &iosurface_rbo_depth_);
-        iosurface_rbo_depth_ = 0;
-    }
-    if (iosurface_texture_ != 0) {
-        // Release the texture image binding before deleting
-        if (iosurface_pbuffer_ != EGL_NO_SURFACE && display_ != EGL_NO_DISPLAY) {
-            eglReleaseTexImage(display_, iosurface_pbuffer_, EGL_BACK_BUFFER);
-        }
-        glDeleteTextures(1, &iosurface_texture_);
-        iosurface_texture_ = 0;
-    }
-    if (iosurface_pbuffer_ != EGL_NO_SURFACE && display_ != EGL_NO_DISPLAY) {
-        eglDestroySurface(display_, iosurface_pbuffer_);
-        iosurface_pbuffer_ = EGL_NO_SURFACE;
-    }
-    iosurface_tex_target_ = 0;
-    iosurface_width_ = 0;
-    iosurface_height_ = 0;
-    iosurface_id_ = 0;
-}
-
 // ---------------------------------------------------------------------------
 // Android: Initialize EGL directly with a WindowSurface (no Pbuffer)
 // ---------------------------------------------------------------------------
 
 bool EGLContextManager::InitializeWithWindow(void* window,
-                                              uint32_t width, uint32_t height,
-                                              AngleBackend backend) {
+                                              uint32_t width, uint32_t height) {
 #if defined(__ANDROID__)
     if (!window || width == 0 || height == 0) {
         EGL_LOGE("InitializeWithWindow: invalid parameters (window=%p, %ux%u)",
@@ -536,12 +305,11 @@ bool EGLContextManager::InitializeWithWindow(void* window,
         Destroy();
     }
 
-    angle_backend_ = backend;
 
-    // 1. Get EGL display — shared logic with Vulkan → OpenGLES fallback
-    display_ = AcquireAngleDisplay(angle_backend_);
+    // 1. 获取原生 EGL display
+    display_ = AcquireDisplay();
     if (display_ == EGL_NO_DISPLAY) {
-        EGL_LOGE("InitializeWithWindow: AcquireAngleDisplay failed: 0x%x", eglGetError());
+        EGL_LOGE("InitializeWithWindow: AcquireDisplay failed: 0x%x", eglGetError());
         return false;
     }
 
@@ -565,7 +333,7 @@ bool EGLContextManager::InitializeWithWindow(void* window,
         EGL_ALPHA_SIZE,      8,
         EGL_DEPTH_SIZE,      0,
         EGL_STENCIL_SIZE,    8,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
         EGL_NONE
     };
 
@@ -595,9 +363,9 @@ bool EGLContextManager::InitializeWithWindow(void* window,
     }
     EGL_LOGI("InitializeWithWindow: WindowSurface created %ux%u", width, height);
 
-    // 5. Create GLES2 context
+    // 5. Create GLES3 context
     EGLint contextAttribs[] = {
-        EGL_CONTEXT_CLIENT_VERSION, 2,
+        EGL_CONTEXT_CLIENT_VERSION, 3,
         EGL_NONE
     };
     context_ = eglCreateContext(display_, config_, EGL_NO_CONTEXT, contextAttribs);
@@ -626,9 +394,9 @@ bool EGLContextManager::InitializeWithWindow(void* window,
     }
     EGL_LOGI("InitializeWithWindow: MakeCurrent OK");
 
-    // Disable VSync wait — Flutter already controls frame pacing via its own
+    // Disable VSync wait — the host shell already controls frame pacing via its own
     // Choreographer / VSync signal.  Without this, eglSwapBuffers blocks for
-    // one VSync period which desynchronises from Flutter's tick and causes
+    // one VSync period which desynchronises from the host's tick and causes
     // visible flicker.
     eglSwapInterval(display_, 0);
 
@@ -707,7 +475,7 @@ bool EGLContextManager::AttachNativeWindow(void* window,
         return false;
     }
 
-    // Disable VSync wait — Flutter controls frame pacing
+    // Disable VSync wait — the host shell controls frame pacing
     eglSwapInterval(display_, 0);
 
     native_window_ = nativeWindow;
