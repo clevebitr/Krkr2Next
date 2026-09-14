@@ -1,206 +1,131 @@
-# 构建与工具链
+# 构建
 
-> iOS 构建需在 **macOS** 上进行（需要 Xcode + Apple 工具链 + vcpkg）。
-> **Android 构建可在 Windows / macOS / Linux 上进行**（需要 NDK + vcpkg）。
-> 根 CMake 设置 `CMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake`，依赖由 vcpkg manifest 安装。
+Android-only。宿主壳是原生 Kotlin/Compose 应用，引擎是 C++ 共享库。
+
+## 为什么引擎在 Gradle 之外构建
+
+根 `CMakeLists.txt` 会设置 vcpkg 的 `CMAKE_TOOLCHAIN_FILE`；Gradle 的
+`externalNativeBuild` 会传入 NDK 自己的 toolchain file。两者同时生效会被 CMake
+判定为 toolchain 重定义而行为异常。
+
+因此流程是：**CMake 出 `.so` → 投放进 `jniLibs/` → Gradle 打包**。
+`build.sh` 把这三步串起来，也可以分开跑（CI 就是分开跑的）。
+
+（`CMakeLists.txt` 里的 toolchain 设置带 `if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)`
+守卫，所以将来要接 `externalNativeBuild` 时不会被挡住。）
+
+## 命令
+
+```bash
+./build.sh debug                     # 引擎 + APK
+./build.sh release
+./build.sh release --engine-only     # 只构建并可投放 libengine_api.so
+./build.sh debug --apk-only          # 只跑 Gradle（引擎产物已就位）
+
+JOBS=16 ./build.sh release           # 并行度
+
+# Linux 宿主验证：不需要 NDK，只验引擎核心能编译、测试能跑
+cmake --preset "Linux Debug Config" && cmake --build --preset "Linux Debug Build"
+```
+
+`build.sh` 是薄封装，实际逻辑在 `scripts/build_engine_android.sh`。
 
 ## 前置要求
 
-文档站使用 MkDocs Material 和 `mkdocs-static-i18n` 构建。首次构建前安装固定版本：
+| 项 | 要求 |
+|---|---|
+| Android NDK | **27.0.12077973**。NDK 29 会让 `libffi:arm64-android` 交叉编译失败。 |
+| JDK | 17（AGP 8.x 要求） |
+| CMake | ≥ 3.28 |
+| Ninja | 任意版本 |
+| vcpkg | 可选。未设 `VCPKG_ROOT` 时脚本自举到 `.devtools/vcpkg` 并钉在固定 commit。 |
+| Linux 宿主验证 | 额外需要 `bison`、`libegl1-mesa-dev`、`libgles2-mesa-dev` |
+
+不需要 Flutter SDK。
+
+**NDK 定位顺序**：`ANDROID_NDK_HOME` → `ANDROID_NDK_ROOT` → `$ANDROID_HOME/ndk/*`
+取最新。因为第三条会误选托管 runner 上预装的更新版本，CI 里显式安装并指定
+27.0.12077973，不依赖"取最新"。
+
+## 为什么 vcpkg 要钉 commit
+
+`.devtools/vcpkg` 固定到 `scripts/build_engine_android.sh` 里的
+`VCPKG_PINNED_COMMIT`。跟随滚动 tip 会让 vcpkg 的 ABI 版本逐次漂移，二进制缓存
+全部失效，所有依赖重编（约 40 分钟）。钉住后 ABI 稳定，缓存才真正复用。
+
+## 产物
+
+| 目标 | 路径 |
+|---|---|
+| 引擎共享库 | `out/android/<type>/bridge/engine_api/libengine_api.so` |
+| 投放位置（已 gitignore） | `app/app/src/main/jniLibs/arm64-v8a/libengine_api.so` |
+| APK | `app/app/build/outputs/apk/**/*.apk` |
+
+`libengine_api.so` 是**自包含**的：引擎核心、插件、vcpkg 静态依赖全部链进去，
+APK 只需要带这一个原生库。
+
+### NDK 运行时依赖
+
+`build_engine_android.sh` 会读 `.so` 的 `DT_NEEDED`，把 NDK 运行时库
+（典型是 `libomp.so` / `libc++_shared.so`）一并拷进 `jniLibs/`。漏拷的话运行时
+`dlopen` 报 `library ... not found needed by libengine_api.so`，表现为引擎加载失败、
+界面一直转圈。真机日志里看 `nativelogger` 能看到这条。
+
+### Android 链接约定
+
+插件源码通过 CMake 目标源（`INTERFACE_SOURCES`）传播进共享库，用普通链接。
+**禁止 `--whole-archive`**——会让 psbfile/motionplayer 的对象重复，触发 `ld.lld`
+重复符号错误。
+
+## 校验
+
+不需要 NDK 也能跑的静态检查：
 
 ```bash
-pip install mkdocs-material==9.7.1 mkdocs-static-i18n==1.3.1
+python3 scripts/check_jni_symbols.py
 ```
 
-### iOS / macOS（macOS 主机）
+校验 Kotlin 的 `external` 方法与 C++ 的 JNI 符号一一对应。JNI 符号名编码了包名与
+类名，改名不一致只在运行时抛 `UnsatisfiedLinkError`，编译期不会报错——这个脚本
+把该约束提前到无构建环境也能检查。
 
-- macOS（Apple Silicon 或 Intel）+ Xcode
-
-- CMake ≥3.28、Ninja、ccache（可选）
-
-- bison（TJS2 parser 生成，Homebrew：`/opt/homebrew/opt/bison`）
-
-- **autoconf / automake / autoconf-archive / libtool / gettext / pkg-config**
-  （vcpkg 交叉编译 iOS 时需构建宿主工具：gperf→glib、libexif 等 autotools 端口；
-  GNU libtool 提供 `libtool.m4` 供 aclocal 使用）
-
-  ```bash
-  brew install cmake ninja bison autoconf automake autoconf-archive libtool gettext pkg-config
-  ```
-
-  > ⚠️ Homebrew 的 GNU libtool 会覆盖 PATH 里的 `libtool`。
-  > `build_ios.sh` 已改为显式调用系统 `/usr/bin/libtool` 做静态库合并（`-static`），勿改回裸 `libtool`。
-
-### Android（任意主机）
-
-- Android NDK（r25+ 推荐），设置环境变量：
-  ```bash
-  export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/<版本>"   # Windows: set ANDROID_NDK_HOME=...
-  ```
-  > `build_android.sh` 会自动从 `ANDROID_NDK_HOME` / `ANDROID_NDK_ROOT` / `$ANDROID_HOME/ndk/*`（取最新）定位 NDK。
-
-- JDK 17（AGP 8 要求，Android Studio 自带）
-
-- CMake ≥3.28、Ninja
-
-- Flutter SDK（`flutter` 在 PATH，或放到 `.devtools/flutter`）——`flutter doctor --android-licenses` 需通过
-
-- 网络（vcpkg 首次会 clone 依赖）
-
-## 快速开始
+有产物时：
 
 ```bash
-# 一键构建 iOS（默认 debug，需 macOS）
-./build.sh ios debug
-
-# 或 release
-./build.sh ios release
-
-# Android APK（Windows / macOS / Linux 均可）
-./build.sh android debug
-
-# macOS
-./build.sh macos debug
+scripts/verify_engine_so.sh out/android/debug/bridge/engine_api/libengine_api.so "$ANDROID_NDK_HOME"
 ```
 
-## iOS 构建步骤（build/build\_ios.sh 内部）
+断言：24 个 `engine_*` C ABI 符号齐全、`NativeEngine` 的三个 JNI 符号存在、
+动态依赖是平台原生 `libEGL.so`/`libGLESv2.so`、二进制中不含 ANGLE 平台常量。
 
-1. 定位 Flutter SDK（`.devtools/flutter` 或 PATH）。
-2. 定位/自举 vcpkg（`.devtools/vcpkg`，`bootstrap-vcpkg.sh`）。
-3. CMake 配置 `iOS <Debug|Release> Config` 预设 → 构建 `iOS <Debug|Release> Build`。
+## CI
 
-   - 输出：`out/ios/<type>/bridge/engine_api/libengine_api.a`（静态库）
+`.github/workflows/android_build.yml`，两个 job：
 
-   - 依赖装到 `out/ios/<type>/vcpkg_installed/arm64-ios/`（triplet `arm64-ios`）
-4. **静态库合并**：
+1. **engine-build** — 先跑 JNI 符号一致性检查，再构建 `.so`，跑
+   `verify_engine_so.sh`，上传产物。独立成 job 是为了让引擎侧问题在 Gradle 之前
+   就失败，反馈更快。
+2. **android-package** — 下载引擎产物放进 `jniLibs/`，Gradle 打包，校验 APK 内含
+   `lib/arm64-v8a/libengine_api.so`，上传 APK。
 
-   - 工程库（排除 `cpp/plugins` 顶层，保留深层子库如 psdparse 的独有 `.o`）→ `libengine_project.a`
+`.github/workflows/engine_verify.yml` 是 Linux 宿主验证：不需要 NDK，编译引擎核心
+与工具并跑测试（`tests/tvpgl_simd_compare.cpp` 的 SIMD 逐像素比对挂在这里）。
 
-   - vcpkg 三方库（排除 libpng/libjpeg/libwebpdecoder/libharfbuzz-subset 冗余子集）→ `libengine_vendors.a`
-
-   - 二者写入 `bridge/flutter_engine_bridge/ios/Libs/`（该目录 `*.a` 已 gitignore）
-5. `flutter pub get` + `flutter build ios --<mode> --no-codesign`
-
-   - 产物：`apps/flutter_app/build/ios/iphoneos/Runner.app`
-6. 真机运行：Xcode 打开 `apps/flutter_app/ios/Runner.xcworkspace`。
-
-## macOS 构建步骤（build/build\_macos.sh 内部）
-
-1. CMake `MacOS <Debug|Release> Config` → 构建 → `out/macos/<type>/bridge/engine_api/libengine_api.dylib`。
-2. `flutter build macos --<mode>` → `build/macos/Build/Products/<Debug|Release>/Runner.app`。
-3. 把 dylib 拷入 `Contents/Frameworks/`，`install_name_tool` 设 `@executable_path/../Frameworks/`，ad-hoc 重签。
-
-## Android 构建步骤（build/build\_android.sh 内部）
-
-1. 定位 NDK（`ANDROID_NDK_HOME` / `ANDROID_NDK_ROOT` / `$ANDROID_HOME/ndk/*` 最新版）。
-2. 定位 Flutter SDK（`.devtools/flutter` 或 PATH）。
-3. 定位/自举 vcpkg（`.devtools/vcpkg`，`bootstrap-vcpkg.sh`）。
-4. CMake 配置 `Android <Debug|Release> Config` 预设 → 构建 `Android <Debug|Release> Build`。
-
-   - 输出：`out/android/<type>/bridge/engine_api/libengine_api.so`（**自包含共享库**）
-
-   - 依赖装到 `out/android/<type>/vcpkg_installed/arm64-android/`（triplet `arm64-android`）
-
-   - `engine_api` 自包含打包：插件子库 `target_sources(PUBLIC)` 源码经 `INTERFACE_SOURCES`
-     直接编进 .so，`engine_api` 普通链接 `krkr2core + krkr2plugin`（**不用 `--whole-archive`**，
-     否则 psbfile/motionplayer 对象重复触发 ld.lld 重复符号）；
-     JNI 胶水 `engine_api_android_jni.cpp` 提供 `krkr_GetNativeWindow` 及 Kotlin 可调用的
-     `nativeSetSurface` / `nativeDetachSurface`。
-5. 拷贝 `libengine_api.so` → `apps/flutter_app/android/app/src/main/jniLibs/arm64-v8a/`（已 gitignore）。
-6. `flutter pub get` + `flutter build apk --<mode>`。
-
-   - 产物：`apps/flutter_app/build/app/outputs/flutter-apk/app-<debug|release>.apk`
-7. 真机运行：`flutter run -d <device>`（或 `adb install` APK）。
-
-### Android 渲染路径
-
-- **GPU 零拷贝（首选）**：Kotlin 插件 `createSurfaceTexture` 创建 `SurfaceTexture` → JNI
-  `nativeSetSurface` 把 `ANativeWindow` 交给引擎 → `engine_tick` 自动挂载 EGL WindowSurface
-  （ANGLE Vulkan 后端）→ `eglSwapBuffers` 直接把帧交给 Flutter。
-- **CPU 回读（兜底）**：`engineReadFrameRgba` → Dart → `updateTextureRgba` → FlutterTexture 上传。
-- 若 SurfaceTexture 创建失败，`engine_surface.dart` 会自动降级到回读路径。
-
-## 产物路径速查
-
-| 目标    | 引擎库                                                               | App 产物                                                                       |
-| ----- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| iOS   | `out/ios/{debug,release}/bridge/engine_api/libengine_api.a`       | `apps/flutter_app/build/ios/iphoneos/Runner.app`                             |
-| Android | `out/android/{debug,release}/bridge/engine_api/libengine_api.so` | `apps/flutter_app/build/app/outputs/flutter-apk/app-{debug,release}.apk`      |
-| macOS | `out/macos/{debug,release}/bridge/engine_api/libengine_api.dylib` | `apps/flutter_app/build/macos/Build/Products/{Debug,Release}/Runner.app` |
-
-## 常用操作
+**`gradle-wrapper.jar` 未入库**（二进制）。CI 在缺失时用固定版本的 Gradle 生成
+一次 wrapper。本地首次构建前同样需要：
 
 ```bash
-# 清理某平台产物
-./build.sh --clean ios
-./build.sh --clean android
-./build.sh --clean macos
-
-# 并行数
-JOBS=16 ./build.sh ios release
+cd app && gradle wrapper --gradle-version 8.11.1
 ```
-
-## CI 打包（GitHub Actions）
-
-- **iOS**：`.github/workflows/ios_package.yml`（手动触发或 `v*` 标签），运行于 `macos-15`。
-
-- **Android**：`.github/workflows/android_package.yml`（手动触发或 `v*` 标签），运行于 `ubuntu-22.04`：
-  setup Flutter + JDK 17 + 自动安装 NDK（`sdkmanager "ndk;27.0.12077973"`）+ `./build.sh android <type>`。
-
-- **引擎核心验证（Linux）**：`.github/workflows/engine_verify.yml` 使用 `Linux Debug` 预设和 `x64-linux` triplet，构建核心与工具并运行可用测试。SIMD 逐像素对比等测试应接入该工作流。
-
-- vcpkg 二进制缓存：`~/.cache/vcpkg`（key 基于 `vcpkg.json`/`vcpkg-configuration.json`/`vcpkg/**`），
-  通过环境变量 `VCPKG_BINARY_SOURCES=files,<path>,readwrite` 启用。
-
-- iOS 产物：未签名 `Runner.app` 的 zip（`ditto` 打包）；Android 产物：APK。均保留 14 天。
-
-- iOS 真机安装需自行用 Apple 开发者证书签名；Android 可直接安装 APK。
-
-### 版本号与发布（GitHub Actions）
-
-- **版本号规则（X.Y.Z 三段式）**：一个版本号同时控制四处，需保持一致——
-  - Git tag / Release：`ios-vX.Y.Z`（iOS）、`android-vX.Y.Z`（Android），**分平台各自 Release**；
-  - 原生 app 版本：iOS `CFBundleShortVersionString`、Android `versionName`（`--build-name`）；
-  - 原生构建号：Android `versionCode`、iOS `CFBundleVersion`（`--build-number`），自动取
-    `major*10000 + minor*100 + patch`（如 `0.1.4` → `104`）；
-  - 软件内版本显示：设置 → 版本，副标题显示该版本号（`--dart-define=APP_VERSION` 注入）。
-- **手动发布（推荐）**：
-  1. Actions → 对应打包工作流 → Run workflow；
-  2. 填 `build_type=release`，填 **`发布版本号`**（`X.Y.Z`），勾选 **`发布 Release`**；
-  3. 跑完自动建 tag `ios-vX.Y.Z` / `android-vX.Y.Z` → 建对应 GitHub Release → 挂产物。
-- **注意**：只测不发布则不勾「发布 Release」（产物仍保留 14 天）；已存在 tag 再跑不会重复建
-  Release，只补充/覆盖产物；`debug` 类型即使发布也是 debug 包，正式发布请用 `release`。
-
-### Android 稳定签名（升级一致性，可选）
-
-Android 覆盖安装要求**同一签名**；默认 release 用 debug 临时签名，每次 CI 全新 runner 生成的
-keystore 不同 → **签名每次不一致，用户无法覆盖更新（只能卸载重装）**。为此提供**可选稳定 keystore**：
-
-- **工作方式**：在 GitHub Secrets 配置后，CI 解出 keystore 并写入 `KEYSTORE_PATH/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD` 环境变量，
-  `android/app/build.gradle` 检测到这些变量（且 keystore 文件存在）时用**固定 keystore** 给 release 签名；
-  未配置则回退 debug 临时签名（现状行为）。
-- **配置 Secrets**（仓库 Settings → Secrets and variables → Actions）：
-  `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。
-- **生成 keystore + base64**（本地一次，妥善保存，丢失则旧包无法更新）：
-  ```bash
-  keytool -genkeypair -v -keystore release.jks -alias release -keyalg RSA \
-    -keysize 2048 -validity 10000 -storepass <pw> -keypass <pw> -dname "CN=PocketKrKr"
-  base64 -w0 release.jks        # 全部输出即为 ANDROID_KEYSTORE_BASE64
-  ```
-- **iOS 无此问题**：iOS 产物是未签名 IPA，由用户用**自己的 Apple ID** 侧载签名；只要 bundle ID
-  （`org.pocketkrkr.app`）不变、每次用同一 Apple ID 重签，即可覆盖更新，无需 CI 签名密钥。
-- **本地构建**：随便装即可不设这些变量；要签名一致就导出上述 4 个环境变量再 `./build.sh android release`。
 
 ## 常见问题
 
-- **找不到 bison**：Homebrew 安装后路径在 `HINTS` 里已列（tjs2/CMakeLists.txt）。
-
-- **vcpkg 卡住**：首次安装 `arm64-ios` 依赖耗时长；`--jobs` 控制并行。
-
-- **符号找不到（iOS）**：确认 `build_ios.sh` 的 libtool 合并步骤成功，`ios/Libs/*.a` 已更新，
-  且 Runner 链接了这些库（podspec 配置）。
-
-- **静态库重复符号**：多为冗余三方库未排除（libpng/libjpeg/libwebpdecoder 等），核对合并脚本排除列表。
-
-- **vcpkg 缓存路径异常**：如果导出目标引用了另一构建类型或另一工作目录，删除对应 triplet 的失效二进制缓存，再重新配置；同时确认缓存 key 包含 manifest、overlay port、triplet 和构建类型。不要修改下载目录中的第三方源码。
-
+- **找不到 bison**：TJS2 parser 需要它。Linux 宿主验证构建必须装。
+- **vcpkg 首次构建很慢**：要交叉编译 `arm64-android` 全部依赖。用
+  `VCPKG_BINARY_SOURCES` 开二进制缓存，并在 CI 里缓存 `~/.cache/vcpkg`。
+- **链接期报 `EGL`/`GLESv2` 找不到**（Linux 宿主）：装
+  `libegl1-mesa-dev libgles2-mesa-dev`。Android 侧由 NDK sysroot 提供，不需要额外操作。
+- **运行期 `UnsatisfiedLinkError`**：JNI 符号名与 Kotlin 侧不一致。跑
+  `scripts/check_jni_symbols.py` 定位。
+- **启动后一直转圈**：先看 `nativelogger`/`dlopen` 报错（缺 NDK 运行时依赖），
+  再看 `KiriNext/Engine` 标签的日志。

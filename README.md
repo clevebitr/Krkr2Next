@@ -1,96 +1,114 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/FiresonZ/PocketKrKr/main/docs/resources/logo.png" alt="PocketKrKr" width="96">
-  <h1 align="center">PocketKrKr</h1>
-  <p align="center">面向移动端的下一代 KiriKiri2（吉里吉里2）运行环境</p>
-</p>
+# KiriNext
 
-<p align="center">
-  <img src="https://img.shields.io/badge/status-In%20Development-orange" alt="Status">
-  <img src="https://img.shields.io/badge/platform-iOS%20%7C%20Android%20%7C%20macOS-blue" alt="Platform">
-  <img src="https://img.shields.io/badge/engine-KiriKiri2-blue" alt="Engine">
-  <img src="https://img.shields.io/badge/framework-Flutter-02569B" alt="Flutter">
-  <img src="https://img.shields.io/badge/graphics-ANGLE(Metal%2FVulkan)-red" alt="Graphics">
-  <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License">
-</p>
+面向 **Android** 的 KiriKiri2（吉里吉里2）运行环境。
 
----
+原生 Kotlin/Compose 宿主壳 + C++ 引擎核心，直连平台自带的 EGL/GLES3 渲染，
+通过零拷贝 SurfaceTexture 把引擎画面交给宿主显示。
 
-**语言 / Language**: 中文 | [English](README_EN.md)
+> 项目从 [PocketKrKr](https://github.com/FiresonZ/PocketKrKr) fork 而来（保留完整
+> 历史，基线标签 `pocketkrkr-base`），在其 C++ 引擎核心上演进：移除 Flutter 壳、
+> 移除 ANGLE 翻译层、改为仅面向 Android。
+>
+> English README 待补。
 
-PocketKrKr 使用 GPL-3.0 协议发布。开发入口、架构约束和参考资料见 [docs/dev/](docs/dev/README.md)。
+## 状态
 
-## 简介
+**内核里程碑（M1）**：打通「选目录 → 启动游戏 → 运行 → 退出」。
+游戏库、ROM 刮削、逐游戏兼容性档案属于后续阶段，尚未实现。
 
-**PocketKrKr** 是 [KiriKiri2 (吉里吉里2)](https://zh.wikipedia.org/wiki/%E5%90%89%E9%87%8C%E5%90%89%E9%87%8C2) 视觉小说引擎的现代化运行环境，**专注移动端：iOS + Android**（macOS 保留为 Apple 开发/调试目标）。它完全兼容原版游戏脚本，通过 ANGLE（iOS/macOS 用 Metal 后端，Android 用 Vulkan 后端）+ 零拷贝纹理共享（IOSurface / SurfaceTexture）实现硬件加速渲染，并在渲染性能与脚本执行效率上做了大量优化。
-
-项目采用「C++ 引擎 + Flutter 壳」架构：C++ 引擎离屏渲染到 IOSurface（iOS/macOS）或 SurfaceTexture（Android），Flutter 以原生纹理零拷贝显示，UI 完全由 Flutter 构建。
+引擎侧仍继承 PocketKrKr 的已知未完成项：Z-compat 主渲染路径的目标绑定、
+视频合成落屏、Layer 特效像素实现、复杂 M2 motion。详见
+[开发文档](docs/dev/README.md)。
 
 ## 架构
 
 ```
-C++ 引擎 (cpp/core, TJS2) ──engine_api C ABI──> Dart FFI (flutter_engine_bridge)
-        │ ANGLE EGL/GLES2 离屏渲染                     │ Flutter Texture
-        └─ iOS/macOS: IOSurface ──┐                    │
-        └─ Android:  SurfaceTexture ─┴──────────────────┘ 显示
+┌──────────────────────────────────────────────┐
+│ Kotlin / Compose 壳            app/          │
+│  LauncherScreen · GameScreen · EngineSession │
+└──────────────┬───────────────────────────────┘
+               │ JNI（System.loadLibrary + 符号绑定）
+┌──────────────▼───────────────────────────────┐
+│ bridge/engine_api    C ABI 0x01000000         │
+└──────────────┬───────────────────────────────┘
+               │ 链接 krkr2core + krkr2plugin
+┌──────────────▼───────────────────────────────┐
+│ cpp/core   TJS2 VM · XP3 · sound · movie      │
+│  iTVPRenderManager  ← 渲染接缝                │
+│    └ tTVPRenderManager_OpenGL（GLSL）         │
+│       └ 原生 EGL + GLES3                      │
+│          └ SurfaceTexture 零拷贝              │
+└──────────────────────────────────────────────┘
 ```
 
-> 📖 渲染管线、桥接层等技术细节见 **[docs/dev/](docs/dev/README.md)**（技术栈、架构、关键引用、构建、约定陷阱）。
+**为什么不用 ANGLE**：ANGLE 的价值在于把 GLES 翻译到 Metal 以复用到 iOS。
+只面向 Android 时它是多余的一层翻译 + APK 膨胀 + 需要长期维护的本地补丁，
+因此改为直连平台自带的 EGL/GLES3。
 
-## 平台支持
-
-| 平台 | 状态 | 图形后端 | 纹理共享 | 引擎形态 |
-|------|------|----------|----------|----------|
-| iOS | 🚧 主目标，开发中 | Metal | IOSurface | 静态库链接进 Runner |
-| Android | 🚧 主目标，开发中 | Vulkan | SurfaceTexture | `libengine_api.so` 打包进 APK |
-| macOS | ✅ 开发目标 | Metal | IOSurface | dylib 打包进 Frameworks |
-
-## 系统要求
-
-| 平台 | 系统版本 | 架构 | 备注 |
-|------|----------|------|------|
-| iOS | iOS / iPadOS 15.0+ | arm64 | 需支持 iOS 15 的 64 位设备 |
-| Android | Android 7.0（API 24）+ | arm64-v8a | 需支持 Vulkan 的 GPU |
-| macOS | macOS（开发目标） | arm64 | — |
-
-> 引擎（静态库/vcpkg 依赖/Flutter）均按 `arm64`、对应最低系统版本配置，见
-> `CMakePresets.json`、`vcpkg/triplets/arm64-ios.cmake`、`vcpkg/triplets/arm64-android.cmake`。
+**为什么不用 Flutter 壳**：同上——壳只有一个平台时，Flutter 运行时（约
+15-20MB）换不来任何好处，反而多一层 Dart FFI。
 
 ## 构建
 
+引擎在 Gradle **之外**独立构建（根 `CMakeLists.txt` 会设置 vcpkg 的
+`CMAKE_TOOLCHAIN_FILE`，与 Gradle 传入的 NDK toolchain file 冲突）。
+
 ```bash
-./build.sh ios release     # 构建 iOS（需 macOS/Xcode，或走 CI）
-./build.sh android debug   # 构建 Android APK（Windows / macOS / Linux 均可）
-./build.sh macos debug     # 构建 macOS（开发）
+./build.sh debug                    # 引擎 + APK
+./build.sh release
+./build.sh release --engine-only    # 只出 libengine_api.so 并投放进 jniLibs
+./build.sh debug --apk-only         # 只跑 Gradle
+
+# Linux 宿主验证（无需 NDK，校验引擎核心可编译）
+cmake --preset "Linux Debug Config" && cmake --build --preset "Linux Debug Build"
 ```
 
-详见 [docs/dev/build.md](docs/dev/build.md) 与 [build.sh](build.sh)。
+**前置要求**
 
-## 获取/安装
+| 项 | 版本 / 说明 |
+|---|---|
+| 主机 | Linux / macOS / Windows（iOS 已移除，不需要 macOS） |
+| Android NDK | **27.0.12077973**（NDK 29 会破坏 `libffi:arm64-android`） |
+| JDK | 17 |
+| CMake / Ninja | ≥ 3.28 / 任意 |
+| vcpkg | 未设置 `VCPKG_ROOT` 时自动自举到 `.devtools/vcpkg`（钉在固定 commit） |
+| ABI | 仅 `arm64-v8a`；`minSdk 24` |
 
-在线构建产物由 GitHub Actions 打包（iOS 未签名、Android 为 APK），并支持自动打 tag +
-建 Release 挂产物。具体触发方式、产物命名、真机安装与版本号规范见
-**[docs/dev/build.md](docs/dev/build.md)**。本地无 macOS 时，Android APK 可在 Windows 上直接构建。
+无需 Flutter SDK。
 
-## 开发进度
+**产物**
 
-| 模块 | 状态 | 说明 |
-|------|------|------|
-| C++ 引擎核心编译 | ✅ 完成 | KiriKiri2 核心引擎可编译（iOS/Android/macOS） |
-| ANGLE 渲染层迁移 | ✅ 基本完成 | EGL/GLES 离屏渲染（Metal / Vulkan 后端），替代旧 Cocos2d-x + GLFW 管线 |
-| engine_api 桥接层 | ✅ 完成 | 稳定 C ABI，含启动/主循环/输入/内存统计等 |
-| Flutter 插件（零拷贝纹理） | ✅ 基本完成 | IOSurface + SurfaceTexture 零拷贝纹理 + RGBA 兼容路径 |
-| Flutter 调试 UI | ✅ 基本完成 | FPS 控制、引擎生命周期、渲染状态监控 |
-| 输入事件转发 | ✅ 基本完成 | 触控 / 指针事件坐标映射转发 |
-| Android 构建链 | ✅ 基本完成 | 自包含 `libengine_api.so`（含 JNI），APK 可出、真机不再闪退/不转圈；进入日志筛查游戏兼容性阶段 |
-| 引擎性能优化 | 🔨 进行中 | SIMD 像素混合（Highway）：非 PS 混合已对齐标量；**11 个 PS 混合回退标量**（待改 u32 lane 再放回）；GPU 合成管线等 |
-| 游戏兼容性优化 | 🔨 进行中 | 补全解析引擎、插件，目标与 Z 闭源版兼容持平 |
+| 目标 | 路径 |
+|---|---|
+| 引擎共享库 | `out/android/<type>/bridge/engine_api/libengine_api.so` |
+| 投放位置（已 gitignore） | `app/app/src/main/jniLibs/arm64-v8a/libengine_api.so` |
+| APK | `app/app/build/outputs/apk/**/*.apk` |
 
-## 相关文档
+## 校验
 
-- 开发文档：[docs/dev/](docs/dev/README.md)
-- 项目主页：<https://github.com/FiresonZ/PocketKrKr>
-- 兼容性与参考资料：[docs/dev/krkrz-compat.md](docs/dev/krkrz-compat.md)
+无 NDK 环境下也能跑：
 
-## 许可证
+```bash
+python3 scripts/check_jni_symbols.py     # Kotlin external ↔ C++ JNI 符号一致性
+```
 
-本项目基于 GNU General Public License v3.0 (GPL-3.0) 开源，详见 [LICENSE](./LICENSE)。
+有构建产物时：
+
+```bash
+scripts/verify_engine_so.sh out/android/debug/bridge/engine_api/libengine_api.so "$ANDROID_NDK_HOME"
+```
+
+CI（`.github/workflows/android_build.yml`）跑完整链路：引擎构建 → `.so` 符号/依赖
+断言 → Gradle 打包 → 校验 APK 内含引擎库。Linux 宿主验证见
+`engine_verify.yml`。
+
+## 权限
+
+引擎消费**裸文件系统路径**（`engine_open_game(path)`），SAF 的 `content://` URI
+无法直接解析为真实路径，因此需要完整的文件访问权限：API 30+ 引导用户授予
+`MANAGE_EXTERNAL_STORAGE`，API 24-28 走 `READ_EXTERNAL_STORAGE`。
+
+## 许可
+
+GPL-3.0，继承自 PocketKrKr。第三方组件与授权见
+[THIRD_PARTY](docs/dev/krkrz-compat.md) 与各依赖自带许可。
