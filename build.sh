@@ -1,178 +1,79 @@
 #!/usr/bin/env bash
 #
-# build.sh — krkr2 unified build entry point
+# build.sh — KiriNext 构建入口（仅 Android）
 #
 # Usage:
-#   ./build.sh <platform> [options]
-#   ./build.sh                          # Interactive platform selection
+#   ./build.sh [debug|release] [--engine-only] [--apk-only]
 #
-# Platforms:
-#   ios, android, macos
+# 说明：
+#   KiriNext 只面向 Android。引擎共享库经 scripts/build_engine_android.sh 构建
+#   并投放到 app/app/src/main/jniLibs/arm64-v8a/，随后由 Gradle 打包进 APK。
 #
-# Options:
-#   debug|release       Build type (default: debug)
-#   --jobs=<N>          Parallel build jobs (default: 8)
-#   --clean             Clean build artifacts before building
-#   --help, -h          Show this help message
+#   Gradle 不使用 externalNativeBuild —— 引擎在 Gradle 之外独立构建。原因是根
+#   CMakeLists.txt 会设置 vcpkg 的 CMAKE_TOOLCHAIN_FILE，与 Gradle 传入的 NDK
+#   toolchain file 冲突，CMake 会因 toolchain 重定义而行为异常。
 #
-# Examples:
-#   ./build.sh ios release
-#   ./build.sh android debug --jobs=16
-#   ./build.sh --clean ios debug
+# 环境变量：见 scripts/build_engine_android.sh 头部注释
 #
-
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_SCRIPTS_DIR="$SCRIPT_DIR/build"
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-# ============================================================
-# Help
-# ============================================================
-show_help() {
-    echo ""
-    echo -e "${CYAN}krkr2 Unified Build Script${NC}"
-    echo ""
-    echo "Usage:"
-    echo "  ./build.sh <platform> [options]"
-    echo "  ./build.sh                          # Interactive platform selection"
-    echo ""
-    echo "Platforms:"
-    echo "  ios        Build iOS app (C++ static lib + Flutter)"
-    echo "  android    Build Android app (C++ shared lib + Flutter APK)"
-    echo "  macos      Build macOS app (C++ dylib + Flutter)"
-    echo ""
-    echo "Options:"
-    echo "  debug|release       Build type (default: debug)"
-    echo "  --jobs=<N>          Parallel build jobs (default: 8)"
-    echo "  --clean             Clean build artifacts before building"
-    echo "  --help, -h          Show this help message"
-    echo ""
-    echo "Examples:"
-    echo "  ./build.sh ios release"
-    echo "  ./build.sh macos debug --jobs=16"
-    echo "  ./build.sh --clean ios debug"
-    echo ""
-}
-
-# ============================================================
-# Parse arguments
-# ============================================================
-PLATFORM=""
-BUILD_TYPE=""
-CLEAN=false
-EXTRA_ARGS=()
+BUILD_TYPE="debug"
+ENGINE_ONLY=false
+APK_ONLY=false
 
 for arg in "$@"; do
     case "$arg" in
         --help|-h)
-            show_help
+            sed -n '3,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
-        --clean)
-            CLEAN=true
-            ;;
-        --jobs=*)
-            export JOBS="${arg#*=}"
-            ;;
-        ios|android|macos)
-            PLATFORM="$arg"
-            ;;
+        --engine-only) ENGINE_ONLY=true ;;
+        --apk-only)    APK_ONLY=true ;;
         debug|release|Debug|Release)
-            BUILD_TYPE="$(echo "$arg" | tr '[:upper:]' '[:lower:]')"
-            ;;
+            BUILD_TYPE="$(echo "$arg" | tr '[:upper:]' '[:lower:]')" ;;
         *)
-            echo -e "${YELLOW}[WARN]${NC} Unknown argument: $arg (passing through)"
-            EXTRA_ARGS+=("$arg")
+            echo "错误：未知参数 '$arg'（用 --help 查看用法）" >&2
+            exit 1
             ;;
     esac
 done
 
-# ============================================================
-# Interactive platform selection (if not specified)
-# ============================================================
-if [[ -z "$PLATFORM" ]]; then
-    echo ""
-    echo -e "${CYAN}==============================${NC}"
-    echo -e "${CYAN}  krkr2 Build System${NC}"
-    echo -e "${CYAN}==============================${NC}"
-    echo ""
-    echo "Select target platform:"
-    echo ""
-    echo "  1) ios"
-    echo "  2) android"
-    echo "  3) macos"
-    echo ""
-    read -rp "Enter choice [1-3]: " choice
-    case "$choice" in
-        1|ios)      PLATFORM="ios" ;;
-        2|android)  PLATFORM="android" ;;
-        3|macos)    PLATFORM="macos" ;;
-        *)
-            echo -e "${RED}[ERROR]${NC} Invalid choice: $choice"
-            exit 1
-            ;;
-    esac
-    echo ""
-fi
-
-# Default build type
-if [[ -z "$BUILD_TYPE" ]]; then
-    BUILD_TYPE="debug"
+if [[ "$APK_ONLY" == false ]]; then
+    bash "$SCRIPT_DIR/scripts/build_engine_android.sh" "$BUILD_TYPE"
+    [[ "$ENGINE_ONLY" == true ]] && exit 0
 fi
 
 # ============================================================
-# Validate platform script exists
+# Gradle 打包 APK
 # ============================================================
-PLATFORM_SCRIPT="$BUILD_SCRIPTS_DIR/build_${PLATFORM}.sh"
+APP_DIR="$SCRIPT_DIR/app"
 
-if [[ ! -f "$PLATFORM_SCRIPT" ]]; then
-    echo -e "${RED}[ERROR]${NC} Build script not found: $PLATFORM_SCRIPT"
+if [[ ! -d "$APP_DIR" ]]; then
+    echo "错误：Kotlin 壳目录不存在：$APP_DIR" >&2
     exit 1
 fi
 
-# ============================================================
-# Clean (optional)
-# ============================================================
-if [[ "$CLEAN" == true ]]; then
-    echo -e "${CYAN}Cleaning build artifacts for $PLATFORM...${NC}"
-    case "$PLATFORM" in
-        ios)
-            rm -rf "$SCRIPT_DIR/out/ios/$BUILD_TYPE"
-            rm -rf "$SCRIPT_DIR/apps/flutter_app/build/ios"
-            echo -e "${GREEN}[INFO]${NC} iOS build artifacts cleaned."
-            ;;
-        android)
-            rm -rf "$SCRIPT_DIR/out/android/$BUILD_TYPE"
-            rm -rf "$SCRIPT_DIR/apps/flutter_app/build/app"
-            echo -e "${GREEN}[INFO]${NC} Android build artifacts cleaned."
-            ;;
-        macos)
-            rm -rf "$SCRIPT_DIR/out/macos/$BUILD_TYPE"
-            rm -rf "$SCRIPT_DIR/apps/flutter_app/build/macos"
-            echo -e "${GREEN}[INFO]${NC} macOS build artifacts cleaned."
-            ;;
-    esac
-    echo ""
+JNI_SO="$APP_DIR/app/src/main/jniLibs/arm64-v8a/libengine_api.so"
+if [[ ! -f "$JNI_SO" ]]; then
+    echo "错误：未找到引擎共享库：$JNI_SO" >&2
+    echo "  先运行：./build.sh $BUILD_TYPE --engine-only" >&2
+    exit 1
 fi
 
-# ============================================================
-# Run platform build script
-# ============================================================
-echo -e "${CYAN}==============================${NC}"
-echo -e "${CYAN}  Building: $PLATFORM ($BUILD_TYPE)${NC}"
-echo -e "${CYAN}==============================${NC}"
+if [[ "$BUILD_TYPE" == "release" ]]; then
+    GRADLE_TASK="assembleRelease"
+else
+    GRADLE_TASK="assembleDebug"
+fi
+
 echo ""
+echo "========================================"
+echo "  构建 APK：$GRADLE_TASK"
+echo "========================================"
+(cd "$APP_DIR" && ./gradlew ":$GRADLE_TASK")
 
-# Ensure the script is executable
-chmod +x "$PLATFORM_SCRIPT"
-
-# Execute the platform-specific build script with arguments
-exec bash "$PLATFORM_SCRIPT" "$BUILD_TYPE" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
+echo ""
+echo "APK 产物："
+find "$APP_DIR/app/build/outputs/apk" -name '*.apk' 2>/dev/null || true
