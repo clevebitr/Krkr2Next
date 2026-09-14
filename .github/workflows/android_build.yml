@@ -78,6 +78,9 @@ jobs:
           # autoconf/automake/libtool：vcpkg 的 autotools 端口需要宿主 autoreconf
           sudo apt-get install -y cmake ninja-build ccache autoconf automake libtool
           cmake --version | head -1
+          # 打印绝对路径：构建 preset 用 Ninja 生成器，找不到 ninja 时
+          # CMake 只报 "CMAKE_MAKE_PROGRAM is not set"，看不出是安装问题还是 PATH 问题
+          echo "ninja: $(command -v ninja)"
           ninja --version
 
       - name: 安装 Android NDK ${{ env.NDK_VERSION }}
@@ -117,9 +120,12 @@ jobs:
             vcpkg-${{ runner.os }}-
 
       - name: 构建引擎
-        env:
-          VCPKG_BINARY_SOURCES: clear;files,$HOME/.cache/vcpkg,readwrite
-        run: ./build.sh "$BUILD_TYPE" --engine-only
+        # VCPKG_BINARY_SOURCES 必须在这里 export，不能放进 env: 块——
+        # GitHub Actions 的 env: 值是字面量，$HOME 不会被 shell 展开，
+        # vcpkg 会因为路径不是绝对路径而直接报错退出。
+        run: |
+          export VCPKG_BINARY_SOURCES="clear;files,$HOME/.cache/vcpkg,readwrite"
+          ./build.sh "$BUILD_TYPE" --engine-only
 
       - name: 校验 libengine_api.so
         run: scripts/verify_engine_so.sh "out/android/$BUILD_TYPE/bridge/engine_api/libengine_api.so" "$ANDROID_NDK_HOME"
@@ -162,23 +168,17 @@ jobs:
           name: libengine_api-${{ env.BUILD_TYPE }}
           path: app/app/src/main/jniLibs/arm64-v8a/
 
-      - name: 生成 Gradle wrapper（若仓库未含 jar）
-        working-directory: app
-        run: |
-          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            # gradle-wrapper.jar 是二进制，未入库；用本机 gradle 生成一次
-            sudo apt-get update -o Acquire::Retries=3 || true
-            sudo apt-get install -y unzip
-            GRADLE_VER="$(sed -n 's/.*gradle-\([0-9.]*\)-bin\.zip.*/\1/p' gradle/wrapper/gradle-wrapper.properties)"
-            curl -fsSL -o /tmp/gradle.zip "https://services.gradle.org/distributions/gradle-${GRADLE_VER}-bin.zip"
-            unzip -q /tmp/gradle.zip -d /tmp
-            /tmp/gradle-${GRADLE_VER}/bin/gradle wrapper --gradle-version "$GRADLE_VER"
-          fi
-          chmod +x gradlew
+      - name: Setup Gradle
+        # gradle-wrapper.jar 是二进制、未入库，所以 CI 里直接用 action 提供的
+        # gradle，不走 ./gradlew。本地构建需要先跑一次
+        # `cd app && gradle wrapper --gradle-version 8.11.1`。
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
 
       - name: 构建 APK
         working-directory: app
-        run: ./gradlew --no-daemon ":app:assemble$([ "$BUILD_TYPE" = release ] && echo Release || echo Debug)"
+        run: gradle --no-daemon ":app:assemble$([ "$BUILD_TYPE" = release ] && echo Release || echo Debug)"
 
       - name: 校验 APK 内含引擎库
         run: |
