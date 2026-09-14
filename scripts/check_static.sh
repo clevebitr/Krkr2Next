@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#
+# check_static.sh — 全部本地静态检查的统一入口
+#
+# 这些检查都不需要 NDK / vcpkg / cmake，因此在 Termux 和 CI 上都能跑。
+# 把它们集中成一个入口，是为了新增检查时只改一处，而不是去每个 workflow 里
+# 同步罗列——漏同步的后果是某条检查在 CI 上悄悄不跑。
+#
+# CI 用法（android_build.yml 与 engine_verify.yml 都调用它）：
+#   bash scripts/check_static.sh
+#
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$ROOT"
+
+fail=0
+
+run() {
+    local name="$1"; shift
+    echo "──────────────────────────────────────────"
+    echo "  $name"
+    echo "──────────────────────────────────────────"
+    if "$@"; then
+        echo
+    else
+        echo "  ↑ 失败：$name"
+        echo
+        fail=1
+    fi
+}
+
+# 1. Kotlin external 方法 ↔ C++ JNI 符号一一对应。
+#    JNI 符号名编码包名与类名，不一致只在运行时抛 UnsatisfiedLinkError。
+run "JNI 符号一致性" python3 "$SCRIPT_DIR/check_jni_symbols.py"
+
+# 2. 移植文件无未经承认的漂移（见 compat/upstream/aetherkiri_ports.json）。
+run "移植溯源清单" python3 "$SCRIPT_DIR/check_port_drift.py"
+
+# 3. 独立源文件的本地语法检查（Catch2 语法垫片 + clang -fsyntax-only）。
+#    无编译器时脚本自行跳过并返回 0。
+run "本地语法检查" bash "$SCRIPT_DIR/check_syntax.sh"
+
+echo "##########################################"
+if (( fail )); then
+    echo "# 静态检查有失败项。"
+    exit 1
+fi
+echo "# 全部静态检查通过。"

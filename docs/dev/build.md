@@ -79,17 +79,35 @@ APK 只需要带这一个原生库。
 
 ## 校验
 
-不需要 NDK 也能跑的静态检查：
+### 本地静态检查（不需要 NDK / vcpkg / cmake）
 
 ```bash
-python3 scripts/check_jni_symbols.py
+bash scripts/check_static.sh
 ```
 
-校验 Kotlin 的 `external` 方法与 C++ 的 JNI 符号一一对应。JNI 符号名编码了包名与
-类名，改名不一致只在运行时抛 `UnsatisfiedLinkError`，编译期不会报错——这个脚本
-把该约束提前到无构建环境也能检查。
+聚合入口，依次跑三项：
 
-有产物时：
+| 检查 | 脚本 | 拦什么 |
+|---|---|---|
+| JNI 符号一致性 | `scripts/check_jni_symbols.py` | Kotlin 的 `external` 方法与 C++ JNI 符号一一对应。符号名编码包名与类名，不一致只在运行时抛 `UnsatisfiedLinkError`，编译期不报错 |
+| 移植溯源 | `scripts/check_port_drift.py` | 与 AetherKiri 共享的文件无未经承认的漂移（见 `compat/upstream/aetherkiri_ports.json`） |
+| 本地语法检查 | `scripts/check_syntax.sh` | 对头文件依赖少的源文件跑 `clang -fsyntax-only`（Catch2 用语法垫片替代） |
+
+**关于本地能做什么**：Termux 里没有 cmake / ninja / NDK / vcpkg，**完整引擎构建
+不可能**。但 Termux 自带 clang，因此**只依赖少量头文件的源文件是可以先编译一遍的**
+——`check_syntax.sh` 就利用这一点，把"拼错符号名 / 缺 include / 断言写错 / 结构体
+偏移算错"这类问题在推送前拦下来，而不是等几分钟的 CI。
+
+它的边界：只证明**能编译**，不证明行为正确；依赖 spdlog / ffmpeg / vcpkg 三方库的
+源文件加不进去，那类只能靠 CI。
+
+改了移植文件后：
+
+```bash
+python3 scripts/check_port_drift.py --update   # 刷新哈希，并改 modifications 字段
+```
+
+### 有构建产物时
 
 ```bash
 scripts/verify_engine_so.sh out/android/debug/bridge/engine_api/libengine_api.so "$ANDROID_NDK_HOME"
@@ -100,19 +118,28 @@ scripts/verify_engine_so.sh out/android/debug/bridge/engine_api/libengine_api.so
 
 ## CI
 
-`.github/workflows/android_build.yml`，两个 job：
+两条流水线，都在 push/PR 上自动跑：
 
-1. **engine-build** — 先跑 JNI 符号一致性检查，再构建 `.so`，跑
-   `verify_engine_so.sh`，上传产物。独立成 job 是为了让引擎侧问题在 Gradle 之前
-   就失败，反馈更快。
+**`.github/workflows/engine_verify.yml` — 引擎行为验证（Linux 宿主）**
+
+最快的正确性信号：不需要 NDK，5-10 分钟出结果。先跑 `check_static.sh`，再编译
+引擎核心与工具，最后 `ctest --no-tests=error` 跑 `tests/` 下的用例
+（Catch2 单元测试 + `tvpgl_simd_compare` 的 SIMD 逐像素比对）。
+
+`--no-tests=error` 是刻意的：测试目录存在却没注册到任何用例属于配置错误
+（例如 `catch_discover_tests` 漏调），必须失败而不是静默通过——否则测试被悄悄
+摘掉也不会有人发现。
+
+**`.github/workflows/android_build.yml` — Android 交叉编译与打包**
+
+1. **engine-build** — `check_static.sh` → 装 NDK 27 → 构建 `libengine_api.so` →
+   `verify_engine_so.sh` 符号断言 → 上传产物。独立成 job 是为了让引擎侧问题在
+   Gradle 之前就失败。
 2. **android-package** — 下载引擎产物放进 `jniLibs/`，Gradle 打包，校验 APK 内含
    `lib/arm64-v8a/libengine_api.so`，上传 APK。
 
-`.github/workflows/engine_verify.yml` 是 Linux 宿主验证：不需要 NDK，编译引擎核心
-与工具并跑测试（`tests/tvpgl_simd_compare.cpp` 的 SIMD 逐像素比对挂在这里）。
-
-**`gradle-wrapper.jar` 未入库**（二进制）。CI 在缺失时用固定版本的 Gradle 生成
-一次 wrapper。本地首次构建前同样需要：
+**`gradle-wrapper.jar` 未入库**（二进制）。CI 用 `gradle/actions/setup-gradle`
+直接提供 gradle，不走 `./gradlew`。本地构建前需要生成一次：
 
 ```bash
 cd app && gradle wrapper --gradle-version 8.11.1

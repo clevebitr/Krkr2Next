@@ -2,15 +2,24 @@ name: 引擎核心验证 (Linux)
 
 # 在 Ubuntu runner 上以宿主构建（非交叉编译）验证 C++ 引擎核心：
 #   - 编译全部引擎库（engine_api SHARED + core + plugins + tools）
-#   - 后续可挂 catch2 单元测试（tests/ 目录）与 SIMD on/off 逐像素比对
-# 反馈最快：Linux 宿主构建无 NDK/Xcode 开销，配合 vcpkg 二进制缓存 + ccache，
-# 常规改动 5-10 分钟出结果，且与 iOS/Android 的 SIMD 结论等价（公式缺陷与指令集无关）。
+#   - 跑 tests/ 下的 Catch2 单元测试与 SIMD 逐像素比对（ctest）
+#
+# 这是**最快的正确性信号**：Linux 宿主构建无 NDK 开销，配合 vcpkg 二进制缓存 +
+# ccache，常规改动 5-10 分钟出结果，且与 Android 的 SIMD/算法结论等价
+# （公式缺陷与指令集无关）。因此它对 push/PR 自动运行——不能自动跑的测试
+# 等于没有测试。
+#
+# 与 android_build.yml 的分工：那边验证 Android 交叉编译与 APK 打包，
+# 这边验证引擎的行为正确性。两者都用 push/PR 触发。
 
 on:
-  workflow_dispatch:   # 仅允许手动触发
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
 
 concurrency:
-  group: engine-verify
+  group: engine-verify-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -24,6 +33,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: 静态检查
+        # 不需要任何依赖，秒级出结果，放在装依赖之前
+        run: bash scripts/check_static.sh
 
       - name: Install build dependencies
         # bison: 生成 TJS2 parser
@@ -96,13 +109,12 @@ jobs:
           path: ~/.cache/vcpkg
           key: vcpkg-linux-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg/ports/**', 'vcpkg/triplets/**') }}
 
-      - name: Run tests (ctest, if any)
+      - name: Run tests (ctest)
         run: |
-          if [ -d "out/linux/debug/tests" ]; then
-            (cd out/linux/debug && ctest --output-on-failure)
-          else
-            echo "No tests yet — build succeeded."
-          fi
+          # --no-tests=error：测试目录存在却没有注册到任何用例，属于配置错误
+          # （例如 find_package(Catch2) 没找到、catch_discover_tests 漏调），
+          # 必须失败而不是静默通过——否则测试被悄悄摘掉也不会有人发现。
+          (cd out/linux/debug && ctest --output-on-failure --no-tests=error)
 
       - name: Smoke test tools/xp3
         run: |

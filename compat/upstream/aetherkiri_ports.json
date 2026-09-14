@@ -1,0 +1,112 @@
+{
+  "_comment": [
+    "与 AetherKiri 共享/移植的文件的溯源清单。",
+    "",
+    "为什么需要：AetherKiri 拥有本工作区最广的插件集（约 110 个注册名、60 款验证游戏），",
+    "而它的插件 API 与本仓库逐字节兼容，因此大量插件是从它移植来的。移植之后必须能回答",
+    "两个问题——「这个文件相对上游改了什么」和「上游后来修了 bug，我要不要跟」——",
+    "否则移植代码会在几次改动后变成无人敢动的黑盒。",
+    "",
+    "本文件是数据不是流程文档：它记录的是每个文件的确切来源、基线与哈希，",
+    "reviewer 据此能算出精确的 diff 面。",
+    "",
+    "维护方式：",
+    "  python3 scripts/check_port_drift.py            # 校验（默认）",
+    "  python3 scripts/check_port_drift.py --update   # 重新计算哈希并写回",
+    "改了 ported 里的任何文件，必须用 --update 更新哈希并改 modifications 字段，",
+    "否则校验会失败——这是刻意的：改动必须被显式承认，不能悄悄漂移。",
+    "",
+    "已核实（2026-09-15）：移植目标插件只依赖 ncbind.hpp / tp_stub.h / PluginStub.h / UtilStreams.h / ClipboardIntf.h / GraphicsLoaderIntf.h / StorageIntf.h / TextStream.h / TransIntf.h / tjsCommHead.h，这些头本仓库全部已有；且没有任何移植目标引用 TVPSetPluginLoadMode / TVPIsAetherAllPluginLoadMode（它们只在 AK 的 bridge 层使用）。因此原先设想的 UpstreamCompat.h 垫片不需要。"
+  ],
+  "upstream": {
+    "project": "AetherKiri",
+    "repo": "https://github.com/AetherKiri/AetherKiri",
+    "rev": "bd14a986db747c0d961f8c005ba25b9bc22f510e",
+    "rev_short": "bd14a986",
+    "rev_date": "2026-09-14",
+    "local_checkout": "../AetherKiri",
+    "note": "漂移比对需要本地同级目录存在该 rev 的检出；缺失时脚本退化为只校验本地哈希。"
+  },
+  "modifications_values": {
+    "none": "与上游逐字节一致",
+    "api-shim": "为适配本仓库的 API 差异做了改动（通常是 UpstreamCompat.h 相关）",
+    "bridge-substituted": "上游的渲染/宿主桥接被替换为本仓库的实现",
+    "local-fix": "在本仓库做的独立修复，上游没有"
+  },
+  "ported": [
+    {
+      "local": "cpp/plugins/tp_stub.h",
+      "upstream": "cpp/plugins/tp_stub.h",
+      "modifications": "none",
+      "reason": "插件桩接口。两个仓库都从 krkr2 沿袭，必须保持一致，否则插件二进制接口会分叉。",
+      "sha256_local": "ba0b16bed9060c9a10aa685cb63e130f9a70484defe2db2a8fd16b8e40455b08",
+      "sha256_upstream_at_rev": "ba0b16bed9060c9a10aa685cb63e130f9a70484defe2db2a8fd16b8e40455b08"
+    },
+    {
+      "local": "cpp/plugins/PluginStub.h",
+      "upstream": "cpp/plugins/PluginStub.h",
+      "modifications": "none",
+      "reason": "插件桩声明。同上。",
+      "sha256_local": "a22c10020626d61b892dfa6b8e0895ba2753d5ca083f5cf359ae5e979a867dcf",
+      "sha256_upstream_at_rev": "a22c10020626d61b892dfa6b8e0895ba2753d5ca083f5cf359ae5e979a867dcf"
+    },
+    {
+      "local": "cpp/core/plugin/ncb_invoke.hpp",
+      "upstream": "cpp/core/plugin/ncb_invoke.hpp",
+      "modifications": "none",
+      "reason": "ncbind 调用机制。移植插件的实现方式（NCB_ATTACH_CLASS 等）依赖它，改动会波及所有插件。",
+      "sha256_local": "9a00fcb56a73b04fcb890c34385f31530018b86a6970c95d3e4400ddd2617ae8",
+      "sha256_upstream_at_rev": "9a00fcb56a73b04fcb890c34385f31530018b86a6970c95d3e4400ddd2617ae8"
+    },
+    {
+      "local": "cpp/plugins/varfile.cpp",
+      "upstream": "cpp/plugins/varfile.cpp",
+      "modifications": "none",
+      "reason": "变量持久化插件。可作为「API 兼容性」的活样本：能保持逐字节一致即说明插件层未分叉。",
+      "sha256_local": "ee1ef347a657dabb15ca03be8581d271e338b2775a28dded9b5e82e411a0f026",
+      "sha256_upstream_at_rev": "ee1ef347a657dabb15ca03be8581d271e338b2775a28dded9b5e82e411a0f026"
+    }
+  ],
+  "not_ported": [
+    {
+      "upstream": "cpp/core/plugin/ncbind.hpp",
+      "reason": "本仓库有自己的插件重启/卸载逻辑（TVPUnregisterInternalPluginsForRestart 等），AetherKiri 有它的加载模式 API（TVPSetPluginLoadMode）。差异是刻意的，不做合并。经核实这两个 API 只在 AetherKiri 的 bridge 层使用，其 plugins/ 目录下无任何文件引用，因此移植插件不需要兼容垫片。"
+    },
+    {
+      "upstream": "cpp/core/plugin/PluginImpl.h",
+      "reason": "本仓库有自己的插件重启/卸载逻辑（TVPUnregisterInternalPluginsForRestart 等），AetherKiri 有它的加载模式 API（TVPSetPluginLoadMode）。差异是刻意的，不做合并。经核实这两个 API 只在 AetherKiri 的 bridge 层使用，其 plugins/ 目录下无任何文件引用，因此移植插件不需要兼容垫片。"
+    },
+    {
+      "upstream": "cpp/plugins/dummy_plugin_stubs.cpp",
+      "reason": "AetherKiri 专用的空注册胶水（57 个模块名，空实现）。本仓库的等价物是 zcompat，不应引入第二套。"
+    },
+    {
+      "upstream": "cpp/plugins/compatLegacyPlugins.cpp",
+      "reason": "AetherKiri 专用兼容胶水（Godot 集成相关）。"
+    },
+    {
+      "upstream": "cpp/plugins/compatMediaLayerPlugins.cpp",
+      "reason": "AetherKiri 专用兼容胶水（含 Godot 引用）。"
+    },
+    {
+      "upstream": "cpp/plugins/compatSystemPlugins.cpp",
+      "reason": "AetherKiri 专用兼容胶水。"
+    },
+    {
+      "upstream": "cpp/plugins/pluginAnchors.cpp",
+      "reason": "AetherKiri 专用的静态注册锚点，用于对抗链接期死代码消除。本仓库用 CMake 目标源传播解决同一问题。"
+    },
+    {
+      "upstream": "cpp/plugins/krkrlive2d_stub.cpp",
+      "reason": "AetherKiri 的 Live2D 存根（弱符号）。本仓库走 cpp/plugins/krkrlive2d.cpp 的真实实现 + CMake 可选探测。"
+    },
+    {
+      "upstream": "cpp/core/visual/godot/*",
+      "reason": "Godot 渲染后端，与 AetherKiri 的宿主架构绑定。本仓库用原生 EGL/GLES3。"
+    },
+    {
+      "upstream": "cpp/plugins/packinone.cpp",
+      "reason": "其 AK 分支整体包在 #ifdef AETHERKIRI_INTERNAL_KRKR2_PLUGIN 内，未定义该宏时文件为空壳。而 PackinOne.dll 的实际功能（fstat / dirlist / addFont / saveStruct / getMD5HashString）在本仓库已由 cpp/plugins/{fstat,dirlist,addFont,saveStruct} 实现——移植它等于引入重复实现。"
+    }
+  ]
+}
