@@ -1,6 +1,11 @@
 #include "krkr_texture2d.h"
 #include "krkr_gl.h"
 #include "ogl_common.h"
+
+// glGetStringi / GL_NUM_EXTENSIONS：ES3 上下文中的扩展枚举必须走这两个符号。
+// ogl_common.h 只引 GLES2 头，这里按需补 ES3 头，避免 ES3 声明扩散到所有 GL 使用方。
+#include <GLES3/gl3.h>
+
 #include "tjsCommHead.h"
 #include "../RenderManager.h"
 #include "WindowImpl.h"
