@@ -38,7 +38,13 @@ run "JNI 符号一致性" python3 "$SCRIPT_DIR/check_jni_symbols.py"
 # 2. 移植文件无未经承认的漂移（见 compat/upstream/aetherkiri_ports.json）。
 run "移植溯源清单" python3 "$SCRIPT_DIR/check_port_drift.py"
 
-# 3. 独立源文件的本地语法检查（Catch2 语法垫片 + clang -fsyntax-only）。
+# 3. 直接调用的 GL/EGL 函数在目标平台上存在。
+#    cpp/ 里有不少桌面 GL / Kodi heritage 代码，容易混入 Android 不提供的符号；
+#    去掉 ANGLE 之后不再有冗余的符号覆盖，这类错误更容易漏到链接期。
+#    找不到 GL 库的环境（普通 CI 容器）会自行跳过。
+run "GL/EGL 符号可用性" python3 "$SCRIPT_DIR/check_gl_symbols.py"
+
+# 4. 独立源文件的本地语法检查（Catch2 语法垫片 + clang -fsyntax-only）。
 #    无编译器时脚本自行跳过并返回 0。
 run "本地语法检查" bash "$SCRIPT_DIR/check_syntax.sh"
 
