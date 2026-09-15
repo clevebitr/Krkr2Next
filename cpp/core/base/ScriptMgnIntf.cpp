@@ -922,14 +922,127 @@ bool TVPStartupSuccess = false;
 void TVPOpenPatchLibUrl();
 
 //---------------------------------------------------------------------------
+// 汉化/兼容补丁的前置成员
+//---------------------------------------------------------------------------
+// 根目录的 patch.tjs（汉化补丁、整合补丁）通常假设 KAG 框架已经把这批成员
+// 建好了。缺任何一个，补丁要么直接抛错、要么 hook 不上，表现就是"补丁没
+// 生效"。这里在跑补丁之前按 AetherKiri 的做法把它们补齐。
+//
+// 只补**缺失**的：`typeof x == "undefined"` 的判断保证不覆盖游戏或补丁
+// 自己设过的值，所以重复安装是安全的（同一进程连续开多个游戏时也会用到）。
+// 移植自 AetherKiri cpp/core/base/ScriptMgnIntf.cpp 的同名实现。
+const tjs_char *TVPGetStartupPatchPrerequisitesScript() {
+    return TJS_W("if(typeof global.inSystemMenuStorages == \"undefined\") "
+                 "global.inSystemMenuStorages = [];\n"
+                 "if(typeof global.kagHookEntries == \"undefined\") "
+                 "global.kagHookEntries = [];\n"
+                 "if(typeof global.afterInitCallback == \"undefined\") "
+                 "global.afterInitCallback = [];\n"
+                 "if(typeof global.COMMAND_SYNC == \"undefined\") "
+                 "global.COMMAND_SYNC = 0;\n"
+                 "if(typeof global.COMMAND_ASYNC == \"undefined\") "
+                 "global.COMMAND_ASYNC = 1;\n"
+                 "if(typeof global.COMMAND_WAIT == \"undefined\") "
+                 "global.COMMAND_WAIT = 2;\n"
+                 "if(typeof global.kirikiriz == \"undefined\") "
+                 "global.kirikiriz = false;\n"
+                 "if(typeof global.kirikiriz_generic == \"undefined\") "
+                 "global.kirikiriz_generic = false;\n");
+}
+
+const tjs_char *TVPGetPatchWindowPrerequisitesScript() {
+    return TJS_W(
+        "if(typeof KAGWindow != \"undefined\") {\n"
+        "  if(typeof KAGWindow.inSystemMenuStorages == \"undefined\") "
+        "KAGWindow.inSystemMenuStorages = global.inSystemMenuStorages;\n"
+        "  if(typeof KAGWindow.kagHookEntries == \"undefined\") "
+        "KAGWindow.kagHookEntries = global.kagHookEntries;\n"
+        "  if(typeof KAGWindow.afterInitCallback == \"undefined\") "
+        "KAGWindow.afterInitCallback = global.afterInitCallback;\n"
+        "  if(typeof KAGWindow.COMMAND_SYNC == \"undefined\") "
+        "KAGWindow.COMMAND_SYNC = global.COMMAND_SYNC;\n"
+        "  if(typeof KAGWindow.COMMAND_ASYNC == \"undefined\") "
+        "KAGWindow.COMMAND_ASYNC = global.COMMAND_ASYNC;\n"
+        "  if(typeof KAGWindow.COMMAND_WAIT == \"undefined\") "
+        "KAGWindow.COMMAND_WAIT = global.COMMAND_WAIT;\n"
+        "  if(typeof KAGWindow.kirikiriz == \"undefined\") KAGWindow.kirikiriz "
+        "= global.kirikiriz;\n"
+        "  if(typeof KAGWindow.kirikiriz_generic == \"undefined\") "
+        "KAGWindow.kirikiriz_generic = global.kirikiriz_generic;\n"
+        "}\n");
+}
+
+static void TVPInstallStartupPatchPrerequisites() {
+    TVPExecuteScript(TVPGetStartupPatchPrerequisitesScript(),
+                     TJS_W("startup_patch_prereq.tjs"), 0,
+                     static_cast<tTJSVariant *>(nullptr));
+}
+
+static void TVPInstallPatchWindowPrerequisites() {
+    try {
+        // 标题自己的 startup 脚本可能显式清掉这些兼容全局；这里只补缺失的，
+        // 再把它们接到补丁要用的窗口类上。
+        TVPInstallStartupPatchPrerequisites();
+        TVPExecuteScript(TVPGetPatchWindowPrerequisitesScript(),
+                         TJS_W("patch_window_prereq.tjs"), 0,
+                         static_cast<tTJSVariant *>(nullptr));
+    } catch(const TJS::eTJSScriptError &e) {
+        spdlog::warn("Patch window prerequisites error: {}",
+                     e.GetMessage().AsStdString());
+    } catch(const TJS::eTJS &e) {
+        spdlog::warn("Patch window prerequisites TJS error: {}",
+                     e.GetMessage().AsStdString());
+    } catch(...) {
+        // 兼容前置是可选的，绝不能因此让标题连自己的 patch.tjs 都跑不到
+        spdlog::warn("Patch window prerequisites failed");
+    }
+}
+
+// KAG 的几个运行时开关：补丁脚本会读它们，而框架在某些启动路径下并不建。
+// 同样只补缺失的。
+static void TVPInstallKagRuntimeDefaults() {
+    try {
+        TVPExecuteScript(
+            TJS_W(
+                "if(typeof kag != \"undefined\") {\n"
+                "  if(typeof kag.autoMode == \"undefined\") kag.autoMode = "
+                "false;\n"
+                "  if(typeof kag.skipMode == \"undefined\") kag.skipMode = 0;\n"
+                "  if(typeof kag.autoModePageWait == \"undefined\") "
+                "kag.autoModePageWait = 0;\n"
+                "  if(typeof kag.autoModeLineWait == \"undefined\") "
+                "kag.autoModeLineWait = 0;\n"
+                "  if(typeof kag.userChSpeed == \"undefined\") kag.userChSpeed "
+                "= 0;\n"
+                "  if(typeof kag.autoModeWaitVoice == \"undefined\") "
+                "kag.autoModeWaitVoice = 0;\n"
+                "}\n"),
+            TJS_W("kag_runtime_defaults.tjs"), 0,
+            static_cast<tTJSVariant *>(nullptr));
+    } catch(...) {
+        spdlog::warn("KAG runtime defaults install failed");
+    }
+}
+
+//---------------------------------------------------------------------------
 // TVPExecuteStartupScript
 //---------------------------------------------------------------------------
 void TVPExecuteStartupScript() {
+    // 前置成员要在 patch.tjs 之前就位。单独捕获：它只是给补丁兜底，
+    // 失败也绝不能阻断启动。
+    try {
+        TVPInstallStartupPatchPrerequisites();
+    } catch(...) {
+        spdlog::warn("Install startup patch prerequisites failed");
+    }
+
     ttstr strPatchError;
     try {
         ttstr patch = TVPGetAppPath() + "patch.tjs";
-        if(TVPIsExistentStorageNoSearch(patch))
+        if(TVPIsExistentStorageNoSearch(patch)) {
+            TVPInstallPatchWindowPrerequisites();
             TVPExecuteStorage(patch);
+        }
     } catch(const TJS::eTJSScriptError &e) {
         ttstr &msg = strPatchError;
         msg += e.GetMessage();
@@ -1072,6 +1185,8 @@ void TVPExecuteStartupScript() {
             TVPStartupSuccess = true;
         }
         spdlog::info("Startup script ended.");
+        // KAG 已经起来了，补上补丁脚本会读的运行时开关
+        TVPInstallKagRuntimeDefaults();
 #if defined(KRKR_RENDER_PROBE)
         { // EngineState[exit]: startup.tjs 结束后 dump，对照 entry 看状态变化
             extern bool TVPSystemControlAlive;
