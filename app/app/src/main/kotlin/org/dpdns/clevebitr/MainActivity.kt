@@ -138,6 +138,12 @@ class MainActivity : ComponentActivity() {
     /** 选定游戏目录后创建引擎会话。 */
     private fun launchGame(path: String) {
         closeSession()
+
+        // 必须先落这个状态：GameScreen（内含 SurfaceView）只在 gamePath 非空时才被
+        // 组合，而 SurfaceView 的 surfaceChanged 是引擎拿到渲染目标的**唯一**途径。
+        // 少了这一行，引擎照样能启动到 SUCCEEDED，但永远等不到 attachSurface——
+        // 表现就是"日志说启动成功、屏幕却停在启动器上不动，也没有任何状态提示"。
+        gamePath = path
         // 游戏目录是排障必需信息（哪个游戏、哪份存档），按已确认的边界记录它本身，
         // 不记录游戏内的任何文本
         AppLog.i(TAG, "launchGame path=$path cache=${cacheDir.absolutePath}")

@@ -87,6 +87,16 @@ class EngineSession(
     /** 累计输入被拒次数，同上。 */
     private var sendFailures = 0L
 
+    /** 上次上报过的启动状态，用于抑制重复上报（见 [pollStartupState]）。只在渲染线程写。 */
+    private var lastReportedState = -1
+
+    /**
+     * 是否已收到 surface。attach/detach 允许从任意线程调用，因此是 volatile；
+     * 它只用于那条"启动成功但没画面"的提示。
+     */
+    @Volatile
+    private var surfaceAttached = false
+
     @Volatile private var paused = false
     @Volatile private var running = false
     @Volatile private var destroyed = false
@@ -118,6 +128,16 @@ class EngineSession(
                 }
                 if (++frameCounter % STARTUP_POLL_FRAMES == 0L) {
                     pollStartupState()
+                }
+                // 启动成功却始终没有 surface，表现是"日志说成功、屏幕全黑"。
+                // 少了这条提示，这种情况只能靠反查日志里有没有 attachSurface 才发现
+                // ——真实踩过一次。限频记录，避免每帧刷屏。
+                if(lastReportedState == NativeEngine.STARTUP_SUCCEEDED &&
+                   !surfaceAttached) {
+                    AppLog.wLimited(TAG, "noSurface", 3_000L) {
+                        "引擎已启动成功，但还没有收到 surface（画面会是黑的）：" +
+                            "检查 GameScreen 是否真的被组合、SurfaceView 是否回调了 surfaceChanged"
+                    }
                 }
             }
 
@@ -181,6 +201,7 @@ class EngineSession(
     fun attachSurface(surface: Surface, width: Int, height: Int) {
         if (width <= 0 || height <= 0) return
         AppLog.i(TAG, "attachSurface ${width}x$height")
+        surfaceAttached = true
         NativeEngine.nativeSetSurface(surface, width, height)
         post { NativeEngine.engineSetSurfaceSize(handle, width, height) }
     }
@@ -188,6 +209,7 @@ class EngineSession(
     /** Surface 销毁。可在任意线程调用。 */
     fun detachSurface() {
         AppLog.i(TAG, "detachSurface")
+        surfaceAttached = false
         NativeEngine.nativeDetachSurface()
     }
 
@@ -320,14 +342,22 @@ class EngineSession(
     private fun lastError(): String =
         if (handle == 0L) "<no handle>" else NativeEngine.engineGetLastError(handle)
 
-    /** 排空引擎启动日志并转发给 [onLog]，同时上报启动状态。 */
+    /**
+     * 排空引擎启动日志并转发给 [onLog]，同时上报启动状态。
+     *
+     * 日志每轮都要排空（那是引擎启动日志的唯一出口），但**状态只在变化时上报**：
+     * 这个方法是按帧轮询的，无条件上报会让宿主每 100ms 收到一次相同状态——真机日志
+     * 里因此出现过连续几十行一模一样的 `startup state -> 2`。`docs/dev/probes.md`
+     * 对高频日志的要求就是去重/仅边沿。
+     */
     private fun pollStartupState() {
         val written = NativeEngine.engineDrainStartupLogs(handle, logBuffer)
         if (written > 0) {
             onLog(String(logBuffer, 0, written, Charsets.UTF_8))
         }
         val state = NativeEngine.engineGetStartupState(handle)
-        if (state >= 0) {
+        if (state >= 0 && state != lastReportedState) {
+            lastReportedState = state
             val msg = if (state == NativeEngine.STARTUP_FAILED) lastError() else null
             postToMain {
                 onStartupStateChanged(state)
