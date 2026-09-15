@@ -215,6 +215,68 @@ static tTVPAtExit TVPShutdownArchiveCacheAtExit(TVP_ATEXIT_PRI_CLEANUP,
    contained in archive.
 */
 //---------------------------------------------------------------------------
+// 诱饵 XP3 头的基点修正。
+//
+// 有些重打包/加壳工具会在真实归档前面塞一个 19 字节的"空 XP3 头"：
+// mark(11) + index_ofs(8) = 0。index_ofs=0 指向 mark 自身，而 mark 首字节
+// 'X'(0x58) 当索引标志用时低 3 位为 0（TVP_XP3_INDEX_ENCODE_RAW），紧随其后的
+// 8 字节于是被当成索引长度，Init 必然抛 TVPReadError。实测 nainiuniu5krkr.xp3
+// （nainiuniu5krkr 的中文补丁）正是这个形态：真实归档从偏移 19 开始，其
+// index_ofs 指向一个合法索引（882 条目，根目录含 startup.tjs），诱饵头却让它连
+// 挂载都做不到。
+//
+// 判定依据：合法归档的索引不可能落在 mark 自身，所以"mark 在偏移 0 且
+// index_ofs==0"只可能是诱饵头，跳过它只可能把"必然打不开"变成"能打开"。
+//
+// 找真基点要三条同时成立：mark 匹配、index_ofs 非 0、且 index_ofs 处确实是合法
+// 索引标志（RAW/ZLIB）。归档数据里随时可能撞出 mark 字节序列，只有后面真的跟着
+// 一个索引时才能当基点。
+//---------------------------------------------------------------------------
+static bool TVPFindXP3ArchiveBase(tTJSBinaryStream *st, const tjs_uint8 *mark,
+                                  tjs_uint64 &out) {
+    const tjs_uint one_read_size = 256 * 1024;
+    const tjs_uint64 file_size = st->GetSize();
+    std::vector<tjs_uint8> buffer(one_read_size);
+
+    // 从诱饵头之后开始找；相邻窗口留 10 字节重叠，避免 mark 跨窗口被漏掉
+    tjs_uint64 window = 11;
+    while(window + 11 <= file_size) {
+        st->SetPosition(window);
+        const tjs_uint read = st->Read(buffer.data(), one_read_size);
+        if(read < 11)
+            break;
+
+        for(tjs_uint p = 0; p + 11 <= read; p++) {
+            if(memcmp(mark, buffer.data() + p, 11))
+                continue;
+
+            const tjs_uint64 candidate = window + p;
+            if(candidate + 19 > file_size)
+                continue;
+
+            st->SetPosition(candidate + 11);
+            const tjs_uint64 index_ofs = st->ReadI64LE();
+            if(index_ofs == 0 || candidate + index_ofs >= file_size)
+                continue;
+
+            st->SetPosition(candidate + index_ofs);
+            const tjs_uint8 index_flag = st->ReadI8LE();
+            if((index_flag & TVP_XP3_INDEX_ENCODE_METHOD_MASK) >
+               TVP_XP3_INDEX_ENCODE_ZLIB)
+                continue;
+
+            out = candidate;
+            return true;
+        }
+
+        if(read < one_read_size)
+            break;
+        window += read - 10;
+    }
+    return false;
+}
+
+//---------------------------------------------------------------------------
 bool TVPGetXP3ArchiveOffset(tTJSBinaryStream *st, const ttstr name,
                             tjs_uint64 &offset, bool raise) {
     st->SetPosition(0);
@@ -298,6 +360,20 @@ bool TVPGetXP3ArchiveOffset(tTJSBinaryStream *st, const ttstr name,
     } else if(!memcmp(XP3Mark, mark, 11)) {
         // XP3 mark found
         offset = 0;
+
+        // 诱饵头：index_ofs==0 时基点肯定不对，见 TVPFindXP3ArchiveBase。
+        st->SetPosition(11);
+        if(st->ReadI64LE() == 0) {
+            tjs_uint64 real = 0;
+            if(TVPFindXP3ArchiveBase(st, XP3Mark, real)) {
+                offset = real;
+                ttstr msg;
+                msg.printf("(info) Decoy XP3 header detected; archive base "
+                           "offset = %u",
+                           (unsigned)real);
+                TVPAddLog(msg);
+            }
+        }
     } else {
         if(raise) {
             ttstr msg(TVPGetMessageByLocale("err_not_xp3_archive"));
