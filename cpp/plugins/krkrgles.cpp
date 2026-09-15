@@ -48,6 +48,94 @@ extern Live2DRenderTarget g_live2dRenderTarget;
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// KRKR_RENDER_PROBE：TJS 侧调用面探针
+//
+// 目的：G2 的「全动画」模式整屏全黑且日志里一条报错都没有——需要先知道游戏到底
+// 调用了本插件的哪些接口，才能判断缺的是哪一条绘制原语。
+//
+// 做法：按「方法名 + 参数个数 + 参数类型序列」去重，只在该签名**首次**出现时打印
+// 一次并带上参数值。这些回调会被每帧调用，不去重会刷屏（README 硬约束 4：
+// 高频日志必须采样/限频/去重/仅边沿）。默认关闭，靠 -DENABLE_RENDER_PROBE=ON 打开。
+// ---------------------------------------------------------------------------
+#if defined(KRKR_RENDER_PROBE)
+namespace {
+
+    const char *ProbeTypeName(const tTJSVariant *v) {
+        if(!v)
+            return "null";
+        switch(v->Type()) {
+            case tvtVoid:   return "void";
+            case tvtObject: return "object";
+            case tvtString: return "string";
+            case tvtInteger:return "int";
+            case tvtReal:   return "real";
+            case tvtOctet:  return "octet";
+            default:        return "?";
+        }
+    }
+
+    std::string ProbeValue(const tTJSVariant *v) {
+        if(!v)
+            return "null";
+        switch(v->Type()) {
+            case tvtInteger:
+                return std::to_string(static_cast<long long>(
+                    static_cast<tjs_int>(*v)));
+            case tvtReal:
+                return std::to_string(static_cast<double>(*v));
+            case tvtString: {
+                std::string s = ttstr(*v).AsStdString();
+                if(s.size() > 24)
+                    s = s.substr(0, 24) + "...";
+                return "\"" + s + "\"";
+            }
+            case tvtObject:
+                return "object";
+            default:
+                return ProbeTypeName(v);
+        }
+    }
+
+    // 返回 true 表示这个签名是第一次见到（调用方据此决定要不要打印）。
+    bool ProbeFirstSeen(const std::string &sig) {
+        static std::unordered_map<std::string, long> counts;
+        long &c = counts[sig];
+        ++c;
+        return c == 1;
+    }
+
+    void ProbeCall(const char *who, const char *name, tjs_int n,
+                   tTJSVariant **p) {
+        std::string sig(name);
+        sig += '|';
+        sig += std::to_string(static_cast<long long>(n));
+        for(tjs_int i = 0; i < n; ++i) {
+            sig += ',';
+            sig += ProbeTypeName(p ? p[i] : nullptr);
+        }
+        if(!ProbeFirstSeen(sig))
+            return;
+        std::string args;
+        const tjs_int lim = (n < 10) ? n : 10;
+        for(tjs_int i = 0; i < lim; ++i) {
+            if(i)
+                args += ", ";
+            args += ProbeValue(p ? p[i] : nullptr);
+        }
+        if(n > lim)
+            args += ", ...";
+        spdlog::info("[probe] {}.{}(n={}) args=[{}]", who, name,
+                     static_cast<int>(n), args);
+    }
+
+} // namespace
+
+#define KRKR_PROBE_TJS(who, name, n, p) ProbeCall(who, name, n, p)
+#else
+#define KRKR_PROBE_TJS(who, name, n, p) ((void)0)
+#endif
+
 namespace {
 
     inline tjs_int ToInt(const tTJSVariant &v, tjs_int fallback = 0) {
@@ -1181,6 +1269,10 @@ static bool CopyFBOToLayerGPU(GLuint srcFbo, GLsizei srcW, GLsizei srcH,
     GLsizei blitW = (layerW < srcW) ? layerW : srcW;
     GLsizei blitH = (layerH < srcH) ? layerH : srcH;
 
+    // 清掉此前积压的错误位，下面那次 glGetError 才能**只**反映这次 blit。
+    while(glGetError() != GL_NO_ERROR) {
+    }
+
 #if defined(__ANDROID__)
     // Android: no Y flip so Live2D appears right-side up
     glBlitFramebuffer(0, 0, blitW, blitH, 0, 0, blitW, blitH,
@@ -1188,6 +1280,42 @@ static bool CopyFBOToLayerGPU(GLuint srcFbo, GLsizei srcW, GLsizei srcH,
 #else
     glBlitFramebuffer(0, 0, blitW, blitH, 0, blitH, blitW, 0,
                       GL_COLOR_BUFFER_BIT, GL_NEAREST);
+#endif
+
+    // glBlitFramebuffer 在 GLES3 下会因**读写格式不兼容**静默失败（只置错误位、
+    // 什么都不画）。此前这里无条件 return true，于是 GPU 路径"成功"了、CPU 兜底
+    // 永远轮不到，画面空着却一条日志都没有——"有声音、整屏黑、零报错"正是这种
+    // 静默失败最难查的地方。这里显式检查，失败就让位给 CPU 路径。
+    const GLenum blitErr = glGetError();
+    if(blitErr != GL_NO_ERROR) {
+#if defined(KRKR_RENDER_PROBE)
+        static bool s_blitFailLogged = false;
+        if(!s_blitFailLogged) {
+            s_blitFailLogged = true;
+            spdlog::warn("krkrgles: glBlitFramebuffer failed (err=0x{:04X}, "
+                         "src={}x{} layer={}x{} internal={}x{}) — CPU fallback",
+                         static_cast<unsigned>(blitErr), static_cast<int>(srcW),
+                         static_cast<int>(srcH), static_cast<int>(layerW),
+                         static_cast<int>(layerH), static_cast<int>(intW),
+                         static_cast<int>(intH));
+        }
+#endif
+        glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
+        return false;
+    }
+
+#if defined(KRKR_RENDER_PROBE)
+    {
+        static bool s_gpuOkLogged = false;
+        if(!s_gpuOkLogged) {
+            s_gpuOkLogged = true;
+            spdlog::info("[probe] krkrgles: CopyFBOToLayer GPU ok src={}x{} "
+                         "dst={}x{} internal={}x{}",
+                         static_cast<int>(srcW), static_cast<int>(srcH),
+                         static_cast<int>(layerW), static_cast<int>(layerH),
+                         static_cast<int>(intW), static_cast<int>(intH));
+        }
+    }
 #endif
 
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
@@ -1575,8 +1703,8 @@ namespace { // reopen anonymous namespace
 
         OffscreenFBO &GetFBO() { return fbo_; }
 
-        static tjs_error entryUpdateObjectCb(tTJSVariant *r, tjs_int n,
-                                             tTJSVariant **p, GLESModule *) {
+        static tjs_error entryUpdateObjectCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
+            KRKR_PROBE_TJS("GLESModule", "entryUpdateObject", n, p);
             if(n > 0 && p) {
                 iTJSDispatch2 *layer = FindLayerInParams(n, p);
                 if(layer) {
@@ -1608,8 +1736,8 @@ namespace { // reopen anonymous namespace
             return TJS_S_OK;
         }
 
-        static tjs_error beginSceneCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                                      GLESModule *s) {
+        static tjs_error beginSceneCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
+            KRKR_PROBE_TJS("GLESModule", "beginScene", n, p);
             if(s) {
                 tjs_int w = NormalizeExtent(s->screenWidth_, 1920);
                 tjs_int h = NormalizeExtent(s->screenHeight_, 1080);
@@ -1623,8 +1751,8 @@ namespace { // reopen anonymous namespace
             return TJS_S_OK;
         }
 
-        static tjs_error endSceneCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                                    GLESModule *s) {
+        static tjs_error endSceneCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
+            KRKR_PROBE_TJS("GLESModule", "endScene", n, p);
             if(s) {
                 s->fbo_.Unbind();
                 s->sceneActive_ = false;
@@ -1634,8 +1762,8 @@ namespace { // reopen anonymous namespace
             return TJS_S_OK;
         }
 
-        static tjs_error finalizeCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                                    GLESModule *s) {
+        static tjs_error finalizeCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
+            KRKR_PROBE_TJS("GLESModule", "finalize", n, p);
             if(s)
                 s->fbo_.Destroy();
             if(r)
@@ -1643,8 +1771,8 @@ namespace { // reopen anonymous namespace
             return TJS_S_OK;
         }
 
-        static tjs_error captureCb(tTJSVariant *r, tjs_int n, tTJSVariant **p,
-                                   GLESModule *s) {
+        static tjs_error captureCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
+            KRKR_PROBE_TJS("GLESModule", "capture", n, p);
             tjs_int w = NormalizeExtent(s ? s->screenWidth_ : 0, 1920);
             tjs_int h = NormalizeExtent(s ? s->screenHeight_ : 0, 1080);
             InvokeCaptureCallback("GLESModule.capture", w, h, n, p);
@@ -1668,8 +1796,8 @@ namespace { // reopen anonymous namespace
             return captureCb(r, n, p, s);
         }
 
-        static tjs_error copyLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p,
-                                     GLESModule *s) {
+        static tjs_error copyLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
+            KRKR_PROBE_TJS("GLESModule", "copyLayer", n, p);
             iTJSDispatch2 *layer = FindLayerInParams(n, p);
             if(layer) {
                 if(s && s->fbo_.GetFBO()) {
@@ -1690,44 +1818,44 @@ namespace { // reopen anonymous namespace
             return TJS_S_OK;
         }
 
-        static tjs_error glesCopyLayerCb(tTJSVariant *r, tjs_int n,
-                                         tTJSVariant **p, GLESModule *s) {
+        static tjs_error glesCopyLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
+            KRKR_PROBE_TJS("GLESModule", "glesCopyLayer", n, p);
             return copyLayerCb(r, n, p, s);
         }
 
-        static tjs_error drawLayerCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                                     GLESModule *) {
+        static tjs_error drawLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
+            KRKR_PROBE_TJS("GLESModule", "drawLayer", n, p);
             if(r)
                 *r = true;
             return TJS_S_OK;
         }
 
-        static tjs_error glesDrawLayerCb(tTJSVariant *r, tjs_int n,
-                                         tTJSVariant **p, GLESModule *s) {
+        static tjs_error glesDrawLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
+            KRKR_PROBE_TJS("GLESModule", "glesDrawLayer", n, p);
             return drawLayerCb(r, n, p, s);
         }
 
-        static tjs_error drawAffineCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                                      GLESModule *) {
+        static tjs_error drawAffineCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
+            KRKR_PROBE_TJS("GLESModule", "drawAffine", n, p);
             if(r)
                 *r = true;
             return TJS_S_OK;
         }
 
-        static tjs_error drawAffineGLESCb(tTJSVariant *r, tjs_int n,
-                                          tTJSVariant **p, GLESModule *s) {
+        static tjs_error drawAffineGLESCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
+            KRKR_PROBE_TJS("GLESModule", "drawAffineGLES", n, p);
             return drawAffineCb(r, n, p, s);
         }
 
-        static tjs_error renderCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                                  GLESModule *) {
+        static tjs_error renderCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
+            KRKR_PROBE_TJS("GLESModule", "render", n, p);
             if(r)
                 *r = true;
             return TJS_S_OK;
         }
 
-        static tjs_error setMatrixCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                                     GLESModule *) {
+        static tjs_error setMatrixCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
+            KRKR_PROBE_TJS("GLESModule", "setMatrix", n, p);
             if(r)
                 *r = true;
             return TJS_S_OK;
@@ -1782,6 +1910,7 @@ namespace { // reopen anonymous namespace
     static tjs_error CreateModuleObject(tTJSVariant *result, tjs_int w = 0,
                                         tjs_int h = 0) {
         auto *mod = new GLESModule();
+        spdlog::debug("krkrgles: GLES module created {}x{}", w, h);
         mod->setScreenWidth(w);
         mod->setScreenHeight(h);
         iTJSDispatch2 *obj = ncbInstanceAdaptor<GLESModule>::CreateAdaptor(mod);
@@ -1857,8 +1986,8 @@ namespace { // reopen anonymous namespace
             return cachedModule_;
         }
 
-        static tjs_error getModuleCb(tTJSVariant *r, tjs_int n, tTJSVariant **p,
-                                     GLESAdaptor *s) {
+        static tjs_error getModuleCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "getModule", n, p);
             static std::unordered_map<
                 uintptr_t, std::unordered_map<ModuleName, tTJSVariant>>
                 sm;
@@ -1913,8 +2042,8 @@ namespace { // reopen anonymous namespace
             return TJS_S_OK;
         }
 
-        static tjs_error beginSceneCb(tTJSVariant *r, tjs_int n,
-                                      tTJSVariant **p, GLESAdaptor *s) {
+        static tjs_error beginSceneCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "beginScene", n, p);
             auto *mod = s ? s->FindModule() : nullptr;
             if(mod)
                 return GLESModule::beginSceneCb(r, n, p, mod);
@@ -1923,8 +2052,8 @@ namespace { // reopen anonymous namespace
             return TJS_S_OK;
         }
 
-        static tjs_error endSceneCb(tTJSVariant *r, tjs_int n, tTJSVariant **p,
-                                    GLESAdaptor *s) {
+        static tjs_error endSceneCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "endScene", n, p);
             auto *mod = s ? s->FindModule() : nullptr;
             if(mod)
                 return GLESModule::endSceneCb(r, n, p, mod);
@@ -1933,8 +2062,8 @@ namespace { // reopen anonymous namespace
             return TJS_S_OK;
         }
 
-        static tjs_error entryUpdateObjectCb(tTJSVariant *r, tjs_int n,
-                                             tTJSVariant **p, GLESAdaptor *) {
+        static tjs_error entryUpdateObjectCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "entryUpdateObject", n, p);
             if(n > 0 && p) {
                 iTJSDispatch2 *layer = FindLayerInParams(n, p);
                 if(layer)
@@ -1945,8 +2074,8 @@ namespace { // reopen anonymous namespace
             return TJS_S_OK;
         }
 
-        static tjs_error captureCb(tTJSVariant *r, tjs_int n, tTJSVariant **p,
-                                   GLESAdaptor *s) {
+        static tjs_error captureCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "capture", n, p);
             tjs_int w = NormalizeExtent(s ? s->screenWidth_ : 0, 1920);
             tjs_int h = NormalizeExtent(s ? s->screenHeight_ : 0, 1080);
             InvokeCaptureCallback("GLESAdaptor.capture", w, h, n, p);
@@ -1970,8 +2099,8 @@ namespace { // reopen anonymous namespace
             return captureCb(r, n, p, s);
         }
 
-        static tjs_error copyLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p,
-                                     GLESAdaptor *s) {
+        static tjs_error copyLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "copyLayer", n, p);
             auto *mod = s ? s->FindModule() : nullptr;
             if(mod)
                 return GLESModule::copyLayerCb(r, n, p, mod);
@@ -1980,44 +2109,44 @@ namespace { // reopen anonymous namespace
             return TJS_S_OK;
         }
 
-        static tjs_error glesCopyLayerCb(tTJSVariant *r, tjs_int n,
-                                         tTJSVariant **p, GLESAdaptor *s) {
+        static tjs_error glesCopyLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "glesCopyLayer", n, p);
             return copyLayerCb(r, n, p, s);
         }
 
-        static tjs_error drawLayerCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                                     GLESAdaptor *) {
+        static tjs_error drawLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "drawLayer", n, p);
             if(r)
                 *r = true;
             return TJS_S_OK;
         }
 
-        static tjs_error glesDrawLayerCb(tTJSVariant *r, tjs_int n,
-                                         tTJSVariant **p, GLESAdaptor *s) {
+        static tjs_error glesDrawLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "glesDrawLayer", n, p);
             return drawLayerCb(r, n, p, s);
         }
 
-        static tjs_error drawAffineCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                                      GLESAdaptor *) {
+        static tjs_error drawAffineCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "drawAffine", n, p);
             if(r)
                 *r = true;
             return TJS_S_OK;
         }
 
-        static tjs_error drawAffineGLESCb(tTJSVariant *r, tjs_int n,
-                                          tTJSVariant **p, GLESAdaptor *s) {
+        static tjs_error drawAffineGLESCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "drawAffineGLES", n, p);
             return drawAffineCb(r, n, p, s);
         }
 
-        static tjs_error renderCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                                  GLESAdaptor *) {
+        static tjs_error renderCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "render", n, p);
             if(r)
                 *r = true;
             return TJS_S_OK;
         }
 
-        static tjs_error setMatrixCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                                     GLESAdaptor *) {
+        static tjs_error setMatrixCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "setMatrix", n, p);
             if(r)
                 *r = true;
             return TJS_S_OK;
@@ -2051,22 +2180,22 @@ namespace { // reopen anonymous namespace
                                             "GLESAdaptor.createDevice");
         }
 
-        static tjs_error finalizeCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                                    GLESAdaptor *) {
+        static tjs_error finalizeCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "finalize", n, p);
             if(r)
                 *r = true;
             return TJS_S_OK;
         }
 
-        static tjs_error glesEntryCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                                     GLESAdaptor *) {
+        static tjs_error glesEntryCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "glesEntry", n, p);
             if(r)
                 *r = true;
             return TJS_S_OK;
         }
 
-        static tjs_error glesRemoveCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                                      GLESAdaptor *) {
+        static tjs_error glesRemoveCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
+            KRKR_PROBE_TJS("GLESAdaptor", "glesRemove", n, p);
             if(r)
                 *r = true;
             return TJS_S_OK;

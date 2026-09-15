@@ -86,6 +86,90 @@ extern "C" const unsigned char *KrkrLive2DEmbeddedShader(const char *path,
 // ---------------------------------------------------------------------------
 // Cubism Allocator — uses standard malloc/free
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// KRKR_RENDER_PROBE：TJS 侧调用面探针（与 krkrgles.cpp 同款）
+//
+// 目的：确认游戏到底怎么驱动 Live2D（是脚本每帧调 model.render()，还是靠本插件
+// 注册的连续动画钩子），以及呈现走了哪条路。按「方法名+参数个数+参数类型序列」
+// 去重，只在该签名首次出现时打印一次（高频回调，必须去重）。
+// ---------------------------------------------------------------------------
+#if defined(KRKR_RENDER_PROBE)
+namespace {
+
+    const char *ProbeTypeName(const tTJSVariant *v) {
+        if(!v)
+            return "null";
+        switch(v->Type()) {
+            case tvtVoid:   return "void";
+            case tvtObject: return "object";
+            case tvtString: return "string";
+            case tvtInteger:return "int";
+            case tvtReal:   return "real";
+            case tvtOctet:  return "octet";
+            default:        return "?";
+        }
+    }
+
+    std::string ProbeValue(const tTJSVariant *v) {
+        if(!v)
+            return "null";
+        switch(v->Type()) {
+            case tvtInteger:
+                return std::to_string(static_cast<long long>(
+                    static_cast<tjs_int>(*v)));
+            case tvtReal:
+                return std::to_string(static_cast<double>(*v));
+            case tvtString: {
+                std::string s = ttstr(*v).AsStdString();
+                if(s.size() > 24)
+                    s = s.substr(0, 24) + "...";
+                return "\"" + s + "\"";
+            }
+            case tvtObject:
+                return "object";
+            default:
+                return ProbeTypeName(v);
+        }
+    }
+
+    bool ProbeFirstSeen(const std::string &sig) {
+        static std::unordered_map<std::string, long> counts;
+        long &c = counts[sig];
+        ++c;
+        return c == 1;
+    }
+
+    void ProbeCall(const char *who, const char *name, tjs_int n,
+                   tTJSVariant **p) {
+        std::string sig(name);
+        sig += '|';
+        sig += std::to_string(static_cast<long long>(n));
+        for(tjs_int i = 0; i < n; ++i) {
+            sig += ',';
+            sig += ProbeTypeName(p ? p[i] : nullptr);
+        }
+        if(!ProbeFirstSeen(sig))
+            return;
+        std::string args;
+        const tjs_int lim = (n < 10) ? n : 10;
+        for(tjs_int i = 0; i < lim; ++i) {
+            if(i)
+                args += ", ";
+            args += ProbeValue(p ? p[i] : nullptr);
+        }
+        if(n > lim)
+            args += ", ...";
+        spdlog::info("[probe] {}.{}(n={}) args=[{}]", who, name,
+                     static_cast<int>(n), args);
+    }
+
+} // namespace
+
+#define KRKR_PROBE_TJS(who, name, n, p) ProbeCall(who, name, n, p)
+#else
+#define KRKR_PROBE_TJS(who, name, n, p) ((void)0)
+#endif
+
 namespace {
 
     class CubismAllocator : public ICubismAllocator {
@@ -1459,6 +1543,19 @@ public:
     void OnContinuousCallback(tjs_uint64 /*tick*/) override {
         bool anyActive = false;
         iTJSDispatch2 *layer = KrkrGLES_GetRegisteredLayer();
+#if defined(KRKR_RENDER_PROBE)
+        {
+            static int s_lastHadLayer = -1;
+            const int had = layer ? 1 : 0;
+            if(had != s_lastHadLayer) {
+                s_lastHadLayer = had;
+                spdlog::info("[probe] krkrlive2d: registered layer {} -> {}"
+                             " presentation path",
+                             had ? "present" : "absent",
+                             had ? "CopyFBOToLayer" : "PostDrawHook overlay");
+            }
+        }
+#endif
 
         GLint savedFBO = 0;
         glGetIntegerv(GL_FRAMEBUFFER_BINDING, &savedFBO);
@@ -1488,6 +1585,17 @@ static Live2DContinuousCallback g_live2dContinuousCb;
 static bool g_continuousHookRegistered = false;
 
 static void Live2DPostDrawHook() {
+#if defined(KRKR_RENDER_PROBE)
+    {
+        static bool s_logged = false;
+        if(!s_logged) {
+            s_logged = true;
+            spdlog::info("[probe] krkrlive2d: PostDrawHook entered "
+                         "(registeredLayer={})",
+                         KrkrGLES_GetRegisteredLayer() ? "present" : "absent");
+        }
+    }
+#endif
     if(KrkrGLES_GetRegisteredLayer())
         return;
 
@@ -1538,13 +1646,25 @@ private:
 class Live2DDevice {
 public:
     Live2DDevice() = default;
-    void beginScene() { inScene_ = true; }
-    void endScene() { inScene_ = false; }
-    void onBeginScene() { beginScene(); }
-    void onEndScene() { endScene(); }
+    void beginScene() {
+        KRKR_PROBE_TJS("Live2DDevice", "beginScene", 0, nullptr);
+        inScene_ = true;
+    }
+    void endScene() {
+        KRKR_PROBE_TJS("Live2DDevice", "endScene", 0, nullptr);
+        inScene_ = false;
+    }
+    void onBeginScene() {
+        KRKR_PROBE_TJS("Live2DDevice", "onBeginScene", 0, nullptr);
+        beginScene();
+    }
+    void onEndScene() {
+        KRKR_PROBE_TJS("Live2DDevice", "onEndScene", 0, nullptr);
+        endScene();
+    }
 
-    static tjs_error renderCb(tTJSVariant *r, tjs_int numparams,
-                              tTJSVariant **param, Live2DDevice *) {
+    static tjs_error renderCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DDevice *s) {
+            KRKR_PROBE_TJS("Live2DDevice", "render", n, p);
         if(numparams > 0 && param && param[0] &&
            param[0]->Type() == tvtObject) {
             iTJSDispatch2 *obj = param[0]->AsObjectNoAddRef();
@@ -1587,8 +1707,8 @@ public:
 
     // --- Core callbacks ---
 
-    static tjs_error loadCb(tTJSVariant *r, tjs_int n, tTJSVariant **p,
-                            Live2DModel *s) {
+    static tjs_error loadCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
+            KRKR_PROBE_TJS("Live2DModel", "load", n, p);
         if(!s)
             return TJS_S_OK;
         if(n <= 0 || !p) {
@@ -1650,8 +1770,8 @@ public:
         return TJS_S_OK;
     }
 
-    static tjs_error renderCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                              Live2DModel *s) {
+    static tjs_error renderCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
+            KRKR_PROBE_TJS("Live2DModel", "render", n, p);
         if(s && s->cubismModel_ && s->cubismModel_->IsLoaded()) {
             GLint savedFBO = 0;
             glGetIntegerv(GL_FRAMEBUFFER_BINDING, &savedFBO);
@@ -1666,15 +1786,15 @@ public:
         return TJS_S_OK;
     }
 
-    static tjs_error showCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                            Live2DModel *) {
+    static tjs_error showCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
+            KRKR_PROBE_TJS("Live2DModel", "show", n, p);
         if(r)
             *r = true;
         return TJS_S_OK;
     }
 
-    static tjs_error hideCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                            Live2DModel *) {
+    static tjs_error hideCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
+            KRKR_PROBE_TJS("Live2DModel", "hide", n, p);
         if(r)
             *r = true;
         return TJS_S_OK;
@@ -1815,8 +1935,8 @@ public:
         return TJS_S_OK;
     }
 
-    static tjs_error setExpressionCb(tTJSVariant *r, tjs_int n, tTJSVariant **p,
-                                     Live2DModel *s) {
+    static tjs_error setExpressionCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
+            KRKR_PROBE_TJS("Live2DModel", "setExpression", n, p);
         if(s && n > 0 && p)
             s->expression_ = ToTTStr(*p[0]);
         if(r)
@@ -1884,8 +2004,8 @@ public:
         return TJS_S_OK;
     }
 
-    static tjs_error startMotionCb(tTJSVariant *r, tjs_int n, tTJSVariant **p,
-                                   Live2DModel *s) {
+    static tjs_error startMotionCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
+            KRKR_PROBE_TJS("Live2DModel", "startMotion", n, p);
         if(!s)
             return TJS_S_OK;
         s->playing_ = true;
@@ -2043,8 +2163,8 @@ public:
         return TJS_S_OK;
     }
 
-    static tjs_error progressCb(tTJSVariant *r, tjs_int n, tTJSVariant **p,
-                                Live2DModel *s) {
+    static tjs_error progressCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
+            KRKR_PROBE_TJS("Live2DModel", "progress", n, p);
         if(s && p && n > 0)
             s->progress_ = ToReal(*p[0], s->progress_);
         if(r && s)
@@ -2052,8 +2172,8 @@ public:
         return TJS_S_OK;
     }
 
-    static tjs_error cloneCb(tTJSVariant *r, tjs_int, tTJSVariant **,
-                             Live2DModel *) {
+    static tjs_error cloneCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
+            KRKR_PROBE_TJS("Live2DModel", "clone", n, p);
         // Clone not supported for Cubism models (shared GPU resources)
         if(r)
             r->Clear();
