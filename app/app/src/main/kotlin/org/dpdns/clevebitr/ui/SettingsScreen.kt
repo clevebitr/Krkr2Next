@@ -59,6 +59,11 @@ fun SettingsScreen(
     logDirPath: String,
     onBack: () -> Unit,
     onShareLogs: () -> Unit,
+    /**
+     * 叠加层档位变化时回调。壳层据此立刻切换档位——设置页现在也能在游戏里打开
+     * （悬浮菜单 -> 设置），光写偏好设置要退出重进才看得到，那就等于没生效。
+     */
+    onPerfOverlayModeChanged: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -119,6 +124,7 @@ fun SettingsScreen(
                             onClick = {
                                 perfMode = value
                                 AppPrefs.setPerfOverlayMode(context, value)
+                                onPerfOverlayModeChanged(value)
                                 AppLog.i(TAG, "perf overlay = $value")
                             },
                             shape = SegmentedButtonDefaults.itemShape(

@@ -46,7 +46,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import org.dpdns.clevebitr.core.AppLog
-import org.dpdns.clevebitr.core.AppPrefs
 import org.dpdns.clevebitr.core.EngineSession
 import org.dpdns.clevebitr.core.InputEvent
 import org.dpdns.clevebitr.core.NativeEngine
@@ -78,12 +77,18 @@ fun GameScreen(
     session: EngineSession,
     startupState: Int,
     statusText: String,
+    /**
+     * 性能叠加层档位。**由 MainActivity 持有并传进来**，不在本文件里读偏好设置：
+     * 游戏内菜单能直接打开设置页，改完要立刻生效，而 `remember { AppPrefs... }`
+     * 只在首次组合时读一次，改了要退出重进才看得到。
+     */
+    perfMode: String,
+    /** 打开设置页。设置页会盖在游戏之上，引擎与 SurfaceView 不被销毁。 */
+    onOpenSettings: () -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    // 设置里改的是"下次启动游戏生效"，这里读一次即可
-    val perfMode = remember { AppPrefs.perfOverlayMode(context) }
 
     // 性能叠加层：4Hz 采样，与 AetherKiri 的 PERF_UPDATE_INTERVAL = 0.25s 对齐。
     // 关档时不启动这个循环——不采样，也不调那两次 JNI。
@@ -199,6 +204,10 @@ fun GameScreen(
                             logLines = AppLog.recent()
                             logsVisible = true
                         },
+                        onOpenSettings = {
+                            menuOpen = false
+                            onOpenSettings()
+                        },
                         onExit = {
                             menuOpen = false
                             onExit()
@@ -230,13 +239,24 @@ fun GameScreen(
 }
 
 /**
- * 悬浮菜单面板。两项都用纯文字，不引图标——少一个图标名就对不上依赖版本的风险。
+ * 悬浮菜单面板。三项都用纯文字，不引图标——少一个图标名就对不上依赖版本的风险。
  */
 @Composable
-private fun GameMenu(onShowLogs: () -> Unit, onExit: () -> Unit) {
+private fun GameMenu(
+    onShowLogs: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onExit: () -> Unit,
+) {
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xE61F1F1F))) {
         Column {
             MenuEntry(label = "显示运行时日志", onClick = onShowLogs)
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color(0x33FFFFFF)),
+            )
+            MenuEntry(label = "设置", onClick = onOpenSettings)
             Box(
                 Modifier
                     .fillMaxWidth()

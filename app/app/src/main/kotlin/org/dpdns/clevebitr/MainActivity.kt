@@ -7,14 +7,18 @@ import android.view.View
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -59,8 +63,15 @@ class MainActivity : ComponentActivity() {
     /** 上次异常退出的提示文本；null 表示这次不需要提示。 */
     private var recoveryNotice by mutableStateOf<String?>(null)
 
-    /** 启动器里是否停在设置页。只在没有引擎会话时有效。 */
+    /** 启动器或游戏内是否停在设置页。 */
     private var showSettings by mutableStateOf(false)
+
+    /**
+     * 性能叠加层档位。**放在 Activity 而不是 GameScreen 里**：设置页现在也能从游戏内
+     * 悬浮菜单打开，改完必须立刻生效；`remember { AppPrefs... }` 只在首次组合时读一次，
+     * 那样改了得退出重进才看得到。初值在 onCreate 里读（字段初始化时 Context 还没 attach）。
+     */
+    private var perfOverlayMode by mutableStateOf("")
 
     private val logDirPath: String by lazy { LogFiles.logsDir(this).absolutePath }
 
@@ -81,6 +92,8 @@ class MainActivity : ComponentActivity() {
         }
         AppLog.i(TAG, "onCreate (recovery=$previous)")
 
+        perfOverlayMode = AppPrefs.perfOverlayMode(this)
+
         setContent {
             KrKr2NextTheme {
                 val activeSession = session
@@ -91,6 +104,7 @@ class MainActivity : ComponentActivity() {
                             logDirPath = logDirPath,
                             onBack = { showSettings = false },
                             onShareLogs = ::shareLogs,
+                            onPerfOverlayModeChanged = { perfOverlayMode = it },
                         )
                     } else {
                         LauncherScreen(
@@ -99,12 +113,32 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 } else {
-                    GameScreen(
-                        session = activeSession,
-                        startupState = startupState,
-                        statusText = statusText,
-                        onExit = ::exitToLauncher,
-                    )
+                    // 设置页盖在游戏**之上**而不是替换它：替换会让 SurfaceView 被销毁，
+                    // 引擎的 surface 得重新 attach。浮层画在窗口里、SurfaceView 的 surface
+                    // 在窗口之下，所以盖上去是安全的（游戏内悬浮菜单本来就是这个道理）。
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        GameScreen(
+                            session = activeSession,
+                            startupState = startupState,
+                            statusText = statusText,
+                            perfMode = perfOverlayMode,
+                            onOpenSettings = { showSettings = true },
+                            onExit = ::exitToLauncher,
+                        )
+                        if (showSettings) {
+                            Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                color = MaterialTheme.colorScheme.background,
+                            ) {
+                                SettingsScreen(
+                                    logDirPath = logDirPath,
+                                    onBack = { showSettings = false },
+                                    onShareLogs = ::shareLogs,
+                                    onPerfOverlayModeChanged = { perfOverlayMode = it },
+                                )
+                            }
+                        }
+                    }
                 }
 
                 recoveryNotice?.let { notice ->
@@ -206,6 +240,9 @@ class MainActivity : ComponentActivity() {
         closeSession()
         gamePath = null
         startupState = NativeEngine.STARTUP_IDLE
+        // 设置页现在也能从游戏内打开。退出游戏后必须复位，否则（比如从崩溃恢复路径回来）
+        // 会落在设置页而不是启动器上。
+        showSettings = false
         AppLog.i(TAG, "exitToLauncher")
     }
 
