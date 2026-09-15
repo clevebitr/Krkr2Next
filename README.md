@@ -44,7 +44,7 @@ scripts/verify_engine_so.sh out/android/debug/bridge/engine_api/libengine_api.so
 ```
 
 CI：`.github/workflows/android_build.yml`（引擎构建 → `.so` 符号断言 → Gradle 打包 →
-校验 APK 内含引擎库）、`engine_verify.yml`（Linux 宿主，`ctest --no-tests=error`）。
+校验 APK 内含引擎库）。
 
 ## 硬约束
 
@@ -55,7 +55,7 @@ CI：`.github/workflows/android_build.yml`（引擎构建 → `.so` 符号断言
 3. **输入**。`key_code` 是 **Windows VK 码**（取值见 `cpp/core/environ/vkdefine.h`），不是 Android `KEYCODE_*`，必须经 `VkCodes.fromAndroid` 显式映射；指针坐标是**物理像素**，不要乘 density；返回键必须发 keyDown + BACK + keyUp 三个事件。
 4. **诊断探针**统一 `KRKR_RENDER_PROBE`（`-DENABLE_RENDER_PROBE=ON`）且默认关闭；高频日志必须采样 / 限频 / 去重 / 仅边沿；探针不得改变结果、时序、生命周期或性能，且不得记录完整用户文本、个人路径或设备标识。
 5. **链接**。插件源码经 CMake 目标源（`INTERFACE_SOURCES`）以普通链接进入共享库；**禁止 `--whole-archive`**（psbfile / motionplayer 对象重复，`ld.lld` 报重复符号）。
-6. **Cubism SDK 可选且不入库**。`cpp/plugins/cubism/{Framework,Core/lib}` 已 gitignore，从 live2d.com 自行获取；缺失时自动禁用，不得阻断核心构建。
+6. **Cubism SDK 可选且不入库**。`cpp/plugins/cubism/{Framework,Core/lib}` 已 gitignore，从 live2d.com 自行获取；缺失时自动禁用，不得阻断核心构建。CI 上没有它，所以要在 CI 里产出带 Live2D 的 APK，得把 SDK 放到**本仓库之外**再让 CI 还原：建一个私有仓库，把 SDK 压成 zip 传成 release asset，设置 `CUBISM_SDK_GH`（`owner/repo`）与 `CUBISM_SDK_TOKEN`（该仓库只读 contents 的 fine-grained PAT）两个 secret，`.github/workflows/android_build.yml` 里的「还原 Live2D Cubism SDK」步骤会调 `scripts/restore_cubism_sdk.sh` 拉下来。该脚本区分两件事：没配来源就警告后继续；配了却拉不到/布局不对就**硬失败**，并且还原成功的轮次里 `verify_engine_so.sh` 会断言二进制确实含 Live2D 插件——避免"以为有 Live2D、其实 CMake 静默跳过"。
 7. **JNI 符号名编码包名与类名**。Kotlin 的 `external` 方法与 C++ JNI 声明必须同步，不一致只在运行时以 `UnsatisfiedLinkError` 暴露；改动公共 C ABI 时同步检查 Kotlin 声明、生命周期和版本约束。
 8. **平台守卫不得按目录名判断**。`sound/win32/`、`utils/win32/`、`environ/win32/` 中有部分实现跨平台共享，不能当 Windows 专属删除。
 9. **像素混合基准**。`cpp/core/visual/tvpgl.cpp` 的标量实现是基准；SIMD 改动须逐像素覆盖透明度、边界、溢出和负值路径，未验证的 PS 混合保持标量回退。

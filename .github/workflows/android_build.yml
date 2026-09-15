@@ -57,6 +57,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 还原 Live2D Cubism SDK
+        # SDK 是专有构件，README「硬约束 6」要求不入库（cpp/plugins/cubism/{Framework,
+        # Core/lib} 已 gitignore），所以 CI 机器上默认没有它——而缺了它不会让构建失败，
+        # 只会让产出的 APK 没有 Live2D，真机上表现为 krkrlive2d.dll Failed、全动画作品黑屏。
+        #
+        # 本步骤把来源收敛成一个入口：配了 secret 就还原并**断言之**，没配就明确警告后继续
+        # （不得阻断核心构建）。三个 secret 都是可选的：
+        #   CUBISM_SDK_GH     私有仓库 owner/repo（SDK 以 release asset 存放）
+        #   CUBISM_SDK_TOKEN  该私有仓库只读 contents 的 fine-grained PAT
+        #   CUBISM_SDK_ASSET  asset 文件匹配，缺省 cubism*.zip
+        # 也可以用 CUBISM_SDK_URL 指向自建主机的直链，见 scripts/restore_cubism_sdk.sh。
+        id: cubism
+        env:
+          CUBISM_SDK_GH: ${{ secrets.CUBISM_SDK_GH }}
+          CUBISM_SDK_TOKEN: ${{ secrets.CUBISM_SDK_TOKEN }}
+          CUBISM_SDK_ASSET: ${{ secrets.CUBISM_SDK_ASSET }}
+          CUBISM_SDK_SHA256: ${{ secrets.CUBISM_SDK_SHA256 }}
+        run: |
+          bash scripts/restore_cubism_sdk.sh
+          # 输出按**还原后的实际文件**判定，不看脚本退出码：脚本在"未配置来源"时
+          # 是成功退出的，那种情况必须让后面的校验知道 Live2D 并不存在。
+          if [[ -f cpp/plugins/cubism/Framework/CubismFramework.hpp ]] \
+             && [[ -n "$(find cpp/plugins/cubism/Core/lib -name 'libLive2DCubismCore.a' -print -quit 2>/dev/null)" ]]; then
+            echo "live2d=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "live2d=0" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: 静态检查
         # JNI 符号一致性 / 移植溯源漂移 / 本地语法检查。都不需要 NDK，
         # 秒级出结果，因此放在最前面——这类问题（符号不一致、断言写错）
@@ -291,6 +319,11 @@ jobs:
       - name: 校验 libengine_api.so
         # 第三个参数传 jniLibs：顺带断言运行时依赖（libomp.so 等）确实和引擎放在
         # 一起了。少了这一步，问题只会在装机后以"游戏启动即崩溃"暴露。
+        #
+        # EXPECT_LIVE2D：还原过 Cubism SDK 的轮次里，二进制**必须**含 Live2D 插件。
+        # 缺 SDK 时降级是允许的，但"以为有 Live2D、其实 CMake 静默跳过"绝不能算通过。
+        env:
+          EXPECT_LIVE2D: ${{ steps.cubism.outputs.live2d }}
         run: |
           scripts/verify_engine_so.sh \
             "out/android/$BUILD_TYPE/bridge/engine_api/libengine_api.so" \

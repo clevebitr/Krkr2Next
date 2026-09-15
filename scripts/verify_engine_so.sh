@@ -7,11 +7,16 @@
 #   2. NativeEngine 的三个 JNI 符号存在（包名/类名重绑后最容易静默出错）
 #   3. 动态依赖里是平台原生 libEGL/libGLESv2，而不是被静态链进来的 ANGLE
 #   4. 二进制里不含 ANGLE 的平台扩展常量（去 ANGLE 是否彻底）
+#   5. Live2D 插件是否真被编进去（EXPECT_LIVE2D=1 时缺失即失败）
 #
 # Usage: verify_engine_so.sh <path/to/libengine_api.so> [ndk_root] [jni_libs_dir]
 #
 #   jni_libs_dir  可选。给了就额外检查"非平台的运行时依赖是否都已和引擎放在
 #                 一起"（libomp.so 这类）。不传则跳过该项。
+#
+# 环境变量：
+#   EXPECT_LIVE2D=1  断言二进制里必须含 Live2D 插件。CI 在成功还原 Cubism SDK 后
+#                    设置它，用来堵住"以为有 Live2D、其实 CMake 静默跳过"的降级。
 #
 set -euo pipefail
 
@@ -159,6 +164,24 @@ if strings -a "$SO" | grep -q "EGL_PLATFORM_ANGLE_TYPE_ANGLE"; then
     fail=1
 else
     echo "✓ 二进制中无 ANGLE 平台常量"
+fi
+
+# ── 6. Live2D 是否真被编进去 ─────────────────────────────────────────────────
+# "krkrlive2d.dll" 这个字面量只在 cpp/plugins/krkrlive2d.cpp 的 NCB_MODULE_NAME 里
+# 出现一次，用它当"Live2D 插件参与了编译"的判据足够唯一。
+#
+# EXPECT_LIVE2D=1 时（本轮的 CI 已经把 SDK 还原上去了）没有这个字符串就是**失败**：
+# 缺 SDK 的降级是允许的，但"以为有 Live2D、实际编出来没有"绝不能算通过——
+# 那种 APK 在真机上只表现为一句 krkrlive2d.dll Failed。
+if strings -a "$SO" | grep -q "^krkrlive2d\.dll$"; then
+    echo "✓ 二进制含 Live2D 插件（krkrlive2d）"
+elif [[ "${EXPECT_LIVE2D:-0}" == "1" ]]; then
+    echo "✗ 本轮还原了 Cubism SDK，但 libengine_api.so 里没有 Live2D 插件"
+    echo "  多半是 CMake 没找到 SDK：核对 cpp/plugins/cubism/Framework/CubismFramework.hpp"
+    echo "  与 cpp/plugins/cubism/Core/lib/android/arm64-v8a/libLive2DCubismCore.a 是否在位。"
+    fail=1
+else
+    echo "· 二进制不含 Live2D 插件（本机无 Cubism SDK，属预期降级）"
 fi
 
 echo
