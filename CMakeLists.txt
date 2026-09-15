@@ -22,12 +22,57 @@ add_compile_definitions(
 # 无条件覆盖会被 CMake 判定为 toolchain 重定义而行为异常。保留守卫以便将来
 # 接入 externalNativeBuild，也便于调用方显式指定别的 toolchain。
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    # Android 走 vcpkg 官方推荐的两段式：CMAKE_TOOLCHAIN_FILE 必须是 vcpkg 自己，
+    # NDK 的 android.toolchain.cmake 经 VCPKG_CHAINLOAD_TOOLCHAIN_FILE 串在它后面，
+    # 由后者设置 sysroot / 目标三元组 / 编译器。
+    #
+    # 不能改用「CMAKE_SYSTEM_NAME=Android + CMAKE_ANDROID_NDK + 显式
+    # CMAKE_C(XX)_COMPILER=clang/clang++」：一旦显式给了编译器，CMake 的 Android
+    # 平台模块就不再把它改写成 NDK 的 clang，于是拿宿主的 /usr/bin/clang++ 去编，
+    # 既没有 NDK sysroot（EGL/egl.h 找不到），__ANDROID__ 也没有定义——编出来的是
+    # Linux 那套源码，却写进 out/android/。这类错误要到很靠后的编译步骤才炸。
+    if(ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "Android")
+        if(NOT DEFINED ENV{ANDROID_NDK_HOME})
+            message(FATAL_ERROR
+                "Android 构建需要 ANDROID_NDK_HOME 环境变量（见 scripts/build_engine_android.sh）")
+        endif()
+        set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE
+            "$ENV{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake"
+            CACHE STRING "NDK android.toolchain.cmake, chainloaded by vcpkg")
+        message(STATUS
+            "Android toolchain: $ENV{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake (chainloaded by vcpkg)")
+    endif()
     set(CMAKE_TOOLCHAIN_FILE $ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake)
 endif()
 
 set(APP_NAME krkr2)
 
 project(${APP_NAME})
+
+# Android 目标自检。上面那段注释描述的退化（宿主 clang、无 sysroot、无
+# __ANDROID__）不会让 configure 失败，只会在编译到某个引用了 EGL/GLES 头的
+# 文件时才报错——那时已经烧掉大半轮 CI。这里在 configure 期就编译一小段探针，
+# 同时验证 __ANDROID__ 与 EGL 头，把这类问题压到几秒内暴露。
+if(ANDROID)
+    include(CheckCXXSourceCompiles)
+    check_cxx_source_compiles("
+        #ifndef __ANDROID__
+        #error not an Android target
+        #endif
+        #include <EGL/egl.h>
+        #include <GLES2/gl2.h>
+        int main() { return 0; }
+    " KRKR_TARGET_IS_ANDROID)
+    if(NOT KRKR_TARGET_IS_ANDROID)
+        message(FATAL_ERROR
+            "Android 目标自检失败：编译器未定义 __ANDROID__ 或找不到 EGL/GLES 头。\n"
+            "  CMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}\n"
+            "  CMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}\n"
+            "  VCPKG_CHAINLOAD_TOOLCHAIN_FILE=${VCPKG_CHAINLOAD_TOOLCHAIN_FILE}\n"
+            "Android 构建必须经 VCPKG_CHAINLOAD_TOOLCHAIN_FILE 使用 NDK 的 "
+            "build/cmake/android.toolchain.cmake（见本文件开头）。")
+    endif()
+endif()
 
 option(ENABLE_TESTS "enable tests (excluded on Android)" ON)
 option(BUILD_TOOLS "build tools (excluded on Android)" ON)

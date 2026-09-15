@@ -158,6 +158,18 @@ if [[ -n "${KRKR_LOG_LEVEL:-}" && "${KRKR_LOG_LEVEL}" != "auto" ]]; then
     LOG_LEVEL_OPT="-DKRKR_LOG_LEVEL=$KRKR_LOG_LEVEL"
 fi
 
+# 工具链换过一次：旧的 Android preset 用 CMAKE_SYSTEM_NAME=Android + 裸
+# clang/clang++，CMake 会把它解析成宿主的 /usr/bin/clang++（没有 NDK sysroot、
+# 没有 __ANDROID__），构建目录里因此留下这两项缓存。现在改成 NDK
+# android.toolchain.cmake 经 vcpkg chainload，而这套缓存仍在、且 CMake 不会因为
+# 一个新增的 chainload 变量就报错，于是继续沿用旧编译器。检测到旧指纹就清掉
+# 重建——这个目录里只有构建产物。
+if [[ -f "$CMAKE_BUILD_DIR/CMakeCache.txt" ]] && \
+   grep -qE '^(CMAKE_SYSTEM_NAME|CMAKE_ANDROID_NDK):' "$CMAKE_BUILD_DIR/CMakeCache.txt"; then
+    log_warn "构建目录由旧工具链配置生成（宿主 clang / 无 NDK sysroot），清理后重新 configure"
+    rm -rf "$CMAKE_BUILD_DIR"
+fi
+
 NEED_CFG=0
 if [[ ! -f "$CMAKE_BUILD_DIR/build.ninja" ]]; then
     NEED_CFG=1
