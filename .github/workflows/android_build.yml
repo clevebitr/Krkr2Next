@@ -344,13 +344,31 @@ jobs:
           name: libengine_api-${{ env.BUILD_TYPE }}
           path: app/app/src/main/jniLibs/arm64-v8a/
 
+      - name: 安装 Android platform 36
+        # compileSdk 36 是 compose 1.12 / foundation 1.13 的硬要求（低于它会直接
+        # 报 "dependency requires compileSdk 36"），而托管 runner 预装的 platform
+        # 未必到 36，这里显式装一次并接受许可。
+        run: |
+          SDKMGR=""
+          for c in "$ANDROID_HOME"/cmdline-tools/latest/bin/sdkmanager \
+                   "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager \
+                   "$ANDROID_HOME"/tools/bin/sdkmanager; do
+            [ -x "$c" ] && SDKMGR="$c" && break
+          done
+          [ -n "$SDKMGR" ] || { echo "::error::找不到 sdkmanager"; exit 1; }
+          if [ ! -d "$ANDROID_HOME/platforms/android-36" ]; then
+            yes | "$SDKMGR" --licenses >/dev/null 2>&1 || true
+            "$SDKMGR" "platforms;android-36"
+          fi
+          echo "platforms: $(ls "$ANDROID_HOME/platforms")"
+
       - name: Setup Gradle
-        # gradle-wrapper.jar 是二进制、未入库，所以 CI 里直接用 action 提供的
-        # gradle，不走 ./gradlew。本地构建需要先跑一次
-        # `cd app && gradle wrapper --gradle-version 8.11.1`。
+        # 版本必须 ≥ 8.13：AGP 8.13 依赖 Gradle 里被 9.6 移除的内部 API，且
+        # 低于 8.13 会直接报 "Minimum supported Gradle version"。
+        # 与 gradle/wrapper/gradle-wrapper.properties 钉的版本保持一致。
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.11.1'
+          gradle-version: '8.14.5'
 
       - name: 构建 APK
         working-directory: app

@@ -80,7 +80,10 @@ echo ""
 echo "========================================"
 echo "  构建 APK：$GRADLE_TASK"
 echo "========================================"
-(cd "$APP_DIR" && ./gradlew ":$GRADLE_TASK")
+# 用 `sh ./gradlew` 而不是 `./gradlew`：仓库常常放在 Android 的共享存储上
+# （/storage/emulated/0，FUSE），那里**不支持可执行位**，chmod +x 不生效，
+# 直接执行会 Permission denied。gradlew 本身就是 POSIX shell 脚本，交给 sh 跑即可。
+(cd "$APP_DIR" && sh ./gradlew ":$GRADLE_TASK")
 
 echo ""
 echo "APK 产物："
