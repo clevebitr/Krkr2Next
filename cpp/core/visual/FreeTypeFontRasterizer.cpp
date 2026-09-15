@@ -16,7 +16,10 @@
 #include "FontImpl.h"
 #include "ConfigManager/IndividualConfigManager.h"
 #include <complex>
+#include <cstddef>
 #include <mutex>
+#include <string>
+#include <unordered_map>
 #include <spdlog/spdlog.h>
 
 extern void TVPUninitializeFreeFont();
@@ -62,6 +65,47 @@ namespace {
                          : "auto",
                      mode);
     }
+
+    // -----------------------------------------------------------------------
+    // 触字宽度（GetTextExtent）缓存
+    //
+    // 为什么必须有：GetTextExtent 每字每帧都走。chain
+    // 模式下主字面缺一个字就要把 已注册字面逐个问一遍（设备上仅 CJK 字体就有 5
+    // 个字面），开销会被放大到可见。 原版实现没有这个缓存——它压根不做回退查询。
+    //
+    // 键必须含「实际解析出的字面名 + 字号 + 标志」，少一项就会拿错值去排版
+    // （表现为字宽错、文字挤在一起）。跨对象共享所以要互斥；
+    // 上限到了整体清空：字形集是稳定的热点集，简单清空比 LRU 划算且不会无限涨。
+    // -----------------------------------------------------------------------
+    struct GlyphExtentCacheKey {
+        std::string font;
+        tjs_char ch = 0;
+
+        bool operator==(const GlyphExtentCacheKey &other) const {
+            return ch == other.ch && font == other.font;
+        }
+    };
+
+    struct GlyphExtentCacheKeyHash {
+        std::size_t operator()(const GlyphExtentCacheKey &key) const {
+            const auto font_hash = std::hash<std::string>{}(key.font);
+            const auto char_hash =
+                std::hash<tjs_uint32>{}(static_cast<tjs_uint32>(key.ch));
+            return font_hash ^
+                (char_hash + 0x9e3779b9u + (font_hash << 6) + (font_hash >> 2));
+        }
+    };
+
+    struct GlyphExtentCacheValue {
+        tjs_int w = 0;
+        tjs_int h = 0;
+    };
+
+    std::mutex g_glyph_extent_cache_mutex;
+    std::unordered_map<GlyphExtentCacheKey, GlyphExtentCacheValue,
+                       GlyphExtentCacheKeyHash>
+        g_glyph_extent_cache;
+    constexpr std::size_t kGlyphExtentCacheLimit = 32768;
 } // namespace
 
 void TVPSetFontFallbackModeFromString(const char *mode) {
@@ -341,6 +385,14 @@ void FreeTypeFontRasterizer::ApplyFont(const tTVPFont &font) {
             Face->ClearOption(TVP_TF_STRIKEOUT);
         }
     }
+    // 触字宽度缓存的键前缀：字面名取「实际解析到的那个」，字号与标志都进键。
+    // 主字面一变这里就变，旧条目自然再也不会被命中（不需要显式失效）。
+    {
+        const ttstr &resolved = Face ? Face->GetFontName() : font.Face;
+        const tjs_int h = font.Height < 0 ? -font.Height : font.Height;
+        CurrentExtentCacheFontKey = resolved.AsStdString() + "|" +
+            std::to_string(h) + "|" + std::to_string(font.Flags);
+    }
     LastBitmap = nullptr;
 }
 //---------------------------------------------------------------------------
@@ -348,20 +400,43 @@ void FreeTypeFontRasterizer::GetTextExtent(tjs_char ch, tjs_int &w,
                                            tjs_int &h) {
     if(!Face)
         return;
+
+    // 命中缓存直接返回。注意键里带了字面名/字号/标志，所以 ApplyFont
+    // 换了主字面后 旧条目不会再被取到，不需要额外失效。
+    const GlyphExtentCacheKey cache_key{ CurrentExtentCacheFontKey, ch };
+    {
+        std::lock_guard<std::mutex> lock(g_glyph_extent_cache_mutex);
+        const auto it = g_glyph_extent_cache.find(cache_key);
+        if(it != g_glyph_extent_cache.end()) {
+            w = it->second.w;
+            h = it->second.h;
+            return;
+        }
+    }
+
+    tjs_int resolved_w = 0;
+    tjs_int resolved_h = 0;
     tGlyphMetrics metrics{};
     if(Face->GetGlyphSizeFromCharcode(ch, metrics)) {
-        w = metrics.CellIncX;
-        h = metrics.CellIncY;
-        return;
+        resolved_w = metrics.CellIncX;
+        resolved_h = metrics.CellIncY;
+    } else if(!isUnicodeSpace(ch) && ResolveMode() == FontFallbackMode::Chain &&
+              FindChainGlyph(ch, metrics)) {
+        resolved_w = metrics.CellIncX;
+        resolved_h = metrics.CellIncY;
+    } else {
+        // 与改动前一致：既没有字形又不是空格时，退回「字面高度」当宽度。
+        resolved_w = Face->GetHeight();
+        resolved_h = resolved_w;
     }
-    if(!isUnicodeSpace(ch) && ResolveMode() == FontFallbackMode::Chain &&
-       FindChainGlyph(ch, metrics)) {
-        w = metrics.CellIncX;
-        h = metrics.CellIncY;
-        return;
-    }
-    w = Face->GetHeight();
-    h = w;
+    w = resolved_w;
+    h = resolved_h;
+
+    std::lock_guard<std::mutex> lock(g_glyph_extent_cache_mutex);
+    if(g_glyph_extent_cache.size() >= kGlyphExtentCacheLimit)
+        g_glyph_extent_cache.clear();
+    g_glyph_extent_cache.emplace(
+        cache_key, GlyphExtentCacheValue{ resolved_w, resolved_h });
 }
 //---------------------------------------------------------------------------
 tjs_int FreeTypeFontRasterizer::GetAscentHeight() {

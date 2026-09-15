@@ -155,22 +155,39 @@ namespace {
             CubismFramework::Deallocate(byteData);
     }
 
+    /**
+     * 交给 CubismFramework::StartUp() 的 Option。
+     *
+     * **必须是静态存储期**。SDK 的 StartUp() 实现只有一句
+     * `s_option = option;`：它**存指针、不拷贝**。之后
+     * GetLoadFileFunction() / GetReleaseBytesFunction() / GetLoggingLevel()
+     * 都靠 `s_option->...` 取值，其中第一个还没有空值保护。
+     *
+     * 这曾经是真机 SIGSEGV 的真因：Option 原先是本函数的**局部变量**，
+     * 函数一返回栈就被复用，s_option 随即悬垂。后果很有迷惑性：
+     *   * 读出来的不是 null，所以 `if (!fileLoader)` 拦不住；
+     *   * 崩溃点恒定在取回调那一句（该函数第一件事就是取）；
+     *   * 日志里**没有** "File loader is not set"，因为那行本身没被走到。
+     * 放成静态后，指针在整个进程生命周期内有效。
+     */
+    CubismFramework::Option &GetCubismOption() {
+        static CubismFramework::Option opt = [] {
+            CubismFramework::Option o = {};
+            o.LogFunction = [](const char *msg) {
+                spdlog::debug("Cubism: {}", msg);
+            };
+            o.LoggingLevel = CubismFramework::Option::LogLevel_Warning;
+            o.LoadFileFunction = &Live2DLoadFile;
+            o.ReleaseBytesFunction = &Live2DReleaseBytes;
+            return o;
+        }();
+        return opt;
+    }
+
     void EnsureCubismInitialized() {
         if(s_cubismInitialized)
             return;
-        // 值初始化：CubismFramework::StartUp() 只是 `s_option = option;`，把
-        // **调用方的指针**存下来，而
-        // GetLoadFileFunction()/GetReleaseBytesFunction()
-        // 又是无空值保护地解引用它。Option 里将来若再加字段而这里漏设，写 null
-        // 至少让 SDK 走它自己的报错路径，而不是拿野指针去调用。
-        CubismFramework::Option opt = {};
-        opt.LogFunction = [](const char *msg) {
-            spdlog::debug("Cubism: {}", msg);
-        };
-        opt.LoggingLevel = CubismFramework::Option::LogLevel_Warning;
-        opt.LoadFileFunction = &Live2DLoadFile;
-        opt.ReleaseBytesFunction = &Live2DReleaseBytes;
-        CubismFramework::StartUp(&s_allocator, &opt);
+        CubismFramework::StartUp(&s_allocator, &GetCubismOption());
         CubismFramework::Initialize();
         s_cubismInitialized = true;
         spdlog::info("krkrlive2d: Cubism SDK initialized");

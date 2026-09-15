@@ -5,6 +5,7 @@
 #include "tjsCommHead.h"
 #include "CharacterData.h"
 #include "FontRasterizer.h"
+#include <string>
 #include <vector>
 
 /**
@@ -48,6 +49,12 @@ class FreeTypeFontRasterizer : public FontRasterizer {
     std::vector<class tFreeTypeFace *> OwnedChainFaces;
     class tTVPNativeBaseBitmap *LastBitmap;
     tTVPFont CurrentFont;
+    /**
+     * 触字宽度缓存的键前缀。由「实际解析出的字面名 + 字号 +
+     * 标志」拼成；主字面一变 就必须变，否则会拿旧字面的度量去排版。见
+     * GetTextExtent()。
+     */
+    std::string CurrentExtentCacheFontKey;
 
     void ApplyFallbackFace();
     /** 当前应使用的策略：`Auto` 需先看主字面的多字面能力再决定。 */
