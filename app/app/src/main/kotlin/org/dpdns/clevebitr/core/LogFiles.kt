@@ -217,6 +217,21 @@ object LogFiles {
         return intent
     }
 
+    /**
+     * 清空日志目录（含崩溃报告），返回删掉的文件数。
+     *
+     * **只应在没有游戏在跑的时候调用**：引擎正持着 `engine.log` 的 fd，删掉它只是
+     * 解除链接，引擎会继续往那个已 unlink 的 inode 写——日志看上去"消失了"，
+     * 直到下次重启引擎才重新建文件。设置页只在启动器里可达，正是这个前提。
+     */
+    fun clearAll(context: Context): Int {
+        var deleted = 0
+        listOf(logsDir(context), crashDir(context)).forEach { dir ->
+            dir.listFiles { f -> f.isFile }?.forEach { if(it.delete()) deleted++ }
+        }
+        return deleted
+    }
+
     /** 分享日志时带上目录里的全部内容（app.log 及其轮转份、engine.log 系列、崩溃报告）。 */
     fun collectForSharing(context: Context): List<File> {
         val dir = logsDir(context)

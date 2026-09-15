@@ -19,6 +19,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import org.dpdns.clevebitr.core.AppLog
+import org.dpdns.clevebitr.core.AppPrefs
 import org.dpdns.clevebitr.core.CrashTracker
 import org.dpdns.clevebitr.core.EngineSession
 import org.dpdns.clevebitr.core.InputEvent
@@ -28,6 +29,7 @@ import org.dpdns.clevebitr.core.VkCodes
 import org.dpdns.clevebitr.ui.GameScreen
 import org.dpdns.clevebitr.ui.KrKr2NextTheme
 import org.dpdns.clevebitr.ui.LauncherScreen
+import org.dpdns.clevebitr.ui.SettingsScreen
 
 /**
  * 单 Activity 壳。
@@ -57,6 +59,9 @@ class MainActivity : ComponentActivity() {
     /** 上次异常退出的提示文本；null 表示这次不需要提示。 */
     private var recoveryNotice by mutableStateOf<String?>(null)
 
+    /** 启动器里是否停在设置页。只在没有引擎会话时有效。 */
+    private var showSettings by mutableStateOf(false)
+
     private val logDirPath: String by lazy { LogFiles.logsDir(this).absolutePath }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -81,11 +86,18 @@ class MainActivity : ComponentActivity() {
                 val activeSession = session
                 val path = gamePath
                 if (activeSession == null || path == null) {
-                    LauncherScreen(
-                        onLaunchGame = ::launchGame,
-                        onShareLogs = ::shareLogs,
-                        logDirPath = logDirPath,
-                    )
+                    if (showSettings) {
+                        SettingsScreen(
+                            logDirPath = logDirPath,
+                            onBack = { showSettings = false },
+                            onShareLogs = ::shareLogs,
+                        )
+                    } else {
+                        LauncherScreen(
+                            onLaunchGame = ::launchGame,
+                            onOpenSettings = { showSettings = true },
+                        )
+                    }
                 } else {
                     GameScreen(
                         session = activeSession,
@@ -138,6 +150,7 @@ class MainActivity : ComponentActivity() {
     /** 选定游戏目录后创建引擎会话。 */
     private fun launchGame(path: String) {
         closeSession()
+        showSettings = false
 
         // 必须先落这个状态：GameScreen（内含 SurfaceView）只在 gamePath 非空时才被
         // 组合，而 SurfaceView 的 surfaceChanged 是引擎拿到渲染目标的**唯一**途径。
@@ -152,6 +165,8 @@ class MainActivity : ComponentActivity() {
             // 引擎把存档写到 writablePath，缓存写到 cachePath
             writablePath = path,
             cachePath = cacheDir.absolutePath,
+            // 0 = 不限速，由 Choreographer 的 vsync 决定节拍（默认）
+            fpsLimit = AppPrefs.fpsLimit(this),
             onLog = { log ->
                 // 引擎启动日志已经在 engine.log 里了，这里只做一次转发，
                 // 顺带让连着 adb 的人也能看到
@@ -194,7 +209,17 @@ class MainActivity : ComponentActivity() {
     // ── 按键 ──────────────────────────────────────────────────────────────
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        val s = session ?: return super.dispatchKeyEvent(event)
+        val s = session
+        if (s == null) {
+            // 没有引擎会话时返回键交还给系统，除了"设置页 → 启动器"这一层自己处理
+            if (event.keyCode == KeyEvent.KEYCODE_BACK &&
+                event.action == KeyEvent.ACTION_DOWN && showSettings
+            ) {
+                showSettings = false
+                return true
+            }
+            return super.dispatchKeyEvent(event)
+        }
 
         // 返回键：短按转发给游戏（游戏用它打开自己的菜单），2 秒内连按两次退出。
         // 直接吞掉返回键会让玩家无法开菜单；直接退出又会丢失游戏内菜单入口。

@@ -23,14 +23,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,16 +46,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import org.dpdns.clevebitr.core.AppLog
+import org.dpdns.clevebitr.core.AppPrefs
 import java.io.File
 
 private const val TAG = "KrKr2Next/Launcher"
 
-/** 内置的极简目录浏览器。选定一个目录即作为游戏根目录启动。 */
+/** 内置的目录浏览器。选定一个目录即作为游戏根目录启动。 */
 @Composable
 fun LauncherScreen(
     onLaunchGame: (String) -> Unit,
-    onShareLogs: () -> Unit,
-    logDirPath: String,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -100,8 +104,7 @@ fun LauncherScreen(
 
     DirectoryBrowser(
         onLaunchGame = onLaunchGame,
-        onShareLogs = onShareLogs,
-        logDirPath = logDirPath,
+        onOpenSettings = onOpenSettings,
         modifier = modifier,
     )
 }
@@ -131,14 +134,22 @@ private fun PermissionRequest(modifier: Modifier, onRequest: () -> Unit) {
 @Composable
 private fun DirectoryBrowser(
     onLaunchGame: (String) -> Unit,
-    onShareLogs: () -> Unit,
-    logDirPath: String,
+    onOpenSettings: () -> Unit,
     modifier: Modifier,
 ) {
+    val context = LocalContext.current
     val storageRoot = remember { Environment.getExternalStorageDirectory().absolutePath }
-    var currentPath by remember { mutableStateOf(storageRoot) }
+
+    // 上次浏览到的目录优先，但它可能已经被删掉/卸载了存储，所以必须复核
+    var currentPath by remember {
+        mutableStateOf(AppPrefs.lastDir(context)?.takeIf { File(it).isDirectory } ?: storageRoot)
+    }
+    var showJump by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentPath) { AppPrefs.setLastDir(context, currentPath) }
 
     val currentDir = remember(currentPath) { File(currentPath) }
+    val parentPath = remember(currentPath) { currentDir.parentFile?.absolutePath }
     val subDirs = remember(currentPath) {
         currentDir.listFiles()
             ?.filter { it.isDirectory && !it.name.startsWith('.') }
@@ -149,23 +160,42 @@ private fun DirectoryBrowser(
 
     Column(modifier = modifier.fillMaxSize()) {
         // ── 路径与导航 ──
+        // 显示完整绝对路径（而不是相对存储根目录的那一段）：出问题时用户要能
+        // 原样把路径念出来，也要能直接跳过去。
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(
-                enabled = currentPath != storageRoot,
-                onClick = { currentDir.parentFile?.let { currentPath = it.absolutePath } },
+            TextButton(
+                enabled = parentPath != null,
+                onClick = { parentPath?.let { currentPath = it } },
             ) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "上一级")
+                Icon(Icons.Filled.ArrowBack, contentDescription = null)
+                Text("上一级", modifier = Modifier.padding(start = 4.dp))
             }
-            Text(
-                text = currentPath.removePrefix(storageRoot).ifEmpty { "/" },
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { showJump = true }
+                    .padding(horizontal = 4.dp),
+            ) {
+                Text(
+                    text = currentPath,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "点此跳转到其他目录",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            IconButton(onClick = onOpenSettings) {
+                Icon(Icons.Filled.Settings, contentDescription = "设置")
+            }
         }
 
         // ── 启动按钮 ──
@@ -190,6 +220,16 @@ private fun DirectoryBrowser(
 
         // ── 子目录 ──
         LazyColumn(modifier = Modifier.fillMaxSize()) {
+            if (subDirs.isEmpty()) {
+                item(key = "__empty__") {
+                    Text(
+                        text = "此目录下没有子目录。",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    )
+                }
+            }
+
             items(subDirs, key = { it.absolutePath }) { dir ->
                 ListItem(
                     headlineContent = {
@@ -204,19 +244,86 @@ private fun DirectoryBrowser(
                     modifier = Modifier.clickable { currentPath = dir.absolutePath },
                 )
             }
-
-            // ── 日志入口 ──
-            // 放在列表末尾而不是顶部：它的用途是出问题时来拿证据，不是日常操作
-            item(key = "__logs__") {
-                ListItem(
-                    headlineContent = { Text("分享日志") },
-                    supportingContent = { Text(logDirPath, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-                    leadingContent = { Icon(Icons.Filled.Share, contentDescription = null) },
-                    modifier = Modifier.clickable { onShareLogs() },
-                )
-            }
         }
     }
+
+    if (showJump) {
+        PathJumpDialog(
+            initialPath = currentPath,
+            rootPath = storageRoot,
+            onDismiss = { showJump = false },
+            onJump = { target ->
+                AppLog.i(TAG, "jump to $target")
+                currentPath = target
+            },
+        )
+    }
+}
+
+/**
+ * 手动跳转。存在的意义是**回到存储根目录之外**：逐级返回只能向上走，一旦用户在
+ * 深层目录里迷路，或者要去的路径不在当前这棵子树里，就只能靠输入。
+ */
+@Composable
+private fun PathJumpDialog(
+    initialPath: String,
+    rootPath: String,
+    onDismiss: () -> Unit,
+    onJump: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf(initialPath) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    fun submit(path: String) {
+        val trimmed = path.trim()
+        if (trimmed.isEmpty()) {
+            error = "路径不能为空"
+            return
+        }
+        val dir = File(trimmed)
+        if (!dir.isDirectory) {
+            error = "不是可读目录：$trimmed"
+            return
+        }
+        onJump(dir.absolutePath)
+        onDismiss()
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("跳转到目录") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = {
+                        text = it
+                        error = null
+                    },
+                    label = { Text("绝对路径") },
+                    singleLine = false,
+                    maxLines = 3,
+                    isError = error != null,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                error?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { submit(text) }) { Text("跳转") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { submit(rootPath) }) { Text("存储根目录") }
+                TextButton(onClick = onDismiss) { Text("取消") }
+            }
+        },
+    )
 }
 
 /** 目录里是否有 KiriKiri 游戏特征文件。 */

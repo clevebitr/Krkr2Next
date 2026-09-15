@@ -22,11 +22,14 @@ import android.view.Surface
  * ## 帧节拍
  *
  * 循环用 `Choreographer` 驱动：它在构造它的线程上绑定该线程的 Looper，因此可以
- * 脱离 UI 线程获得 vsync 节拍。引擎侧 `fps_limit` 设 0，由 Choreographer 统一限速。
+ * 脱离 UI 线程获得 vsync 节拍。节拍本身由 vsync 决定；需要更低的上限时交给引擎的
+ * `fps_limit`（它会在间隔不足时直接跳过整个 tick）。
  */
 class EngineSession(
     private val writablePath: String,
     private val cachePath: String,
+    /** 引擎帧率上限；0 = 不限速，跟随 vsync。 */
+    private val fpsLimit: Int = 0,
     /**
      * 引擎日志。**在渲染线程回调**——只做日志落盘/打印，不要在这里碰 UI 状态。
      */
@@ -56,6 +59,9 @@ class EngineSession(
          * 5 秒一条既能看出持续失败，也不会淹没别的信息。
          */
         private const val TICK_FAILURE_LOG_INTERVAL_MS = 5_000L
+
+        /** FPS 统计窗口长度；窗口越短越跟手，越容易被单帧抖动带偏。 */
+        private const val FPS_WINDOW_NANOS = 500_000_000L
     }
 
     private var thread: HandlerThread? = null
@@ -80,6 +86,22 @@ class EngineSession(
 
     private var lastFrameNanos = 0L
     private var frameCounter = 0L
+
+    /**
+     * 最近一个统计窗口内的 tick 速率（帧/秒）。渲染线程写、任意线程读——只有 FPS
+     * 叠加层会读它，读到上一窗口的值无关紧要。
+     *
+     * 它是**调用 `engineTick` 的频率**：默认（`fps_limit=0`）每个 tick 都会渲染，
+     * 数字就等于渲染帧率；设了上限时引擎会跳过一部分 tick，数字是引擎节拍而不是
+     * 实际上屏帧数。
+     */
+    @Volatile
+    var measuredFps: Float = 0f
+        private set
+
+    /** FPS 统计窗口的起点与窗口内 tick 数。只在渲染线程写。 */
+    private var fpsWindowStartNanos = 0L
+    private var fpsWindowTicks = 0
 
     /** 累计 tick 失败次数，供限频日志带出"偶发还是彻底坏了"。只在渲染线程写。 */
     private var tickFailures = 0L
@@ -115,6 +137,8 @@ class EngineSession(
             lastFrameNanos = frameTimeNanos
 
             if (!paused && handle != 0L) {
+                trackFps(frameTimeNanos)
+
                 val rc = NativeEngine.engineTick(handle, deltaMs.toInt())
                 if (rc != NativeEngine.RESULT_OK) {
                     // 每帧都能失败，逐帧记录会把日志刷爆（60 行/秒）。限频到 5 秒一条，
@@ -168,8 +192,7 @@ class EngineSession(
             }
             AppLog.i(TAG, "engineCreate ok, apiVersion=0x${NativeEngine.engineGetRuntimeApiVersion().toString(16)}")
 
-            // fps_limit=0：由 Choreographer 提供节拍，引擎不再自行限速
-            applyOption("fps_limit", "0")
+            applyOption("fps_limit", fpsLimit.toString())
 
             running = true
             choreographer?.postFrameCallback(frameCallback)
@@ -322,6 +345,21 @@ class EngineSession(
     }
 
     // ── 内部 ──────────────────────────────────────────────────────────────
+
+    /** 每个 tick 调一次；窗口满了就结算一次速率。只在渲染线程调用。 */
+    private fun trackFps(frameTimeNanos: Long) {
+        if (fpsWindowStartNanos == 0L) {
+            fpsWindowStartNanos = frameTimeNanos
+            return
+        }
+        fpsWindowTicks++
+        val elapsed = frameTimeNanos - fpsWindowStartNanos
+        if (elapsed >= FPS_WINDOW_NANOS) {
+            measuredFps = fpsWindowTicks * 1_000_000_000f / elapsed
+            fpsWindowTicks = 0
+            fpsWindowStartNanos = frameTimeNanos
+        }
+    }
 
     private fun post(block: () -> Unit) {
         val h = handler

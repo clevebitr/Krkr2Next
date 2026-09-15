@@ -14,12 +14,21 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import org.dpdns.clevebitr.core.AppLog
+import org.dpdns.clevebitr.core.AppPrefs
 import org.dpdns.clevebitr.core.EngineSession
 import org.dpdns.clevebitr.core.InputEvent
 import org.dpdns.clevebitr.core.NativeEngine
@@ -47,6 +56,20 @@ fun GameScreen(
     statusText: String,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    // 设置里改的是"下次启动游戏生效"，这里读一次即可
+    val showFps = remember { AppPrefs.showFps(context) }
+
+    var fps by remember { mutableStateOf(0f) }
+    if (showFps) {
+        LaunchedEffect(session) {
+            while (true) {
+                fps = session.measuredFps
+                delay(500)
+            }
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
 
         AndroidView(
@@ -76,6 +99,20 @@ fun GameScreen(
                 }
             },
         )
+
+        // FPS 叠加：不加背景的话在浅色画面上读不出来；不设 clickable，触摸照样穿透给引擎
+        if (showFps) {
+            Text(
+                text = "FPS ${(fps * 10).roundToInt() / 10f}",
+                color = Color.White,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp)
+                    .background(Color(0f, 0f, 0f, 0.6f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
 
         // 引擎出第一帧前的进度覆盖层
         if (startupState != NativeEngine.STARTUP_SUCCEEDED) {

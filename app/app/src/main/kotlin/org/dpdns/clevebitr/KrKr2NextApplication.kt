@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Process
 import android.util.Log
 import org.dpdns.clevebitr.core.AppLog
+import org.dpdns.clevebitr.core.AppPrefs
 import org.dpdns.clevebitr.core.CrashTracker
 import org.dpdns.clevebitr.core.LogFiles
 import org.dpdns.clevebitr.core.LogcatCapture
@@ -54,7 +55,13 @@ class KrKr2NextApplication : Application() {
 
         // logcat 采集：补上只进 logcat 的那部分（引擎的 AndroidInfoLog、debuggerd
         // 的 tombstone）。取不到就自己降级，不影响别的。
-        LogcatCapture.start(this)
+        // 开关在设置页，改动下次启动生效——采集要常驻一条 logcat 子进程，关掉它是
+        // 省电/省 IO 的手段。
+        if (AppPrefs.logcatCapture(this)) {
+            LogcatCapture.start(this)
+        } else {
+            AppLog.i(TAG, "logcat capture disabled by preference")
+        }
 
         try {
             // 触发 NativeEngine 的类初始化（内部 System.loadLibrary("engine_api")）
