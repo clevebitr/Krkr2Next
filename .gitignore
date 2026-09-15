@@ -33,3 +33,7 @@ java_pid*.hprof
 # Cubism SDK (proprietary binary, download from live2d.com)
 cpp/plugins/cubism/Core/lib/
 cpp/plugins/cubism/Framework/
+
+# 本地排查用的临时产物（真机日志、APK 拷贝等）。日志里含游戏路径与设备信息，
+# 不要入库。
+temp/
