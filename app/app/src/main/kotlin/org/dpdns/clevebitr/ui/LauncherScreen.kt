@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import org.dpdns.clevebitr.core.AppLog
 import org.dpdns.clevebitr.core.AppPrefs
+import org.dpdns.clevebitr.core.EntryVerdict
+import org.dpdns.clevebitr.core.GameEntry
 import java.io.File
 
 private const val TAG = "KrKr2Next/Launcher"
@@ -156,7 +158,10 @@ private fun DirectoryBrowser(
             ?.sortedBy { it.name.lowercase() }
             ?: emptyList()
     }
-    val looksLikeGame = remember(currentPath) { detectGameRoot(currentDir) }
+    val verdict = remember(currentPath) { GameEntry.inspect(currentDir) }
+
+    // 每个子目录的判定只做一次：LazyColumn 重组时会反复取用，而判定要 stat/list 文件系统
+    val childVerdicts = remember(currentPath) { subDirs.associateWith { GameEntry.inspect(it) } }
 
     Column(modifier = modifier.fillMaxSize()) {
         // ── 路径与导航 ──
@@ -205,14 +210,16 @@ private fun DirectoryBrowser(
         ) {
             Icon(Icons.Filled.PlayArrow, contentDescription = null)
             Text(
-                text = if (looksLikeGame) "启动此目录的游戏" else "启动此目录",
+                text = if (verdict is EntryVerdict.Entry) "启动此目录的游戏" else "启动此目录",
                 modifier = Modifier.padding(start = 8.dp),
             )
         }
 
-        if (!looksLikeGame) {
+        // 引擎只在**被选中目录的本层**找 startup.tjs 与 .xp3，选错一层就只表现为
+        // "游戏打不开"，而用户手上没有任何线索。所以入口在哪要直接说出来。
+        GameEntry.hint(verdict)?.let { text ->
             Text(
-                text = "未在此目录发现 .xp3 或 startup.tjs —— 若游戏在上层目录，请先返回。",
+                text = text,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
@@ -231,12 +238,15 @@ private fun DirectoryBrowser(
             }
 
             items(subDirs, key = { it.absolutePath }) { dir ->
+                // 列表页这一行是用户挑入口的地方：能启动的标出来，被同名补丁归档
+                // 盖住的那个也要标出来，否则它看起来和正常入口一模一样。
+                val badge = GameEntry.badge(childVerdicts[dir] ?: EntryVerdict.None)
                 ListItem(
                     headlineContent = {
                         Text(dir.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
-                    supportingContent = if (detectGameRoot(dir)) {
-                        { Text("可能是游戏目录") }
+                    supportingContent = if (badge != null) {
+                        { Text(badge) }
                     } else {
                         null
                     },
@@ -324,15 +334,6 @@ private fun PathJumpDialog(
             }
         },
     )
-}
-
-/** 目录里是否有 KiriKiri 游戏特征文件。 */
-private fun detectGameRoot(dir: File): Boolean {
-    val children = dir.list() ?: return false
-    return children.any { name ->
-        val lower = name.lowercase()
-        lower.endsWith(".xp3") || lower == "startup.tjs"
-    }
 }
 
 private fun hasStoragePermission(context: Context): Boolean =
