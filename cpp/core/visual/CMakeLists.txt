@@ -51,6 +51,8 @@ set(VISUAL_SOURCE_FILES
     ${VISUAL_PATH}/ogl/RenderManager_ogl.cpp
     ${VISUAL_PATH}/ogl/krkr_gl.cpp
     ${VISUAL_PATH}/ogl/krkr_egl_context.cpp
+    # Android 的 libGLESv2 存根只导出 ES2 入口点，ES3 的四个符号改为运行期解析
+    ${VISUAL_PATH}/ogl/krkr_gl3_shim.cpp
 
     ${VISUAL_PATH}/impl/BasicDrawDevice.cpp
     ${VISUAL_PATH}/impl/BitmapBitsAlloc.cpp
