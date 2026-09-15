@@ -170,10 +170,13 @@ fi
 # "krkrlive2d.dll" 这个字面量只在 cpp/plugins/krkrlive2d.cpp 的 NCB_MODULE_NAME 里
 # 出现一次，用它当"Live2D 插件参与了编译"的判据足够唯一。
 #
-# EXPECT_LIVE2D=1 时（本轮的 CI 已经把 SDK 还原上去了）没有这个字符串就是**失败**：
-# 缺 SDK 的降级是允许的，但"以为有 Live2D、实际编出来没有"绝不能算通过——
-# 那种 APK 在真机上只表现为一句 krkrlive2d.dll Failed。
-if strings -a "$SO" | grep -q "^krkrlive2d\.dll$"; then
+# ⚠️ 不能用 `strings -a` 找：`NCB_MODULE_NAME` 是 `TJS_W("krkrlive2d.dll")`，而
+# `TJS_W(X)` = `u##X`、`tjs_char` = `char16_t`，所以它在二进制里是 **UTF-16LE**，
+# 字符间夹着 NUL。`strings` 默认按 ASCII 连续可打印字节切分，**永远匹配不到**——
+# 2026-09-16 那次 CI 就是被这个假阴性卡住的（引擎其实编好了，判据却说没有）。
+# 先 tr 掉 NUL 再 grep，与具体宽窄格式无关，也免得依赖 `strings -el`（GNU 之外的
+# 实现未必有 -e）。
+if tr -d '\0' < "$SO" | grep -aq 'krkrlive2d\.dll'; then
     echo "✓ 二进制含 Live2D 插件（krkrlive2d）"
 elif [[ "${EXPECT_LIVE2D:-0}" == "1" ]]; then
     echo "✗ 本轮还原了 Cubism SDK，但 libengine_api.so 里没有 Live2D 插件"
