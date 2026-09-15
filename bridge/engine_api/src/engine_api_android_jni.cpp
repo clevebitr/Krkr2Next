@@ -443,4 +443,46 @@ Java_org_dpdns_clevebitr_core_NativeEngine_engineGetRendererInfo(
     return static_cast<jint>(written);
 }
 
+// 内存/缓存统计。按**固定顺序**把 engine_memory_stats_t 的字段写进调用方的
+// long[]， 返回写入的字段数；失败返回 -1。
+//
+// 为什么用数组而不是新建 Java 对象：性能叠加层会按 4Hz 轮询它，数组只需一次
+// SetLongArrayRegion，省掉类查找与对象分配。顺序在 Kotlin 侧有一份对应的解析
+// （EngineSession.MemoryStats），两边必须同步修改。
+extern "C" JNIEXPORT jint JNICALL
+Java_org_dpdns_clevebitr_core_NativeEngine_engineGetMemoryStats(
+    JNIEnv *env, jobject /*thiz*/, jlong handle, jlongArray out) {
+    constexpr jsize kFieldCount = 16;
+    if(out == nullptr || env->GetArrayLength(out) < kFieldCount)
+        return -1;
+
+    engine_memory_stats_t stats{};
+    stats.struct_size = sizeof(stats);
+    const engine_result_t rc = engine_get_memory_stats(
+        reinterpret_cast<engine_handle_t>(handle), &stats);
+    if(rc != ENGINE_RESULT_OK)
+        return -1;
+
+    const jlong fields[kFieldCount] = {
+        static_cast<jlong>(stats.self_used_mb),
+        static_cast<jlong>(stats.system_free_mb),
+        static_cast<jlong>(stats.system_total_mb),
+        static_cast<jlong>(stats.graphic_cache_bytes),
+        static_cast<jlong>(stats.graphic_cache_limit_bytes),
+        static_cast<jlong>(stats.xp3_segment_cache_bytes),
+        static_cast<jlong>(stats.psb_cache_bytes),
+        static_cast<jlong>(stats.psb_cache_entries),
+        static_cast<jlong>(stats.psb_cache_entry_limit),
+        static_cast<jlong>(stats.psb_cache_hits),
+        static_cast<jlong>(stats.psb_cache_misses),
+        static_cast<jlong>(stats.archive_cache_entries),
+        static_cast<jlong>(stats.archive_cache_limit),
+        static_cast<jlong>(stats.autopath_cache_entries),
+        static_cast<jlong>(stats.autopath_cache_limit),
+        static_cast<jlong>(stats.autopath_table_entries),
+    };
+    env->SetLongArrayRegion(out, 0, kFieldCount, fields);
+    return kFieldCount;
+}
+
 #endif // __ANDROID__

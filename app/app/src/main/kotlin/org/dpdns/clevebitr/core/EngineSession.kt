@@ -62,6 +62,22 @@ class EngineSession(
 
         /** FPS 统计窗口长度；窗口越短越跟手，越容易被单帧抖动带偏。 */
         private const val FPS_WINDOW_NANOS = 500_000_000L
+
+        /**
+         * 帧时间分位数的统计窗口。AetherKiri 的性能叠加层就是每秒结算一次（对窗口内
+         * 原始帧时间排序后取分位数），这里对齐它，detail 档的 P50/P95/P99/Max 才有
+         * 可比性。
+         */
+        private const val PERF_WINDOW_NANOS = 1_000_000_000L
+
+        /** 分位数窗口的样本上限：1 秒 @240fps 也才 240 个，512 足够且不会增长。 */
+        private const val PERF_SAMPLE_CAPACITY = 512
+
+        /** 渲染器信息的缓存时长；它是一次 C 调用加字符串解码，别每帧问。 */
+        private const val RENDERER_INFO_CACHE_MS = 1_000L
+
+        /** 渲染器信息缓冲区大小（当前实现返回几十字节的 key=value 串）。 */
+        private const val RENDERER_INFO_BUFFER_SIZE = 1024
     }
 
     private var thread: HandlerThread? = null
@@ -103,6 +119,51 @@ class EngineSession(
     private var fpsWindowStartNanos = 0L
     private var fpsWindowTicks = 0
 
+    /**
+     * 上一帧的原始帧间隔（毫秒，**未平滑**）。与 AetherKiri 的 `Frame: %.2f ms`
+     * 同义：它显示的就是 delta，不做平均，抖动要能直接看见。
+     */
+    @Volatile
+    var frameMs: Float = 0f
+        private set
+
+    /** 上一次 `engineTick` 的耗时（毫秒）。对应 AetherKiri detail 档的 `Tick`。 */
+    @Volatile
+    var tickMs: Float = 0f
+        private set
+
+    /** 单位时间窗口内的帧时间分位数（毫秒）。对应 AetherKiri detail 档的 P50/P95/P99/Max。 */
+    @Volatile
+    var frameP50Ms: Float = 0f
+        private set
+
+    @Volatile
+    var frameP95Ms: Float = 0f
+        private set
+
+    @Volatile
+    var frameP99Ms: Float = 0f
+        private set
+
+    @Volatile
+    var frameMaxMs: Float = 0f
+        private set
+
+    /** 累计 tick 失败次数；叠加层的 `Errors` 用它。只在渲染线程写。 */
+    val tickFailureCount: Long get() = tickFailures
+
+    /** 分位数窗口的样本与起点。只在渲染线程读写。 */
+    private val frameSamples = FloatArray(PERF_SAMPLE_CAPACITY)
+    private var frameSampleCount = 0
+    private var perfWindowStartNanos = 0L
+
+    /** 渲染器信息的缓存与取用时间戳；方法带同步，故缓冲区可以复用。 */
+    @Volatile
+    private var rendererInfoCache: String = ""
+    @Volatile
+    private var rendererInfoFetchedAtMs: Long = 0L
+    private val rendererInfoBuffer = ByteArray(RENDERER_INFO_BUFFER_SIZE)
+
     /** 累计 tick 失败次数，供限频日志带出"偶发还是彻底坏了"。只在渲染线程写。 */
     private var tickFailures = 0L
 
@@ -138,8 +199,12 @@ class EngineSession(
 
             if (!paused && handle != 0L) {
                 trackFps(frameTimeNanos)
+                trackFrameTime(frameTimeNanos, deltaMs)
 
+                // tick 耗时：叠加层 detail 档要区分「引擎慢」还是「宿主调度慢」
+                val tickStartNanos = System.nanoTime()
                 val rc = NativeEngine.engineTick(handle, deltaMs.toInt())
+                tickMs = (System.nanoTime() - tickStartNanos) / 1_000_000f
                 if (rc != NativeEngine.RESULT_OK) {
                     // 每帧都能失败，逐帧记录会把日志刷爆（60 行/秒）。限频到 5 秒一条，
                     // 并把次数带上——次数本身是判断"偶发一次"还是"彻底坏了"的关键。
@@ -359,6 +424,119 @@ class EngineSession(
             fpsWindowTicks = 0
             fpsWindowStartNanos = frameTimeNanos
         }
+    }
+
+    /**
+     * 记录本帧帧时间，并在窗口满时结算分位数。只在渲染线程调用。
+     *
+     * 采样的是**原始 delta**（已 clamp 到 [1, MAX_DELTA_MS]）且不做平滑：分位数的
+     * 意义就是让尖峰露出来——所以它与 [measuredFps] 的口径不同，后者是窗口平均。
+     */
+    private fun trackFrameTime(frameTimeNanos: Long, deltaMs: Long) {
+        frameMs = deltaMs.toFloat()
+        if (frameSampleCount < frameSamples.size) {
+            frameSamples[frameSampleCount++] = deltaMs.toFloat()
+        }
+        if (perfWindowStartNanos == 0L) {
+            perfWindowStartNanos = frameTimeNanos
+            return
+        }
+        if (frameTimeNanos - perfWindowStartNanos < PERF_WINDOW_NANOS) return
+
+        // 排序副本：原数组要留给下一个窗口继续写入
+        val sorted = frameSamples.copyOf(frameSampleCount).apply { sort() }
+        if (sorted.isNotEmpty()) {
+            frameP50Ms = percentile(sorted, 0.50f)
+            frameP95Ms = percentile(sorted, 0.95f)
+            frameP99Ms = percentile(sorted, 0.99f)
+            frameMaxMs = sorted[sorted.size - 1]
+        }
+        frameSampleCount = 0
+        perfWindowStartNanos = frameTimeNanos
+    }
+
+    /** 与 AetherKiri 同一取法：samples[floor((count-1)*q)]。 */
+    private fun percentile(sorted: FloatArray, q: Float): Float =
+        sorted[((sorted.size - 1) * q).toInt().coerceIn(0, sorted.size - 1)]
+
+    /**
+     * 引擎内存/缓存统计快照。字段顺序与 `NativeEngine.engineGetMemoryStats` 写入的
+     * 数组一一对应（见 `engine_api_android_jni.cpp` 的 `kFieldCount`）。
+     *
+     * 注意 KiriNext 的 `engine_memory_stats_t` **没有** AetherKiri 的进程物理内存字段
+     * （`process_*_bytes`），所以叠加层拿不到"App 实际占用"，只能显示引擎自己的缓存
+     * 账目与系统内存——移植时不能照抄那边的字段名。
+     */
+    data class MemoryStats(
+        val selfUsedMb: Long,
+        val systemFreeMb: Long,
+        val systemTotalMb: Long,
+        val graphicCacheBytes: Long,
+        val graphicCacheLimitBytes: Long,
+        val xp3SegmentCacheBytes: Long,
+        val psbCacheBytes: Long,
+        val psbCacheEntries: Long,
+        val psbCacheEntryLimit: Long,
+        val psbCacheHits: Long,
+        val psbCacheMisses: Long,
+        val archiveCacheEntries: Long,
+        val archiveCacheLimit: Long,
+        val autopathCacheEntries: Long,
+        val autopathCacheLimit: Long,
+        val autopathTableEntries: Long,
+    ) {
+        /** 叠加层 `Memory: ... Cache` 那一项：三块缓存之和。 */
+        val cacheBytes: Long
+            get() = graphicCacheBytes + xp3SegmentCacheBytes + psbCacheBytes
+    }
+
+    /** 读一次内存统计；句柄未起来或引擎未运行返回 null。可从任意线程调用。 */
+    fun memoryStats(): MemoryStats? {
+        val h = handle
+        if (h == 0L) return null
+        val out = LongArray(NativeEngine.MEMORY_STATS_FIELDS)
+        if (NativeEngine.engineGetMemoryStats(h, out) < out.size) return null
+        return MemoryStats(
+            selfUsedMb = out[0],
+            systemFreeMb = out[1],
+            systemTotalMb = out[2],
+            graphicCacheBytes = out[3],
+            graphicCacheLimitBytes = out[4],
+            xp3SegmentCacheBytes = out[5],
+            psbCacheBytes = out[6],
+            psbCacheEntries = out[7],
+            psbCacheEntryLimit = out[8],
+            psbCacheHits = out[9],
+            psbCacheMisses = out[10],
+            archiveCacheEntries = out[11],
+            archiveCacheLimit = out[12],
+            autopathCacheEntries = out[13],
+            autopathCacheLimit = out[14],
+            autopathTableEntries = out[15],
+        )
+    }
+
+    /**
+     * 渲染器信息（key=value 串，含 backend / fallback 等）。带 1 秒缓存：它是 C 调用
+     * 加字符串解码，没必要每帧问；叠加层按 4Hz 轮询时最多每秒命中一次真实调用。
+     * 同步是为了复用那个缓冲区（JNI 写入与解码不能被打断）。
+     */
+    @Synchronized
+    fun rendererInfo(): String {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (rendererInfoCache.isNotEmpty() &&
+            now - rendererInfoFetchedAtMs < RENDERER_INFO_CACHE_MS
+        ) {
+            return rendererInfoCache
+        }
+        val h = handle
+        if (h == 0L) return ""
+        val written = NativeEngine.engineGetRendererInfo(h, rendererInfoBuffer)
+        if (written > 0) {
+            rendererInfoCache = String(rendererInfoBuffer, 0, written, Charsets.UTF_8)
+            rendererInfoFetchedAtMs = now
+        }
+        return rendererInfoCache
     }
 
     private fun post(block: () -> Unit) {

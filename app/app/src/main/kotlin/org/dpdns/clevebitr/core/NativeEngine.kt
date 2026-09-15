@@ -61,6 +61,15 @@ object NativeEngine {
     /** 渲染器信息写进 [buffer]，@return 写入字节数；失败返回 -1 */
     external fun engineGetRendererInfo(handle: Long, buffer: ByteArray): Int
 
+    /**
+     * 内存/缓存统计写进 [out]（长度需 ≥ [MEMORY_STATS_FIELDS]），
+     * @return 写入的字段数；失败返回 -1。
+     *
+     * 字段顺序与 `engine_api_android_jni.cpp` 里那个 `kFieldCount` 数组一一对应，
+     * 解析见 `EngineSession.MemoryStats`。两边必须同步改。
+     */
+    external fun engineGetMemoryStats(handle: Long, out: LongArray): Int
+
     // ── 输入 ──────────────────────────────────────────────────────────────
     /**
      * @param keyCode **Windows VK 码**，不是 Android `KEYCODE_*`——
@@ -111,4 +120,8 @@ object NativeEngine {
     const val STARTUP_RUNNING = 1
     const val STARTUP_SUCCEEDED = 2
     const val STARTUP_FAILED = 3
+
+    // ── 性能叠加层 ────────────────────────────────────────────────────────
+    /** [engineGetMemoryStats] 一次写入的字段数（Kotlin 侧解析依赖它）。 */
+    const val MEMORY_STATS_FIELDS = 16
 }
