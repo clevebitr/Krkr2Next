@@ -33,6 +33,12 @@ object AppPrefs {
     /** 上次浏览到的目录，下次启动回到这里。 */
     private const val KEY_LAST_DIR = "ui.last_dir"
 
+    /** 主题档位（`system` / `light` / `dark`）。默认跟随系统。 */
+    private const val KEY_THEME = "ui.theme"
+
+    /** 引擎字体回退策略（`auto` / `legacy` / `chain`）。见 [FONT_FALLBACK_MODES]。 */
+    private const val KEY_FONT_FALLBACK = "engine.font_fallback"
+
     const val FPS_LIMIT_UNLIMITED = 0
 
     private fun prefs(context: Context): SharedPreferences =
@@ -79,4 +85,41 @@ object AppPrefs {
 
     fun setLastDir(context: Context, path: String) =
         prefs(context).edit().putString(KEY_LAST_DIR, path).apply()
+
+    // ── 主题 ──────────────────────────────────────────────────────────────
+
+    /** 合法主题档位。`system` 跟随系统，也是默认值。 */
+    val THEME_MODES = listOf("system", "light", "dark")
+
+    fun themeMode(context: Context): String {
+        val stored = prefs(context).getString(KEY_THEME, null)
+        return if (stored != null && stored in THEME_MODES) stored else "system"
+    }
+
+    fun setThemeMode(context: Context, mode: String) {
+        val normalized = if (mode in THEME_MODES) mode else "system"
+        prefs(context).edit().putString(KEY_THEME, normalized).apply()
+    }
+
+    // ── 引擎字体回退 ──────────────────────────────────────────────────────
+
+    /**
+     * 引擎字体回退策略，写到引擎侧的同名选项（见 `engine_set_option`）：
+     *  - `auto`  ：按字面/字形能力自动选（默认）
+     *  - `legacy`：原版派系实现（单一 fallback 字面）
+     *  - `chain` ：AetherKiri 派系实现（注册字面逐个回退 + 基线对齐）
+     *
+     * 两种实现都保留；遇到缺字（黑方块）时可在设置里手动切到另一种对比。
+     */
+    val FONT_FALLBACK_MODES = listOf("auto", "legacy", "chain")
+
+    fun fontFallbackMode(context: Context): String {
+        val stored = prefs(context).getString(KEY_FONT_FALLBACK, null)
+        return if (stored != null && stored in FONT_FALLBACK_MODES) stored else "auto"
+    }
+
+    fun setFontFallbackMode(context: Context, mode: String) {
+        val normalized = if (mode in FONT_FALLBACK_MODES) mode else "auto"
+        prefs(context).edit().putString(KEY_FONT_FALLBACK, normalized).apply()
+    }
 }

@@ -69,6 +69,7 @@ extern "C" void krkr_GetSurfaceDimensions(uint32_t *, uint32_t *);
 #include "visual/WindowIntf.h"
 #include "visual/TransIntf.h"
 #include "visual/FontImpl.h"
+#include "visual/FreeTypeFontRasterizer.h"
 #include "visual/impl/LayerBitmapImpl.h"
 #include "visual/impl/BitmapBitsAlloc.h"
 #include "plugin/PluginImpl.h"
@@ -1879,6 +1880,16 @@ engine_result_t engine_set_option(engine_handle_t handle,
         ClearHandleErrorLocked(impl);
         SetThreadError(nullptr);
         return ENGINE_RESULT_OK;
+    }
+
+    // 字体回退策略：两套字体解析实现都保留，由设置页在运行时选。
+    // TVPSetCommandLine 已把值写进配置（下面的通用分支）；这里再做一件**立即**
+    // 生效的事：写进程内的策略变量。字体初始化晚于选项下发，两者取哪个都行，
+    // 但显式设一次更直观，也不依赖"配置在字体初始化前一定可读"这个隐含前提。
+    if(key == ENGINE_OPTION_FONT_FALLBACK_MODE) {
+        TVPSetFontFallbackModeFromString(option->value_utf8);
+        spdlog::info("engine_set_option: font_fallback_mode={}",
+                     option->value_utf8);
     }
 
     TVPSetCommandLine(ttstr(option->key_utf8).c_str(),

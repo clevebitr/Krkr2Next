@@ -31,6 +31,11 @@ class EngineSession(
     /** 引擎帧率上限；0 = 不限速，跟随 vsync。 */
     private val fpsLimit: Int = 0,
     /**
+     * 引擎字体回退策略（`auto` / `legacy` / `chain`，见 [AppPrefs.FONT_FALLBACK_MODES]）。
+     * 引擎侧只在初始化时读一次，所以是"下次开游戏生效"。
+     */
+    private val fontFallbackMode: String = "auto",
+    /**
      * 引擎日志。**在渲染线程回调**——只做日志落盘/打印，不要在这里碰 UI 状态。
      */
     private val onLog: (String) -> Unit = {},
@@ -258,6 +263,7 @@ class EngineSession(
             AppLog.i(TAG, "engineCreate ok, apiVersion=0x${NativeEngine.engineGetRuntimeApiVersion().toString(16)}")
 
             applyOption("fps_limit", fpsLimit.toString())
+            applyOption("font_fallback_mode", fontFallbackMode)
 
             running = true
             choreographer?.postFrameCallback(frameCallback)

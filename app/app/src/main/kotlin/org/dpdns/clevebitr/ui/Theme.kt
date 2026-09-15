@@ -106,3 +106,17 @@ fun KrKr2NextTheme(
         content = content,
     )
 }
+
+/**
+ * 把设置里的主题档位（`AppPrefs.THEME_MODES`）解析成"用不用深色"。
+ *
+ * 单独抽出来是因为调用点（`MainActivity`）需要**同一个值**做两件事：包主题，以及
+ * 决定窗口装饰（状态栏/导航栏图标明暗）。两处各算一次必然漂。
+ */
+@Composable
+fun resolveDarkTheme(mode: String): Boolean = when (mode) {
+    "light" -> false
+    "dark" -> true
+    // 认不出来的值（含旧的/手改的）都按跟随系统处理，与 AppPrefs 的默认一致。
+    else -> isSystemInDarkTheme()
+}

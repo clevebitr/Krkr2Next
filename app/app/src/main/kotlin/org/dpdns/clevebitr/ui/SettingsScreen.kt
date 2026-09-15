@@ -50,6 +50,25 @@ private val PERF_OVERLAY_CHOICES = listOf(
     "detail" to "详细",
 )
 
+/** 主题三档。值即 `AppPrefs.THEME_MODES`。 */
+private val THEME_CHOICES = listOf(
+    "system" to "跟随系统",
+    "light" to "浅色",
+    "dark" to "深色",
+)
+
+/**
+ * 引擎字体回退策略。两种解析器实现都保留，遇到缺字（黑方块）时切到另一种对比：
+ *  - 自动：按字面/字形能力自选
+ *  - 原版：原版派系的单一 fallback 字面实现
+ *  - 链式：AetherKiri 派系的多字面逐字回退实现
+ */
+private val FONT_FALLBACK_CHOICES = listOf(
+    "auto" to "自动",
+    "legacy" to "原版",
+    "chain" to "链式",
+)
+
 /**
  * 设置页。目前只有调试相关的东西——这是给排障用的壳，设置项也都服务于
  * "把问题现场原样带出来"：日志怎么收、怎么导出、引擎跑多快、画面上叠什么。
@@ -64,6 +83,12 @@ fun SettingsScreen(
      * （悬浮菜单 -> 设置），光写偏好设置要退出重进才看得到，那就等于没生效。
      */
     onPerfOverlayModeChanged: (String) -> Unit = {},
+    /** 主题档位；改完立刻换肤，所以要回调给壳层（与叠加层同理）。 */
+    themeMode: String = "system",
+    onThemeModeChanged: (String) -> Unit = {},
+    /** 引擎字体回退策略；改完**下次开游戏**生效（引擎侧只在初始化时读一次）。 */
+    fontFallbackMode: String = "auto",
+    onFontFallbackModeChanged: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -72,6 +97,7 @@ fun SettingsScreen(
     var logcatCapture by remember { mutableStateOf(AppPrefs.logcatCapture(context)) }
     var perfMode by remember { mutableStateOf(AppPrefs.perfOverlayMode(context)) }
     var fpsLimit by remember { mutableStateOf(AppPrefs.fpsLimit(context)) }
+    var fontMode by remember { mutableStateOf(fontFallbackMode) }
 
     Column(modifier = modifier.fillMaxSize()) {
         Row(
@@ -87,6 +113,43 @@ fun SettingsScreen(
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
+            SectionTitle("外观")
+
+            // 主题：写进壳的偏好并**立刻**回调给 Activity 换肤（不用退出重进）。
+            // 之所以必须有这一项：`themes.xml` 的 windowBackground 是黑的，若固定用
+            // 浅色方案的深色文字，在某些设备/系统深浅色下就会黑字黑底看不清。
+            ChoiceRow(
+                title = "主题",
+                subtitle = "跟随系统之外还能手动锁定浅色或深色。" +
+                    "设置页/启动页的文字与图标颜色都取自当前配色，" +
+                    "若觉得文字看不清或图标不见了，先在这里切一档试试。",
+                choices = THEME_CHOICES,
+                selected = themeMode,
+                onSelected = { mode ->
+                    AppPrefs.setThemeMode(context, mode)
+                    onThemeModeChanged(mode)
+                    AppLog.i(TAG, "theme = $mode")
+                },
+            )
+
+            SectionTitle("字体")
+
+            ChoiceRow(
+                title = "字体回退策略",
+                subtitle = "引擎里保留了两套字体解析实现：原版派系（单一回退字面）与" +
+                    "AetherKiri 派系（把已注册字面逐个按字回退，并对齐基线）。" +
+                    "文字出现黑方块/大小不一的方框就是缺字，切到另一档对比即可。" +
+                    "下次开游戏生效。",
+                choices = FONT_FALLBACK_CHOICES,
+                selected = fontMode,
+                onSelected = { mode ->
+                    fontMode = mode
+                    AppPrefs.setFontFallbackMode(context, mode)
+                    onFontFallbackModeChanged(mode)
+                    AppLog.i(TAG, "font fallback = $mode（下次开游戏生效）")
+                },
+            )
+
             SectionTitle("调试")
 
             SwitchRow(
@@ -263,4 +326,39 @@ private fun SwitchRow(
         trailingContent = { Switch(checked = checked, onCheckedChange = onCheckedChange) },
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/**
+ * 标题 + 说明 + 一排单选按钮。三档以上的枚举用它，比 SegmentedButton 好放长中文标签
+ * （后者等宽分格，长标签会被挤成两行）。
+ */
+@Composable
+private fun ChoiceRow(
+    title: String,
+    subtitle: String,
+    choices: List<Pair<String, String>>,
+    selected: String,
+    onSelected: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        Text(text = subtitle, style = MaterialTheme.typography.bodySmall)
+        choices.forEach { (value, label) ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectable(
+                        selected = value == selected,
+                        onClick = { onSelected(value) },
+                    )
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = value == selected, onClick = { onSelected(value) })
+                Text(text = label, modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+    }
 }

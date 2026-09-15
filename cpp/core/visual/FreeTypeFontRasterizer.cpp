@@ -2,6 +2,7 @@
 #include "FreeTypeFontRasterizer.h"
 #include "LayerBitmapIntf.h"
 #include "FreeType.h"
+#include "FontBaseline.h"
 #if _WIN32
 #include <corecrt_math_defines.h>
 #else
@@ -12,12 +13,77 @@
 #endif
 #include "MsgIntf.h"
 #include "FontSystem.h"
+#include "FontImpl.h"
+#include "ConfigManager/IndividualConfigManager.h"
 #include <complex>
+#include <mutex>
 #include <spdlog/spdlog.h>
 
 extern void TVPUninitializeFreeFont();
 extern FontSystem *TVPFontSystem;
 extern const ttstr &TVPGetDefaultFontName();
+extern void TVPGetAllFontList(std::vector<ttstr> &list);
+
+// 定义在文件下方；GetTextExtent 在它之前用到。
+static bool isUnicodeSpace(char16_t ch);
+
+// ---------------------------------------------------------------------------
+// 回退策略：进程级，由设置下发（engine_api 的 font_fallback_mode 选项）
+// ---------------------------------------------------------------------------
+namespace {
+    std::mutex g_font_fallback_mode_mutex;
+    FontFallbackMode g_font_fallback_mode = FontFallbackMode::Auto;
+    bool g_font_fallback_mode_init = false;
+
+    /**
+     * 首次使用时把设置读进来。`IndividualConfigManager` 由 TVPSetCommandLine
+     * 写值，
+     * 而选项是在引擎起来之前下发的、字体初始化在之后，所以这里读到的一定是最新值。
+     * 读一次就冻结：ApplyFont 在渲染线程上跑，不该每帧去碰配置管理器。
+     */
+    void EnsureFontFallbackModeInit() {
+        std::lock_guard<std::mutex> lock(g_font_fallback_mode_mutex);
+        if(g_font_fallback_mode_init)
+            return;
+        g_font_fallback_mode_init = true;
+        std::string mode =
+            IndividualConfigManager::GetInstance()->GetValue<std::string>(
+                "font_fallback_mode", "auto");
+        if(mode == "legacy")
+            g_font_fallback_mode = FontFallbackMode::Legacy;
+        else if(mode == "chain")
+            g_font_fallback_mode = FontFallbackMode::Chain;
+        else
+            g_font_fallback_mode = FontFallbackMode::Auto;
+        spdlog::info("font fallback mode = {} (raw='{}')",
+                     g_font_fallback_mode == FontFallbackMode::Legacy ? "legacy"
+                         : g_font_fallback_mode == FontFallbackMode::Chain
+                         ? "chain"
+                         : "auto",
+                     mode);
+    }
+} // namespace
+
+void TVPSetFontFallbackModeFromString(const char *mode) {
+    std::lock_guard<std::mutex> lock(g_font_fallback_mode_mutex);
+    g_font_fallback_mode_init = true;
+    if(mode && std::string(mode) == "legacy")
+        g_font_fallback_mode = FontFallbackMode::Legacy;
+    else if(mode && std::string(mode) == "chain")
+        g_font_fallback_mode = FontFallbackMode::Chain;
+    else
+        g_font_fallback_mode = FontFallbackMode::Auto;
+}
+
+FontFallbackMode TVPGetFontFallbackMode() {
+    EnsureFontFallbackModeInit();
+    std::lock_guard<std::mutex> lock(g_font_fallback_mode_mutex);
+    return g_font_fallback_mode;
+}
+
+// ---------------------------------------------------------------------------
+// legacy：原版派系的单一回退字面
+// ---------------------------------------------------------------------------
 void FreeTypeFontRasterizer::ApplyFallbackFace() {
     if(!FaceFallback && Face &&
        Face->GetFontName() != TVPGetDefaultFontName()) {
@@ -49,33 +115,149 @@ void FreeTypeFontRasterizer::ApplyFallbackFace() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// chain：把所有已注册字面都当回退候选（AetherKiri 派系）
+// ---------------------------------------------------------------------------
+FontFallbackMode FreeTypeFontRasterizer::ResolveMode() {
+    const FontFallbackMode mode = TVPGetFontFallbackMode();
+    if(mode != FontFallbackMode::Auto)
+        return mode;
+
+    // Auto：主字面是「多字面字体」时用
+    // chain。判据不需要猜文件格式——默认字体在同名
+    // 下能解析出与主字面**不同**的字面名，就说明这个字面名背后有多于一个字面
+    // （TTC/OTC 集合），此时单一回退字面覆盖不住。
+    if(Face) {
+        const ttstr &primary = Face->GetFontName();
+        if(!primary.IsEmpty()) {
+            std::vector<ttstr> names;
+            tFreeTypeFace probe(primary, 0);
+            probe.GetFaceNameList(names);
+            for(const auto &n : names) {
+                if(n != primary) {
+                    spdlog::info("font fallback auto -> chain（字面 '{}' "
+                                 "是多字面集合，含 {} 个字面）",
+                                 primary.AsNarrowStdString(), names.size());
+                    return FontFallbackMode::Chain;
+                }
+            }
+        }
+    }
+    return FontFallbackMode::Legacy;
+}
+
+void FreeTypeFontRasterizer::ClearFallbackFaces() {
+    for(auto *f : OwnedChainFaces)
+        delete f;
+    OwnedChainFaces.clear();
+    FaceFallbacks.clear();
+}
+
+void FreeTypeFontRasterizer::ApplyFallbackFaces() {
+    if(!Face || !FaceFallbacks.empty())
+        return;
+
+    std::vector<ttstr> candidates;
+    const ttstr &current = Face->GetFontName();
+    const ttstr &default_font = TVPGetDefaultFontName();
+    auto append_unique = [&](const ttstr &name) {
+        if(name.IsEmpty() || name == current)
+            return;
+        for(const auto &existing : candidates) {
+            if(existing == name)
+                return;
+        }
+        candidates.emplace_back(name);
+    };
+
+    append_unique(default_font);
+    std::vector<ttstr> all_fonts;
+    TVPGetAllFontList(all_fonts);
+    for(const auto &name : all_fonts)
+        append_unique(name);
+
+    for(const auto &name : candidates) {
+        auto *fallback = new tFreeTypeFace(name, 0);
+        if(!fallback)
+            continue;
+        fallback->SetHeight(CurrentFont.Height < 0 ? -CurrentFont.Height
+                                                   : CurrentFont.Height);
+        if(CurrentFont.Flags & TVP_TF_ITALIC)
+            fallback->SetOption(TVP_TF_ITALIC);
+        if(CurrentFont.Flags & TVP_TF_BOLD)
+            fallback->SetOption(TVP_TF_BOLD);
+        if(CurrentFont.Flags & TVP_TF_UNDERLINE)
+            fallback->SetOption(TVP_TF_UNDERLINE);
+        if(CurrentFont.Flags & TVP_TF_STRIKEOUT)
+            fallback->SetOption(TVP_TF_STRIKEOUT);
+        OwnedChainFaces.emplace_back(fallback);
+        FaceFallbacks.emplace_back(fallback);
+    }
+    spdlog::info("font fallback chain 建了 {} 个回退字面（主字面 '{}'）",
+                 FaceFallbacks.size(), current.AsNarrowStdString());
+}
+
+tFreeTypeFace *FreeTypeFontRasterizer::FindChainGlyph(tjs_char ch,
+                                                      tGlyphMetrics &metrics) {
+    ApplyFallbackFaces();
+    for(auto *fallback : FaceFallbacks) {
+        if(fallback && fallback->GetGlyphSizeFromCharcode(ch, metrics))
+            return fallback;
+    }
+    return nullptr;
+}
+
+tTVPCharacterData *FreeTypeFontRasterizer::GetFallbackGlyph(tjs_char ch) {
+    ApplyFallbackFaces();
+    for(auto *fallback : FaceFallbacks) {
+        if(!fallback)
+            continue;
+        tTVPCharacterData *data = fallback->GetGlyphFromCharcode(ch);
+        if(!data)
+            continue;
+        // 各回退字面的 ascender 与主字面不同，直接用会让相邻字符上下跳。
+        // 把回退字形挪回主字面基线（AetherKiri 的同一处理）。
+        const int adjust = krkr::font::ComputeFallbackBaselineAdjustment(
+            Face ? Face->GetAscent() : 0, fallback->GetAscent());
+        if(adjust != 0)
+            data->OriginY += adjust;
+        return data;
+    }
+    return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// 生命周期
+// ---------------------------------------------------------------------------
 FreeTypeFontRasterizer::FreeTypeFontRasterizer() :
     RefCount(0), Face(nullptr), LastBitmap(nullptr) {
     AddRef();
 }
-FreeTypeFontRasterizer::~FreeTypeFontRasterizer() {
 
+FreeTypeFontRasterizer::~FreeTypeFontRasterizer() {
     delete Face;
     Face = nullptr;
     if(FaceFallback) {
         delete FaceFallback;
         FaceFallback = nullptr;
     }
+    ClearFallbackFaces();
     TVPUninitializeFreeFont();
 }
+
 void FreeTypeFontRasterizer::AddRef() { RefCount++; }
 //---------------------------------------------------------------------------
 void FreeTypeFontRasterizer::Release() {
     RefCount--;
     LastBitmap = nullptr;
     if(RefCount == 0) {
-
         delete Face;
         Face = nullptr;
         if(FaceFallback) {
             delete FaceFallback;
             FaceFallback = nullptr;
         }
+        ClearFallbackFaces();
         delete this;
     }
 }
@@ -108,6 +290,12 @@ void FreeTypeFontRasterizer::ApplyFont(const tTVPFont &font) {
             Face = nullptr;
             Face = new tFreeTypeFace(stdname, opt);
             recreate = true;
+            // 换了主字面，之前那批回退字面是按旧字面尺寸/标志建的，必须重建
+            if(FaceFallback) {
+                delete FaceFallback;
+                FaceFallback = nullptr;
+            }
+            ClearFallbackFaces();
         }
     } else {
         Face = new tFreeTypeFace(stdname, opt);
@@ -116,29 +304,19 @@ void FreeTypeFontRasterizer::ApplyFont(const tTVPFont &font) {
     Face->SetHeight(font.Height < 0 ? -font.Height : font.Height);
 
 #if defined(KRKR_RENDER_PROBE)
-    // [Font probe] Log the requested face/height against what FreeType actually
-    // used for this face+size. If the rendered text looks half-sized or shifted
-    // out of its box:
-    //   - height vs y_ppem mismatch -> heightPixels != heightRequested
-    //     (glyph scaling bug, e.g. a global scale factor halving the size)
-    //   - ascent/baseline odd       -> ascent vs rawAsc/rawDesc/unitsPerEM
-    //     disagrees, misplacing text vertically inside its box.
-    // Placed after SetHeight() so the metrics reflect the NEW face/size.
-    // [字体探针] 打印请求的字面名/字号与 FreeType 在此字面+字号上实际使用的值。
-    // 若渲染文字偏小或偏移出框：
-    //   - height 与 y_ppem 不一致 -> heightPixels != heightRequested
-    //     （字形缩放被某全局系数缩小一倍）
-    //   - ascent/baseline 异常   -> ascent 与原始 rawAsc/rawDesc/unitsPerEM
-    //     推导不一致，导致文字在其框内垂直错位。
-    // 置于 SetHeight() 之后，度量反映的是新的字面+字号。
+    // [Font probe] 打印请求的字面名/字号与 FreeType 实际使用的值。
+    // 文字偏小或垂直错位时看这里：heightReq 与 heightPix 不符 =
+    // 字形缩放被改过； ascent 与 rawAsc/rawDesc/unitsEM 推不出来 = 基线被放歪。
     if(auto logger = spdlog::get("core")) {
         logger->info(
             "[FontProbe] apply face='{}' being='{}' heightReq={} heightPix={} "
-            "ascent={} rawAsc={} rawDesc={} unitsEM={} angle={}",
+            "ascent={} rawAsc={} rawDesc={} unitsEM={} angle={} fallback={}",
             font.Face.AsNarrowStdString(), stdname.AsNarrowStdString(),
             font.Height, Face->GetPixelHeight(), Face->GetAscent(),
             Face->GetAscender(), Face->GetDescender(), Face->GetUnitsPerEM(),
-            font.Angle);
+            font.Angle,
+            TVPGetFontFallbackMode() == FontFallbackMode::Chain ? "chain"
+                                                                : "legacy");
     }
 #endif
     if(recreate == false) {
@@ -168,16 +346,22 @@ void FreeTypeFontRasterizer::ApplyFont(const tTVPFont &font) {
 //---------------------------------------------------------------------------
 void FreeTypeFontRasterizer::GetTextExtent(tjs_char ch, tjs_int &w,
                                            tjs_int &h) {
-    if(Face) {
-        tGlyphMetrics metrics{};
-        if(Face->GetGlyphSizeFromCharcode(ch, metrics)) {
-            w = metrics.CellIncX;
-            h = metrics.CellIncY;
-        } else {
-            w = Face->GetHeight();
-            h = w;
-        }
+    if(!Face)
+        return;
+    tGlyphMetrics metrics{};
+    if(Face->GetGlyphSizeFromCharcode(ch, metrics)) {
+        w = metrics.CellIncX;
+        h = metrics.CellIncY;
+        return;
     }
+    if(!isUnicodeSpace(ch) && ResolveMode() == FontFallbackMode::Chain &&
+       FindChainGlyph(ch, metrics)) {
+        w = metrics.CellIncX;
+        h = metrics.CellIncY;
+        return;
+    }
+    w = Face->GetHeight();
+    h = w;
 }
 //---------------------------------------------------------------------------
 tjs_int FreeTypeFontRasterizer::GetAscentHeight() {
@@ -211,9 +395,13 @@ FreeTypeFontRasterizer::GetBitmap(const tTVPFontAndCharacterData &font,
     }
     tTVPCharacterData *data = Face->GetGlyphFromCharcode(font.Character);
     if(!data && !isUnicodeSpace(font.Character)) {
-        ApplyFallbackFace();
-        if(FaceFallback) {
-            data = FaceFallback->GetGlyphFromCharcode(font.Character);
+        if(ResolveMode() == FontFallbackMode::Chain) {
+            data = GetFallbackGlyph(font.Character);
+        } else {
+            ApplyFallbackFace();
+            if(FaceFallback) {
+                data = FaceFallback->GetGlyphFromCharcode(font.Character);
+            }
         }
     }
     if(data == nullptr) {
@@ -267,6 +455,7 @@ void FreeTypeFontRasterizer::GetGlyphDrawRect(const ttstr &text,
     Face->ClearOption(TVP_FACE_OPTIONS_NO_ANTIALIASING);
     Face->ClearOption(TVP_FACE_OPTIONS_NO_HINTING);
 
+    const bool use_chain = ResolveMode() == FontFallbackMode::Chain;
     area.left = area.top = area.right = area.bottom = 0;
     tjs_int offsetx = 0;
     tjs_int offsety = 0;
@@ -276,6 +465,21 @@ void FreeTypeFontRasterizer::GetGlyphDrawRect(const ttstr &text,
         tjs_int ax, ay;
         tTVPRect rt(0, 0, 0, 0);
         bool result = Face->GetGlyphRectFromCharcode(rt, ch, ax, ay);
+        if(result == false && !isUnicodeSpace(ch) && use_chain) {
+            ApplyFallbackFaces();
+            for(auto *fallback : FaceFallbacks) {
+                if(!fallback)
+                    continue;
+                result = fallback->GetGlyphRectFromCharcode(rt, ch, ax, ay);
+                if(result) {
+                    rt.add_offsets(
+                        0,
+                        krkr::font::ComputeFallbackBaselineAdjustment(
+                            Face->GetAscent(), fallback->GetAscent()));
+                    break;
+                }
+            }
+        }
         if(result == false)
             result = Face->GetGlyphRectFromCharcode(rt, Face->GetDefaultChar(),
                                                     ax, ay);

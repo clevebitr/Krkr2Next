@@ -34,6 +34,7 @@ import org.dpdns.clevebitr.ui.GameScreen
 import org.dpdns.clevebitr.ui.KrKr2NextTheme
 import org.dpdns.clevebitr.ui.LauncherScreen
 import org.dpdns.clevebitr.ui.SettingsScreen
+import org.dpdns.clevebitr.ui.resolveDarkTheme
 
 /**
  * 单 Activity 壳。
@@ -73,6 +74,15 @@ class MainActivity : ComponentActivity() {
      */
     private var perfOverlayMode by mutableStateOf("")
 
+    /**
+     * 主题档位（`system` / `light` / `dark`）。与 [perfOverlayMode] 同理提到 Activity：
+     * 设置页改完要**立刻**换肤，不能退出重进。初值在 onCreate 里读。
+     */
+    private var themeMode by mutableStateOf("system")
+
+    /** 引擎字体回退策略（`auto` / `legacy` / `chain`）；改完下次开游戏生效。 */
+    private var fontFallbackMode by mutableStateOf("auto")
+
     private val logDirPath: String by lazy { LogFiles.logsDir(this).absolutePath }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -93,9 +103,20 @@ class MainActivity : ComponentActivity() {
         AppLog.i(TAG, "onCreate (recovery=$previous)")
 
         perfOverlayMode = AppPrefs.perfOverlayMode(this)
+        themeMode = AppPrefs.themeMode(this)
+        fontFallbackMode = AppPrefs.fontFallbackMode(this)
 
         setContent {
-            KrKr2NextTheme {
+            KrKr2NextTheme(darkTheme = resolveDarkTheme(themeMode)) {
+                // 根 Surface 不能省。`themes.xml` 的 windowBackground 是黑的，而 Compose
+                // 只画自己覆盖到的像素——**没有 Surface 的区域会直接露出窗口底色**。
+                // 启动页/设置页此前正是这样：浅色方案下发黑字、窗口又是黑的，于是设置页
+                // 黑字黑底看不见、启动页右上角齿轮（取 onSurfaceVariant）也被吞掉。
+                // 这里铺一层 colorScheme.background，把所有分支都盖住。
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
                 val activeSession = session
                 val path = gamePath
                 if (activeSession == null || path == null) {
@@ -105,6 +126,10 @@ class MainActivity : ComponentActivity() {
                             onBack = { showSettings = false },
                             onShareLogs = ::shareLogs,
                             onPerfOverlayModeChanged = { perfOverlayMode = it },
+                            themeMode = themeMode,
+                            onThemeModeChanged = { themeMode = it },
+                            fontFallbackMode = fontFallbackMode,
+                            onFontFallbackModeChanged = { fontFallbackMode = it },
                         )
                     } else {
                         LauncherScreen(
@@ -141,29 +166,30 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                recoveryNotice?.let { notice ->
-                    AlertDialog(
-                        onDismissRequest = { recoveryNotice = null },
-                        title = { Text("上次运行异常结束") },
-                        text = {
-                            Column {
-                                Text(notice)
-                                Text(
-                                    text = "日志目录：$logDirPath",
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                        },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                shareLogs()
-                                recoveryNotice = null
-                            }) { Text("分享日志") }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { recoveryNotice = null }) { Text("知道了") }
-                        },
-                    )
+                    recoveryNotice?.let { notice ->
+                        AlertDialog(
+                            onDismissRequest = { recoveryNotice = null },
+                            title = { Text("上次运行异常结束") },
+                            text = {
+                                Column {
+                                    Text(notice)
+                                    Text(
+                                        text = "日志目录：$logDirPath",
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    shareLogs()
+                                    recoveryNotice = null
+                                }) { Text("分享日志") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { recoveryNotice = null }) { Text("知道了") }
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -204,6 +230,7 @@ class MainActivity : ComponentActivity() {
             cachePath = cacheDir.absolutePath,
             // 0 = 不限速，由 Choreographer 的 vsync 决定节拍（默认）
             fpsLimit = AppPrefs.fpsLimit(this),
+            fontFallbackMode = AppPrefs.fontFallbackMode(this),
             onLog = { log ->
                 // 引擎启动日志已经在 engine.log 里了，这里只做一次转发，
                 // 顺带让连着 adb 的人也能看到

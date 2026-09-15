@@ -3,9 +3,19 @@
     <!--
         Compose 负责实际配色，这里只需要一个不带 ActionBar 的基础主题。
         全屏沉浸由 MainActivity 在运行时设置。
+
+        windowBackground 刻意**不写死颜色**：
+        原先写的是 @android:color/black，而 Compose 只画自己覆盖到的像素——凡是没被
+        Surface 盖住的地方都会直接露出这个底色。启动页/设置页当时正是这样：App 内是浅色
+        配色（深色文字），窗口底色却是纯黑，于是设置页黑字黑底看不见、启动页右上角设置
+        齿轮（取 onSurfaceVariant）也被吞掉。
+
+        两头都修才稳：
+          1. MainActivity 的 setContent 根部已经有 Surface(color = background) 兜底；
+          2. 这里不再写死纯黑，交给框架主题的默认窗口底色（随系统深浅色），
+             避免浅色模式下冷启动第一帧闪一块黑。
     -->
     <style name="Theme.KrKr2Next" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@android:color/black</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>

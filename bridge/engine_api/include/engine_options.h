@@ -19,6 +19,15 @@
 /** Frame rate limit (0 = unlimited / follow vsync). */
 #define ENGINE_OPTION_FPS_LIMIT "fps_limit"
 
+/**
+ * 字体回退策略（`auto` / `legacy` / `chain`）。见
+ * cpp/core/visual/FreeTypeFontRasterizer.h 的 FontFallbackMode。
+ * `legacy` = 原版派系（单一回退字面）；
+ * `chain` = AetherKiri 派系（逐字回退链）。
+ * 引擎只在字体初始化时读一次，所以"下次开游戏生效"。
+ */
+#define ENGINE_OPTION_FONT_FALLBACK_MODE "font_fallback_mode"
+
 /** Render pipeline selection ("opengl" or "software"). */
 #define ENGINE_OPTION_RENDERER "renderer"
 
