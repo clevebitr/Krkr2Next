@@ -52,8 +52,10 @@ jobs:
           sudo grep -rIl 'dl\.google\.com' /etc/apt/sources.list.d/ 2>/dev/null | \
             xargs -r sudo rm -f
           sudo apt-get update -o Acquire::Retries=3 || true
+          # libomp-dev：根 CMakeLists 有 find_package(OpenMP REQUIRED)，
+          #   OpenCV 的配置也会 find_dependency(OpenMP)。CMake 用 clang 时靠 libomp。
           sudo apt-get install -y cmake ninja-build ccache bison nasm yasm \
-            libegl1-mesa-dev libgles2-mesa-dev
+            libegl1-mesa-dev libgles2-mesa-dev libomp-dev
           cmake --version | head -1
           ninja --version
           bison --version | head -1

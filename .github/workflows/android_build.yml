@@ -77,6 +77,11 @@ jobs:
         #   导致 "No rule to make target 'vp9itxfm_template.asm'"；yasm 生成正确路径。
         #   两个都装：缺 nasm 时 vcpkg 会直接报
         #   "Could not find nasm. Please install it via your package manager"。
+        # libomp-dev：OpenCV 的 CMake 配置会 find_dependency(OpenMP)。宿主的
+        #   opencv4 一旦出现在 vcpkg_installed/x64-linux 下就会被 find_package
+        #   搜到，而它的依赖检查需要 C 语言的 OpenMP。CMake 用 clang 时靠 libomp，
+        #   不装就会报 "Could NOT find OpenMP_C (missing: OpenMP_C_FLAGS
+        #   OpenMP_C_LIB_NAMES)"。
         run: |
           # runner 预装的 chrome apt 源与本次构建无关，且其 dl.google.com CDN
           # 偶发 Hash Sum mismatch 会让 apt-get update 退出 100 拖垮整个 workflow。
@@ -86,7 +91,7 @@ jobs:
           sudo apt-get update -o Acquire::Retries=3 || true
           sudo apt-get install -y \
             cmake ninja-build ccache autoconf automake libtool \
-            bison nasm yasm
+            bison nasm yasm libomp-dev
           # 逐个回显版本与绝对路径：缺工具时 CMake/vcpkg 的报错往往含糊
           # （如 "CMAKE_MAKE_PROGRAM is not set"），先在这里暴露更省时间。
           cmake --version | head -1
@@ -95,6 +100,9 @@ jobs:
           bison --version | head -1
           nasm -v
           yasm --version | head -1
+          echo "libomp: $(ls /usr/lib/llvm-*/lib/libomp.so 2>/dev/null || \
+                          ls /usr/lib/x86_64-linux-gnu/libomp.so 2>/dev/null || \
+                          echo '未找到')"
 
       - name: 安装 Android NDK ${{ env.NDK_VERSION }}
         run: |
@@ -216,6 +224,21 @@ jobs:
             echo
           else
             echo "  找不到 $NINJA（configure 未完成？）"
+          fi
+          echo
+          echo "===== (c) vcpkg_installed 里各 triplet 有什么 ====="
+          # configure 期的 find_package 失败常源于「找到的是宿主 triplet 的包」，
+          # 而不是目标 triplet 的。列出各自的 share/ 目录能一眼看出目标包在不在。
+          VI="out/android/$BUILD_TYPE/vcpkg_installed"
+          if [ -d "$VI" ]; then
+            for t in "$VI"/*/; do
+              echo "  $(basename "$t"): $(ls "$t/share" 2>/dev/null | wc -l) 个包"
+              ls "$t/share" 2>/dev/null | grep -iE "opencv|openmp" | sed 's/^/      /' || true
+            done
+            echo "  --- 目标 triplet 下是否有 opencv4 ---"
+            ls -d "$VI"/arm64-android/share/opencv4 2>/dev/null || echo "      **没有**（find_package 会退回到宿主 triplet）"
+          else
+            echo "  找不到 $VI"
           fi
 
       - name: 校验 libengine_api.so
