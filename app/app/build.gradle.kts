@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "org.dpdns.clevebitr"
-    compileSdk = 35
+    // 36 是 androidx compose 1.12 / foundation 1.13 的硬要求（低于它 AGP 会直接报
+    // "dependency requires compileSdk 36"）。本机 SDK 需先装 platforms;android-36。
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "org.dpdns.clevebitr"
@@ -61,11 +63,18 @@ android {
 }
 
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    // Material 3 Expressive（MD3E）只在 material3 1.5.0-alpha 里是 public：稳定版
+    // 1.4.0 里 MaterialExpressiveTheme 是 internal，ButtonGroup /
+    // FloatingActionButtonMenu / LoadingIndicator / 浮动工具栏 / MaterialShapes 根本
+    // 不存在。所以 BOM 锁稳定的 compose 1.12.1，material3 单独显式升到
+    // 1.5.0-alpha28（其传递依赖会顺带把 foundation 抬到 1.13.0-alpha）。
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.material3:material3:1.5.0-alpha28")
+    // 不再依赖 material-icons-extended：本 App 只用到 core 图标（Close /
+    // ArrowBack / Settings / PlayArrow / MoreVert / Folder），而该构件在新 BOM 下
+    // 已冻结在 1.7.8。
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
