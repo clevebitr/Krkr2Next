@@ -83,14 +83,27 @@ fun GameScreen(
 ) {
     val context = LocalContext.current
     // 设置里改的是"下次启动游戏生效"，这里读一次即可
-    val showFps = remember { AppPrefs.showFps(context) }
+    val perfMode = remember { AppPrefs.perfOverlayMode(context) }
 
-    var fps by remember { mutableStateOf(0f) }
-    if (showFps) {
-        LaunchedEffect(session) {
+    // 性能叠加层：4Hz 采样，与 AetherKiri 的 PERF_UPDATE_INTERVAL = 0.25s 对齐。
+    // 关档时不启动这个循环——不采样，也不调那两次 JNI。
+    var perf by remember { mutableStateOf(PerfSnapshot()) }
+    if (perfMode != PerfOverlayMode.OFF) {
+        LaunchedEffect(session, perfMode) {
             while (true) {
-                fps = session.measuredFps
-                delay(500)
+                perf = PerfSnapshot(
+                    fps = session.measuredFps,
+                    frameMs = session.frameMs,
+                    tickMs = session.tickMs,
+                    p50Ms = session.frameP50Ms,
+                    p95Ms = session.frameP95Ms,
+                    p99Ms = session.frameP99Ms,
+                    maxMs = session.frameMaxMs,
+                    errors = session.tickFailureCount,
+                    rendererInfo = session.rendererInfo(),
+                    memory = session.memoryStats(),
+                )
+                delay(250)
             }
         }
     }
@@ -143,19 +156,15 @@ fun GameScreen(
             },
         )
 
-        // FPS 叠加：不加背景的话在浅色画面上读不出来；不设 clickable，触摸照样穿透给引擎
-        if (showFps) {
-            Text(
-                text = "FPS ${(fps * 10).roundToInt() / 10f}",
-                color = Color.White,
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(8.dp)
-                    .background(Color(0f, 0f, 0f, 0.6f))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-            )
-        }
+        // 性能叠加层：左上角 (16,12)，与 AetherKiri 的 _layout_perf_overlay 同位。
+        // 不设 clickable，触摸照常穿透给引擎。
+        PerformanceOverlay(
+            mode = perfMode,
+            snapshot = perf,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 16.dp, top = 12.dp),
+        )
 
         // 引擎出第一帧前的进度覆盖层
         if (startupState != NativeEngine.STARTUP_SUCCEEDED) {

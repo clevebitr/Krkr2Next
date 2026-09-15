@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -40,10 +41,18 @@ import org.dpdns.clevebitr.core.LogFiles
 
 private const val TAG = "KrKr2Next/Settings"
 
+/** 叠加层三档的用户可见名字；值与 AetherKiri 的 off/summary/detail 一致。 */
+private val PERF_OVERLAY_CHOICES = listOf(
+    "off" to "关闭",
+    "summary" to "简要",
+    "detail" to "详细",
+)
+
 /**
  * 设置页。目前只有调试相关的东西——这是给排障用的壳，设置项也都服务于
  * "把问题现场原样带出来"：日志怎么收、怎么导出、引擎跑多快、画面上叠什么。
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SettingsScreen(
     logDirPath: String,
@@ -55,7 +64,7 @@ fun SettingsScreen(
 
     // 首帧从 SharedPreferences 读一次，之后以本地状态为准（写入是 apply()，异步落盘）
     var logcatCapture by remember { mutableStateOf(AppPrefs.logcatCapture(context)) }
-    var showFps by remember { mutableStateOf(AppPrefs.showFps(context)) }
+    var perfMode by remember { mutableStateOf(AppPrefs.perfOverlayMode(context)) }
     var fpsLimit by remember { mutableStateOf(AppPrefs.fpsLimit(context)) }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -87,16 +96,34 @@ fun SettingsScreen(
                 },
             )
 
-            SwitchRow(
-                title = "显示 FPS",
-                subtitle = "在游戏画面左上角叠加帧率，用于判断卡顿是渲染慢还是逻辑慢。",
-                checked = showFps,
-                onCheckedChange = {
-                    showFps = it
-                    AppPrefs.setShowFps(context, it)
-                    AppLog.i(TAG, "show fps = $it")
-                },
-            )
+            // 三档而不是开关：与 AetherKiri 的 off/summary/detail 对齐（detail 只多第三行）
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                Text("性能叠加层", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = "游戏画面左上角叠加实时性能摘要：简要档给帧率、帧时间、内存与缓存" +
+                        "账目，详细档再加 tick 耗时与 1 秒窗分位数。下次启动游戏时生效。",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Row(
+                    modifier = Modifier.padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    PERF_OVERLAY_CHOICES.forEach { (value, label) ->
+                        ToggleButton(
+                            checked = perfMode == value,
+                            onCheckedChange = {
+                                perfMode = value
+                                AppPrefs.setPerfOverlayMode(context, value)
+                                AppLog.i(TAG, "perf overlay = $value")
+                            },
+                        ) {
+                            Text(label)
+                        }
+                    }
+                }
+            }
 
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text("引擎帧率上限", style = MaterialTheme.typography.bodyLarge)

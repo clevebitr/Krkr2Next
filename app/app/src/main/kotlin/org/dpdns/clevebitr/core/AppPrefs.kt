@@ -21,7 +21,13 @@ object AppPrefs {
     /** 引擎帧率上限。0 = 不限速，跟随 vsync（默认）。 */
     private const val KEY_FPS_LIMIT = "debug.fps_limit"
 
-    /** 游戏画面左上角叠加 FPS。默认关。 */
+    /** 性能叠加层档位（`off` / `summary` / `detail`）。默认关。 */
+    private const val KEY_PERF_OVERLAY = "debug.perf_overlay"
+
+    /**
+     * 旧键：布尔型的"显示 FPS"。只用来**读旧值**——从上一版升上来的用户不该发现自己的
+     * 设置被重置。与 AetherKiri 处理 `rendering/perf_overlay` 旧键的方式一致。
+     */
     private const val KEY_SHOW_FPS = "debug.show_fps"
 
     /** 上次浏览到的目录，下次启动回到这里。 */
@@ -46,11 +52,24 @@ object AppPrefs {
     fun setFpsLimit(context: Context, limit: Int) =
         prefs(context).edit().putInt(KEY_FPS_LIMIT, limit).apply()
 
-    fun showFps(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_SHOW_FPS, false)
+    /** 合法档位，与 AetherKiri 的 `DEBUG_OVERLAY_MODES` 同名同义。 */
+    val PERF_OVERLAY_MODES = listOf("off", "summary", "detail")
 
-    fun setShowFps(context: Context, enabled: Boolean) =
-        prefs(context).edit().putBoolean(KEY_SHOW_FPS, enabled).apply()
+    /**
+     * 叠加层档位。非法值或从未设置时：旧布尔开关为真按 `summary` 处理，否则 `off`
+     * （AetherKiri 也是"旧键为真 → summary，否则 off"）。
+     */
+    fun perfOverlayMode(context: Context): String {
+        val p = prefs(context)
+        val stored = p.getString(KEY_PERF_OVERLAY, null)
+        if (stored != null && stored in PERF_OVERLAY_MODES) return stored
+        return if (p.getBoolean(KEY_SHOW_FPS, false)) "summary" else "off"
+    }
+
+    fun setPerfOverlayMode(context: Context, mode: String) {
+        val normalized = if (mode in PERF_OVERLAY_MODES) mode else "off"
+        prefs(context).edit().putString(KEY_PERF_OVERLAY, normalized).apply()
+    }
 
     // ── 界面状态 ──────────────────────────────────────────────────────────
 
