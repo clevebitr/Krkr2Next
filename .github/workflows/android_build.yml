@@ -195,6 +195,38 @@ jobs:
           export VCPKG_BINARY_SOURCES="clear;files,$HOME/.cache/vcpkg,readwrite"
           ./build.sh "$BUILD_TYPE" --engine-only
 
+      - name: 诊断：vcpkg 二进制缓存体积与归档数
+        # GitHub 每个仓库的 cache 总配额 10 GB，超出按 LRU 淘汰；淘汰掉旧条目会
+        # 让下一轮又从缺包开始编。本轮会写两个 vcpkg 条目（configure 后 / 构建后），
+        # 把体积和归档数打出来，逼近配额时能及早看见，而不是等"又开始重编 ffmpeg"
+        # 这种症状出现再去猜。
+        # 归档数 ≈ 已缓存住的目标数，也是"到底缺多少包"最直接的量化。
+        if: ${{ always() }}
+        run: |
+          du -sh "$HOME/.cache/vcpkg" 2>/dev/null || echo "(缓存目录不存在)"
+          printf "二进制缓存归档数: %s\n" "$(find "$HOME/.cache/vcpkg" -maxdepth 1 -name '*.zip' 2>/dev/null | wc -l)"
+
+      - name: 保存 vcpkg 二进制缓存（构建之后）
+        # **第二个** vcpkg 保存点，位置在「构建引擎」之后。第一个保存在 configure
+        # 之后（见上），只覆盖那一轮 configure 装完的包。
+        #
+        # 为什么必须有第二个：vcpkg 是按包增量写缓存的，失败就停在当前进度。
+        # 而构建引擎这一步会再跑一次 configure（环境里有 ENABLE_RENDER_PROBE /
+        # KRKR_LOG_LEVEL，脚本每次都重新 configure），vcpkg 就在**这一步**把上一轮
+        # 没装完的包补齐——那些包正是在这里现编的。如果只有 configure 之后那一个
+        # 保存点，它们永远不会被写进缓存：下一轮恢复出来还是缺它们，于是在构建
+        # 引擎这一步再编一遍。表现就是「每次都要重新编译剩余的库」、ffmpeg 每轮
+        # 重编。
+        #
+        # 放在这里 + if: always() 后，即使这一轮编译仍然失败，本轮编好的包也会
+        # 落进缓存，下一轮少编一批，逐轮收敛。configure 之后那个保存点保留：它
+        # 防的是超时/取消——job 被 timeout 掐掉时，它后面的步骤根本不会执行。
+        if: ${{ always() }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/vcpkg
+          key: vcpkg-android-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg/**') }}-${{ env.BUILD_TYPE }}-${{ github.run_id }}-post-build
+
       - name: 保存 ccache
         # if: always() —— 编译失败也要存。ccache 内容寻址，已编译对象依然有效。
         # key 带 run_id 的原因同 vcpkg：固定 key 第二次保存会撞车失败。
