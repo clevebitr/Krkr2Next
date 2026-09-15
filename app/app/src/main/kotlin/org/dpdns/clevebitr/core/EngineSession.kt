@@ -220,7 +220,15 @@ class EngineSession(
     // ── 输入 ──────────────────────────────────────────────────────────────
 
     /**
-     * 发送输入事件。可在 UI 线程调用——事件在引擎内部排队，下一次 tick 才派发。
+     * 发送输入事件。**可在任意线程调用**——内部会切到渲染线程再调引擎。
+     *
+     * ⚠️ 为什么必须切线程：`engine_send_input` 在 C++ 侧用
+     * `ValidateHandleThreadLocked` 校验调用方必须是 `engine_create` 所在线程
+     * （即本类的渲染线程），否则返回 `ENGINE_RESULT_INVALID_STATE` 且**事件不入队**。
+     * 触摸来自 UI 线程、按键来自 `dispatchKeyEvent`（也在 UI 线程），若直接调用，
+     * 每一次输入都会被引擎丢弃，表现为游戏完全无响应。
+     *
+     * 切线程不会增加可感知延迟：引擎本来就是把事件排队到下一 tick 才派发。
      *
      * @param keyCode **Windows VK 码**（见 [VkCodes]），不是 Android KEYCODE
      * @param x,y 视图坐标（物理像素）；不要乘 density
@@ -236,15 +244,17 @@ class EngineSession(
         keyCode: Int = 0,
         modifiers: Int = 0,
         unicodeCodepoint: Int = 0,
+        timestampMicros: Long = System.nanoTime() / 1_000L,
     ) {
-        if (handle == 0L) return
-        val rc = NativeEngine.engineSendInput(
-            handle, type, x, y, deltaX, deltaY, pointerId, button,
-            keyCode, modifiers, unicodeCodepoint,
-            System.nanoTime() / 1_000L,
-        )
-        if (rc != NativeEngine.RESULT_OK) {
-            Log.w(TAG, "engineSendInput(type=$type) rc=$rc err=${lastError()}")
+        post {
+            if (handle == 0L) return@post
+            val rc = NativeEngine.engineSendInput(
+                handle, type, x, y, deltaX, deltaY, pointerId, button,
+                keyCode, modifiers, unicodeCodepoint, timestampMicros,
+            )
+            if (rc != NativeEngine.RESULT_OK) {
+                Log.w(TAG, "engineSendInput(type=$type) rc=$rc err=${lastError()}")
+            }
         }
     }
 

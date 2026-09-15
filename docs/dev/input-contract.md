@@ -13,11 +13,23 @@
 
 `engine_send_input` 在 `bridge/engine_api/src/engine_api.cpp` 中把事件拷入
 `EngineInputEvent`（bridge → core 结构），再交 `EngineLoop::HandleInputEvent`
-（`cpp/core/environ/EngineLoop.cpp:189`）。事件被**排队**，在**下一次 tick** 才派发，
-因此从任意线程调用都是安全的。
+（`cpp/core/environ/EngineLoop.cpp:189`）。事件被**排队**，在**下一次 tick** 才派发。
 
 **必须设置 `struct_size = sizeof(engine_input_event_t)`。**
 结构体定义见 `bridge/engine_api/include/engine_api.h:127`。
+
+### ⚠️ 线程约束：必须在 engine_create 所在线程调用
+
+虽然事件本身是排队的，但 `engine_send_input`（`engine_api.cpp:2205`）会先做
+`ValidateHandleThreadLocked`，要求调用线程等于 `owner_thread`——即 `engine_create`
+所在的那条线程（本项目中是 Kotlin 的渲染线程）。
+
+**不满足时返回 `ENGINE_RESULT_INVALID_STATE`，且事件被直接丢弃、不入队。**
+症状是游戏完全无响应，且只有一条 `Log.w` 提示，很容易被当成"输入没做"。
+
+因此壳侧从 UI 线程收到触摸/按键后，**必须切到渲染线程再调用**
+（`EngineSession.sendInput` 内部用 `post{}` 完成这一步）。切换不增加可感知延迟——
+事件本来就要等到下一次 tick 才派发。
 
 ## 事件类型
 

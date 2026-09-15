@@ -673,30 +673,35 @@ tTJSNativeClass *TVPCreateNativeClass_System() {
             caption = TJS_W("Information");
 
         if(numparams >= 3 && param[2]->Type() != tvtVoid) {
+            std::vector<ttstr> vecButtons;
+
             if(param[2]->Type() == tvtObject) { // vector of button
-                tTJSArrayNI *ni;
-                param[2]->AsObjectNoAddRef()->NativeInstanceSupport(
-                    TJS_NIS_GETINSTANCE, TJSGetArrayClassID(),
-                    (iTJSNativeInstance **)&ni);
-                std::vector<ttstr> vecButtons;
-                vecButtons.reserve(ni->Items.size());
-                for(const ttstr &label : ni->Items) {
-                    vecButtons.emplace_back(label);
+                // 必须先置空并检查返回值：NativeInstanceSupport 在类 ID
+                // 不匹配时 返回失败且**不写**出参（tjsObject.cpp 的
+                // TJS_NIS_GETINSTANCE 分支）， 若直接使用未初始化的 ni，传非
+                // Array 对象（如 new Dictionary()） 就会解引用野指针崩溃。
+                tTJSArrayNI *ni = nullptr;
+                if(TJS_SUCCEEDED(
+                       param[2]->AsObjectNoAddRef()->NativeInstanceSupport(
+                           TJS_NIS_GETINSTANCE, TJSGetArrayClassID(),
+                           (iTJSNativeInstance **)&ni)) &&
+                   ni) {
+                    vecButtons.reserve(ni->Items.size());
+                    for(const ttstr &label : ni->Items)
+                        vecButtons.emplace_back(label);
                 }
-                int ret = TVPShowSimpleMessageBox(text, caption, vecButtons);
-                if(result)
-                    result->operator=(ret);
+                // 非 Array 对象：vecButtons 留空，与传空数组行为一致
             } else {
                 int nButtons = param[2]->AsInteger();
-                std::vector<ttstr> vecButtons;
                 if(nButtons >= 1)
                     vecButtons.emplace_back(TJS_W("OK"));
                 if(nButtons >= 2)
                     vecButtons.emplace_back(TJS_W("Cancel"));
-                int ret = TVPShowSimpleMessageBox(text, caption, vecButtons);
-                if(result)
-                    result->operator=(ret);
             }
+
+            int ret = TVPShowSimpleMessageBox(text, caption, vecButtons);
+            if(result)
+                result->operator=(ret);
             return TJS_S_OK;
         }
 

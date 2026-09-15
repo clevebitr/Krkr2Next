@@ -988,8 +988,13 @@ static bool TVPWriteDataToFileJava(const std::string &filename,
                 methodInfo.classID, methodInfo.methodID, jstr, arr);
             methodInfo.env->DeleteLocalRef(arr);
             methodInfo.env->DeleteLocalRef(jstr);
-            methodInfo.env->DeleteLocalRef(methodInfo.classID);
+            // classID 由 getStaticMethodInfo 创建为**局部**引用，必须在本函数内
+            // 释放；但只能在循环**外**释放——放进循环里会让第二轮把已删除的
+            // jclass 传给 CallStaticBooleanMethod，且下一轮的 NewStringUTF/
+            // NewByteArray 很可能复用同一个局部引用槽，导致传入的其实是个
+            // jstring。重试路径正是这段代码存在的意义，所以必须修。
         } while(access(filename.c_str(), F_OK) != 0 && --retry);
+        methodInfo.env->DeleteLocalRef(methodInfo.classID);
         return ret;
     }
     return false;
