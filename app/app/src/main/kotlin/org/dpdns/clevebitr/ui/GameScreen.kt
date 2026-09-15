@@ -19,9 +19,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import org.dpdns.clevebitr.core.AppLog
 import org.dpdns.clevebitr.core.EngineSession
 import org.dpdns.clevebitr.core.InputEvent
 import org.dpdns.clevebitr.core.NativeEngine
+
+private const val TAG = "KrKr2Next/Game"
 
 /**
  * 游戏画面。
@@ -100,6 +103,49 @@ fun GameScreen(
  * 引擎侧 `DrawDevice::TransformToPrimaryLayerManager` 负责物理像素 → layer 坐标。
  * 详见 `docs/dev/input-contract.md`。
  */
+/**
+ * 触摸轨迹的聚合状态。
+ *
+ * move 是高频事件（一秒几十条），逐条记日志会把它彻底淹掉——`docs/dev/probes.md`
+ * 明确要求高频日志必须采样/限频/仅边沿。这里的做法是：按下记一条、抬起记一条汇总
+ * （时长 / move 次数 / 位移），移动本身只更新计数。
+ *
+ * 触摸事件都来自 UI 线程的同一条事件流，因此这些字段不需要同步。
+ */
+private object TouchStats {
+    var active = false
+    var downAt = 0L
+    var startX = 0f
+    var startY = 0f
+    var lastX = 0f
+    var lastY = 0f
+    var moveCount = 0
+
+    fun begin(x: Float, y: Float) {
+        active = true
+        downAt = System.currentTimeMillis()
+        startX = x
+        startY = y
+        lastX = x
+        lastY = y
+        moveCount = 0
+    }
+
+    fun trace(x: Float, y: Float) {
+        moveCount++
+        lastX = x
+        lastY = y
+    }
+
+    fun summary(): String {
+        val ms = System.currentTimeMillis() - downAt
+        val dx = lastX - startX
+        val dy = lastY - startY
+        return "touch up: ${ms}ms, move=${moveCount}, from=(${startX.toInt()},${startY.toInt()})" +
+            " to=(${lastX.toInt()},${lastY.toInt()}) d=(${dx.toInt()},${dy.toInt()})"
+    }
+}
+
 @SuppressLint("ClickableViewAccessibility")
 private fun handleTouch(session: EngineSession, event: MotionEvent) {
     // 按钮映射：0=左 1=右 2=中（对应 tTVPMouseButton）
@@ -111,14 +157,18 @@ private fun handleTouch(session: EngineSession, event: MotionEvent) {
     val pointerId = event.getPointerId(0)
 
     when (event.actionMasked) {
-        MotionEvent.ACTION_DOWN ->
+        MotionEvent.ACTION_DOWN -> {
+            TouchStats.begin(event.x, event.y)
+            AppLog.i(TAG, "touch down (${event.x.toInt()},${event.y.toInt()}) button=$button ptr=$pointerId")
             session.sendInput(
                 InputEvent.POINTER_DOWN,
                 x = event.x.toDouble(), y = event.y.toDouble(),
                 pointerId = pointerId, button = button,
             )
+        }
 
         MotionEvent.ACTION_MOVE -> {
+            TouchStats.trace(event.x, event.y)
             // 一个 MotionEvent 可能合并了多个采样点，逐点补发以免丢失轨迹
             for (i in 0 until event.historySize) {
                 session.sendInput(
@@ -135,12 +185,17 @@ private fun handleTouch(session: EngineSession, event: MotionEvent) {
             )
         }
 
-        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+            if (TouchStats.active) {
+                AppLog.i(TAG, TouchStats.summary())
+                TouchStats.active = false
+            }
             session.sendInput(
                 InputEvent.POINTER_UP,
                 x = event.x.toDouble(), y = event.y.toDouble(),
                 pointerId = pointerId, button = button,
             )
+        }
 
         MotionEvent.ACTION_SCROLL ->
             session.sendInput(

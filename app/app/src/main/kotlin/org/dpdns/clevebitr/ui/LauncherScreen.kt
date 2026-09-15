@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,12 +41,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import org.dpdns.clevebitr.core.AppLog
 import java.io.File
+
+private const val TAG = "KrKr2Next/Launcher"
 
 /** 内置的极简目录浏览器。选定一个目录即作为游戏根目录启动。 */
 @Composable
 fun LauncherScreen(
     onLaunchGame: (String) -> Unit,
+    onShareLogs: () -> Unit,
+    logDirPath: String,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -56,9 +62,17 @@ fun LauncherScreen(
         ActivityResultContracts.StartActivityForResult(),
     ) { hasPermission = hasStoragePermission(context) }
 
+    // 游戏目录读取要 READ，日志写 Android/media/<包名> 还要 WRITE（API 24-29 上
+    // 那个目录并不免权限，只有 API 30+ 才免）。两者同属存储权限组，一次申请即可。
     val legacyPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted -> hasPermission = granted }
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { granted ->
+        hasPermission = hasStoragePermission(context)
+        if (!granted.values.all { it }) {
+            // 只读被拒不影响启动游戏（引擎仍能读目录），只是日志会落到应用私有目录
+            AppLog.w(TAG, "storage permissions not fully granted: $granted")
+        }
+    }
 
     if (!hasPermission) {
         PermissionRequest(
@@ -72,14 +86,24 @@ fun LauncherScreen(
                         ),
                     )
                 } else {
-                    legacyPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                    legacyPermissionLauncher.launch(
+                        arrayOf(
+                            Manifest.permission.READ_EXTERNAL_STORAGE,
+                            Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                        ),
+                    )
                 }
             },
         )
         return
     }
 
-    DirectoryBrowser(onLaunchGame = onLaunchGame, modifier = modifier)
+    DirectoryBrowser(
+        onLaunchGame = onLaunchGame,
+        onShareLogs = onShareLogs,
+        logDirPath = logDirPath,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -105,7 +129,12 @@ private fun PermissionRequest(modifier: Modifier, onRequest: () -> Unit) {
 }
 
 @Composable
-private fun DirectoryBrowser(onLaunchGame: (String) -> Unit, modifier: Modifier) {
+private fun DirectoryBrowser(
+    onLaunchGame: (String) -> Unit,
+    onShareLogs: () -> Unit,
+    logDirPath: String,
+    modifier: Modifier,
+) {
     val storageRoot = remember { Environment.getExternalStorageDirectory().absolutePath }
     var currentPath by remember { mutableStateOf(storageRoot) }
 
@@ -173,6 +202,17 @@ private fun DirectoryBrowser(onLaunchGame: (String) -> Unit, modifier: Modifier)
                     },
                     leadingContent = { Icon(Icons.Filled.Folder, contentDescription = null) },
                     modifier = Modifier.clickable { currentPath = dir.absolutePath },
+                )
+            }
+
+            // ── 日志入口 ──
+            // 放在列表末尾而不是顶部：它的用途是出问题时来拿证据，不是日常操作
+            item(key = "__logs__") {
+                ListItem(
+                    headlineContent = { Text("分享日志") },
+                    supportingContent = { Text(logDirPath, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                    leadingContent = { Icon(Icons.Filled.Share, contentDescription = null) },
+                    modifier = Modifier.clickable { onShareLogs() },
                 )
             }
         }

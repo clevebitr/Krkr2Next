@@ -1,20 +1,28 @@
 package org.dpdns.clevebitr
 
+import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import org.dpdns.clevebitr.core.AppLog
+import org.dpdns.clevebitr.core.CrashTracker
 import org.dpdns.clevebitr.core.EngineSession
 import org.dpdns.clevebitr.core.InputEvent
+import org.dpdns.clevebitr.core.LogFiles
 import org.dpdns.clevebitr.core.NativeEngine
 import org.dpdns.clevebitr.core.VkCodes
 import org.dpdns.clevebitr.ui.GameScreen
@@ -34,6 +42,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "KrKr2Next/Main"
+        private const val ENGINE_LOG_TAG = "KrKr2Next/Engine"
         private const val DOUBLE_BACK_MS = 2_000L
     }
 
@@ -45,16 +54,38 @@ class MainActivity : ComponentActivity() {
     private var startupState by mutableStateOf(NativeEngine.STARTUP_IDLE)
     private var statusText by mutableStateOf("正在打开游戏…")
 
+    /** 上次异常退出的提示文本；null 表示这次不需要提示。 */
+    private var recoveryNotice by mutableStateOf<String?>(null)
+
+    private val logDirPath: String by lazy { LogFiles.logsDir(this).absolutePath }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // 顺序不能反：inspectPrevious 读的正是上次留下的标记文件，beginSession 会覆盖它
+        val previous = CrashTracker.inspectPrevious(this)
+        CrashTracker.beginSession(this)
+        if (previous.kind != CrashTracker.ExitKind.CLEAN) {
+            AppLog.w(TAG, "上次未正常退出：${previous.kind} / ${previous.detail}")
+            // Java 崩溃当时已经把崩溃界面给用户看过了，这里不再重复打扰；
+            // 其余几种（原生崩溃 / ANR / 被系统结束）用户什么都没看到，需要补一次说明。
+            if (previous.kind != CrashTracker.ExitKind.JAVA_CRASH) {
+                recoveryNotice = previous.detail ?: "上次未正常退出"
+            }
+        }
+        AppLog.i(TAG, "onCreate (recovery=$previous)")
 
         setContent {
             KrKr2NextTheme {
                 val activeSession = session
                 val path = gamePath
                 if (activeSession == null || path == null) {
-                    LauncherScreen(onLaunchGame = ::launchGame)
+                    LauncherScreen(
+                        onLaunchGame = ::launchGame,
+                        onShareLogs = ::shareLogs,
+                        logDirPath = logDirPath,
+                    )
                 } else {
                     GameScreen(
                         session = activeSession,
@@ -62,29 +93,72 @@ class MainActivity : ComponentActivity() {
                         statusText = statusText,
                     )
                 }
+
+                recoveryNotice?.let { notice ->
+                    AlertDialog(
+                        onDismissRequest = { recoveryNotice = null },
+                        title = { Text("上次运行异常结束") },
+                        text = {
+                            Column {
+                                Text(notice)
+                                Text(
+                                    text = "日志目录：$logDirPath",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                shareLogs()
+                                recoveryNotice = null
+                            }) { Text("分享日志") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { recoveryNotice = null }) { Text("知道了") }
+                        },
+                    )
+                }
             }
+        }
+    }
+
+    private fun shareLogs() {
+        val intent = LogFiles.buildShareIntent(this, LogFiles.collectForSharing(this))
+        if (intent == null) {
+            Toast.makeText(this, "没有可分享的日志", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            startActivity(Intent.createChooser(intent, "分享日志"))
+        } catch (t: Throwable) {
+            AppLog.e(TAG, "share logs failed", t)
         }
     }
 
     /** 选定游戏目录后创建引擎会话。 */
     private fun launchGame(path: String) {
         closeSession()
-
-        // 引擎日志落盘，便于离线排查
-        NativeEngine.engineSetLogFilePath("${cacheDir.absolutePath}/krkr2_engine.log")
+        // 游戏目录是排障必需信息（哪个游戏、哪份存档），按已确认的边界记录它本身，
+        // 不记录游戏内的任何文本
+        AppLog.i(TAG, "launchGame path=$path cache=${cacheDir.absolutePath}")
 
         val s = EngineSession(
             // 引擎把存档写到 writablePath，缓存写到 cachePath
             writablePath = path,
             cachePath = cacheDir.absolutePath,
             onLog = { log ->
-                log.lines().forEach { if (it.isNotBlank()) Log.i("KrKr2Next/Engine", it) }
+                // 引擎启动日志已经在 engine.log 里了，这里只做一次转发，
+                // 顺带让连着 adb 的人也能看到
+                log.lines().forEach { if (it.isNotBlank()) AppLog.i(ENGINE_LOG_TAG, it) }
             },
-            onStartupStateChanged = { state -> startupState = state },
+            onStartupStateChanged = { state ->
+                startupState = state
+                AppLog.i(TAG, "startup state -> $state")
+            },
             onFatal = { msg ->
                 statusText = msg
                 startupState = NativeEngine.STARTUP_FAILED
-                Log.e(TAG, "fatal: $msg")
+                AppLog.e(TAG, "fatal: $msg")
             },
         )
         session = s
@@ -97,6 +171,7 @@ class MainActivity : ComponentActivity() {
 
     private fun closeSession() {
         session?.let {
+            AppLog.i(TAG, "closeSession")
             it.detachSurface()
             it.shutdown()
         }
@@ -107,6 +182,7 @@ class MainActivity : ComponentActivity() {
         closeSession()
         gamePath = null
         startupState = NativeEngine.STARTUP_IDLE
+        AppLog.i(TAG, "exitToLauncher")
     }
 
     // ── 按键 ──────────────────────────────────────────────────────────────
@@ -139,6 +215,10 @@ class MainActivity : ComponentActivity() {
             KeyEvent.ACTION_UP -> InputEvent.KEY_UP
             else -> return super.dispatchKeyEvent(event)
         }
+        // 只记按下：抬起与按下成对出现，记两份没有额外信息，却会把日志量翻倍
+        if (type == InputEvent.KEY_DOWN) {
+            AppLog.i(TAG, "key down vk=0x${vk.toString(16)} modifiers=${event.metaState}")
+        }
         s.sendInput(
             type,
             keyCode = vk,
@@ -153,16 +233,26 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         applyImmersiveMode()
         session?.resume()
+        AppLog.d(TAG, "onResume")
     }
 
     override fun onPause() {
         // 先暂停引擎再走默认流程：后台时不应继续烧 CPU/GPU
         session?.pause()
         super.onPause()
+        AppLog.d(TAG, "onPause")
     }
 
     override fun onDestroy() {
+        val finishing = isFinishing
+        AppLog.i(TAG, "onDestroy finishing=$finishing")
         closeSession()
+        if (finishing) {
+            // 走到这里才算"正常退出"。没走到的话会话标记会停在 running，
+            // 下次启动就会提示上次异常退出——这正是原生崩溃/被系统杀掉的判据。
+            CrashTracker.endSession(this)
+        }
+        AppLog.flush()
         super.onDestroy()
     }
 

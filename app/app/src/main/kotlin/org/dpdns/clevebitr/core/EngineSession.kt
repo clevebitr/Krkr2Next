@@ -3,7 +3,6 @@ package org.dpdns.clevebitr.core
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
-import android.util.Log
 import android.view.Choreographer
 import android.view.Surface
 
@@ -51,6 +50,12 @@ class EngineSession(
 
         /** 单帧最大 tick 步长，避免切回前台时 delta 过大导致脚本时间跳变 */
         private const val MAX_DELTA_MS = 100L
+
+        /**
+         * `engineTick` 失败日志的最小间隔。tick 是每帧调用的，失败时逐帧记录会刷爆日志；
+         * 5 秒一条既能看出持续失败，也不会淹没别的信息。
+         */
+        private const val TICK_FAILURE_LOG_INTERVAL_MS = 5_000L
     }
 
     private var thread: HandlerThread? = null
@@ -76,6 +81,12 @@ class EngineSession(
     private var lastFrameNanos = 0L
     private var frameCounter = 0L
 
+    /** 累计 tick 失败次数，供限频日志带出"偶发还是彻底坏了"。只在渲染线程写。 */
+    private var tickFailures = 0L
+
+    /** 累计输入被拒次数，同上。 */
+    private var sendFailures = 0L
+
     @Volatile private var paused = false
     @Volatile private var running = false
     @Volatile private var destroyed = false
@@ -96,7 +107,14 @@ class EngineSession(
             if (!paused && handle != 0L) {
                 val rc = NativeEngine.engineTick(handle, deltaMs.toInt())
                 if (rc != NativeEngine.RESULT_OK) {
-                    Log.w(TAG, "engineTick failed: rc=$rc err=${lastError()}")
+                    // 每帧都能失败，逐帧记录会把日志刷爆（60 行/秒）。限频到 5 秒一条，
+                    // 并把次数带上——次数本身是判断"偶发一次"还是"彻底坏了"的关键。
+                    tickFailures++
+                    AppLog.wLimited(
+                        TAG,
+                        "engineTick",
+                        TICK_FAILURE_LOG_INTERVAL_MS,
+                    ) { "engineTick failed x$tickFailures (最近一次 rc=$rc err=${lastError()})" }
                 }
                 if (++frameCounter % STARTUP_POLL_FRAMES == 0L) {
                     pollStartupState()
@@ -124,11 +142,11 @@ class EngineSession(
 
             handle = NativeEngine.engineCreate(writablePath, cachePath)
             if (handle == 0L) {
-                Log.e(TAG, "engineCreate failed (writable=$writablePath cache=$cachePath)")
+                AppLog.e(TAG, "engineCreate failed (writable=$writablePath cache=$cachePath)")
                 postToMain { onFatal("引擎初始化失败") }
                 return@post
             }
-            Log.i(TAG, "engineCreate ok, apiVersion=0x${NativeEngine.engineGetRuntimeApiVersion().toString(16)}")
+            AppLog.i(TAG, "engineCreate ok, apiVersion=0x${NativeEngine.engineGetRuntimeApiVersion().toString(16)}")
 
             // fps_limit=0：由 Choreographer 提供节拍，引擎不再自行限速
             applyOption("fps_limit", "0")
@@ -142,11 +160,14 @@ class EngineSession(
     fun openGame(gameRootPath: String, startupScript: String? = null) {
         post {
             lastFrameNanos = 0L
+            tickFailures = 0L
             val rc = NativeEngine.engineOpenGameAsync(handle, gameRootPath, startupScript)
             if (rc != NativeEngine.RESULT_OK) {
-                Log.e(TAG, "engineOpenGameAsync failed: rc=$rc err=${lastError()}")
+                AppLog.e(TAG, "engineOpenGameAsync failed: rc=$rc err=${lastError()}")
                 val msg = lastError()
                 postToMain { onFatal("打开游戏失败：$msg") }
+            } else {
+                AppLog.i(TAG, "engineOpenGameAsync queued for $gameRootPath")
             }
         }
     }
@@ -159,18 +180,21 @@ class EngineSession(
      */
     fun attachSurface(surface: Surface, width: Int, height: Int) {
         if (width <= 0 || height <= 0) return
+        AppLog.i(TAG, "attachSurface ${width}x$height")
         NativeEngine.nativeSetSurface(surface, width, height)
         post { NativeEngine.engineSetSurfaceSize(handle, width, height) }
     }
 
     /** Surface 销毁。可在任意线程调用。 */
     fun detachSurface() {
+        AppLog.i(TAG, "detachSurface")
         NativeEngine.nativeDetachSurface()
     }
 
     /** Surface 尺寸变化（旋转/分屏）。可在任意线程调用。 */
     fun resizeSurface(surface: Surface, width: Int, height: Int) {
         if (width <= 0 || height <= 0) return
+        AppLog.i(TAG, "resizeSurface ${width}x$height")
         NativeEngine.nativeSetSurface(surface, width, height)
         post { NativeEngine.engineSetSurfaceSize(handle, width, height) }
     }
@@ -180,7 +204,7 @@ class EngineSession(
         paused = true
         post {
             val rc = NativeEngine.enginePause(handle)
-            if (rc != NativeEngine.RESULT_OK) Log.w(TAG, "enginePause rc=$rc")
+            if (rc != NativeEngine.RESULT_OK) AppLog.w(TAG, "enginePause rc=$rc")
         }
     }
 
@@ -189,7 +213,7 @@ class EngineSession(
         post {
             lastFrameNanos = 0L
             val rc = NativeEngine.engineResume(handle)
-            if (rc != NativeEngine.RESULT_OK) Log.w(TAG, "engineResume rc=$rc")
+            if (rc != NativeEngine.RESULT_OK) AppLog.w(TAG, "engineResume rc=$rc")
             paused = false
         }
     }
@@ -209,7 +233,7 @@ class EngineSession(
             if (handle != 0L) {
                 NativeEngine.engineDestroy(handle)
                 handle = 0L
-                Log.i(TAG, "engineDestroy done")
+                AppLog.i(TAG, "engineDestroy done")
             }
             ht.quitSafely()
         }
@@ -253,7 +277,11 @@ class EngineSession(
                 keyCode, modifiers, unicodeCodepoint, timestampMicros,
             )
             if (rc != NativeEngine.RESULT_OK) {
-                Log.w(TAG, "engineSendInput(type=$type) rc=$rc err=${lastError()}")
+                // 触摸是高频事件，输入若被持续拒绝会逐条刷屏——限频并带上次数
+                sendFailures++
+                AppLog.wLimited(TAG, "sendInput", 5_000L) {
+                    "engineSendInput failed x$sendFailures (最近一次 type=$type rc=$rc err=${lastError()})"
+                }
             }
         }
     }
@@ -276,7 +304,7 @@ class EngineSession(
     private fun post(block: () -> Unit) {
         val h = handler
         if (h == null) {
-            Log.w(TAG, "post ignored: session not started")
+            AppLog.w(TAG, "post ignored: session not started")
             return
         }
         h.post(block)
@@ -285,7 +313,7 @@ class EngineSession(
     private fun applyOption(key: String, value: String) {
         val rc = NativeEngine.engineSetOption(handle, key, value)
         if (rc != NativeEngine.RESULT_OK) {
-            Log.w(TAG, "engineSetOption($key=$value) rc=$rc err=${lastError()}")
+            AppLog.w(TAG, "engineSetOption($key=$value) rc=$rc err=${lastError()}")
         }
     }
 

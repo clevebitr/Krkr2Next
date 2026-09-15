@@ -47,6 +47,38 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+            崩溃界面必须跑在独立进程里：它是在主进程即将被 killProcess 掉的时刻被拉起来
+            的，同进程的话它一出生就会被一起杀掉。代价是拿不到内存状态，因此它只读崩溃
+            报告文件。taskAffinity="" + excludeFromRecents 让它不进最近任务、也不搅乱
+            主进程的任务栈。
+        -->
+        <activity
+            android:name=".CrashActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|density|smallestScreenSize"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:process=":crash"
+            android:resizeableActivity="false"
+            android:screenOrientation="sensorLandscape"
+            android:taskAffinity=""
+            android:theme="@style/Theme.KrKr2Next" />
+
+        <!--
+            供「分享日志」把 logs/ 下的文件以 content:// 交给别的应用。
+            只读授权、exported=false，白名单见 res/xml/file_paths.xml。
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

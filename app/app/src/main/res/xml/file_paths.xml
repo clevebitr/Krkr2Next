@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider 白名单，用于「分享日志」。
+
+  四条路径对应 LogFiles 的回退链，必须都列出来——否则用户在没有存储权限、
+  日志实际落在 lower 层级时，分享会因为路径不在白名单里而静默失败（代码里
+  捕 IllegalArgumentException 后跳过该文件）。
+
+  external-media-path 映射 Context.getExternalMediaDirs()[0]，即
+  /sdcard/Android/media/<包名>/，也就是首选日志目录。
+-->
+<paths>
+    <external-media-path
+        name="media-logs"
+        path="logs/" />
+    <external-files-path
+        name="ext-files-logs"
+        path="logs/" />
+    <files-path
+        name="files-logs"
+        path="logs/" />
+    <cache-path
+        name="cache-logs"
+        path="logs/" />
+</paths>
