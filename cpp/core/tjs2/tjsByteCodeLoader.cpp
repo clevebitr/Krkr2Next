@@ -83,8 +83,19 @@ namespace TJS {
         // int objsize = ibuff.get();
         const tjs_int32 objsize = read4byte(&(databuff[offset]));
         offset += 4;
-        if(objsize < 0 || !inRange(offset, (tjs_uint64)objsize))
-            return nullptr;
+        // objsize **不做范围校验**，只用来推进 offset。
+        //
+        // 它的语义不是"后面还有多少字节可用"，而是"从本字段起到对象区末尾的距离，
+        // 含本字段自身的 4 字节"。实测两个正常游戏（data.xp3 里的
+        // startup.tjs）： objsize 声明 4716 / 772，而文件从该字段起只剩 4712 /
+        // 768 字节——差的正是 这 4 字节。（datasize 是同一套约定：它是"从 DATA
+        // 标签起"的距离，所以 上方 `offset = 12 + datasize` 与这里的 `+4`
+        // 才是对的。）
+        //
+        // 原实现从没读过这个值（ReadObjects 的 size
+        // 形参一直未使用），所以它从来
+        // 没有被当作边界；按"后续可用字节数"去校验它，会把正常文件全部判为损坏。
+        // 真正的边界由 ReadObjects 内部逐次读取的 canRead 保证，不需要这一层。
         auto *block = new tTJSScriptBlock(owner, name, 0);
         ReadObjects(block, databuff, (int)offset, objsize);
         return block;
@@ -306,9 +317,10 @@ namespace TJS {
             if(contextType < (tjs_int32)ctTopLevel ||
                contextType > (tjs_int32)ctSuperClassGetter)
                 fail();
-            // 这几个是寄存器区的尺寸与基准，会直接进入 ExecuteAsFunction 的
-            // Allocate(num_alloc) 与 ra[base + i]：负数即是下溢/越界。
-            // 上界取一个远超正常脚本的值，避免损坏的头申请数 GB 内存。
+            // 前四个是"数量"（寄存器区尺寸、参数个数），后两个是基准——都会进入
+            // ExecuteAsFunction 的 `Allocate(num_alloc)` 与 `ra[base + i]`，
+            // 越界值即是下溢/越界访问。上界取一个远超正常脚本的值，避免损坏的头
+            // 申请数 GB 内存。
             static const tjs_int32 kMaxRegisterCount = 0x00FFFFFF;
             tjs_int32 maxVariableCount = 0;
             tjs_int32 variableReserveCount = 0;
@@ -321,9 +333,19 @@ namespace TJS {
                   &funcDeclArgCount, &funcDeclUnnamedArgArrayBase,
                   &funcDeclCollapseBase }) {
                 read(*field);
-                if(*field < 0 || *field > kMaxRegisterCount)
+                if(*field > kMaxRegisterCount)
                     fail();
             }
+            // 下界分两类。funcDeclCollapseBase 用 **-1 表示"不折叠"**
+            // 这个合法状态： 生成器里它的初值就是
+            // -1（tjsInterCodeGen.cpp），运行期也是按 `FuncDeclCollapseBase >=
+            // 0` 判断的。把它一并要求非负会把正常脚本全判成
+            // 损坏——实测两个游戏的 startup.tjs 在这一项都是
+            // -1。其余五个必须非负。
+            if(maxVariableCount < 0 || variableReserveCount < 0 ||
+               maxFrameCount < 0 || funcDeclArgCount < 0 ||
+               funcDeclUnnamedArgArrayBase < 0 || funcDeclCollapseBase < -1)
+                fail();
             readOptionalIndex(propSetter[o], (tjs_uint64)objcount);
             readOptionalIndex(propGetter[o], (tjs_uint64)objcount);
             readOptionalIndex(superClassGetter[o], (tjs_uint64)objcount);

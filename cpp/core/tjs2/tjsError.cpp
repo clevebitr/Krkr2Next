@@ -134,10 +134,19 @@ namespace TJS {
     // throw helper functions
     //---------------------------------------------------------------------------
     //---------------------------------------------------------------------------
+    // 两个重载都必须容忍 null：
+    //
+    // `TJS_eTJSScriptError(msg, block, pos)` 的调用方里有一处传的必然是空指针——
+    // tjsScriptCache.cpp 的 `TJS_eTJSScriptError(TJSByteCodeBroken, blk.get(),
+    // 0)` 位于 `if(blk != nullptr) { ... }` 的 else 分支内，blk.get()
+    // **必定**是 null。 于是这里 `block->GetTJS()` 解引用空指针 →
+    // SIGSEGV：本该报"字节码损坏"的地方 直接把进程崩掉（真机表现是加载
+    // startup.tjs 时 FATAL SIGNAL 11，栈顶就是 tTJSScriptBlock::GetTJS）。没有
+    // block 就没有源码位置可报，跳过即可。
     static void TJSReportExceptionSource(const ttstr &msg,
                                          const tTJSScriptBlock *block,
                                          tjs_int srcpos) {
-        if(TJSEnableDebugMode) {
+        if(TJSEnableDebugMode && block != nullptr) {
             tTJS *tjs = block->GetTJS();
             tjs->OutputExceptionToConsole(
                 (msg + TJS_W(" at ") + block->GetLineDescriptionString(srcpos))
@@ -149,7 +158,9 @@ namespace TJS {
     static void TJSReportExceptionSource(const ttstr &msg,
                                          const tTJSInterCodeContext *context,
                                          tjs_int codepos) {
-        if(TJSEnableDebugMode) {
+        // 同上：GetBlock() 也可能是空
+        if(TJSEnableDebugMode && context != nullptr &&
+           context->GetBlock() != nullptr) {
             tTJS *tjs = context->GetBlock()->GetTJS();
             tjs->OutputExceptionToConsole(
                 (msg + TJS_W(" at ") +
