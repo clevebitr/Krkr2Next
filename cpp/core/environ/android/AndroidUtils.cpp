@@ -245,6 +245,33 @@ std::string TVPGetDeviceID() {
 }
 
 static jobject GetKR2ActInstance() {
+    // 优先用宿主壳交过来的 Application Context。
+    //
+    // 顺序颠倒的理由：KR2ActJavaPath 是 Kirikiroid2 形态的宿主类名，
+    // KiriNext 的壳（org.dpdns.clevebitr）没有这个类，直接查必然失败，
+    // 并在 logcat 留一条 "class not found"。而这个函数在每次存储路径
+    // 解析时都会被调到（TVPGetAppStoragePath 内部就两次），实测每次
+    // 触摸触发的资源访问刷三条错误——既做无用功，又违反 README
+    // 「硬约束」的"高频日志必须限频/去重"，还会把真正的报错淹掉。
+    //
+    // 等价性：调用点用到的接口全是 Context/ContextWrapper 的
+    // （getApplicationInfo、getPackageName、getFilesDir、
+    // getExternalFilesDirs），Application Context 完全够用。
+    {
+        jobject ctx = krkr_GetApplicationContext();
+        if(ctx) {
+            JNIEnv *env = JniHelper::getEnv();
+            if(env) {
+                // 调用方会对返回值 DeleteLocalRef，所以必须返回新的 local ref，
+                // 不能直接把壳持有的那个全局引用交出去
+                return env->NewLocalRef(ctx);
+            }
+        }
+    }
+
+    // 没有宿主 Context（老 Kirikiroid2 形态）才退回 KR2Activity。
+    // 用 KR2ActJavaPath 当 Context 用时同时作类名，所以这里要把签名拼成
+    // ()L<类名>;
     JniMethodInfo methodInfo;
     std::string strtmp("()L");
     strtmp += KR2ActJavaPath;
@@ -256,19 +283,10 @@ static jobject GetKR2ActInstance() {
         methodInfo.env->DeleteLocalRef(methodInfo.classID);
         return ret;
     }
-    // Fallback for host-shell mode: KR2Activity doesn't exist,
-    // use the Application Context stored by the host shell.
-    // Create a new local ref so callers can safely DeleteLocalRef on it.
-    jobject ctx = krkr_GetApplicationContext();
-    if(ctx) {
-        JNIEnv *env = JniHelper::getEnv();
-        if(env) {
-            return env->NewLocalRef(ctx);
-        }
-    }
+
     __android_log_print(ANDROID_LOG_ERROR, "krkr2",
-                        "GetKR2ActInstance: no KR2Activity and no Application "
-                        "Context available");
+                        "GetKR2ActInstance: no host Application Context and no "
+                        "KR2Activity available");
     return 0;
 }
 
