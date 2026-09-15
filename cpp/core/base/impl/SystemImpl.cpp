@@ -876,13 +876,21 @@ static void TVPRegisterStartupCompatGlobals() {
         func->Release();
     };
 
-    // kirikiriz：脚本拿它当"是否具备 Z 扩展"的探测点，并且会链式取成员，
-    // 所以给 mock 对象而不是 false —— 与 AetherKiri 的运行期取值保持一致。
-    {
-        iTJSDispatch2 *kirikiriz = new GenericMockObjectLocal();
-        set_object(TJS_W("kirikiriz"), kirikiriz);
-        kirikiriz->Release();
-    }
+    // kirikiriz：脚本拿它当"是否具备 Z 扩展"的探测点。
+    //
+    // 给 **0/false**，而不是像 AetherKiri 那样给一个"什么都有"的 mock
+    // 对象：mock 会让脚本相信宿主具备 Z 扩展，于是走进 Z 分支，而 KiriNext
+    // 并没有那些 API， mock 又永远不失败（PropGet/FuncCall
+    // 无条件返回自身），脚本就可能在该分支里死 转。实测 nainiuniu5krkr
+    // 的中文补丁正是如此：KAG 框架整套加载完之后在 Z 分支
+    // 里无限递归，顶穿线程栈（SIGSEGV 闪退）。名字仍然"存在"（typeof 不再是
+    // undefined，探测不会抛），只是值诚实地说"不具备 Z 扩展"。
+    // （TJS2 没有独立的布尔类型，true/false 就是 1/0。）
+    //
+    // 这里曾用 mock 对象（与 AetherKiri 运行期取值一致）来让 G1
+    // 的启动链路多走一 段；但那只是在没有 Z API 的前提下假装有。要真正跑 Z
+    // 分支，得先有实现。
+    set_int(TJS_W("kirikiriz"), 0);
 
     // 手柄初始键位映射：脚本按索引读写，必须是数组对象
     {
