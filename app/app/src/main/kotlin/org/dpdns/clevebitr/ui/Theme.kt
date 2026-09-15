@@ -1,36 +1,35 @@
-@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
-
 package org.dpdns.clevebitr.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.MaterialExpressiveTheme
-import androidx.compose.material3.MotionScheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 /**
- * Material 3 Expressive（MD3E）主题。
+ * 标准 Material 3 主题。
  *
- * ## 为什么是 MaterialExpressiveTheme 而不是 MaterialTheme
+ * ## 为什么不是 Material 3 Expressive
  *
- * MD3E 的弹性动效、更大的圆角与新组件（ButtonGroup、FloatingActionButtonMenu、
- * LoadingIndicator、浮动工具栏）都靠 [MaterialExpressiveTheme] 打开
- * `LocalUsingExpressiveTheme` 后才生效——它内部默认就给
- * `MotionScheme.expressive()`。用普通 `MaterialTheme` 时这些组件会退回标准动画与
- * 旧圆角，看起来就不像 MD3E。
+ * MD3E 的 `MaterialExpressiveTheme` / `MotionScheme` 只在 material3 1.5.0-alpha 里是
+ * public（稳定版 1.4.0 里它是 `internal fun`，调不到），而 **alpha19 起把
+ * `minAndroidGradlePluginVersion` 抬到 9.1.0、`minCompileSdk` 抬到 37**——compose
+ * 自己在 1.12.0-alpha02 也是同一条线。换言之"要 MD3E"等于把 AGP 从 8.13.2 连跳大版本、
+ * 连带 Gradle 9 与 JDK 一起动，而本应用实际只用到 `MaterialExpressiveTheme`、
+ * `MotionScheme.expressive()`、`ToggleButton` 三个 API。为一个观感换整套工具链不划算，
+ * 所以退回稳定版：`MaterialTheme` + 下面这套配色，观感差异只是弹性动效与更大圆角。
+ *
+ * 将来若要重新上 MD3E：把 material3 显式指到 1.5.0-alpha18（最后一个 minAGP 8.6.0 的
+ * 版本），并把此处换回 `MaterialExpressiveTheme`；再往上就得先升 AGP。
  *
  * ## 配色为什么显式写
  *
- * 这个 material3 版本（1.5.0-alpha28）里**没有** `ColorScheme.fromSeed`（对 sources
- * 全量搜索零命中），官方对暗色的注释也是直接让用 `darkColorScheme()`（该版本只有
- * `expressiveLightColorScheme()` 这一个 expressive 基准亮色）。所以这里显式给出明暗
- * 两套角色：色相沿用应用原有的靛蓝强调色，但补齐 MD3E 组件会取用的容器色阶
- * （`*Container` / `surfaceContainer*` / `surfaceDim|Bright` / `outlineVariant`），
- * 否则新组件会落回默认紫色调，两批组件不像同一套设计语言。
+ * 不依赖 `ColorScheme.fromSeed`（它是 experimental，且不同版本的默认色板会漂），而是显式
+ * 给出明暗两套角色：色相沿用应用原有的靛蓝强调色，并补齐 Material 3 组件会取用的容器色阶
+ * （`*Container` / `surfaceContainer*` / `surfaceDim|Bright` / `outlineVariant`），否则
+ * 默认紫色调会漏进一部分组件，两批组件不像同一套设计语言。
  *
  * 默认深色：VN 多数时间在看画面，深色更合适，也与 PocketKrKr 的默认一致。
  */
@@ -102,9 +101,8 @@ fun KrKr2NextTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    MaterialExpressiveTheme(
+    MaterialTheme(
         colorScheme = if (darkTheme) DarkScheme else LightScheme,
-        motionScheme = MotionScheme.expressive(),
         content = content,
     )
 }

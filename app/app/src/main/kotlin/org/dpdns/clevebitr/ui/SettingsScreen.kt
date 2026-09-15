@@ -14,13 +14,15 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,7 +54,6 @@ private val PERF_OVERLAY_CHOICES = listOf(
  * 设置页。目前只有调试相关的东西——这是给排障用的壳，设置项也都服务于
  * "把问题现场原样带出来"：日志怎么收、怎么导出、引擎跑多快、画面上叠什么。
  */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SettingsScreen(
     logDirPath: String,
@@ -106,18 +107,24 @@ fun SettingsScreen(
                         "账目，详细档再加 tick 耗时与 1 秒窗分位数。下次启动游戏时生效。",
                     style = MaterialTheme.typography.bodySmall,
                 )
-                Row(
+                // 单选的 SegmentedButton 而不是 MD3E 的 ToggleButton：后者在稳定的
+                // material3 里不存在（只有 1.5.0-alpha 有），而 alpha 版本的 AGP 门槛
+                // 是 9.1.0，见 app/build.gradle.kts 的版本说明。两者观感与语义一致。
+                SingleChoiceSegmentedButtonRow(
                     modifier = Modifier.padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    PERF_OVERLAY_CHOICES.forEach { (value, label) ->
-                        ToggleButton(
-                            checked = perfMode == value,
-                            onCheckedChange = {
+                    PERF_OVERLAY_CHOICES.forEachIndexed { index, (value, label) ->
+                        SegmentedButton(
+                            selected = perfMode == value,
+                            onClick = {
                                 perfMode = value
                                 AppPrefs.setPerfOverlayMode(context, value)
                                 AppLog.i(TAG, "perf overlay = $value")
                             },
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = PERF_OVERLAY_CHOICES.size,
+                            ),
                         ) {
                             Text(label)
                         }
