@@ -357,7 +357,16 @@ namespace TJS {
         // 下面按 objcount 分配若干等长数组，先挡住负数与不可能的计数
         if(objcount < 0 || (tjs_uint64)objcount > ReadSize)
             fail("objcount", objcount, (long long)ReadSize);
-        readOptionalIndex("toplevel", toplevel, (tjs_uint64)objcount);
+        // toplevel 已经在上面读出来了，这里只能**校验**，绝不能再读一次。
+        // readOptionalIndex 是"读一个可为 -1 的下标"，它会消费 4 字节输入；
+        // 拿它去校验一个已读出的值，多读的这一次正好吃掉紧随其后的第一个对象
+        // 头部的 FILE_TAG（"TJS2" = 0x32534A54），于是**每个** TJS2 字节码文件
+        // 都在这里被判成损坏——对象区起点就是紧接 toplevel/objcount 的位置。
+        // 只挡真正会越界的上界：下游是
+        // `if(toplevel >= 0) top = objs[toplevel];`，负值（含 objcount == 0
+        // 时的 -1）本来就被它跳过。
+        if(toplevel >= objcount)
+            fail("toplevel", toplevel, (long long)objcount);
 
         // tTJSInterCodeContext** objs = new
         // tTJSInterCodeContext*[objcount];
