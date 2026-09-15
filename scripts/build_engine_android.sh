@@ -231,6 +231,21 @@ copy_ndk_runtime_deps() {
         return 0
     fi
 
+    # 先把完整依赖清单打出来分类。真机上 "dlopen failed: library X not found"
+    # 每次只报第一个缺的，靠它一个个试太慢——这里一次列全，CI 日志就是答案。
+    local platform_re='^(libc|libm|libdl|liblog|libandroid|libEGL|libGLESv1_CM|libGLESv2|libOpenSLES|libz|libatomic|libjnigraphics|libmediandk|libnativewindow|libsync|libvulkan|libOpenMAXAL|libcamera2ndk)\.so$'
+    log_info "libengine_api.so 的动态依赖清单："
+    while IFS= read -r dep; do
+        [[ -z "$dep" ]] && continue
+        if [[ "$dep" =~ $platform_re ]]; then
+            printf '    %-28s 平台自带\n' "$dep"
+        elif [[ -f "$abi_dir/$dep" ]]; then
+            printf '    %-28s 已在 jniLibs\n' "$dep"
+        else
+            printf '    %-28s **需从 NDK 拷贝**\n' "$dep"
+        fi
+    done < <("$readelf_tool" -d "$so" 2>/dev/null | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p')
+
     local copied=0
     while IFS= read -r dep; do
         [[ -z "$dep" ]] && continue

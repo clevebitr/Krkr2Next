@@ -36,6 +36,11 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
             message(FATAL_ERROR
                 "Android 构建需要 ANDROID_NDK_HOME 环境变量（见 scripts/build_engine_android.sh）")
         endif()
+        # C++ 运行时用静态（preset 里显式写死 ANDROID_STL=c++_static）：引擎是**一个**
+        # 自包含的 .so，没有共享 libc++ 的理由；而 vcpkg 的端口是按 NDK 默认值编的、
+        # 也是静态，混用会让同一个 .so 里出现两份 libc++（链接期被
+        # --allow-multiple-definition 盖住，运行期才可能以异常/本地化的怪象暴露）。
+        # 另外静态还能省掉随 APK 打包 libc++_shared.so —— 少一个必须正确打包的文件。
         set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE
             "$ENV{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake"
             CACHE STRING "NDK android.toolchain.cmake, chainloaded by vcpkg")

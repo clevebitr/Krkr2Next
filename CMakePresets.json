@@ -14,7 +14,7 @@
         "ANDROID": true,
         "ANDROID_ABI": "arm64-v8a",
         "ANDROID_PLATFORM": "android-24",
-        "ANDROID_STL": "c++_shared",
+        "ANDROID_STL": "c++_static",
         "VCPKG_TARGET_TRIPLET": "arm64-android",
         "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/vcpkg/triplets",
         "CMAKE_EXPORT_COMPILE_COMMANDS": true,
