@@ -980,15 +980,21 @@ local int unz64local_GetCurrentFileInfoInternal(
     file_info_internal.offset_curfile = uL;
 
     lSeek += file_info.size_filename;
-    if((err == UNZ_OK) && (szFileName != nullptr)) {
+    if((err == UNZ_OK) && (szFileName != nullptr) && (fileNameBufferSize > 0)) {
         uLong uSizeRead;
-        if(file_info.size_filename < fileNameBufferSize) {
-            *(szFileName + file_info.size_filename) = '\0';
+        // 名字装不下时也必须留出终止符。原实现此时把整个缓冲区读满且**不写
+        // '\0'**，调用方再把它当 C 字符串用就是读出缓冲区之外：ZIP 条目名恰好
+        // fileNameBufferSize 字节时（例如 1024 字节的名字配 1024 字节缓冲），
+        // storeFilename 里的 TJS_narrowtowidelen 会一路扫过栈上相邻字节。
+        // uSizeRead 与实际读入的字节数保持一致，下面的 lSeek 才能正确算出
+        // 还需要跳过多少字节。
+        if(file_info.size_filename < fileNameBufferSize)
             uSizeRead = file_info.size_filename;
-        } else
-            uSizeRead = fileNameBufferSize;
+        else
+            uSizeRead = fileNameBufferSize - 1;
+        *(szFileName + uSizeRead) = '\0';
 
-        if((file_info.size_filename > 0) && (fileNameBufferSize > 0))
+        if((file_info.size_filename > 0) && (uSizeRead > 0))
             if(zip_readfile(nullptr, s->filestream, szFileName, uSizeRead) !=
                uSizeRead)
                 err = UNZ_ERRNO;
@@ -2117,9 +2123,28 @@ tTJSBinaryStream *ZipArchive::CreateStreamByIndex(tjs_uint idx) {
             return nullptr;
         tTVPMemoryStream *mem = new tTVPMemoryStream();
         mem->SetSize(file_info.uncompressed_size);
-        unzReadCurrentFile(uf, mem->GetInternalBuffer(),
-                           file_info.uncompressed_size);
+        // 必须按实际解出的字节数校验。unzReadCurrentFile 在数据损坏 / CRC
+        // 不匹配 时返回负数、提前 EOF 时返回更小的值；忽略返回值就会把 SetSize
+        // 留下的
+        // **未初始化堆内存**当作文件内容交给脚本（SetSize 不清零，CRC
+        // 也从不校验）。 返回值是 int 而长度是 uLong，单次调用表达不了超过 2GiB
+        // 的条目，所以分块读。
+        unsigned char *dest = (unsigned char *)mem->GetInternalBuffer();
+        unsigned long total = 0;
+        while(total < file_info.uncompressed_size) {
+            unsigned long remain = file_info.uncompressed_size - total;
+            unsigned chunk =
+                remain > 0x4000000u ? 0x4000000u : (unsigned)remain;
+            int got = unzReadCurrentFile(uf, dest + total, chunk);
+            if(got <= 0)
+                break;
+            total += (unsigned long)got;
+        }
         unzCloseCurrentFile(uf);
+        if(total != file_info.uncompressed_size) {
+            delete mem;
+            return nullptr;
+        }
         return mem;
     }
 }

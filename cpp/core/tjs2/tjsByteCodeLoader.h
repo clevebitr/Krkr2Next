@@ -132,8 +132,15 @@ namespace TJS {
         static bool IsTJS2ByteCode(const tjs_uint8 *buff);
 
     private:
-        void ReadDataArea(const tjs_uint8 *buff, int offset, size_t size);
+        /**
+         * 读取数据区（byte / short / long / longlong / double / string /
+         * octet 七张表）。里面每个 count 与长度都来自文件，逐项对照缓冲区
+         * 校验；返回 false 表示越界，调用方应放弃该文件。
+         */
+        [[nodiscard]] bool ReadDataArea(const tjs_uint8 *buff, int offset,
+                                        size_t size);
 
+        /** 边界越界时抛 eTJSScriptError(TJSByteCodeBroken)。 */
         void ReadObjects(tTJSScriptBlock *block, const tjs_uint8 *buff,
                          int offset, int size);
 

@@ -421,6 +421,13 @@ void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                     TVPThrowExceptionMessage(TVPReadError);
 
                 // read info sub-chunk
+                // 'info' 布局：flags(4) + orgSize(8) + arcSize(8) + nameLen(2)
+                // + name(nameLen*2)。ch_info_size 现在已被 FindChunk 限制在索引
+                // 缓冲区之内，但还要确认它装得下头部与名字本身——nameLen 直接
+                // 来自文件（最大 32767），照着它去读名字会越界最多 64KB。
+                if(ch_info_size < 22)
+                    TVPThrowExceptionMessage(TVPReadError);
+
                 tArchiveItem item;
                 tjs_uint32 flags =
                     ReadI32FromMem(indexdata + ch_info_start + 0);
@@ -432,6 +439,9 @@ void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                 item.ArcSize = ReadI64FromMem(indexdata + ch_info_start + 12);
 
                 tjs_int len = ReadI16FromMem(indexdata + ch_info_start + 20);
+                // len 是有符号 16 位，负值同样非法
+                if(len < 0 || ch_info_size < 22 + (tjs_uint)len * 2)
+                    TVPThrowExceptionMessage(TVPReadError);
                 ttstr name = TVPStringFromBMPUnicode(
                     (const tjs_uint16 *)(indexdata + ch_info_start + 22), len);
                 item.Name = name;
@@ -476,6 +486,15 @@ void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                                                  12); // original size
                     seg.ArcSize = ReadI64FromMem(indexdata + pos_base +
                                                  20); // archived size
+                    // 段大小是累加进 offset_in_archive 的：一旦它回绕，Offset
+                    // 表 就不再单调，SeekToPosition 的二分查找会落到 Offset >
+                    // pos 的 段上，pos - Offset 在 uint64 下下溢。同时下游
+                    // SetData 收的是 tjs_uint，超过 32
+                    // 位会被截断，缓冲区比声明的小。两种都只
+                    // 能由伪造的包触发，直接判损坏。
+                    if(seg.OrgSize > 0xFFFFFFFFull ||
+                       seg.ArcSize > 0xFFFFFFFFull)
+                        TVPThrowExceptionMessage(TVPReadError);
                     item.Segments.push_back(seg);
                     offset_in_archive += seg.OrgSize;
                     segmentcount++;
@@ -488,6 +507,8 @@ void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                     TVPThrowExceptionMessage(TVPReadError);
 
                 // read 'aldr' sub-chunk
+                if(ch_adlr_size < 4)
+                    TVPThrowExceptionMessage(TVPReadError);
                 item.FileHash = ReadI32FromMem(indexdata + ch_adlr_start);
 
                 // push information
@@ -556,6 +577,12 @@ tTJSBinaryStream *tTVPXP3Archive::CreateStreamByIndex(tjs_uint idx) {
 
     tArchiveItem &item = ItemVector[idx];
 
+    // 段表为空时不能构造 tTVPXP3ArchiveStream：它的构造函数会直接取
+    // Segments[0]，对空 vector 就是越界读。'segm' 子块不足 28 字节（一个段都
+    // 装不下）的条目会走到这里，等价的语义就是 0 字节存储。
+    if(item.Segments.empty())
+        return new tTVPMemoryStream();
+
     tTJSBinaryStream *stream = TVPGetCachedArchiveHandle(this, ArchiveName);
 
     tTVPXP3ArchiveStream *out;
@@ -588,8 +615,18 @@ bool tTVPXP3Archive::FindChunk(const tjs_uint8 *data, const tjs_uint8 *name,
     tjs_uint start_save = start;
     tjs_uint size_save = size;
 
+    // 索引缓冲区来自游戏包，长度与 chunk 长度都不可信。搜索区间是
+    // [start_save, start_save + size_save)，pos 是已消费的字节数，恒定有
+    // start == start_save + pos。每一步都必须在读**之前**确认区间够用：
+    //   - 头部 4 字节名字 + 8 字节长度必须在区间内，否则 memcmp/ReadI64FromMem
+    //     直接读到堆外；
+    //   - chunk 数据长度必须落在剩余区间内，否则 start += size_chunk 会把游标
+    //     推出缓冲区，下一轮又是一次堆外读；旧代码里 pos 还会在这里回绕成小数，
+    //     使 `pos < size` 永远成立而死循环。
+    // 区间不足时按"没找到"收尾（返回 false 并还原 start/size），由调用方决定
+    // 是报错还是停止解析——这比抛异常更能容忍尾部填充。
     tjs_uint pos = 0;
-    while(pos < size) {
+    while(pos + 4 + 8 <= size) {
         bool found = !memcmp(data + start, name, 4);
         start += 4;
         tjs_uint64 r_size = ReadI64FromMem(data + start);
@@ -597,6 +634,8 @@ bool tTVPXP3Archive::FindChunk(const tjs_uint8 *data, const tjs_uint8 *name,
         tjs_uint size_chunk = (tjs_uint)r_size;
         if(size_chunk != r_size)
             TVPThrowExceptionMessage(TVPReadError);
+        if(size_chunk > size - pos - 4 - 8)
+            break; // 损坏的 chunk 长度：停止搜索
         if(found) {
             // found
             size = size_chunk;
@@ -948,7 +987,18 @@ void tTVPXP3ArchiveStream::SeekToPosition(tjs_uint64 pos) {
     CurSegment = &(Segments->operator[](CurSegmentNum));
     SegmentOpened = false;
 
-    SegmentPos = pos - CurSegment->Offset;
+    // SegmentPos/SegmentRemain 都要能容纳"越界"这一情形：两者都是 uint64，
+    // 直接相减会下溢成天文数字，随后 Read 拿 SegmentRemain 当长度、拿
+    // GetData() + SegmentPos 当地址去 memcpy，就是堆越界读。先把 SegmentPos
+    // 收敛到 [0, OrgSize]，SegmentRemain 就恒在 [0, OrgSize] 内（为 0 时 Read
+    // 会自然走到下一段）。
+    // 索引解析已保证 Offset 单调（见段大小上限校验），正常情况下不会走到这里。
+    if(pos <= CurSegment->Offset)
+        SegmentPos = 0;
+    else
+        SegmentPos = pos - CurSegment->Offset;
+    if(SegmentPos > CurSegment->OrgSize)
+        SegmentPos = CurSegment->OrgSize;
     SegmentRemain = CurSegment->OrgSize - SegmentPos;
     CurPos = pos;
 }

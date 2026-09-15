@@ -37,6 +37,16 @@ namespace TJS {
 
         const tjs_uint8 *databuff = ReadBuffer;
 
+        // 字节码文件来自游戏包，长度字段全部不可信。ReadSize 是唯一可信的
+        // 边界，下面每一步都先确认目标区间落在 [0, ReadSize) 之内。
+        // 头 20 字节 = 4 个标签/版本/文件大小 + DATA 标签与大小
+        auto inRange = [this](tjs_uint64 offset, tjs_uint64 length) {
+            return offset <= ReadSize &&
+                length <= (tjs_uint64)ReadSize - offset;
+        };
+        if(size < 20)
+            return nullptr;
+
         // TJS2
         int tag = read4byte(databuff);
         if(tag != FILE_TAG_LE)
@@ -54,116 +64,220 @@ namespace TJS {
         tag = read4byte(&(databuff[12]));
         if(tag != DATA_TAG_LE)
             return nullptr;
-        size = read4byte(&(databuff[16]));
-        ReadDataArea(databuff, 20, size);
+        const tjs_int32 datasize = read4byte(&(databuff[16]));
+        // 负数（或大到装不下）的数据区长度会让下面的 ReadDataArea 从越界处
+        // 开读，offset 也会指到缓冲区之外
+        if(datasize < 0 || !inRange(20, (tjs_uint64)datasize))
+            return nullptr;
+        if(!ReadDataArea(databuff, 20, (size_t)datasize))
+            return nullptr;
 
-        int offset = (int)(12 + size); // これがデータエリア後の位置
+        tjs_uint64 offset = 12 + (tjs_uint64)datasize; // データエリア後の位置
         // OBJS
+        if(!inRange(offset, 8))
+            return nullptr;
         tag = read4byte(&(databuff[offset]));
         offset += 4;
         if(tag != OBJ_TAG_LE)
             return nullptr;
         // int objsize = ibuff.get();
-        int objsize = read4byte(&(databuff[offset]));
+        const tjs_int32 objsize = read4byte(&(databuff[offset]));
         offset += 4;
+        if(objsize < 0 || !inRange(offset, (tjs_uint64)objsize))
+            return nullptr;
         auto *block = new tTJSScriptBlock(owner, name, 0);
-        ReadObjects(block, databuff, offset, objsize);
+        ReadObjects(block, databuff, (int)offset, objsize);
         return block;
     }
 
-    void tTJSByteCodeLoader::ReadDataArea(const tjs_uint8 *buff, int offset,
+    bool tTJSByteCodeLoader::ReadDataArea(const tjs_uint8 *buff, int offset,
                                           size_t size) {
-        int count = read4byte(&(buff[offset]));
-        offset += 4;
+        // 七张表，每张都以一个 int32 count 开头。count 与随后的长度都来自文件，
+        // 用之前必须对照缓冲区实际长度校验：
+        //   - ByteArray 不拷贝，set() 存的就是 &buff[pos] 这段视图，"后续按
+        //     index 取值"是否越界完全取决于这里 count 有没有越过缓冲区末尾；
+        //   - 其余表按 count 分配并逐项读取，越界值就是数 GB 的分配。
+        // size（数据区声明的长度）只作参考，硬边界始终是 ReadSize。
+        tjs_uint64 pos = (tjs_uint64)offset;
+        (void)size;
+        auto canRead = [this](tjs_uint64 p, tjs_uint64 n) {
+            return p <= ReadSize && n <= (tjs_uint64)ReadSize - p;
+        };
+        auto readCount = [&](tjs_int32 &out) {
+            if(!canRead(pos, 4))
+                return false;
+            out = read4byte(&(buff[pos]));
+            pos += 4;
+            return true;
+        };
+        auto align4 = [](tjs_uint64 v) { return (v + 3u) & ~(tjs_uint64)3; };
+
+        tjs_int32 count = 0;
+        if(!readCount(count))
+            return false;
         if(count > 0) {
-            ByteArray.set((tjs_int8 *)&buff[offset], count);
-            int stride = (count + 3) >> 2;
-            offset += stride << 2;
+            if(!canRead(pos, (tjs_uint64)count))
+                return false;
+            ByteArray.set((tjs_int8 *)&buff[pos], count);
+            pos += align4((tjs_uint64)count);
         }
-        count = read4byte(&(buff[offset]));
-        offset += 4;
+
+        if(!readCount(count))
+            return false;
         if(count > 0) { // load short
+            if(!canRead(pos, (tjs_uint64)count * 2))
+                return false;
             ShortArray.clear();
-            ShortArray.reserve(count);
-            for(int i = 0; i < count; i++) {
-                ShortArray.push_back(read2byte(&(buff[offset])));
-                offset += 2;
+            ShortArray.reserve((size_t)count);
+            for(tjs_int32 i = 0; i < count; i++) {
+                ShortArray.push_back(read2byte(&(buff[pos])));
+                pos += 2;
             }
-            offset += (count & 1) << 1;
+            pos += ((tjs_uint64)count & 1) << 1;
         }
-        count = read4byte(&(buff[offset]));
-        offset += 4;
+
+        if(!readCount(count))
+            return false;
         if(count > 0) {
+            if(!canRead(pos, (tjs_uint64)count * 4))
+                return false;
             LongArray.clear();
-            LongArray.reserve(count);
-            for(int i = 0; i < count; i++) {
-                LongArray.push_back(read4byte(&(buff[offset])));
-                offset += 4;
+            LongArray.reserve((size_t)count);
+            for(tjs_int32 i = 0; i < count; i++) {
+                LongArray.push_back(read4byte(&(buff[pos])));
+                pos += 4;
             }
         }
-        count = read4byte(&(buff[offset]));
-        offset += 4;
+
+        if(!readCount(count))
+            return false;
         if(count > 0) { // load long
+            if(!canRead(pos, (tjs_uint64)count * 8))
+                return false;
             LongLongArray.clear();
-            LongLongArray.reserve(count);
-            for(int i = 0; i < count; i++) {
-                LongLongArray.push_back(read8byte(&(buff[offset])));
-                offset += 8;
+            LongLongArray.reserve((size_t)count);
+            for(tjs_int32 i = 0; i < count; i++) {
+                LongLongArray.push_back(read8byte(&(buff[pos])));
+                pos += 8;
             }
         }
-        count = read4byte(&(buff[offset]));
-        offset += 4;
+
+        if(!readCount(count))
+            return false;
         if(count > 0) { // load double
+            if(!canRead(pos, (tjs_uint64)count * 8))
+                return false;
             DoubleArray.clear();
-            DoubleArray.reserve(count);
-            for(int i = 0; i < count; i++) {
-                tjs_uint64 tmp = read8byte(&(buff[offset]));
+            DoubleArray.reserve((size_t)count);
+            for(tjs_int32 i = 0; i < count; i++) {
+                tjs_uint64 tmp = read8byte(&(buff[pos]));
                 DoubleArray.push_back(*(double *)&tmp);
-                offset += 8;
+                pos += 8;
             }
         }
-        count = read4byte(&(buff[offset]));
-        offset += 4;
+
+        if(!readCount(count))
+            return false;
         if(count > 0) {
             StringArray.clear();
-            StringArray.reserve(count);
-            for(int i = 0; i < count; i++) {
-                int len = read4byte(&(buff[offset]));
-                offset += 4;
-                std::vector<tjs_uint16> ch(len + 1);
-                ch[len] = 0;
-                for(int j = 0; j < len; j++) {
-                    ch[j] = read2byte(&(buff[offset]));
-                    offset += 2;
+            StringArray.reserve((size_t)count);
+            for(tjs_int32 i = 0; i < count; i++) {
+                tjs_int32 len = 0;
+                if(!readCount(len))
+                    return false;
+                if(len < 0 || !canRead(pos, (tjs_uint64)len * 2))
+                    return false;
+                std::vector<tjs_uint16> ch((size_t)len + 1);
+                ch[(size_t)len] = 0;
+                for(tjs_int32 j = 0; j < len; j++) {
+                    ch[(size_t)j] = read2byte(&(buff[pos]));
+                    pos += 2;
                 }
                 StringArray.push_back(
                     TJSMapGlobalStringMap((const tjs_char *)&(ch[0])));
-                offset += (len & 1) << 1;
+                pos += ((tjs_uint64)len & 1) << 1;
             }
         }
-        count = read4byte(&(buff[offset]));
-        offset += 4;
+
+        if(!readCount(count))
+            return false;
         if(count > 0) {
             OctetArray.clear();
-            OctetArray.reserve(count);
-            for(int i = 0; i < count; i++) {
-                int len = read4byte(&(buff[offset]));
-                offset += 4;
-                auto *octet = new tTJSVariantOctet(&(buff[offset]),
+            OctetArray.reserve((size_t)count);
+            for(tjs_int32 i = 0; i < count; i++) {
+                tjs_int32 len = 0;
+                if(!readCount(len))
+                    return false;
+                if(len < 0 || !canRead(pos, (tjs_uint64)len))
+                    return false;
+                auto *octet = new tTJSVariantOctet(&(buff[pos]),
                                                    len); // データはコピーされる
                 OctetArray.push_back(octet);
-                offset += ((len + 3) >> 2) << 2;
+                pos += align4((tjs_uint64)len);
             }
         }
+        return true;
     }
 
     void tTJSByteCodeLoader::ReadObjects(tTJSScriptBlock *block,
                                          const tjs_uint8 *buff, int offset,
                                          int size) {
-        int toplevel = read4byte(&(buff[offset]));
-        offset += 4;
-        int objcount = read4byte(&(buff[offset]));
-        offset += 4;
+        // 对象区是字节码里唯一会**把文件里的数字当指针用**的部分：
+        // objs[parent[o]]、StringArray[name]、ByteArray[index] 之类的下标全部
+        // 来自文件，越界就是野指针读，属性注册那一步（obj->PropSet）甚至是
+        // 往任意地址写。所以这里既做读取边界检查，也把每个下标约束回对应的
+        // 数组；越界一律按"字节码损坏"抛异常，与既有的 tag 校验一致。
+        // 代码数组末尾另留 kCodeSlack 个字：TranslateCodeAddress 对多字指令会
+        // 读到 code[i+4]，末条指令被截断时那次读改写不能落到分配之外——补零后
+        // 由它自己的 codeSize != i 检查判为损坏。
+        // size（对象区声明的长度）只作参考，硬边界始终是 ReadSize。
+        static const tjs_int kCodeSlack = 8;
+
+        tjs_uint64 pos = (tjs_uint64)offset;
+        (void)size;
+        auto canRead = [this](tjs_uint64 p, tjs_uint64 n) {
+            return p <= ReadSize && n <= (tjs_uint64)ReadSize - p;
+        };
+        // 抛异常，同时给编译器一个"这里一定有值"的路径，避免误报未初始化
+        auto fail = [block]() -> tjs_int32 {
+            TJS_eTJSScriptError(TJSByteCodeBroken, block, 0);
+            return 0;
+        };
+        auto read = [&](tjs_int32 &out) {
+            if(!canRead(pos, 4)) {
+                out = fail();
+            } else {
+                out = read4byte(&(buff[pos]));
+                pos += 4;
+            }
+        };
+        // 下标（必须落在 [0, max)）
+        auto readIndex = [&](tjs_int32 &out, tjs_uint64 max) {
+            read(out);
+            if(out < 0 || (tjs_uint64)out >= max)
+                out = fail();
+        };
+        // 可为 -1 的下标（父对象、setter/getter 等）
+        auto readOptionalIndex = [&](tjs_int32 &out, tjs_uint64 max) {
+            read(out);
+            if(out < -1 || (tjs_uint64)out >= max)
+                out = fail();
+        };
+        // 计数：负数在下面的 new/vector 里会变成天文数字
+        auto readCount = [&](tjs_int32 &out, tjs_uint64 perItem) {
+            read(out);
+            if(out < 0 || !canRead(pos, (tjs_uint64)out * perItem))
+                out = fail();
+        };
+
+        tjs_int32 toplevel = 0;
+        tjs_int32 objcount = 0;
+        read(toplevel);
+        read(objcount);
+        // 下面按 objcount 分配若干等长数组，先挡住负数与不可能的计数
+        if(objcount < 0 || (tjs_uint64)objcount > ReadSize)
+            fail();
+        readOptionalIndex(toplevel, (tjs_uint64)objcount);
 
         // tTJSInterCodeContext** objs = new
         // tTJSInterCodeContext*[objcount];
@@ -174,42 +288,48 @@ namespace TJS {
         std::vector<int> propGetter(objcount);
         std::vector<int> superClassGetter(objcount);
         std::vector<std::vector<int>> properties(objcount);
-        for(int o = 0; o < objcount; o++) {
-            int tag = read4byte(&(buff[offset]));
-            offset += 4;
-            if(tag != FILE_TAG_LE) {
+        for(tjs_int32 o = 0; o < objcount; o++) {
+            tjs_int32 tag = 0;
+            read(tag);
+            if(tag != (tjs_int32)FILE_TAG_LE) {
                 // throw new TJSException(Error.ByteCodeBroken);
                 TJS_eTJSScriptError(TJSByteCodeBroken, block, 0);
             }
             // int objsize = read4byte( &(buff[offset]) );
-            offset += 4;
-            parent[o] = read4byte(&(buff[offset]));
-            offset += 4;
-            int name = read4byte(&(buff[offset]));
-            offset += 4;
-            int contextType = read4byte(&(buff[offset]));
-            offset += 4;
-            int maxVariableCount = read4byte(&(buff[offset]));
-            offset += 4;
-            int variableReserveCount = read4byte(&(buff[offset]));
-            offset += 4;
-            int maxFrameCount = read4byte(&(buff[offset]));
-            offset += 4;
-            int funcDeclArgCount = read4byte(&(buff[offset]));
-            offset += 4;
-            int funcDeclUnnamedArgArrayBase = read4byte(&(buff[offset]));
-            offset += 4;
-            int funcDeclCollapseBase = read4byte(&(buff[offset]));
-            offset += 4;
-            propSetter[o] = read4byte(&(buff[offset]));
-            offset += 4;
-            propGetter[o] = read4byte(&(buff[offset]));
-            offset += 4;
-            superClassGetter[o] = read4byte(&(buff[offset]));
-            offset += 4;
+            tjs_int32 ignored = 0;
+            read(ignored);
+            readOptionalIndex(parent[o], (tjs_uint64)objcount);
+            tjs_int32 name = 0;
+            readIndex(name, StringArray.size());
+            tjs_int32 contextType = 0;
+            read(contextType);
+            if(contextType < (tjs_int32)ctTopLevel ||
+               contextType > (tjs_int32)ctSuperClassGetter)
+                fail();
+            // 这几个是寄存器区的尺寸与基准，会直接进入 ExecuteAsFunction 的
+            // Allocate(num_alloc) 与 ra[base + i]：负数即是下溢/越界。
+            // 上界取一个远超正常脚本的值，避免损坏的头申请数 GB 内存。
+            static const tjs_int32 kMaxRegisterCount = 0x00FFFFFF;
+            tjs_int32 maxVariableCount = 0;
+            tjs_int32 variableReserveCount = 0;
+            tjs_int32 maxFrameCount = 0;
+            tjs_int32 funcDeclArgCount = 0;
+            tjs_int32 funcDeclUnnamedArgArrayBase = 0;
+            tjs_int32 funcDeclCollapseBase = 0;
+            for(tjs_int32 *field :
+                { &maxVariableCount, &variableReserveCount, &maxFrameCount,
+                  &funcDeclArgCount, &funcDeclUnnamedArgArrayBase,
+                  &funcDeclCollapseBase }) {
+                read(*field);
+                if(*field < 0 || *field > kMaxRegisterCount)
+                    fail();
+            }
+            readOptionalIndex(propSetter[o], (tjs_uint64)objcount);
+            readOptionalIndex(propGetter[o], (tjs_uint64)objcount);
+            readOptionalIndex(superClassGetter[o], (tjs_uint64)objcount);
 
-            int count = read4byte(&(buff[offset]));
-            offset += 4;
+            tjs_int32 count = 0;
+            readCount(count, 8); // 两个 count*4 的数组
 
             // デバッグ用のソース位置を読み込む
             tTJSInterCodeContext::tSourcePos *srcPos = nullptr;
@@ -217,47 +337,44 @@ namespace TJS {
             if(count > 0) {
                 srcPos = new tTJSInterCodeContext::tSourcePos[count];
                 srcPosArraySize = count;
-                for(int i = 0; i < count; i++) {
-                    srcPos[i].CodePos = read4byte(&(buff[offset]));
-                    offset += 4;
+                for(tjs_int32 i = 0; i < count; i++) {
+                    srcPos[i].CodePos = read4byte(&(buff[pos]));
+                    pos += 4;
                 }
-                for(int i = 0; i < count; i++) {
-                    srcPos[i].SourcePos = read4byte(&(buff[offset]));
-                    offset += 4;
+                for(tjs_int32 i = 0; i < count; i++) {
+                    srcPos[i].SourcePos = read4byte(&(buff[pos]));
+                    pos += 4;
                 }
-            } else {
-                offset += count << 3;
             }
 
-            count = read4byte(&(buff[offset]));
+            readCount(count, 2); // 代码区：count 个 int16（+ 对齐）
             const tjs_int codeSize = count;
-            offset += 4;
-            tjs_int32 *code =
-                (tjs_int32 *)TJS_malloc(count * sizeof(tjs_int32));
-            for(int i = 0; i < count; i++) {
-                tjs_int16 c = (tjs_int16)read2byte(&(buff[offset]));
+            // count * sizeof(tjs_int32) 用有符号 count 直接算，负数会溢出成
+            // 天文数字；readCount 已挡住负数并限定了量级，这里再按 size_t 算，
+            // 并多留 kCodeSlack 个字（见函数开头说明）。
+            tjs_int32 *code = (tjs_int32 *)TJS_malloc(
+                ((size_t)count + kCodeSlack) * sizeof(tjs_int32));
+            if(code == nullptr)
+                TJS_eTJSScriptError(TJSInsufficientMem, block, 0);
+            for(tjs_int32 i = 0; i < count; i++) {
+                tjs_int16 c = (tjs_int16)read2byte(&(buff[pos]));
                 code[i] = c;
-                offset += 2;
+                pos += 2;
             }
+            memset(code + count, 0, kCodeSlack * sizeof(tjs_int32));
             TranslateCodeAddress(block, code, codeSize);
-            offset += (count & 1) << 1;
+            pos += ((tjs_uint64)count & 1) << 1;
 
-            count = read4byte(&(buff[offset]));
-            offset += 4;
-            int vcount = count << 1;
-            std::vector<short> data(vcount);
-            for(int i = 0; i < vcount; i++) {
-                data[i] = read2byte(&(buff[offset]));
-                offset += 2;
-            }
-
+            readCount(count, 4); // 值表：count 个 (type, index) 短对
             auto *vdata = new tTJSVariant[count];
             const tjs_int datacount = count;
-            for(int i = 0; i < datacount; i++) {
-                int pos = i << 1;
-                int type = data[pos];
-                int index = data[pos + 1];
-                switch(type) {
+            for(tjs_int32 i = 0; i < datacount; i++) {
+                // 两个下标都是 tjs_uint16：原来读进 short 会变成负数，
+                // 接着就是 StringArray[-1] 这样的野读
+                const tjs_uint16 type = read2byte(&(buff[pos]));
+                const tjs_uint16 index = read2byte(&(buff[pos + 2]));
+                pos += 4;
+                switch((tjs_int32)type) {
                     case TYPE_VOID:
                         vdata[i].Clear();
                         break;
@@ -265,30 +382,44 @@ namespace TJS {
                         vdata[i] = (iTJSDispatch2 *)nullptr;
                         break;
                     case TYPE_INTER_OBJECT:
-                        work.emplace_back(&(vdata[i]), index);
-                        break;
                     case TYPE_INTER_GENERATOR:
-                        work.emplace_back(&(vdata[i]), index);
+                        if((tjs_uint64)index >= (tjs_uint64)objcount)
+                            fail();
+                        work.emplace_back(&(vdata[i]), (int)index);
                         break;
                     case TYPE_STRING:
+                        if((size_t)index >= StringArray.size())
+                            fail();
                         vdata[i] = StringArray[index].c_str(); // tTJSString
                         break;
                     case TYPE_OCTET:
+                        if((size_t)index >= OctetArray.size())
+                            fail();
                         vdata[i] = OctetArray[index]; // tTJSVariantOctet
                         break;
                     case TYPE_REAL:
+                        if((size_t)index >= DoubleArray.size())
+                            fail();
                         vdata[i] = (tjs_real)DoubleArray[index];
                         break;
                     case TYPE_BYTE:
+                        if((size_t)index >= ByteArray.size())
+                            fail();
                         vdata[i] = (tjs_int)ByteArray[index];
                         break;
                     case TYPE_SHORT:
+                        if((size_t)index >= ShortArray.size())
+                            fail();
                         vdata[i] = (tjs_int)ShortArray[index];
                         break;
                     case TYPE_INTEGER:
+                        if((size_t)index >= LongArray.size())
+                            fail();
                         vdata[i] = (tjs_int)LongArray[index];
                         break;
                     case TYPE_LONG:
+                        if((size_t)index >= LongLongArray.size())
+                            fail();
                         vdata[i] = (tjs_int64)LongLongArray[index];
                         break;
                     case TYPE_UNKNOWN:
@@ -297,24 +428,34 @@ namespace TJS {
                         break;
                 }
             }
-            count = read4byte(&(buff[offset]));
-            offset += 4;
+            readCount(count, 4); // super class getter 的代码位置
             // int* scgetterps = new int[count];
-            std::vector<tjs_int> scgetterps(count);
-            for(int i = 0; i < count; i++) {
-                scgetterps[i] = read4byte(&(buff[offset]));
-                offset += 4;
+            std::vector<tjs_int> scgetterps((size_t)count);
+            for(tjs_int32 i = 0; i < count; i++) {
+                const tjs_int32 v = read4byte(&(buff[pos]));
+                pos += 4;
+                // 这些值会被当作起始执行位置交给 ExecuteAsFunction，而 start_ip
+                // 是 CodeArea 的**字**偏移（CodeArea + start_ip），越界等于从
+                // 任意位置开始跑 VM。
+                if(v < 0 || v > codeSize)
+                    fail();
+                scgetterps[i] = v;
             }
             // properties
-            count = read4byte(&(buff[offset]));
-            offset += 4;
+            readCount(count, 8); // count 个 (名字, 对象) 对
             if(count > 0) {
-                int pcount = count << 1;
                 std::vector<int> &props = properties[o];
-                props.resize(pcount);
-                for(int i = 0; i < pcount; i++) {
-                    props[i] = read4byte(&(buff[offset]));
-                    offset += 4;
+                props.resize((size_t)count << 1);
+                for(tjs_int32 i = 0; i < count; i++) {
+                    const tjs_int32 pname = read4byte(&(buff[pos]));
+                    const tjs_int32 pobj = read4byte(&(buff[pos + 4]));
+                    pos += 8;
+                    if(pname < 0 || (size_t)pname >= StringArray.size())
+                        fail();
+                    if(pobj < 0 || pobj >= objcount)
+                        fail();
+                    props[(size_t)i << 1] = pname;
+                    props[((size_t)i << 1) | 1] = pobj;
                 }
             }
 
@@ -350,6 +491,10 @@ namespace TJS {
 
             if(properties[o].size() > 0) {
                 tTJSInterCodeContext *obj = parentObj;
+                // 属性是注册到父对象上的；没有父对象却带属性说明索引被改过，
+                // 继续下去就是 obj->PropSet 的空指针解引用
+                if(obj == nullptr)
+                    fail();
                 std::vector<int> &prop = properties[o];
                 int length = (int)(prop.size() >> 1);
                 for(int i = 0; i < length; i++) {

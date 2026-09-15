@@ -124,22 +124,45 @@ public:
             }
         }
 
-        UInt32 blockIndex;
+        // outBuffer 由 SzArEx_Extract 以 allocMain 分配，**释放责任在调用方**：
+        // 7z.h 把它定义成"可跨次复用的解压缓存"，CSzArEx 只是 const
+        // 入参，不持有 它。原实现用 delete 释放 malloc
+        // 出来的内存，分配器不匹配。 这里每个调用都用新的局部缓冲（接口要求
+        // *outBuffer 每次从 0 开始）， 不开缓存：CreateStreamByIndex
+        // 可能被多个加载线程并发调用。
+        UInt32 blockIndex = 0;
         Byte *outBuffer = nullptr;
-        size_t outBufferSize;
-        size_t offset, outSizeProcessed;
+        size_t outBufferSize = 0;
+        size_t offset = 0, outSizeProcessed = 0;
         SRes res = SzArEx_Extract(&db, &lookStream.vt, fileIndex, &blockIndex,
                                   &outBuffer, &outBufferSize, &offset,
                                   &outSizeProcessed, &allocImp, &allocImp);
-        tTVPMemoryStream *mem;
-        if(offset == 0 && fileSize <= outBufferSize) {
-            mem = new tTVPMemoryStream(outBuffer, outBufferSize);
-        } else {
-            Byte *buf = new Byte[fileSize];
-            memcpy(buf, outBuffer, fileSize);
-            mem = new tTVPMemoryStream(buf, fileSize);
-            delete outBuffer;
+
+        // 有效数据是 outBuffer + offset 起的 outSizeProcessed 字节，不是整个
+        // outBuffer。原来的 `offset == 0 && fileSize <= outBufferSize` 分支之外
+        // 一律从 outBuffer 起拷 fileSize 字节：offset 非 0 时读错位置，fileSize
+        // 大于缓冲区时越界。这里把两个区间都验一遍，并且要求解出的长度与索引
+        // 声明的一致——不一致说明包已损坏，宁可不返回流。
+        const bool ok = res == SZ_OK && outBuffer != nullptr &&
+            outSizeProcessed == fileSize && fileSize <= 0xFFFFFFFFull &&
+            offset <= outBufferSize &&
+            outSizeProcessed <= outBufferSize - offset;
+
+        tTVPMemoryStream *mem = nullptr;
+        if(ok) {
+            // 一律拷贝，不把 outBuffer 直接交给 tTVPMemoryStream(const void*,
+            // size)：那个构造函数是"引用"语义（Reference =
+            // true，不接管所有权）， 而 outBuffer
+            // 马上就要在这里释放，挂上去等于交出一个悬垂指针。 同理不能 new
+            // Byte[] 再交给它——那会漏掉这块内存。走 SetSize + GetInternalBuffer
+            // 让流自己持有，与 XP3Archive 里一致。
+            mem = new tTVPMemoryStream();
+            mem->SetSize((tjs_uint)fileSize);
+            memcpy(mem->GetInternalBuffer(), outBuffer + offset,
+                   (size_t)fileSize);
         }
+        if(outBuffer)
+            ISzAlloc_Free(&allocImp, outBuffer);
         return mem;
     }
 
