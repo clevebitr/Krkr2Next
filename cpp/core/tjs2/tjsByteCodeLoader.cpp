@@ -333,11 +333,15 @@ namespace TJS {
             if(out < 0 || (tjs_uint64)out >= max)
                 out = fail(what, out, (long long)max);
         };
-        // 可为 -1 的下标（父对象、setter/getter 等）
+        // 可为 -1 的下标（父对象、setter/getter 等）。-1 表示"无"，必须在做上界
+        // 比较**之前**就排除掉：把负的 out 转成 tjs_uint64 会绕成接近 2^64 的
+        // 天文数字，于是 `(tjs_uint64)out >= max` 对 -1 恒成立，正好把这个唯一
+        // 合法的负值判成越界（实测 parent 全是 -1 的根对象全部因此失败）。
+        // readIndex 没有这个问题，因为它的 `out < 0` 会先短路。
         auto readOptionalIndex = [&](const char *what, tjs_int32 &out,
                                      tjs_uint64 max) {
             read(what, out);
-            if(out < -1 || (tjs_uint64)out >= max)
+            if(out < -1 || (out >= 0 && (tjs_uint64)out >= max))
                 out = fail(what, out, (long long)max);
         };
         // 计数：负数在下面的 new/vector 里会变成天文数字
