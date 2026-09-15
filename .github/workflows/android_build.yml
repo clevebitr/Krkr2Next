@@ -186,7 +186,14 @@ jobs:
 
       - name: 构建引擎
         # 上一步已完成 configure，这里会跳过 configure 直接编译。
-        run: ./build.sh "$BUILD_TYPE" --engine-only
+        #
+        # 仍要 export VCPKG_BINARY_SOURCES：`cmake --build` 在检测到 CMakeLists
+        # 等输入变化时会重新触发 configure，而 configure 会再次调用 vcpkg。
+        # 那时若没有二进制缓存源，vcpkg 会退回默认源并可能重编依赖——白白浪费
+        # 掉上一步刚缓存好的成果。
+        run: |
+          export VCPKG_BINARY_SOURCES="clear;files,$HOME/.cache/vcpkg,readwrite"
+          ./build.sh "$BUILD_TYPE" --engine-only
 
       - name: 保存 ccache
         # if: always() —— 编译失败也要存。ccache 内容寻址，已编译对象依然有效。
