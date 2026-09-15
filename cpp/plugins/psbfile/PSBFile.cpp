@@ -388,13 +388,10 @@ namespace PSB {
         char sign[4];
         memcpy(sign, fileData, 4);
 
-        bool isMdf = ((sign[0] & ~0x20) == 'M') &&
-                     ((sign[1] & ~0x20) == 'D') &&
-                     ((sign[2] & ~0x20) == 'F') &&
-                     sign[3] == '\0';
+        bool isMdf = ((sign[0] & ~0x20) == 'M') && ((sign[1] & ~0x20) == 'D') &&
+            ((sign[2] & ~0x20) == 'F') && sign[3] == '\0';
 
-        if(!isMdf &&
-           std::strcmp(sign, PsbSignature) != 0 &&
+        if(!isMdf && std::strcmp(sign, PsbSignature) != 0 &&
            std::strcmp(sign, MflSignature) != 0) {
             LOGGER->warn("Not a PSB/MDF/MFL file: {}", filePath.AsStdString());
             freeFileData();
@@ -424,8 +421,8 @@ namespace PSB {
                              zResult, filePath.AsStdString());
                 return false;
             }
-            LOGGER->debug("MDF decompressed: {} -> {} bytes ({})",
-                          readSize, destLen, filePath.AsStdString());
+            LOGGER->debug("MDF decompressed: {} -> {} bytes ({})", readSize,
+                          destLen, filePath.AsStdString());
         } else {
             memcpy(stream.GetInternalBuffer(), fileData, readSize);
             freeFileData();
@@ -514,7 +511,7 @@ namespace PSB {
 
         if(std::strcmp(_header.signature, PSB::PsbSignature) != 0) {
             LOGGER->warn("Not a valid PSB file ({}): signature='{}'",
-                filePath.AsStdString(), _header.signature);
+                         filePath.AsStdString(), _header.signature);
             return false;
         }
 

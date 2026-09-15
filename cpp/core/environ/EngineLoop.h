@@ -20,14 +20,14 @@
 // a dependency from core → bridge).
 // ---------------------------------------------------------------------------
 enum EngineInputEventType : uint32_t {
-    kEngineInputPointerDown  = 1,
-    kEngineInputPointerMove  = 2,
-    kEngineInputPointerUp    = 3,
+    kEngineInputPointerDown = 1,
+    kEngineInputPointerMove = 2,
+    kEngineInputPointerUp = 3,
     kEngineInputPointerScroll = 4,
-    kEngineInputKeyDown      = 5,
-    kEngineInputKeyUp        = 6,
-    kEngineInputTextInput    = 7,
-    kEngineInputBack         = 8,
+    kEngineInputKeyDown = 5,
+    kEngineInputKeyUp = 6,
+    kEngineInputTextInput = 7,
+    kEngineInputBack = 8,
 };
 
 /**
@@ -35,15 +35,15 @@ enum EngineInputEventType : uint32_t {
  * into the core engine loop. This avoids a dependency on engine_api.h.
  */
 struct EngineInputEvent {
-    uint32_t type = 0;          ///< EngineInputEventType
-    double   x = 0;             ///< Pointer X in logical pixels
-    double   y = 0;             ///< Pointer Y in logical pixels
-    double   delta_x = 0;       ///< Scroll delta X
-    double   delta_y = 0;       ///< Scroll delta Y
-    int32_t  pointer_id = 0;    ///< Pointer / touch ID
-    int32_t  button = 0;        ///< Mouse button: 0=left, 1=right, 2=middle
-    int32_t  key_code = 0;      ///< Virtual key code (Windows VK_*)
-    int32_t  modifiers = 0;     ///< Shift state flags (TVP_SS_* compatible)
+    uint32_t type = 0; ///< EngineInputEventType
+    double x = 0; ///< Pointer X in logical pixels
+    double y = 0; ///< Pointer Y in logical pixels
+    double delta_x = 0; ///< Scroll delta X
+    double delta_y = 0; ///< Scroll delta Y
+    int32_t pointer_id = 0; ///< Pointer / touch ID
+    int32_t button = 0; ///< Mouse button: 0=left, 1=right, 2=middle
+    int32_t key_code = 0; ///< Virtual key code (Windows VK_*)
+    int32_t modifiers = 0; ///< Shift state flags (TVP_SS_* compatible)
     uint32_t unicode_codepoint = 0; ///< Unicode codepoint for text input
 };
 
@@ -65,21 +65,21 @@ public:
     ~EngineLoop();
 
     // Non-copyable
-    EngineLoop(const EngineLoop&) = delete;
-    EngineLoop& operator=(const EngineLoop&) = delete;
+    EngineLoop(const EngineLoop &) = delete;
+    EngineLoop &operator=(const EngineLoop &) = delete;
 
     /** Get the singleton instance (nullptr if not created). */
-    static EngineLoop* GetInstance();
+    static EngineLoop *GetInstance();
 
     /** Create the singleton instance (idempotent). */
-    static EngineLoop* CreateInstance();
+    static EngineLoop *CreateInstance();
 
     /**
      * Start the engine from the given game path (standalone mode).
      * In host mode, engine_open_game calls Application::StartApplication
      * directly, so this may not be used.
      */
-    bool StartupFrom(const std::string& path);
+    bool StartupFrom(const std::string &path);
 
     /**
      * Enable per-frame updates.
@@ -111,19 +111,19 @@ public:
      * @return true on success, false if the event could not be dispatched
      *         (e.g. no active window).
      */
-    bool HandleInputEvent(const EngineInputEvent& event);
+    bool HandleInputEvent(const EngineInputEvent &event);
 
 private:
-    void DoStartup(const std::string& path);
+    void DoStartup(const std::string &path);
 
     // Input helpers
-    void HandlePointerDown(const EngineInputEvent& event);
-    void HandlePointerMove(const EngineInputEvent& event);
-    void HandlePointerUp(const EngineInputEvent& event);
-    void HandlePointerScroll(const EngineInputEvent& event);
-    void HandleKeyDown(const EngineInputEvent& event);
-    void HandleKeyUp(const EngineInputEvent& event);
-    void HandleTextInput(const EngineInputEvent& event);
+    void HandlePointerDown(const EngineInputEvent &event);
+    void HandlePointerMove(const EngineInputEvent &event);
+    void HandlePointerUp(const EngineInputEvent &event);
+    void HandlePointerScroll(const EngineInputEvent &event);
+    void HandleKeyDown(const EngineInputEvent &event);
+    void HandleKeyUp(const EngineInputEvent &event);
+    void HandleTextInput(const EngineInputEvent &event);
 
     /**
      * Convert modifier flags to TVP shift state flags (TVP_SS_*).

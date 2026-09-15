@@ -3,7 +3,8 @@
 #include "ogl_common.h"
 
 // glGetStringi / GL_NUM_EXTENSIONS：ES3 上下文中的扩展枚举必须走这两个符号。
-// ogl_common.h 只引 GLES2 头，这里按需补 ES3 头，避免 ES3 声明扩散到所有 GL 使用方。
+// ogl_common.h 只引 GLES2 头，这里按需补 ES3 头，避免 ES3 声明扩散到所有 GL
+// 使用方。
 #include <GLES3/gl3.h>
 
 #include "tjsCommHead.h"
@@ -115,7 +116,8 @@ static bool TVPGLExtensionInfoInited = false;
 // 版本串形如 "OpenGL ES 3.2 V@..." / "OpenGL ES-CM 1.1" / "OpenGL ES 2.0"，
 // 首个数字即主版本号。
 static bool TVPIsGLES3OrLater(const char *ver) {
-    if(!ver) return false;
+    if(!ver)
+        return false;
     for(const char *p = ver; *p; ++p) {
         if(*p >= '0' && *p <= '9')
             return *p >= '3';
@@ -143,7 +145,8 @@ static void TVPEnumerateGLExtensions(std::unordered_set<std::string> &out) {
     }
 
     const char *ext_str = (const char *)glGetString(GL_EXTENSIONS);
-    if(!ext_str) return; // No GL context (e.g. no EGL surface yet)
+    if(!ext_str)
+        return; // No GL context (e.g. no EGL surface yet)
     std::string gl_extensions = ext_str;
     const char *p = gl_extensions.c_str();
     for(char &c : gl_extensions) {
@@ -1255,7 +1258,8 @@ public:
             Bitmap->Release();
         }
         // When Bitmap is null (single texture via AsSingleTexture),
-        // keep internalW/H so base destructor correctly subtracts from _totalVMemSize
+        // keep internalW/H so base destructor correctly subtracts from
+        // _totalVMemSize
     }
     void CompactGPUCache() override {
         if(!CachedTexture.empty())
@@ -1863,7 +1867,10 @@ public:
     bool IsStatic() override { return false; }
 
     void InvalidatePixelCache() override {
-        if (PixelData) { delete[] PixelData; PixelData = nullptr; }
+        if(PixelData) {
+            delete[] PixelData;
+            PixelData = nullptr;
+        }
         IsTextureDirty = false;
     }
 
@@ -3010,9 +3017,10 @@ protected:
         // On Android, this rebuilds all shaders after GL context loss.
         // 注意：此回调由 EngineBootstrap 在 EGL context（重）建后调用
         // krkr::gl::FireRendererRecreated() 触发（runtime-restart 时 context 被
-        // Shutdown 销毁再重建，旧 context 的 GL 对象 id 全部失效）。除重建 shader
-        // 外，还必须重建共享 FBO/模板 FBO 并复位 FBO 状态——否则
-        // TVPSetRenderTarget 会在失效 _FBO 上合成 renderable 纹理，二次打开黑屏。
+        // Shutdown 销毁再重建，旧 context 的 GL 对象 id 全部失效）。除重建
+        // shader 外，还必须重建共享 FBO/模板 FBO 并复位 FBO 状态——否则
+        // TVPSetRenderTarget 会在失效 _FBO 上合成 renderable
+        // 纹理，二次打开黑屏。
         krkr::gl::OnRendererRecreated([this]() {
             tTVPOGLRenderMethod_Script::ClearCache();
             for(auto it : AllMethods) {
@@ -3021,8 +3029,9 @@ protected:
                 method->Rebuild();
             }
             // 旧 context 已销毁，其 FBO id 在新 context 下无效；直接覆盖为新 id
-            // （不能 glDelete，旧 id 可能已被新 context 复用）。InitGL 原在构造函数用
-            // glGenFramebuffers/glGenRenderbuffers 创建，这里等量重建。
+            // （不能 glDelete，旧 id 可能已被新 context 复用）。InitGL
+            // 原在构造函数用 glGenFramebuffers/glGenRenderbuffers
+            // 创建，这里等量重建。
             if(_FBO || _stencil_FBO) {
                 glGenFramebuffers(1, &_FBO);
                 glGenRenderbuffers(1, &_stencil_FBO);
@@ -3030,13 +3039,15 @@ protected:
                 _CurrentFBOValid = false;
                 _CurrentRenderTarget = 0;
             }
-            // runtime-restart（换游戏/二次游玩）时 EGL context 先 Shutdown 再重建，
-            // 新 context 里旧 context 的所有 GL 纹理 id 全部失效。图形缓存（gcache，
-            // 含主 DrawBuffer / 背景等经 CreateTexture2D 上传的像素纹理）里遗留的
-            // GL id 是旧的，直接复用会因附件失效 → FBO INCOMPLETE_ATTACHMENT →
-            // blit 源黑（真机 engine(4) 观察到 blitSrcTex 同 id(=83) 二次打开即
-            // SourceSample "FBO incomplete 0x8cd6" + BlackScreen）。这里清空图形缓存，
-            // 让这些纹理在下一个 context 里按需重新上传为有效 GL id。
+            // runtime-restart（换游戏/二次游玩）时 EGL context 先 Shutdown
+            // 再重建， 新 context 里旧 context 的所有 GL 纹理 id
+            // 全部失效。图形缓存（gcache， 含主 DrawBuffer / 背景等经
+            // CreateTexture2D 上传的像素纹理）里遗留的 GL id
+            // 是旧的，直接复用会因附件失效 → FBO INCOMPLETE_ATTACHMENT → blit
+            // 源黑（真机 engine(4) 观察到 blitSrcTex 同 id(=83) 二次打开即
+            // SourceSample "FBO incomplete 0x8cd6" +
+            // BlackScreen）。这里清空图形缓存， 让这些纹理在下一个 context
+            // 里按需重新上传为有效 GL id。
             TVPClearGraphicCache();
         });
         TVPSetPostUpdateEvent(_RestoreGLStatues);
@@ -5025,9 +5036,11 @@ public:
 
 REGISTER_RENDERMANAGER(TVPRenderManager_OpenGL, opengl);
 
-// Explicit registration function to force linker to include this translation unit
-// (static library dead-stripping would otherwise discard the auto-register global)
+// Explicit registration function to force linker to include this translation
+// unit (static library dead-stripping would otherwise discard the auto-register
+// global)
 void TVPForceRegisterOpenGLRenderManager() {
     // intentionally empty – the REGISTER_RENDERMANAGER static initializer above
-    // does the real work; this function just needs to be referenced from another TU.
+    // does the real work; this function just needs to be referenced from
+    // another TU.
 }

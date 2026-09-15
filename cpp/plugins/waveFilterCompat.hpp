@@ -48,7 +48,7 @@ protected:
 
 private:
     tTVPSampleAndLabelSource *source_ = nullptr;
-    tTVPWaveFormat format_ {};
+    tTVPWaveFormat format_{};
 };
 
 inline void CopyVariantParams(std::vector<tTJSVariant> &dest, tjs_int count,

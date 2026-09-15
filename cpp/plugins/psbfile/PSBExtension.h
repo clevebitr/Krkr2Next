@@ -14,7 +14,6 @@
 namespace PSB::Extension {
 
 
-
     static int getSize(std::uint32_t i) {
         int n = 0;
         do {

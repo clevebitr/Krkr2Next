@@ -4,8 +4,8 @@
  *
  * KrKr2 的主要目标平台是 iOS / Android / macOS（Apple 实现在 apple/{ios,macos}/
  * platform.mm）。Linux 仅作为 CI 宿主做引擎核心验证，且 Linux 从未有过平台层——
- * 此前这些平台函数在 Linux 上没有任何定义，导致 libengine_api.so / tools/xp3 链接失败
- * （undefined reference）。
+ * 此前这些平台函数在 Linux 上没有任何定义，导致 libengine_api.so / tools/xp3
+ * 链接失败 （undefined reference）。
  *
  * 本文件为 Linux 提供这些平台函数的实现：
  *  - 文件操作（TVP_stat/TVP_utime/TVPCreateFolders/TVPWriteDataToFile）
@@ -126,7 +126,7 @@ bool TVP_stat(const char *name, tTVP_stat &s) {
 }
 
 bool TVP_stat(const tjs_char *name, tTVP_stat &s) {
-    return TVP_stat(ttstr{name}.AsStdString().c_str(), s);
+    return TVP_stat(ttstr{ name }.AsStdString().c_str(), s);
 }
 
 bool TVP_utime(const char *name, time_t modtime) {
@@ -144,8 +144,8 @@ tjs_uint32 TVPGetRoughTickCount32() {
     tjs_uint32 uptime = 0;
     timespec on{};
     if(clock_gettime(CLOCK_MONOTONIC, &on) == 0)
-        uptime = static_cast<tjs_uint32>(on.tv_sec * 1000 +
-                                         on.tv_nsec / 1000000);
+        uptime =
+            static_cast<tjs_uint32>(on.tv_sec * 1000 + on.tv_nsec / 1000000);
     return uptime;
 }
 
@@ -223,11 +223,12 @@ std::string TVPGetPackageVersionString() { return "linux"; }
 // UI 桩（无头 CI 环境，仅打日志）
 // ---------------------------------------------------------------------------
 
-extern "C" int TVPShowSimpleMessageBox(const char *pszText, const char *pszTitle,
+extern "C" int TVPShowSimpleMessageBox(const char *pszText,
+                                       const char *pszTitle,
                                        unsigned int nButton,
                                        const char **btnText) {
-    spdlog::warn("[platform_linux] TVPShowSimpleMessageBox stub: {} ({})", pszText,
-                 pszTitle);
+    spdlog::warn("[platform_linux] TVPShowSimpleMessageBox stub: {} ({})",
+                 pszText, pszTitle);
     (void)nButton;
     (void)btnText;
     return 0;
@@ -235,12 +236,14 @@ extern "C" int TVPShowSimpleMessageBox(const char *pszText, const char *pszTitle
 
 int TVPShowSimpleMessageBox(const ttstr &text, const ttstr &caption,
                             const std::vector<ttstr> &vecButtons) {
-    spdlog::warn("[platform_linux] TVPShowSimpleMessageBox stub: {} ({}, {} btns)",
-                 text.AsStdString(), caption.AsStdString(), vecButtons.size());
+    spdlog::warn(
+        "[platform_linux] TVPShowSimpleMessageBox stub: {} ({}, {} btns)",
+        text.AsStdString(), caption.AsStdString(), vecButtons.size());
     return 0;
 }
 
-int TVPShowSimpleInputBox(ttstr &text, const ttstr &caption, const ttstr &prompt,
+int TVPShowSimpleInputBox(ttstr &text, const ttstr &caption,
+                          const ttstr &prompt,
                           const std::vector<ttstr> &vecButtons) {
     spdlog::warn("[platform_linux] TVPShowSimpleInputBox stub");
     (void)caption;

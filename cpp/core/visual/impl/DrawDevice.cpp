@@ -61,29 +61,31 @@ bool tTVPDrawDevice::TransformToPrimaryLayerManager(tjs_int &x, tjs_int &y) {
     }
 
     // Determine the source coordinate space.
-    // Priority: ViewportRect > DestRect > WinWidth/WinHeight > EGL surface > primary layer size
+    // Priority: ViewportRect > DestRect > WinWidth/WinHeight > EGL surface >
+    // primary layer size
     tjs_int src_left, src_top, src_w, src_h;
-    if (ViewportValid && ViewportRect.get_width() > 0 && ViewportRect.get_height() > 0) {
+    if(ViewportValid && ViewportRect.get_width() > 0 &&
+       ViewportRect.get_height() > 0) {
         // Use the explicit viewport set by UpdateDrawBuffer (most reliable)
         src_left = ViewportRect.left;
-        src_top  = ViewportRect.top;
-        src_w    = ViewportRect.get_width();
-        src_h    = ViewportRect.get_height();
+        src_top = ViewportRect.top;
+        src_w = ViewportRect.get_width();
+        src_h = ViewportRect.get_height();
     } else {
         src_left = DestRect.left;
-        src_top  = DestRect.top;
-        src_w    = DestRect.get_width();
-        src_h    = DestRect.get_height();
+        src_top = DestRect.top;
+        src_w = DestRect.get_width();
+        src_h = DestRect.get_height();
     }
     if(src_w <= 0 || src_h <= 0) {
         src_left = 0;
-        src_top  = 0;
+        src_top = 0;
         if(WinWidth > 0 && WinHeight > 0) {
             src_w = WinWidth;
             src_h = WinHeight;
         } else {
             // Fallback: query EGL surface size directly (always up-to-date)
-            auto& egl = krkr::GetEngineEGLContext();
+            auto &egl = krkr::GetEngineEGLContext();
             if(egl.IsValid()) {
                 // Use IOSurface dimensions if attached, else Pbuffer dimensions
                 if(egl.HasIOSurface()) {
@@ -101,13 +103,13 @@ bool tTVPDrawDevice::TransformToPrimaryLayerManager(tjs_int &x, tjs_int &y) {
         }
     }
 
-    if (x < src_left || y < src_top || x >= src_left + src_w ||
-        y >= src_top + src_h)
+    if(x < src_left || y < src_top || x >= src_left + src_w ||
+       y >= src_top + src_h)
         return false;
 
     // Map from source (surface) coordinates to primary layer coordinates
     x = src_w ? ((x - src_left) * pl_w / src_w) : 0;
-    y = src_h ? ((y - src_top)  * pl_h / src_h) : 0;
+    y = src_h ? ((y - src_top) * pl_h / src_h) : 0;
 
     return true;
 }
@@ -128,25 +130,26 @@ bool tTVPDrawDevice::TransformFromPrimaryLayerManager(tjs_int &x, tjs_int &y) {
 
     // Determine destination coordinate space (same fallback as Transform-To)
     tjs_int dst_left, dst_top, dst_w, dst_h;
-    if (ViewportValid && ViewportRect.get_width() > 0 && ViewportRect.get_height() > 0) {
+    if(ViewportValid && ViewportRect.get_width() > 0 &&
+       ViewportRect.get_height() > 0) {
         dst_left = ViewportRect.left;
-        dst_top  = ViewportRect.top;
-        dst_w    = ViewportRect.get_width();
-        dst_h    = ViewportRect.get_height();
+        dst_top = ViewportRect.top;
+        dst_w = ViewportRect.get_width();
+        dst_h = ViewportRect.get_height();
     } else {
         dst_left = DestRect.left;
-        dst_top  = DestRect.top;
-        dst_w    = DestRect.get_width();
-        dst_h    = DestRect.get_height();
+        dst_top = DestRect.top;
+        dst_w = DestRect.get_width();
+        dst_h = DestRect.get_height();
     }
     if(dst_w <= 0 || dst_h <= 0) {
         dst_left = 0;
-        dst_top  = 0;
+        dst_top = 0;
         if(WinWidth > 0 && WinHeight > 0) {
             dst_w = WinWidth;
             dst_h = WinHeight;
         } else {
-            auto& egl = krkr::GetEngineEGLContext();
+            auto &egl = krkr::GetEngineEGLContext();
             if(egl.IsValid()) {
                 if(egl.HasIOSurface()) {
                     dst_w = static_cast<tjs_int>(egl.GetIOSurfaceWidth());
@@ -185,27 +188,29 @@ bool tTVPDrawDevice::TransformToPrimaryLayerManager(tjs_real &x, tjs_real &y) {
             return false;
     }
 
-    // Determine source coordinate space (same fallback chain as tjs_int version)
+    // Determine source coordinate space (same fallback chain as tjs_int
+    // version)
     tjs_real src_left, src_top, src_w, src_h;
-    if (ViewportValid && ViewportRect.get_width() > 0 && ViewportRect.get_height() > 0) {
+    if(ViewportValid && ViewportRect.get_width() > 0 &&
+       ViewportRect.get_height() > 0) {
         src_left = static_cast<tjs_real>(ViewportRect.left);
-        src_top  = static_cast<tjs_real>(ViewportRect.top);
-        src_w    = static_cast<tjs_real>(ViewportRect.get_width());
-        src_h    = static_cast<tjs_real>(ViewportRect.get_height());
+        src_top = static_cast<tjs_real>(ViewportRect.top);
+        src_w = static_cast<tjs_real>(ViewportRect.get_width());
+        src_h = static_cast<tjs_real>(ViewportRect.get_height());
     } else {
         src_left = static_cast<tjs_real>(DestRect.left);
-        src_top  = static_cast<tjs_real>(DestRect.top);
-        src_w    = static_cast<tjs_real>(DestRect.get_width());
-        src_h    = static_cast<tjs_real>(DestRect.get_height());
+        src_top = static_cast<tjs_real>(DestRect.top);
+        src_w = static_cast<tjs_real>(DestRect.get_width());
+        src_h = static_cast<tjs_real>(DestRect.get_height());
     }
     if(src_w <= 0.0 || src_h <= 0.0) {
         src_left = 0.0;
-        src_top  = 0.0;
+        src_top = 0.0;
         if(WinWidth > 0 && WinHeight > 0) {
             src_w = static_cast<tjs_real>(WinWidth);
             src_h = static_cast<tjs_real>(WinHeight);
         } else {
-            auto& egl = krkr::GetEngineEGLContext();
+            auto &egl = krkr::GetEngineEGLContext();
             if(egl.IsValid()) {
                 if(egl.HasIOSurface()) {
                     src_w = static_cast<tjs_real>(egl.GetIOSurfaceWidth());
@@ -224,7 +229,7 @@ bool tTVPDrawDevice::TransformToPrimaryLayerManager(tjs_real &x, tjs_real &y) {
 
     // Map from source (surface) coordinates to primary layer coordinates
     x = src_w > 0.0 ? ((x - src_left) * pl_w / src_w) : 0.0;
-    y = src_h > 0.0 ? ((y - src_top)  * pl_h / src_h) : 0.0;
+    y = src_h > 0.0 ? ((y - src_top) * pl_h / src_h) : 0.0;
 
     return true;
 }

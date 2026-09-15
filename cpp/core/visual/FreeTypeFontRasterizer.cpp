@@ -225,7 +225,8 @@ FreeTypeFontRasterizer::GetBitmap(const tTVPFontAndCharacterData &font,
     if(data == nullptr) {
         // Missing glyphs must not abort the frame; return the same empty-glyph
         // fallback used by the non-FreeType rasterizer.
-        // 缺少字形时不能中断当前帧；返回与非 FreeType 光栅器一致的空字形降级结果。
+        // 缺少字形时不能中断当前帧；返回与非 FreeType
+        // 光栅器一致的空字形降级结果。
         return new tTVPCharacterData();
     }
 

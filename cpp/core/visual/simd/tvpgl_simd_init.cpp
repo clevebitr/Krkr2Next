@@ -13,67 +13,91 @@
 extern "C" {
 
 // Phase 1: Copy/Fill
-void TVPCopyOpaqueImage_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
+void TVPCopyOpaqueImage_hwy(tjs_uint32 *dest, const tjs_uint32 *src,
+                            tjs_int len);
 void TVPFillARGB_hwy(tjs_uint32 *dest, tjs_int len, tjs_uint32 value);
 
 // Phase 2: Alpha Blend (4 variants)
 void TVPAlphaBlend_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
-void TVPAlphaBlend_HDA_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
-void TVPAlphaBlend_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
-void TVPAlphaBlend_HDA_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
+void TVPAlphaBlend_HDA_hwy(tjs_uint32 *dest, const tjs_uint32 *src,
+                           tjs_int len);
+void TVPAlphaBlend_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len,
+                         tjs_int opa);
+void TVPAlphaBlend_HDA_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src,
+                             tjs_int len, tjs_int opa);
 
 // Phase 2: Add Blend (4 variants)
 void TVPAddBlend_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
 void TVPAddBlend_HDA_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
-void TVPAddBlend_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
-void TVPAddBlend_HDA_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
+void TVPAddBlend_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len,
+                       tjs_int opa);
+void TVPAddBlend_HDA_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len,
+                           tjs_int opa);
 
 // Phase 2: Sub Blend (4 variants)
 void TVPSubBlend_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
 void TVPSubBlend_HDA_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
-void TVPSubBlend_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
-void TVPSubBlend_HDA_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
+void TVPSubBlend_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len,
+                       tjs_int opa);
+void TVPSubBlend_HDA_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len,
+                           tjs_int opa);
 
 // Phase 2: Mul Blend (4 variants)
 void TVPMulBlend_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
 void TVPMulBlend_HDA_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
-void TVPMulBlend_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
-void TVPMulBlend_HDA_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
+void TVPMulBlend_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len,
+                       tjs_int opa);
+void TVPMulBlend_HDA_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len,
+                           tjs_int opa);
 
 // Phase 2: Screen Blend (4 variants)
 void TVPScreenBlend_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
-void TVPScreenBlend_HDA_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
-void TVPScreenBlend_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
-void TVPScreenBlend_HDA_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
+void TVPScreenBlend_HDA_hwy(tjs_uint32 *dest, const tjs_uint32 *src,
+                            tjs_int len);
+void TVPScreenBlend_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len,
+                          tjs_int opa);
+void TVPScreenBlend_HDA_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src,
+                              tjs_int len, tjs_int opa);
 
 // Phase 2: Const Alpha Blend (4 variants)
-void TVPConstAlphaBlend_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
-void TVPConstAlphaBlend_HDA_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
-void TVPConstAlphaBlend_d_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
-void TVPConstAlphaBlend_a_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
+void TVPConstAlphaBlend_hwy(tjs_uint32 *dest, const tjs_uint32 *src,
+                            tjs_int len, tjs_int opa);
+void TVPConstAlphaBlend_HDA_hwy(tjs_uint32 *dest, const tjs_uint32 *src,
+                                tjs_int len, tjs_int opa);
+void TVPConstAlphaBlend_d_hwy(tjs_uint32 *dest, const tjs_uint32 *src,
+                              tjs_int len, tjs_int opa);
+void TVPConstAlphaBlend_a_hwy(tjs_uint32 *dest, const tjs_uint32 *src,
+                              tjs_int len, tjs_int opa);
 
 // Phase 2: Additive Alpha Blend (6 variants)
-void TVPAdditiveAlphaBlend_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
-void TVPAdditiveAlphaBlend_HDA_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
-void TVPAdditiveAlphaBlend_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
-void TVPAdditiveAlphaBlend_HDA_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
-void TVPAdditiveAlphaBlend_a_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
-void TVPAdditiveAlphaBlend_ao_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len, tjs_int opa);
+void TVPAdditiveAlphaBlend_hwy(tjs_uint32 *dest, const tjs_uint32 *src,
+                               tjs_int len);
+void TVPAdditiveAlphaBlend_HDA_hwy(tjs_uint32 *dest, const tjs_uint32 *src,
+                                   tjs_int len);
+void TVPAdditiveAlphaBlend_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src,
+                                 tjs_int len, tjs_int opa);
+void TVPAdditiveAlphaBlend_HDA_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src,
+                                     tjs_int len, tjs_int opa);
+void TVPAdditiveAlphaBlend_a_hwy(tjs_uint32 *dest, const tjs_uint32 *src,
+                                 tjs_int len);
+void TVPAdditiveAlphaBlend_ao_hwy(tjs_uint32 *dest, const tjs_uint32 *src,
+                                  tjs_int len, tjs_int opa);
 
 // Phase 2: AlphaColorMat
-void TVPAlphaColorMat_hwy(tjs_uint32 *dest, const tjs_uint32 color, tjs_int len);
+void TVPAlphaColorMat_hwy(tjs_uint32 *dest, const tjs_uint32 color,
+                          tjs_int len);
 
 // Phase 3: Photoshop blend candidates. Declarations do not imply dispatch;
 // each function must pass the scalar comparison before registration.
 // 第三阶段：Photoshop 混合候选实现。声明不代表会派发，注册前必须通过标量对比。
-#define DECLARE_PS_BLEND_4V(Name)                                             \
-    void TVPPs##Name##Blend_hwy(tjs_uint32 *dest, const tjs_uint32 *src,      \
+#define DECLARE_PS_BLEND_4V(Name)                                              \
+    void TVPPs##Name##Blend_hwy(tjs_uint32 *dest, const tjs_uint32 *src,       \
                                 tjs_int len);                                  \
-    void TVPPs##Name##Blend_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src,    \
+    void TVPPs##Name##Blend_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src,     \
                                   tjs_int len, tjs_int opa);                   \
-    void TVPPs##Name##Blend_HDA_hwy(tjs_uint32 *dest, const tjs_uint32 *src,  \
+    void TVPPs##Name##Blend_HDA_hwy(tjs_uint32 *dest, const tjs_uint32 *src,   \
                                     tjs_int len);                              \
-    void TVPPs##Name##Blend_HDA_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src,\
+    void TVPPs##Name##Blend_HDA_o_hwy(tjs_uint32 *dest, const tjs_uint32 *src, \
                                       tjs_int len, tjs_int opa);
 
 DECLARE_PS_BLEND_4V(Alpha)
@@ -100,8 +124,10 @@ DECLARE_PS_BLEND_4V(Diff5)
 // Phase 4: Convert functions
 void TVPConvertAdditiveAlphaToAlpha_hwy(tjs_uint32 *buf, tjs_int len);
 void TVPConvertAlphaToAdditiveAlpha_hwy(tjs_uint32 *buf, tjs_int len);
-void TVPConvert24BitTo32Bit_hwy(tjs_uint32 *dest, const tjs_uint8 *buf, tjs_int len);
-void TVPConvert32BitTo24Bit_hwy(tjs_uint8 *dest, const tjs_uint8 *buf, tjs_int len);
+void TVPConvert24BitTo32Bit_hwy(tjs_uint32 *dest, const tjs_uint8 *buf,
+                                tjs_int len);
+void TVPConvert32BitTo24Bit_hwy(tjs_uint8 *dest, const tjs_uint8 *buf,
+                                tjs_int len);
 void TVPReverseRGB_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
 
 // Phase 4: Misc functions
@@ -115,68 +141,87 @@ void TVPCopyMask_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
 void TVPCopyColor_hwy(tjs_uint32 *dest, const tjs_uint32 *src, tjs_int len);
 void TVPFillColor_hwy(tjs_uint32 *dest, tjs_int len, tjs_uint32 color);
 void TVPFillMask_hwy(tjs_uint32 *dest, tjs_int len, tjs_uint32 mask);
-void TVPBindMaskToMain_hwy(tjs_uint32 *main, const tjs_uint8 *mask, tjs_int len);
-void TVPConstColorAlphaBlend_hwy(tjs_uint32 *dest, tjs_int len, tjs_uint32 color, tjs_int opa);
+void TVPBindMaskToMain_hwy(tjs_uint32 *main, const tjs_uint8 *mask,
+                           tjs_int len);
+void TVPConstColorAlphaBlend_hwy(tjs_uint32 *dest, tjs_int len,
+                                 tjs_uint32 color, tjs_int opa);
 void TVPRemoveConstOpacity_hwy(tjs_uint32 *dest, tjs_int len, tjs_int strength);
 
 // Phase 4: Blur functions
-void TVPAddSubVertSum16_hwy(tjs_uint16 *dest, const tjs_uint32 *addline, const tjs_uint32 *subline, tjs_int len);
-void TVPAddSubVertSum16_d_hwy(tjs_uint16 *dest, const tjs_uint32 *addline, const tjs_uint32 *subline, tjs_int len);
-void TVPAddSubVertSum32_hwy(tjs_uint32 *dest, const tjs_uint32 *addline, const tjs_uint32 *subline, tjs_int len);
-void TVPAddSubVertSum32_d_hwy(tjs_uint32 *dest, const tjs_uint32 *addline, const tjs_uint32 *subline, tjs_int len);
-void TVPDoBoxBlurAvg16_hwy(tjs_uint32 *dest, tjs_uint16 *sum, const tjs_uint16 *add, const tjs_uint16 *sub, tjs_int n, tjs_int len);
-void TVPDoBoxBlurAvg16_d_hwy(tjs_uint32 *dest, tjs_uint16 *sum, const tjs_uint16 *add, const tjs_uint16 *sub, tjs_int n, tjs_int len);
-void TVPDoBoxBlurAvg32_hwy(tjs_uint32 *dest, tjs_uint32 *sum, const tjs_uint32 *add, const tjs_uint32 *sub, tjs_int n, tjs_int len);
-void TVPDoBoxBlurAvg32_d_hwy(tjs_uint32 *dest, tjs_uint32 *sum, const tjs_uint32 *add, const tjs_uint32 *sub, tjs_int n, tjs_int len);
-void TVPChBlurMulCopy65_hwy(tjs_uint8 *dest, const tjs_uint8 *src, tjs_int len, tjs_int level);
-void TVPChBlurAddMulCopy65_hwy(tjs_uint8 *dest, const tjs_uint8 *src, tjs_int len, tjs_int level);
-void TVPChBlurMulCopy_hwy(tjs_uint8 *dest, const tjs_uint8 *src, tjs_int len, tjs_int level);
-void TVPChBlurAddMulCopy_hwy(tjs_uint8 *dest, const tjs_uint8 *src, tjs_int len, tjs_int level);
+void TVPAddSubVertSum16_hwy(tjs_uint16 *dest, const tjs_uint32 *addline,
+                            const tjs_uint32 *subline, tjs_int len);
+void TVPAddSubVertSum16_d_hwy(tjs_uint16 *dest, const tjs_uint32 *addline,
+                              const tjs_uint32 *subline, tjs_int len);
+void TVPAddSubVertSum32_hwy(tjs_uint32 *dest, const tjs_uint32 *addline,
+                            const tjs_uint32 *subline, tjs_int len);
+void TVPAddSubVertSum32_d_hwy(tjs_uint32 *dest, const tjs_uint32 *addline,
+                              const tjs_uint32 *subline, tjs_int len);
+void TVPDoBoxBlurAvg16_hwy(tjs_uint32 *dest, tjs_uint16 *sum,
+                           const tjs_uint16 *add, const tjs_uint16 *sub,
+                           tjs_int n, tjs_int len);
+void TVPDoBoxBlurAvg16_d_hwy(tjs_uint32 *dest, tjs_uint16 *sum,
+                             const tjs_uint16 *add, const tjs_uint16 *sub,
+                             tjs_int n, tjs_int len);
+void TVPDoBoxBlurAvg32_hwy(tjs_uint32 *dest, tjs_uint32 *sum,
+                           const tjs_uint32 *add, const tjs_uint32 *sub,
+                           tjs_int n, tjs_int len);
+void TVPDoBoxBlurAvg32_d_hwy(tjs_uint32 *dest, tjs_uint32 *sum,
+                             const tjs_uint32 *add, const tjs_uint32 *sub,
+                             tjs_int n, tjs_int len);
+void TVPChBlurMulCopy65_hwy(tjs_uint8 *dest, const tjs_uint8 *src, tjs_int len,
+                            tjs_int level);
+void TVPChBlurAddMulCopy65_hwy(tjs_uint8 *dest, const tjs_uint8 *src,
+                               tjs_int len, tjs_int level);
+void TVPChBlurMulCopy_hwy(tjs_uint8 *dest, const tjs_uint8 *src, tjs_int len,
+                          tjs_int level);
+void TVPChBlurAddMulCopy_hwy(tjs_uint8 *dest, const tjs_uint8 *src, tjs_int len,
+                             tjs_int level);
 
-}  // extern "C"
+} // extern "C"
 
 void TVPGL_SIMD_Init() {
     // =====================================================================
     // Phase 1: Copy/Fill operations
     // =====================================================================
     TVPCopyOpaqueImage = TVPCopyOpaqueImage_hwy;
-    TVPFillARGB        = TVPFillARGB_hwy;
-    TVPFillARGB_NC     = TVPFillARGB_hwy;
+    TVPFillARGB = TVPFillARGB_hwy;
+    TVPFillARGB_NC = TVPFillARGB_hwy;
 
     // =====================================================================
     // Phase 2: Alpha Blend (fixed: unsigned u16 arithmetic)
     // =====================================================================
-    TVPAlphaBlend       = TVPAlphaBlend_hwy;
-    TVPAlphaBlend_HDA   = TVPAlphaBlend_HDA_hwy;
-    TVPAlphaBlend_o     = TVPAlphaBlend_o_hwy;
+    TVPAlphaBlend = TVPAlphaBlend_hwy;
+    TVPAlphaBlend_HDA = TVPAlphaBlend_HDA_hwy;
+    TVPAlphaBlend_o = TVPAlphaBlend_o_hwy;
     TVPAlphaBlend_HDA_o = TVPAlphaBlend_HDA_o_hwy;
 
     // Phase 2: Add/Sub/Mul/Screen Blend (safe - uses SaturatedAdd/Sub/Mul)
-    TVPAddBlend       = TVPAddBlend_hwy;
-    TVPAddBlend_HDA   = TVPAddBlend_HDA_hwy;
-    TVPAddBlend_o     = TVPAddBlend_o_hwy;
+    TVPAddBlend = TVPAddBlend_hwy;
+    TVPAddBlend_HDA = TVPAddBlend_HDA_hwy;
+    TVPAddBlend_o = TVPAddBlend_o_hwy;
     TVPAddBlend_HDA_o = TVPAddBlend_HDA_o_hwy;
 
-    TVPSubBlend       = TVPSubBlend_hwy;
-    TVPSubBlend_HDA   = TVPSubBlend_HDA_hwy;
-    // P3 已修：SIMD SubBlend_o 强制 src alpha=0xFF（与标量一致），饱和减后 alpha
-    // 保留 dst 原值。out/p34_check/check.c 对拍 30M 全一致。
-    TVPSubBlend_o     = TVPSubBlend_o_hwy;
+    TVPSubBlend = TVPSubBlend_hwy;
+    TVPSubBlend_HDA = TVPSubBlend_HDA_hwy;
+    // P3 已修：SIMD SubBlend_o 强制 src alpha=0xFF（与标量一致），饱和减后
+    // alpha 保留 dst 原值。out/p34_check/check.c 对拍 30M 全一致。
+    TVPSubBlend_o = TVPSubBlend_o_hwy;
     TVPSubBlend_HDA_o = TVPSubBlend_HDA_o_hwy;
 
-    TVPMulBlend       = TVPMulBlend_hwy;
-    TVPMulBlend_HDA   = TVPMulBlend_HDA_hwy;
-    TVPMulBlend_o     = TVPMulBlend_o_hwy;
+    TVPMulBlend = TVPMulBlend_hwy;
+    TVPMulBlend_HDA = TVPMulBlend_HDA_hwy;
+    TVPMulBlend_o = TVPMulBlend_o_hwy;
     TVPMulBlend_HDA_o = TVPMulBlend_HDA_o_hwy;
 
-    // P4 已修：SIMD ScreenBlend base 强制 alpha=0xFF（与标量一致）。对拍 30M 全一致。
-    TVPScreenBlend       = TVPScreenBlend_hwy;
-    TVPScreenBlend_HDA   = TVPScreenBlend_HDA_hwy;
-    TVPScreenBlend_o     = TVPScreenBlend_o_hwy;
+    // P4 已修：SIMD ScreenBlend base 强制 alpha=0xFF（与标量一致）。对拍 30M
+    // 全一致。
+    TVPScreenBlend = TVPScreenBlend_hwy;
+    TVPScreenBlend_HDA = TVPScreenBlend_HDA_hwy;
+    TVPScreenBlend_o = TVPScreenBlend_o_hwy;
     TVPScreenBlend_HDA_o = TVPScreenBlend_HDA_o_hwy;
 
     // Phase 2: Const Alpha Blend (only truly SIMD variants)
-    TVPConstAlphaBlend     = TVPConstAlphaBlend_hwy;
+    TVPConstAlphaBlend = TVPConstAlphaBlend_hwy;
     TVPConstAlphaBlend_HDA = TVPConstAlphaBlend_HDA_hwy;
     // NOTE: _d and _a variants are pure scalar with table lookups -
     // keep original C (Duff's device optimized) for better performance
@@ -184,9 +229,9 @@ void TVPGL_SIMD_Init() {
     // TVPConstAlphaBlend_a   = TVPConstAlphaBlend_a_hwy;
 
     // Phase 2: Additive Alpha Blend (truly SIMD variants only)
-    TVPAdditiveAlphaBlend       = TVPAdditiveAlphaBlend_hwy;
-    TVPAdditiveAlphaBlend_HDA   = TVPAdditiveAlphaBlend_HDA_hwy;
-    TVPAdditiveAlphaBlend_o     = TVPAdditiveAlphaBlend_o_hwy;
+    TVPAdditiveAlphaBlend = TVPAdditiveAlphaBlend_hwy;
+    TVPAdditiveAlphaBlend_HDA = TVPAdditiveAlphaBlend_HDA_hwy;
+    TVPAdditiveAlphaBlend_o = TVPAdditiveAlphaBlend_o_hwy;
     TVPAdditiveAlphaBlend_HDA_o = TVPAdditiveAlphaBlend_HDA_o_hwy;
     // NOTE: _a and _ao are pure scalar - keep original C
     // TVPAdditiveAlphaBlend_a     = TVPAdditiveAlphaBlend_a_hwy;
@@ -227,7 +272,7 @@ void TVPGL_SIMD_Init() {
     // NOTE: 24/32 bit convert are pure scalar - keep C
     // TVPConvert24BitTo32Bit         = TVPConvert24BitTo32Bit_hwy;
     // TVPConvert32BitTo24Bit         = TVPConvert32BitTo24Bit_hwy;
-    TVPReverseRGB                  = TVPReverseRGB_hwy;
+    TVPReverseRGB = TVPReverseRGB_hwy;
 
     // =====================================================================
     // Phase 4: Misc functions (only truly SIMD ones)
@@ -235,15 +280,15 @@ void TVPGL_SIMD_Init() {
     // NOTE: DoGrayScale, Reverse32/8, BindMaskToMain, RemoveConstOpacity
     // are pure scalar loops - keep original C (Duff's device optimized)
     // TVPDoGrayScale         = TVPDoGrayScale_hwy;
-    TVPSwapLine32          = TVPSwapLine32_hwy;
-    TVPSwapLine8           = TVPSwapLine8_hwy;
+    TVPSwapLine32 = TVPSwapLine32_hwy;
+    TVPSwapLine8 = TVPSwapLine8_hwy;
     // TVPReverse32           = TVPReverse32_hwy;
     // TVPReverse8            = TVPReverse8_hwy;
-    TVPMakeAlphaFromKey    = TVPMakeAlphaFromKey_hwy;
-    TVPCopyMask            = TVPCopyMask_hwy;
-    TVPCopyColor           = TVPCopyColor_hwy;
-    TVPFillColor           = TVPFillColor_hwy;
-    TVPFillMask            = TVPFillMask_hwy;
+    TVPMakeAlphaFromKey = TVPMakeAlphaFromKey_hwy;
+    TVPCopyMask = TVPCopyMask_hwy;
+    TVPCopyColor = TVPCopyColor_hwy;
+    TVPFillColor = TVPFillColor_hwy;
+    TVPFillMask = TVPFillMask_hwy;
     // TVPBindMaskToMain      = TVPBindMaskToMain_hwy;
     TVPConstColorAlphaBlend = TVPConstColorAlphaBlend_hwy;
     // TVPRemoveConstOpacity  = TVPRemoveConstOpacity_hwy;
@@ -253,10 +298,10 @@ void TVPGL_SIMD_Init() {
     // Only AddSubVertSum has true SIMD. DoBoxBlurAvg and ChBlur* are
     // pure scalar - keep original C for better performance.
     // =====================================================================
-    TVPAddSubVertSum16     = TVPAddSubVertSum16_hwy;
-    TVPAddSubVertSum16_d   = TVPAddSubVertSum16_d_hwy;
-    TVPAddSubVertSum32     = TVPAddSubVertSum32_hwy;
-    TVPAddSubVertSum32_d   = TVPAddSubVertSum32_d_hwy;
+    TVPAddSubVertSum16 = TVPAddSubVertSum16_hwy;
+    TVPAddSubVertSum16_d = TVPAddSubVertSum16_d_hwy;
+    TVPAddSubVertSum32 = TVPAddSubVertSum32_hwy;
+    TVPAddSubVertSum32_d = TVPAddSubVertSum32_d_hwy;
     // NOTE: DoBoxBlurAvg* are sequential scalar - keep original C
     // TVPDoBoxBlurAvg16      = TVPDoBoxBlurAvg16_hwy;
     // TVPDoBoxBlurAvg16_d    = TVPDoBoxBlurAvg16_d_hwy;

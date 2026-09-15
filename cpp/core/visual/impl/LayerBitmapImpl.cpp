@@ -140,7 +140,8 @@ void TVPMapPrerenderedFont(const tTVPFont &font, const ttstr &storage) {
     // Yuzusoft option boxes map e.g. "font/スキップ.tpf"; a case/path mismatch
     // on Android could map a WRONG-size .tpf (→ option text smaller/offset).
     // 记录游戏把哪个 .tpf 映射到哪个 face（选项框常映射如 "font/スキップ.tpf"；
-    // Android 上大小写/路径差异可能映射到错误字号的 .tpf → 选项文字偏小/偏移）。
+    // Android 上大小写/路径差异可能映射到错误字号的 .tpf →
+    // 选项文字偏小/偏移）。
     if(auto tl = spdlog::get("core")) {
         tl->info("[TpfMap] face='{}' h={} storage='{}' -> '{}'",
                  font.Face.AsNarrowStdString(), font.Height,
@@ -311,16 +312,16 @@ static tTVPCharacterData *TVPGetCharacter(const tTVPFontAndCharacterData &font,
     // hit/miss + metrics per face/char confirms whether a face is using .tpf
     // glyphs and how far off the vertical offset is.
     // [预渲染字体探针] .tpf 字形是否真的命中，其内置度量与请求字号/回退栅格化器
-    // ascent 的差异。.tpf 字形是按**原始字体**（如 MS ゴシック，ascent≈0.86×字号）
-    // 预烘焙的；定位用的 aofsy 却是**回退字体**的 ascent（Noto CJK≈1.16×字号）。
+    // ascent 的差异。.tpf 字形是按**原始字体**（如 MS
+    // ゴシック，ascent≈0.86×字号） 预烘焙的；定位用的 aofsy 却是**回退字体**的
+    // ascent（Noto CJK≈1.16×字号）。
     // 差异过大时基线被压下去、框底被裁（选项框"偏左上+只见上半"）。按 face/字符
     // 打印命中与否与度量，确认哪些 face 在走 .tpf 及垂直偏移差多少。
     {
         static std::set<std::string> sProbedPrerenderKeys;
         std::string pkey = font.Font.Face.AsNarrowStdString() + "|" +
-                           std::to_string(font.Font.Height) + "|" +
-                           std::to_string(font.Character) + "|" +
-                           (pitem ? "hit" : "miss");
+            std::to_string(font.Font.Height) + "|" +
+            std::to_string(font.Character) + "|" + (pitem ? "hit" : "miss");
         if(sProbedPrerenderKeys.insert(pkey).second) {
             if(auto tl = spdlog::get("core")) {
                 if(pitem) {
@@ -333,7 +334,8 @@ static tTVPCharacterData *TVPGetCharacter(const tTVPFontAndCharacterData &font,
                         pitem->IncX, pitem->IncY, aofsx, aofsy);
                 } else if(pfont) {
                     tl->info(
-                        "[TpfProbe] MISS face='{}' h={} char=U+{:04X} aofs=({},{})",
+                        "[TpfProbe] MISS face='{}' h={} char=U+{:04X} "
+                        "aofs=({},{})",
                         font.Font.Face.AsNarrowStdString(), font.Font.Height,
                         static_cast<unsigned>(font.Character), aofsx, aofsy);
                 }
@@ -756,7 +758,8 @@ bool tTVPNativeBaseBitmap::IsIndependent() const {
 }
 //---------------------------------------------------------------------------
 void tTVPNativeBaseBitmap::CompactGPUCache() {
-    if(Bitmap) Bitmap->CompactGPUCache();
+    if(Bitmap)
+        Bitmap->CompactGPUCache();
 }
 #if 0
 //---------------------------------------------------------------------------
@@ -1011,19 +1014,24 @@ bool tTVPNativeBaseBitmap::InternalDrawText(tTVPCharacterData *data, tjs_int x,
         static std::set<std::string> sProbedEmptyLayouts;
         const std::string layoutKey = Font.Face.AsNarrowStdString() + "|" +
             std::to_string(Font.Height) + "|" +
-            std::to_string(dtdata->rect.left) + ":" + std::to_string(dtdata->rect.top) + "|" +
-            std::to_string(dtdata->rect.right) + ":" + std::to_string(dtdata->rect.bottom) + "|" +
-            std::to_string(glyphRect.left) + ":" + std::to_string(glyphRect.top) + ":" +
-            std::to_string(glyphRect.right) + ":" + std::to_string(glyphRect.bottom);
+            std::to_string(dtdata->rect.left) + ":" +
+            std::to_string(dtdata->rect.top) + "|" +
+            std::to_string(dtdata->rect.right) + ":" +
+            std::to_string(dtdata->rect.bottom) + "|" +
+            std::to_string(glyphRect.left) + ":" +
+            std::to_string(glyphRect.top) + ":" +
+            std::to_string(glyphRect.right) + ":" +
+            std::to_string(glyphRect.bottom);
         if(sProbedEmptyLayouts.insert(layoutKey).second) {
             if(auto logger = spdlog::get("core")) {
-                logger->info("[TextLayoutProbe] face='{}' height={} prerender={} "
-                             "request=({},{}) glyph=({},{},{},{}) clipped=empty "
-                             "source=empty ascent=({},{})",
-                             Font.Face.AsNarrowStdString(), Font.Height,
-                             PrerenderedFont ? 1 : 0, x, y,
-                             glyphRect.left, glyphRect.top, glyphRect.right, glyphRect.bottom,
-                             AscentOfsX, AscentOfsY);
+                logger->info(
+                    "[TextLayoutProbe] face='{}' height={} prerender={} "
+                    "request=({},{}) glyph=({},{},{},{}) clipped=empty "
+                    "source=empty ascent=({},{})",
+                    Font.Face.AsNarrowStdString(), Font.Height,
+                    PrerenderedFont ? 1 : 0, x, y, glyphRect.left,
+                    glyphRect.top, glyphRect.right, glyphRect.bottom,
+                    AscentOfsX, AscentOfsY);
             }
         }
 #endif
@@ -1045,19 +1053,24 @@ bool tTVPNativeBaseBitmap::InternalDrawText(tTVPCharacterData *data, tjs_int x,
         static std::set<std::string> sProbedVerticalEmptyLayouts;
         const std::string layoutKey = Font.Face.AsNarrowStdString() + "|" +
             std::to_string(Font.Height) + "|" +
-            std::to_string(dtdata->rect.left) + ":" + std::to_string(dtdata->rect.top) + "|" +
-            std::to_string(dtdata->rect.right) + ":" + std::to_string(dtdata->rect.bottom) + "|" +
-            std::to_string(glyphRect.left) + ":" + std::to_string(glyphRect.top) + ":" +
-            std::to_string(glyphRect.right) + ":" + std::to_string(glyphRect.bottom);
+            std::to_string(dtdata->rect.left) + ":" +
+            std::to_string(dtdata->rect.top) + "|" +
+            std::to_string(dtdata->rect.right) + ":" +
+            std::to_string(dtdata->rect.bottom) + "|" +
+            std::to_string(glyphRect.left) + ":" +
+            std::to_string(glyphRect.top) + ":" +
+            std::to_string(glyphRect.right) + ":" +
+            std::to_string(glyphRect.bottom);
         if(sProbedVerticalEmptyLayouts.insert(layoutKey).second) {
             if(auto logger = spdlog::get("core")) {
-                logger->info("[TextLayoutProbe] face='{}' height={} prerender={} "
-                             "request=({},{}) glyph=({},{},{},{}) clipped=empty "
-                             "source=empty ascent=({},{})",
-                             Font.Face.AsNarrowStdString(), Font.Height,
-                             PrerenderedFont ? 1 : 0, x, y,
-                             glyphRect.left, glyphRect.top, glyphRect.right, glyphRect.bottom,
-                             AscentOfsX, AscentOfsY);
+                logger->info(
+                    "[TextLayoutProbe] face='{}' height={} prerender={} "
+                    "request=({},{}) glyph=({},{},{},{}) clipped=empty "
+                    "source=empty ascent=({},{})",
+                    Font.Face.AsNarrowStdString(), Font.Height,
+                    PrerenderedFont ? 1 : 0, x, y, glyphRect.left,
+                    glyphRect.top, glyphRect.right, glyphRect.bottom,
+                    AscentOfsX, AscentOfsY);
             }
         }
 #endif
@@ -1069,8 +1082,10 @@ bool tTVPNativeBaseBitmap::InternalDrawText(tTVPCharacterData *data, tjs_int x,
         static std::set<std::string> sProbedLayouts;
         const std::string layoutKey = Font.Face.AsNarrowStdString() + "|" +
             std::to_string(Font.Height) + "|" +
-            std::to_string(dtdata->rect.left) + ":" + std::to_string(dtdata->rect.top) + "|" +
-            std::to_string(dtdata->rect.right) + ":" + std::to_string(dtdata->rect.bottom);
+            std::to_string(dtdata->rect.left) + ":" +
+            std::to_string(dtdata->rect.top) + "|" +
+            std::to_string(dtdata->rect.right) + ":" +
+            std::to_string(dtdata->rect.bottom);
         if(sProbedLayouts.insert(layoutKey).second) {
             if(auto logger = spdlog::get("core")) {
                 logger->info(
@@ -1078,8 +1093,8 @@ bool tTVPNativeBaseBitmap::InternalDrawText(tTVPCharacterData *data, tjs_int x,
                     "request=({},{}) glyph=({},{},{},{}) clipped=({},{},{},{}) "
                     "source=({},{},{},{}) ascent=({},{})",
                     Font.Face.AsNarrowStdString(), Font.Height,
-                    PrerenderedFont ? 1 : 0, x, y,
-                    glyphRect.left, glyphRect.top, glyphRect.right, glyphRect.bottom,
+                    PrerenderedFont ? 1 : 0, x, y, glyphRect.left,
+                    glyphRect.top, glyphRect.right, glyphRect.bottom,
                     drect.left, drect.top, drect.right, drect.bottom,
                     srect.left, srect.top, srect.right, srect.bottom,
                     AscentOfsX, AscentOfsY);
@@ -1283,22 +1298,25 @@ void tTVPNativeBaseBitmap::DrawTextSingle(
     ApplyFont();
 
 #if defined(KRKR_RENDER_PROBE)
-    // [text probe] single-char draw, mirror of the multi-char probe above (deduped).
-    // [文字探针] 单字符绘制，与上文多字符探针对应（去重）。
+    // [text probe] single-char draw, mirror of the multi-char probe above
+    // (deduped). [文字探针] 单字符绘制，与上文多字符探针对应（去重）。
     {
         static std::set<std::string> sProbedSingleFaces;
-        std::string fkey = Font.Face.AsNarrowStdString() + "|" +
-                           std::to_string(Font.Height);
+        std::string fkey =
+            Font.Face.AsNarrowStdString() + "|" + std::to_string(Font.Height);
         if(sProbedSingleFaces.insert(fkey).second) {
             if(auto tl = spdlog::get("core")) {
                 std::string ttext = text.AsNarrowStdString();
-                if (ttext.size() > 16) ttext = ttext.substr(0, 16);
-                tl->info("[TextProbe] single destRect=({},{},{},{}) xy=({},{}) face='{}' "
+                if(ttext.size() > 16)
+                    ttext = ttext.substr(0, 16);
+                tl->info("[TextProbe] single destRect=({},{},{},{}) xy=({},{}) "
+                         "face='{}' "
                          "height={} ascentOfs=({},{}) prerender={} text='{}'",
-                         destrect.left, destrect.top, destrect.right, destrect.bottom,
-                         x, y, Font.Face.AsNarrowStdString(), Font.Height,
-                         AscentOfsX, AscentOfsY,
-                         PrerenderedFont ? static_cast<void *>(PrerenderedFont) : nullptr,
+                         destrect.left, destrect.top, destrect.right,
+                         destrect.bottom, x, y, Font.Face.AsNarrowStdString(),
+                         Font.Height, AscentOfsX, AscentOfsY,
+                         PrerenderedFont ? static_cast<void *>(PrerenderedFont)
+                                         : nullptr,
                          ttext);
             }
         }
@@ -1480,22 +1498,25 @@ void tTVPNativeBaseBitmap::DrawTextMultiple(
     // [text probe] Option/menu text sizing & placement diagnostics (deduped per
     // face so it does not spam for every character). See FreeTypeFontRasterizer
     // FontProbe for glyph metrics.
-    // [文字探针] 选项/菜单文字的尺寸与定位诊断（按 face 去重，避免逐字符刷屏）。
-    // 字形度量见 FreeTypeFontRasterizer 的 FontProbe。
+    // [文字探针] 选项/菜单文字的尺寸与定位诊断（按 face
+    // 去重，避免逐字符刷屏）。 字形度量见 FreeTypeFontRasterizer 的 FontProbe。
     {
         static std::set<std::string> sProbedFaces;
-        std::string fkey = Font.Face.AsNarrowStdString() + "|" +
-                           std::to_string(Font.Height);
+        std::string fkey =
+            Font.Face.AsNarrowStdString() + "|" + std::to_string(Font.Height);
         if(sProbedFaces.insert(fkey).second) {
             if(auto tl = spdlog::get("core")) {
                 std::string ttext = text.AsNarrowStdString();
-                if (ttext.size() > 24) ttext = ttext.substr(0, 24);
-                tl->info("[TextProbe] multi destRect=({},{},{},{}) xy=({},{}) face='{}' "
+                if(ttext.size() > 24)
+                    ttext = ttext.substr(0, 24);
+                tl->info("[TextProbe] multi destRect=({},{},{},{}) xy=({},{}) "
+                         "face='{}' "
                          "height={} ascentOfs=({},{}) prerender={} text='{}'",
-                         destrect.left, destrect.top, destrect.right, destrect.bottom,
-                         x, y, Font.Face.AsNarrowStdString(), Font.Height,
-                         AscentOfsX, AscentOfsY,
-                         PrerenderedFont ? static_cast<void *>(PrerenderedFont) : nullptr,
+                         destrect.left, destrect.top, destrect.right,
+                         destrect.bottom, x, y, Font.Face.AsNarrowStdString(),
+                         Font.Height, AscentOfsX, AscentOfsY,
+                         PrerenderedFont ? static_cast<void *>(PrerenderedFont)
+                                         : nullptr,
                          ttext);
             }
         }

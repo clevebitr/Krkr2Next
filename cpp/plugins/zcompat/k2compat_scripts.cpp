@@ -2,9 +2,9 @@
 // k2compat.dll (Krkr2Compat) 内置 TJS 脚本
 //---------------------------------------------------------------------------
 // 来源: https://github.com/krkrz/Krkr2Compat (data/k2compat/*.tjs, GPL-2.0)
-// 真实实现: k2compat.dll 在 krkrz 中即把上述纯 TJS 兼容层打进 DLL, link 时执行；
-// 这里等价内嵌, Plugins.link("k2compat.dll") 时按依赖序执行。
-// 注: deskinfo/scrinfo 对应 K2COMPAT_SPEC_* 条件编译, 默认关闭, 不内嵌。
+// 真实实现: k2compat.dll 在 krkrz 中即把上述纯 TJS 兼容层打进 DLL, link
+// 时执行； 这里等价内嵌, Plugins.link("k2compat.dll") 时按依赖序执行。 注:
+// deskinfo/scrinfo 对应 K2COMPAT_SPEC_* 条件编译, 默认关闭, 不内嵌。
 //---------------------------------------------------------------------------
 #include "tjsCommHead.h"
 #include "tjsString.h"
@@ -14,7 +14,8 @@
 
 namespace {
 
-const char *k2compat_main_tjs = R"KRKRZ(//=============================================================
+    const char *k2compat_main_tjs =
+        R"KRKRZ(//=============================================================
 // k2compat - 吉里吉里２専用クラス／関数の吉里吉里Ｚ向け互換実装
 
 //-------------------------------------------------------------
@@ -371,7 +372,8 @@ with (global.Krkr2CompatUtils = new Krkr2CompatUtils()) // replace singleton ins
 }
 )KRKRZ";
 
-const char *k2compat_win32dialog_tjs = R"KRKRZ(Plugins.link("win32dialog.dll") if (typeof global.WIN32Dialog == "undefined");
+    const char *k2compat_win32dialog_tjs =
+        R"KRKRZ(Plugins.link("win32dialog.dll") if (typeof global.WIN32Dialog == "undefined");
 
 class WIN32DialogEX extends WIN32Dialog {
 	var allBitmaps = [];
@@ -1177,7 +1179,8 @@ class WIN32GenericDialogEX extends WIN32DialogEX
 }
 )KRKRZ";
 
-const char *k2compat_modeless_tjs = R"KRKRZ(Krkr2CompatUtils.requireWIN32Dialog();
+    const char *k2compat_modeless_tjs =
+        R"KRKRZ(Krkr2CompatUtils.requireWIN32Dialog();
 
 //=============================================================
 
@@ -1423,7 +1426,8 @@ class        WIN32ModelessDialogEX      extends WIN32DialogEX {
 
 )KRKRZ";
 
-const char *k2compat_padcommon_tjs = R"KRKRZ(Krkr2CompatUtils.require("modeless");
+    const char *k2compat_padcommon_tjs =
+        R"KRKRZ(Krkr2CompatUtils.require("modeless");
 
 //=============================================================
 
@@ -1782,7 +1786,8 @@ class        DebugPadCompatDialog extends TextContentModelessDialog {
 }
 )KRKRZ";
 
-const char *k2compat_pad_tjs = R"KRKRZ(Krkr2CompatUtils.require("padcommon");
+    const char *k2compat_pad_tjs =
+        R"KRKRZ(Krkr2CompatUtils.require("padcommon");
 
 class        Pad extends DebugPadCompatDialog{
 	function Pad { super.DebugPadCompatDialog(); }
@@ -1797,7 +1802,8 @@ class        DebugScriptEditorCompatPad extends DebugPadCompatDialog{
 }
 )KRKRZ";
 
-const char *k2compat_console_tjs = R"KRKRZ(Krkr2CompatUtils.require("padcommon");
+    const char *k2compat_console_tjs =
+        R"KRKRZ(Krkr2CompatUtils.require("padcommon");
 
 class        DebugConsoleCompatDialog extends DebugPadCompatDialog {
 	function DebugConsoleCompatDialog { super.DebugPadCompatDialog();
@@ -2014,7 +2020,8 @@ class        DebugConsoleCompatDialog extends DebugPadCompatDialog {
 }
 )KRKRZ";
 
-const char *k2compat_inputstring_tjs = R"KRKRZ(// System.inputStringの互換実装
+    const char *k2compat_inputstring_tjs =
+        R"KRKRZ(// System.inputStringの互換実装
 
 Krkr2CompatUtils.requireWIN32Dialog();
 
@@ -2050,7 +2057,8 @@ class        _System_inputString_Dialog extends WIN32GenericDialogEX {
 
 )KRKRZ";
 
-const char *k2compat_fontselect_tjs = R"KRKRZ(Krkr2CompatUtils.requireWIN32Dialog();
+    const char *k2compat_fontselect_tjs =
+        R"KRKRZ(Krkr2CompatUtils.requireWIN32Dialog();
 
 class FontSelectDialog extends WIN32GenericDialogEX
 {
@@ -2281,17 +2289,20 @@ class FontSelectDialog extends WIN32GenericDialogEX
 } incontextof global;
 )KRKRZ";
 
-struct K2CompatScriptEntry { const char *name; const char *text; };
-const K2CompatScriptEntry k2compat_scripts[] = {
-    { "k2compat/k2compat.tjs", k2compat_main_tjs },
-    { "k2compat/win32dialog.tjs", k2compat_win32dialog_tjs },
-    { "k2compat/k2compat_modeless.tjs", k2compat_modeless_tjs },
-    { "k2compat/k2compat_padcommon.tjs", k2compat_padcommon_tjs },
-    { "k2compat/k2compat_pad.tjs", k2compat_pad_tjs },
-    { "k2compat/k2compat_console.tjs", k2compat_console_tjs },
-    { "k2compat/k2compat_inputstring.tjs", k2compat_inputstring_tjs },
-    { "k2compat/k2compat_fontselect.tjs", k2compat_fontselect_tjs },
-};
+    struct K2CompatScriptEntry {
+        const char *name;
+        const char *text;
+    };
+    const K2CompatScriptEntry k2compat_scripts[] = {
+        { "k2compat/k2compat.tjs", k2compat_main_tjs },
+        { "k2compat/win32dialog.tjs", k2compat_win32dialog_tjs },
+        { "k2compat/k2compat_modeless.tjs", k2compat_modeless_tjs },
+        { "k2compat/k2compat_padcommon.tjs", k2compat_padcommon_tjs },
+        { "k2compat/k2compat_pad.tjs", k2compat_pad_tjs },
+        { "k2compat/k2compat_console.tjs", k2compat_console_tjs },
+        { "k2compat/k2compat_inputstring.tjs", k2compat_inputstring_tjs },
+        { "k2compat/k2compat_fontselect.tjs", k2compat_fontselect_tjs },
+    };
 
 } // namespace
 
@@ -2301,9 +2312,13 @@ void TVPResetK2CompatInstalledForRestart() { s_k2compat_installed = false; }
 
 // 把 UTF-8 脚本转宽字符后经 tTJS::ExecScript 执行（name 供报错定位）。
 static void ExecUtf8Script(tTJS *tjs, const char *utf8, const char *name) {
-    if(!utf8 || !*utf8) return;
+    if(!utf8 || !*utf8)
+        return;
     tjs_int len = TVPUtf8ToWideCharString(utf8, nullptr);
-    if(len < 0) { spdlog::error("K2Compat: invalid UTF-8 in {}", name); return; }
+    if(len < 0) {
+        spdlog::error("K2Compat: invalid UTF-8 in {}", name);
+        return;
+    }
     std::vector<tjs_char> buf(static_cast<size_t>(len) + 1);
     TVPUtf8ToWideCharString(utf8, buf.data());
     buf[len] = 0;
@@ -2313,25 +2328,30 @@ static void ExecUtf8Script(tTJS *tjs, const char *utf8, const char *name) {
 }
 
 void TVPInstallK2CompatScripts() {
-    if(s_k2compat_installed) return;
+    if(s_k2compat_installed)
+        return;
     s_k2compat_installed = true;
     tTJS *tjs = TVPGetScriptEngine();
-    if(!tjs) { spdlog::warn("K2Compat: script engine not ready, skip install"); return; }
+    if(!tjs) {
+        spdlog::warn("K2Compat: script engine not ready, skip install");
+        return;
+    }
     // 1. 主脚本: 定义 Krkr2CompatUtils 单例 + 注册 dummy 属性/延迟加载
     ExecUtf8Script(tjs, k2compat_main_tjs, "k2compat/k2compat.tjs");
     // 2. 预置 scriptLoaded: 子脚本顶层 require() 因此命中跳过, 避免依赖
     //    Scripts.execStorage 从存储读取（脚本已内嵌, 存储中不存在）
-    static const char *preseed =
-        "with (global.Krkr2CompatUtils) { "
-        "scriptLoaded[\"modeless\"]=true; "
-        "scriptLoaded[\"padcommon\"]=true; "
-        "scriptLoaded[\"pad\"]=true; "
-        "scriptLoaded[\"console\"]=true; "
-        "scriptLoaded[\"inputstring\"]=true; "
-        "scriptLoaded[\"fontselect\"]=true; }\n";
+    static const char *preseed = "with (global.Krkr2CompatUtils) { "
+                                 "scriptLoaded[\"modeless\"]=true; "
+                                 "scriptLoaded[\"padcommon\"]=true; "
+                                 "scriptLoaded[\"pad\"]=true; "
+                                 "scriptLoaded[\"console\"]=true; "
+                                 "scriptLoaded[\"inputstring\"]=true; "
+                                 "scriptLoaded[\"fontselect\"]=true; }\n";
     ExecUtf8Script(tjs, preseed, "k2compat/preseed");
-    // 3. 按依赖序执行子模块脚本（win32dialog→modeless→padcommon→{pad,console,inputstring,fontselect}）
-    for(size_t i = 1; i < sizeof(k2compat_scripts) / sizeof(k2compat_scripts[0]); ++i) {
+    // 3.
+    // 按依赖序执行子模块脚本（win32dialog→modeless→padcommon→{pad,console,inputstring,fontselect}）
+    for(size_t i = 1;
+        i < sizeof(k2compat_scripts) / sizeof(k2compat_scripts[0]); ++i) {
         const auto &e = k2compat_scripts[i];
         spdlog::info("K2Compat: installing {}", e.name);
         ExecUtf8Script(tjs, e.text, e.name);

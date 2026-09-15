@@ -10,7 +10,7 @@
 
 class TVPDecodeArena {
     static constexpr size_t kDefaultCapacity = 4 * 1024 * 1024; // 4MB
-    static constexpr size_t kMaxCapacity = 64 * 1024 * 1024;    // 64MB
+    static constexpr size_t kMaxCapacity = 64 * 1024 * 1024; // 64MB
 
     uint8_t *base_ = nullptr;
     size_t capacity_ = 0;
@@ -28,17 +28,21 @@ class TVPDecodeArena {
 
     bool grow(size_t needed) {
         size_t newCap = capacity_ ? capacity_ * 2 : kDefaultCapacity;
-        while(newCap < needed && newCap <= kMaxCapacity) newCap *= 2;
-        if(newCap > kMaxCapacity) return false;
+        while(newCap < needed && newCap <= kMaxCapacity)
+            newCap *= 2;
+        if(newCap > kMaxCapacity)
+            return false;
         newCap = roundToPage(newCap);
 
-        uint8_t *newBase = (uint8_t *)mmap(nullptr, newCap,
-                                           PROT_READ | PROT_WRITE,
-                                           MAP_PRIVATE | MAP_ANON, -1, 0);
-        if(newBase == MAP_FAILED) return false;
+        uint8_t *newBase =
+            (uint8_t *)mmap(nullptr, newCap, PROT_READ | PROT_WRITE,
+                            MAP_PRIVATE | MAP_ANON, -1, 0);
+        if(newBase == MAP_FAILED)
+            return false;
 
         if(base_) {
-            if(offset_ > 0) memcpy(newBase, base_, offset_);
+            if(offset_ > 0)
+                memcpy(newBase, base_, offset_);
             munmap(base_, capacity_);
         }
         base_ = newBase;
@@ -49,11 +53,13 @@ class TVPDecodeArena {
 public:
     TVPDecodeArena() {
         pageSize_ = (size_t)sysconf(_SC_PAGESIZE);
-        if(pageSize_ == 0) pageSize_ = 4096;
+        if(pageSize_ == 0)
+            pageSize_ = 4096;
     }
 
     ~TVPDecodeArena() {
-        if(base_) munmap(base_, capacity_);
+        if(base_)
+            munmap(base_, capacity_);
     }
 
     void Begin() {
@@ -81,16 +87,19 @@ public:
     bool IsActive() const { return active_; }
 
     void *Alloc(size_t size) {
-        if(!active_) return nullptr;
+        if(!active_)
+            return nullptr;
         size = (size + 15) & ~(size_t)15; // 16-byte align
         size_t newOffset = offset_ + size;
         if(newOffset > capacity_) {
-            if(!grow(newOffset)) return nullptr;
+            if(!grow(newOffset))
+                return nullptr;
         }
         void *ptr = base_ + offset_;
         offset_ = newOffset;
         allocCount_++;
-        if(offset_ > peakOffset_) peakOffset_ = offset_;
+        if(offset_ > peakOffset_)
+            peakOffset_ = offset_;
         return ptr;
     }
 

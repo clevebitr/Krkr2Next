@@ -30,7 +30,7 @@
 #include "EventIntf.h"
 
 // Forward declarations for functions used by the engine core
-extern bool TVPCheckStartupPath(const std::string& path);
+extern bool TVPCheckStartupPath(const std::string &path);
 extern void TVPForceSwapBuffer();
 
 // ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ static bool s_drawSceneLastTickValid = false;
 static tjs_uint8 s_scancode[0x200] = {};
 
 bool TVPGetKeyMouseAsyncState(tjs_uint keycode, bool getcurrent) {
-    if (keycode >= sizeof(s_scancode) / sizeof(s_scancode[0]))
+    if(keycode >= sizeof(s_scancode) / sizeof(s_scancode[0]))
         return false;
     tjs_uint8 code = s_scancode[keycode];
     s_scancode[keycode] &= 1;
@@ -57,7 +57,7 @@ bool TVPGetKeyMouseAsyncState(tjs_uint keycode, bool getcurrent) {
 }
 
 bool TVPGetJoyPadAsyncState(tjs_uint keycode, bool getcurrent) {
-    if (keycode >= sizeof(s_scancode) / sizeof(s_scancode[0]))
+    if(keycode >= sizeof(s_scancode) / sizeof(s_scancode[0]))
         return false;
     tjs_uint8 code = s_scancode[keycode];
     s_scancode[keycode] &= 1;
@@ -70,13 +70,13 @@ int TVPDrawSceneOnce(int interval) {
     // TVPResetDrawSceneOnceTimingForRestart() 置回未初始化，避免二次打开沿用
     // 上一游戏的 lastTick 算出巨大 remain 而反复跳过合成（黑屏）。
     tjs_uint64 &lastTick = s_drawSceneLastTick;
-    if (!s_drawSceneLastTickValid) {
+    if(!s_drawSceneLastTickValid) {
         lastTick = curTick;
         s_drawSceneLastTickValid = true;
     }
     int remain = interval - static_cast<int>(curTick - lastTick);
-    if (remain <= 0) {
-        if (s_postUpdate)
+    if(remain <= 0) {
+        if(s_postUpdate)
             s_postUpdate();
         TVPForceSwapBuffer();
         lastTick = curTick;
@@ -95,55 +95,53 @@ void TVPResetDrawSceneOnceTimingForRestart() {
 // EngineLoop singleton
 // ---------------------------------------------------------------------------
 
-static EngineLoop* s_instance = nullptr;
+static EngineLoop *s_instance = nullptr;
 
 EngineLoop::EngineLoop() = default;
 
 EngineLoop::~EngineLoop() {
-    if (s_instance == this) {
+    if(s_instance == this) {
         s_instance = nullptr;
     }
-    // 复位静态输入/贴图回调状态，使下一个 EngineLoop 实例干净启动（对照上游 PR#12）。
+    // 复位静态输入/贴图回调状态，使下一个 EngineLoop 实例干净启动（对照上游
+    // PR#12）。
     s_postUpdate = nullptr;
     std::memset(s_scancode, 0, sizeof(s_scancode));
 }
 
-EngineLoop* EngineLoop::GetInstance() {
-    return s_instance;
-}
+EngineLoop *EngineLoop::GetInstance() { return s_instance; }
 
-EngineLoop* EngineLoop::CreateInstance() {
-    if (!s_instance) {
+EngineLoop *EngineLoop::CreateInstance() {
+    if(!s_instance) {
         s_instance = new EngineLoop();
     }
     return s_instance;
 }
 
-void EngineLoop::Start() {
-    update_enabled_ = true;
-}
+void EngineLoop::Start() { update_enabled_ = true; }
 
 void EngineLoop::Tick(float delta) {
     // started_ is the execution gate; update_enabled_ is retained state and is
-    // currently not checked here. DoStartup enables started_ after its first Tick.
-    // started_ 控制 Tick 是否执行；update_enabled_ 目前仅保留状态且不参与判断。
-    // DoStartup 会在首次 Tick 后设置 started_，因此该首次调用不会运行主循环。
-    if (!started_)
+    // currently not checked here. DoStartup enables started_ after its first
+    // Tick. started_ 控制 Tick 是否执行；update_enabled_
+    // 目前仅保留状态且不参与判断。 DoStartup 会在首次 Tick 后设置
+    // started_，因此该首次调用不会运行主循环。
+    if(!started_)
         return;
     ::Application->Run();
     iTVPTexture2D::RecycleProcess();
-    if (s_postUpdate)
+    if(s_postUpdate)
         s_postUpdate();
 }
 
-bool EngineLoop::StartupFrom(const std::string& path) {
-    if (!TVPCheckStartupPath(path)) {
+bool EngineLoop::StartupFrom(const std::string &path) {
+    if(!TVPCheckStartupPath(path)) {
         return false;
     }
 
-    IndividualConfigManager* pCfgMgr = IndividualConfigManager::GetInstance();
+    IndividualConfigManager *pCfgMgr = IndividualConfigManager::GetInstance();
     auto sepPos = path.find_last_of("/\\");
-    if (sepPos != std::string::npos) {
+    if(sepPos != std::string::npos) {
         pCfgMgr->UsePreferenceAt(path.substr(0, sepPos));
     }
 
@@ -151,7 +149,7 @@ bool EngineLoop::StartupFrom(const std::string& path) {
     return true;
 }
 
-void EngineLoop::DoStartup(const std::string& path) {
+void EngineLoop::DoStartup(const std::string &path) {
     spdlog::info("EngineLoop::DoStartup starting game from: {}", path);
 
     ::Application->StartApplication(path);
@@ -162,7 +160,8 @@ void EngineLoop::DoStartup(const std::string& path) {
 
     // The first Tick is intentionally issued before started_ is enabled; it is
     // currently a no-op, while subsequent ticks run after startup completes.
-    // 首次 Tick 有意发生在 started_ 开启之前，目前不会运行主循环；启动完成后后续 Tick 才执行。
+    // 首次 Tick 有意发生在 started_
+    // 开启之前，目前不会运行主循环；启动完成后后续 Tick 才执行。
     Tick(0);
 
     started_ = true;
@@ -186,8 +185,8 @@ uint32_t EngineLoop::ConvertModifiers(int32_t modifiers) {
     return static_cast<uint32_t>(modifiers) & 0xFF;
 }
 
-bool EngineLoop::HandleInputEvent(const EngineInputEvent& event) {
-    switch (event.type) {
+bool EngineLoop::HandleInputEvent(const EngineInputEvent &event) {
+    switch(event.type) {
         case kEngineInputPointerDown:
             HandlePointerDown(event);
             return true;
@@ -220,9 +219,10 @@ bool EngineLoop::HandleInputEvent(const EngineInputEvent& event) {
     }
 }
 
-void EngineLoop::HandlePointerDown(const EngineInputEvent& event) {
-    auto* win = TVPMainWindow;
-    if (!win) return;
+void EngineLoop::HandlePointerDown(const EngineInputEvent &event) {
+    auto *win = TVPMainWindow;
+    if(!win)
+        return;
 
     const tjs_int x = static_cast<tjs_int>(event.x);
     const tjs_int y = static_cast<tjs_int>(event.y);
@@ -231,106 +231,126 @@ void EngineLoop::HandlePointerDown(const EngineInputEvent& event) {
     TVPPostInputEvent(new tTVPOnMouseMoveInputEvent(win, x, y, shift));
 
     // Update cached cursor position for Layer.cursorX/cursorY queries
-    if (win->GetForm())
+    if(win->GetForm())
         win->GetForm()->UpdateCursorPos(x, y);
 
     // Map button index: 0=left, 1=right, 2=middle (matches tTVPMouseButton)
     tTVPMouseButton mb = mbLeft;
-    if (event.button == 1)
+    if(event.button == 1)
         mb = mbRight;
-    else if (event.button == 2)
+    else if(event.button == 2)
         mb = mbMiddle;
 
     // Update scancode for mouse button async state
     uint16_t vk = 0;
-    switch (mb) {
-        case mbLeft:   vk = 0x01; break; // VK_LBUTTON
-        case mbRight:  vk = 0x02; break; // VK_RBUTTON
-        case mbMiddle: vk = 0x04; break; // VK_MBUTTON
-        default: break;
+    switch(mb) {
+        case mbLeft:
+            vk = 0x01;
+            break; // VK_LBUTTON
+        case mbRight:
+            vk = 0x02;
+            break; // VK_RBUTTON
+        case mbMiddle:
+            vk = 0x04;
+            break; // VK_MBUTTON
+        default:
+            break;
     }
-    if (vk < sizeof(s_scancode) / sizeof(s_scancode[0])) {
+    if(vk < sizeof(s_scancode) / sizeof(s_scancode[0])) {
         s_scancode[vk] = 0x11; // pressed + was-pressed
     }
 
     // Combine mouse button state into shift flags
     uint32_t flags = shift;
-    switch (mb) {
-        case mbLeft:   flags |= TVP_SS_LEFT;   break;
-        case mbRight:  flags |= TVP_SS_RIGHT;  break;
-        case mbMiddle: flags |= TVP_SS_MIDDLE; break;
-        default: break;
+    switch(mb) {
+        case mbLeft:
+            flags |= TVP_SS_LEFT;
+            break;
+        case mbRight:
+            flags |= TVP_SS_RIGHT;
+            break;
+        case mbMiddle:
+            flags |= TVP_SS_MIDDLE;
+            break;
+        default:
+            break;
     }
 
     last_mouse_down_x_ = x;
     last_mouse_down_y_ = y;
 
-    TVPPostInputEvent(
-        new tTVPOnMouseDownInputEvent(win, x, y, mb, flags));
+    TVPPostInputEvent(new tTVPOnMouseDownInputEvent(win, x, y, mb, flags));
 }
 
-void EngineLoop::HandlePointerMove(const EngineInputEvent& event) {
-    auto* win = TVPMainWindow;
-    if (!win) return;
+void EngineLoop::HandlePointerMove(const EngineInputEvent &event) {
+    auto *win = TVPMainWindow;
+    if(!win)
+        return;
 
     const tjs_int x = static_cast<tjs_int>(event.x);
     const tjs_int y = static_cast<tjs_int>(event.y);
     const uint32_t shift = ConvertModifiers(event.modifiers);
 
     // Update cached cursor position for Layer.cursorX/cursorY queries
-    if (win->GetForm())
+    if(win->GetForm())
         win->GetForm()->UpdateCursorPos(x, y);
 
-    TVPPostInputEvent(
-        new tTVPOnMouseMoveInputEvent(win, x, y, shift));
+    TVPPostInputEvent(new tTVPOnMouseMoveInputEvent(win, x, y, shift));
 }
 
-void EngineLoop::HandlePointerUp(const EngineInputEvent& event) {
-    auto* win = TVPMainWindow;
-    if (!win) return;
+void EngineLoop::HandlePointerUp(const EngineInputEvent &event) {
+    auto *win = TVPMainWindow;
+    if(!win)
+        return;
 
     const tjs_int x = static_cast<tjs_int>(event.x);
     const tjs_int y = static_cast<tjs_int>(event.y);
     const uint32_t shift = ConvertModifiers(event.modifiers);
 
     // Update cached cursor position for Layer.cursorX/cursorY queries
-    if (win->GetForm())
+    if(win->GetForm())
         win->GetForm()->UpdateCursorPos(x, y);
 
     tTVPMouseButton mb = mbLeft;
-    if (event.button == 1)
+    if(event.button == 1)
         mb = mbRight;
-    else if (event.button == 2)
+    else if(event.button == 2)
         mb = mbMiddle;
 
     // Update scancode: clear pressed bit
     uint16_t vk = 0;
-    switch (mb) {
-        case mbLeft:   vk = 0x01; break;
-        case mbRight:  vk = 0x02; break;
-        case mbMiddle: vk = 0x04; break;
-        default: break;
+    switch(mb) {
+        case mbLeft:
+            vk = 0x01;
+            break;
+        case mbRight:
+            vk = 0x02;
+            break;
+        case mbMiddle:
+            vk = 0x04;
+            break;
+        default:
+            break;
     }
-    if (vk < sizeof(s_scancode) / sizeof(s_scancode[0])) {
+    if(vk < sizeof(s_scancode) / sizeof(s_scancode[0])) {
         s_scancode[vk] &= ~1; // clear current-pressed, keep was-pressed
     }
 
-    TVPPostInputEvent(
-        new tTVPOnMouseUpInputEvent(win, x, y, mb, shift));
+    TVPPostInputEvent(new tTVPOnMouseUpInputEvent(win, x, y, mb, shift));
 
     // Post click event after mouse-up, matching the original Windows engine
     // which fires OnMouseClick (→ Window.onClick → PrimaryClick) after
     // OnMouseUp.  Uses the stored down position per original behavior.
-    if (mb == mbLeft) {
-        TVPPostInputEvent(
-            new tTVPOnClickInputEvent(win, last_mouse_down_x_,
-                                      last_mouse_down_y_));
+    if(mb == mbLeft) {
+        TVPPostInputEvent(new tTVPOnClickInputEvent(win, last_mouse_down_x_,
+                                                    last_mouse_down_y_));
     }
 }
 
-void EngineLoop::HandlePointerScroll(const EngineInputEvent& event) {
-    auto* win = TVPMainWindow;
-    if (!win) return;
+void EngineLoop::HandlePointerScroll(const EngineInputEvent &event) {
+    auto *win = TVPMainWindow;
+    if(!win)
+        return;
 
     const tjs_int x = static_cast<tjs_int>(event.x);
     const tjs_int y = static_cast<tjs_int>(event.y);
@@ -340,57 +360,57 @@ void EngineLoop::HandlePointerScroll(const EngineInputEvent& event) {
     // TVP expects wheel delta in units (positive = up)
     const tjs_int delta = static_cast<tjs_int>(event.delta_y * 120.0);
 
-    if (delta != 0) {
+    if(delta != 0) {
         TVPPostInputEvent(
             new tTVPOnMouseWheelInputEvent(win, shift, delta, x, y));
     }
 }
 
-void EngineLoop::HandleKeyDown(const EngineInputEvent& event) {
-    auto* win = TVPMainWindow;
-    if (!win) return;
+void EngineLoop::HandleKeyDown(const EngineInputEvent &event) {
+    auto *win = TVPMainWindow;
+    if(!win)
+        return;
 
     tjs_uint key = static_cast<tjs_uint>(event.key_code);
 
     // For BACK button, map to VK_ESCAPE
-    if (event.type == kEngineInputBack) {
+    if(event.type == kEngineInputBack) {
         key = 0x1B; // VK_ESCAPE
     }
 
     const uint32_t shift = ConvertModifiers(event.modifiers);
 
     // Update scancode state
-    if (key < sizeof(s_scancode) / sizeof(s_scancode[0])) {
+    if(key < sizeof(s_scancode) / sizeof(s_scancode[0])) {
         s_scancode[key] = 0x11; // pressed + was-pressed
     }
 
-    TVPPostInputEvent(
-        new tTVPOnKeyDownInputEvent(win, key, shift));
+    TVPPostInputEvent(new tTVPOnKeyDownInputEvent(win, key, shift));
 }
 
-void EngineLoop::HandleKeyUp(const EngineInputEvent& event) {
-    auto* win = TVPMainWindow;
-    if (!win) return;
+void EngineLoop::HandleKeyUp(const EngineInputEvent &event) {
+    auto *win = TVPMainWindow;
+    if(!win)
+        return;
 
     const tjs_uint key = static_cast<tjs_uint>(event.key_code);
     const uint32_t shift = ConvertModifiers(event.modifiers);
 
     // Update scancode: clear pressed bit
-    if (key < sizeof(s_scancode) / sizeof(s_scancode[0])) {
+    if(key < sizeof(s_scancode) / sizeof(s_scancode[0])) {
         s_scancode[key] &= ~1;
     }
 
-    TVPPostInputEvent(
-        new tTVPOnKeyUpInputEvent(win, key, shift));
+    TVPPostInputEvent(new tTVPOnKeyUpInputEvent(win, key, shift));
 }
 
-void EngineLoop::HandleTextInput(const EngineInputEvent& event) {
-    auto* win = TVPMainWindow;
-    if (!win) return;
+void EngineLoop::HandleTextInput(const EngineInputEvent &event) {
+    auto *win = TVPMainWindow;
+    if(!win)
+        return;
 
-    if (event.unicode_codepoint > 0 && event.unicode_codepoint <= 0xFFFF) {
+    if(event.unicode_codepoint > 0 && event.unicode_codepoint <= 0xFFFF) {
         const tjs_char ch = static_cast<tjs_char>(event.unicode_codepoint);
-        TVPPostInputEvent(
-            new tTVPOnKeyPressInputEvent(win, ch));
+        TVPPostInputEvent(new tTVPOnKeyPressInputEvent(win, ch));
     }
 }

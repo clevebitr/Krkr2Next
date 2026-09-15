@@ -581,7 +581,8 @@ static void TVPInitProgramArgumentsAndDataPath(bool stop_after_datapath_got) {
         TVPSetLogLocation(TVPNativeDataPath);
 
         // merge early-set options (from engine_set_option before init)
-        for (auto it = TVPEarlySetOptions.rbegin(); it != TVPEarlySetOptions.rend(); ++it) {
+        for(auto it = TVPEarlySetOptions.rbegin();
+            it != TVPEarlySetOptions.rend(); ++it) {
             TVPProgramArguments.insert(TVPProgramArguments.begin(),
                                        it->first + TJS_W("=") + it->second);
         }
@@ -636,16 +637,16 @@ bool TVPGetCommandLine(const tjs_char *name, tTJSVariant *value) {
 //---------------------------------------------------------------------------
 void TVPSetCommandLine(const tjs_char *name, const ttstr &value) {
     // If not yet initialized, store in early options to be merged after init
-    if (!TVPProgramArgumentsInit) {
+    if(!TVPProgramArgumentsInit) {
         ttstr nameStr(name);
         // Update existing early option or add new one
-        for (auto &opt : TVPEarlySetOptions) {
-            if (opt.first == nameStr) {
+        for(auto &opt : TVPEarlySetOptions) {
+            if(opt.first == nameStr) {
                 opt.second = value;
                 return;
             }
         }
-        TVPEarlySetOptions.push_back({nameStr, value});
+        TVPEarlySetOptions.push_back({ nameStr, value });
         return;
     }
 
@@ -685,7 +686,7 @@ bool TVPExecuteUserConfig() { return false; }
 //---------------------------------------------------------------------------
 // TVPResetSysInitImplForRestart : Reset impl-level state for restart
 //---------------------------------------------------------------------------
-extern bool TVPSystemControlAlive;  // SystemControl.cpp
+extern bool TVPSystemControlAlive; // SystemControl.cpp
 
 void TVPResetSysInitImplForRestart() {
     TVPProgramArgumentsInit = false;

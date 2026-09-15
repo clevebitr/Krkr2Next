@@ -332,8 +332,10 @@ iTVPTransHandlerProvider *TVPFindTransHandlerProvider(const ttstr &name) {
         TVPTransHandlerProviders.Find(name);
     if(!holder) {
         auto logger = spdlog::get("core");
-        if(logger) logger->warn("Transition handler '{}' not found, falling back to crossfade",
-                                ttstr(name).AsStdString());
+        if(logger)
+            logger->warn(
+                "Transition handler '{}' not found, falling back to crossfade",
+                ttstr(name).AsStdString());
         holder = TVPTransHandlerProviders.Find(TJS_W("crossfade"));
     }
 

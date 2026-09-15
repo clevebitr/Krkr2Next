@@ -99,8 +99,9 @@ public:
 
     //! @brief		(Window->DrawDevice) Set the active viewport rectangle
     //! @note		The viewport defines the sub-region of the surface where
-    //!         	game content is rendered (accounting for letterbox/pillarbox).
-    //!         	Used for coordinate transformation (surface→layer).
+    //!         	game content is rendered (accounting for
+    //!         letterbox/pillarbox). 	Used for coordinate transformation
+    //!         (surface→layer).
     virtual void SetViewport(const tTVPRect &rect) {}
     //! @brief		(Window->DrawDevice) クリッピング矩形の設定
     //! @note

@@ -731,7 +731,8 @@ void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
                        const tjs_char *modestr) {
     // execute storage which contains script
 #if defined(KRKR_RENDER_PROBE)
-    { // StorageExec 探针：全量记录 startup 链实际执行的 storage（含 exec# 累计序号），
+    { // StorageExec 探针：全量记录 startup 链实际执行的 storage（含 exec#
+      // 累计序号），
         // 首开 vs restart 逐脚本 diff，钉死"跳过 KAG boot"是从哪个脚本断的。
         static unsigned s_exec = 0;
         spdlog::info("StorageExec: exec#{} name={}", ++s_exec,
@@ -981,21 +982,26 @@ void TVPExecuteStartupScript() {
 #endif
         TVPStartupSuccess = false;
 #if defined(KRKR_RENDER_PROBE)
-        { // EngineState[entry]: startup.tjs 执行前 dump 引擎状态，首开 vs restart 对照残留
+        { // EngineState[entry]: startup.tjs 执行前 dump 引擎状态，首开 vs
+          // restart 对照残留
             extern bool TVPSystemControlAlive;
             spdlog::info(
-                "EngineState[entry]: wndCount={} mainWnd={} sysUninit={} ctlAlive={} "
+                "EngineState[entry]: wndCount={} mainWnd={} sysUninit={} "
+                "ctlAlive={} "
                 "projDirSet={} dataPathSet={} startupSuccess={} cmdArgGen={}",
                 TVPGetWindowCount(), (void *)TVPMainWindow,
                 (int)TVPSystemUninitCalled, (int)TVPSystemControlAlive,
                 (int)(!TVPProjectDir.IsEmpty()), (int)(!TVPDataPath.IsEmpty()),
-                (int)TVPStartupSuccess, (tjs_int)TVPGetCommandLineArgumentGeneration());
+                (int)TVPStartupSuccess,
+                (tjs_int)TVPGetCommandLineArgumentGeneration());
             spdlog::default_logger()->flush();
         }
 #endif
         // —— startup.tjs 执行探针：抓 restart 时 startup 提前抛错的时机/消息。
-        // 黑屏特征：startup.tjs 抛异常(而 system/Initialize.tjs 存在)时被静默吞掉改走 fallback，
-        // KAG boot 被绕过。此探针记录是"完成"还是"抛错"及错误内容，钉死跳 KvK boot 的具体 gate。
+        // 黑屏特征：startup.tjs 抛异常(而 system/Initialize.tjs
+        // 存在)时被静默吞掉改走 fallback， KAG boot
+        // 被绕过。此探针记录是"完成"还是"抛错"及错误内容，钉死跳 KvK boot
+        // 的具体 gate。
 #if defined(KRKR_RENDER_PROBE)
         auto StartupProbeLog = [](const char *kind, const ttstr &msg) {
             spdlog::info(
@@ -1011,34 +1017,36 @@ void TVPExecuteStartupScript() {
             TVPExecuteStorage(TVPStartupScriptName);
             TVPStartupSuccess = true;
 #if defined(KRKR_RENDER_PROBE)
-            spdlog::info("StartupProbe: startup.tjs completed without throwing");
+            spdlog::info(
+                "StartupProbe: startup.tjs completed without throwing");
             spdlog::default_logger()->flush();
 #endif
         }
 #if defined(KRKR_RENDER_PROBE)
         catch(const TJS::eTJSScriptError &e) {
             StartupProbeLog("eTJSScriptError", e.GetMessage());
-            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs"))) throw;
-        }
-        catch(const TJS::eTJS &e) {
+            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
+                throw;
+        } catch(const TJS::eTJS &e) {
             StartupProbeLog("eTJS", e.GetMessage());
-            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs"))) throw;
-        }
-        catch(const std::exception &e) {
+            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
+                throw;
+        } catch(const std::exception &e) {
             StartupProbeLog("std::exception", ttstr(e.what()));
-            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs"))) throw;
-        }
-        catch(const char *e) {
+            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
+                throw;
+        } catch(const char *e) {
             StartupProbeLog("const char*", ttstr(e));
-            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs"))) throw;
-        }
-        catch(const tjs_char *e) {
+            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
+                throw;
+        } catch(const tjs_char *e) {
             StartupProbeLog("tjs_char*", ttstr(e));
-            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs"))) throw;
-        }
-        catch(...) {
+            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
+                throw;
+        } catch(...) {
             StartupProbeLog("unknown", TJS_W(""));
-            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs"))) throw;
+            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
+                throw;
         }
 #else
         catch(...) {
@@ -1051,13 +1059,14 @@ void TVPExecuteStartupScript() {
             // try direct execute initialize.tjs to compatible for
             // some patch
 #if defined(KRKR_RENDER_PROBE)
-            spdlog::info(
-                "StartupProbe: running FALLBACK system/Initialize.tjs (startup.tjs failed)");
+            spdlog::info("StartupProbe: running FALLBACK system/Initialize.tjs "
+                         "(startup.tjs failed)");
             spdlog::default_logger()->flush();
 #endif
 #if defined(__ANDROID__)
-            __android_log_print(ANDROID_LOG_INFO, "krkr2",
-                                "Fallback startup script: system/Initialize.tjs");
+            __android_log_print(
+                ANDROID_LOG_INFO, "krkr2",
+                "Fallback startup script: system/Initialize.tjs");
 #endif
             TVPExecuteStorage(TJS_W("system/Initialize.tjs"));
             TVPStartupSuccess = true;
@@ -1067,12 +1076,14 @@ void TVPExecuteStartupScript() {
         { // EngineState[exit]: startup.tjs 结束后 dump，对照 entry 看状态变化
             extern bool TVPSystemControlAlive;
             spdlog::info(
-                "EngineState[exit]: wndCount={} mainWnd={} sysUninit={} ctlAlive={} "
+                "EngineState[exit]: wndCount={} mainWnd={} sysUninit={} "
+                "ctlAlive={} "
                 "projDirSet={} dataPathSet={} startupSuccess={} cmdArgGen={}",
                 TVPGetWindowCount(), (void *)TVPMainWindow,
                 (int)TVPSystemUninitCalled, (int)TVPSystemControlAlive,
                 (int)(!TVPProjectDir.IsEmpty()), (int)(!TVPDataPath.IsEmpty()),
-                (int)TVPStartupSuccess, (tjs_int)TVPGetCommandLineArgumentGeneration());
+                (int)TVPStartupSuccess,
+                (tjs_int)TVPGetCommandLineArgumentGeneration());
             spdlog::default_logger()->flush();
         }
 #endif

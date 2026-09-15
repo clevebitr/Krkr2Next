@@ -326,9 +326,9 @@ public:
     void ResetInterrupt() { Interrupted = false; };
 
 private:
-    bool EntryParam(bool &condition, const ttstr &attribname, const ttstr &value,
-                    bool entity, bool macroarg, bool allowParamMacro,
-                    int recursionDepth = 0);
+    bool EntryParam(bool &condition, const ttstr &attribname,
+                    const ttstr &value, bool entity, bool macroarg,
+                    bool allowParamMacro, int recursionDepth = 0);
 
 private:
     iTJSDispatch2 *_GetNextTag();
@@ -371,7 +371,8 @@ public:
 };
 
 extern iTJSDispatch2 *TVPCreateNativeClass_KAGParser();
-extern void TVPClearScnearioCache(); // runtime-restart 时清空跨游戏残留的场景缓存
+extern void
+TVPClearScnearioCache(); // runtime-restart 时清空跨游戏残留的场景缓存
 
 
 #endif

@@ -46,8 +46,8 @@ void TVPSetPostDrawHook(void (*hook)()) { g_postDrawHook = hook; }
 // 黑屏持久化，并输出诊断（含视频 overlay 是否在播，用于验证 krmovie Present
 // 是否被 stub 阻塞)。
 // ---------------------------------------------------------------------------
-static int s_blackSampleCount = 0;      // 连续「黑且有绘制」的采样次数
-static bool s_blackReported = false;    // 本段黑屏是否已上报
+static int s_blackSampleCount = 0; // 连续「黑且有绘制」的采样次数
+static bool s_blackReported = false; // 本段黑屏是否已上报
 static const int kBlackReportThreshold = 3;
 
 // ---------------------------------------------------------------------------
@@ -57,16 +57,16 @@ static const int kBlackReportThreshold = 3;
 // ---------------------------------------------------------------------------
 class HostWindowLayer : public iWindowLayer {
 public:
-    explicit HostWindowLayer(tTJSNI_Window *owner)
-        : owner_(owner), visible_(true), caption_("krkr2"),
-          width_(0), height_(0), active_(true), closing_(false) {
+    explicit HostWindowLayer(tTJSNI_Window *owner) :
+        owner_(owner), visible_(true), caption_("krkr2"), width_(0), height_(0),
+        active_(true), closing_(false) {
         // Get initial size from EGL context
-        auto& egl = krkr::GetEngineEGLContext();
-        if (egl.IsValid()) {
-            width_  = static_cast<tjs_int>(egl.GetWidth());
+        auto &egl = krkr::GetEngineEGLContext();
+        if(egl.IsValid()) {
+            width_ = static_cast<tjs_int>(egl.GetWidth());
             height_ = static_cast<tjs_int>(egl.GetHeight());
         } else {
-            width_  = 1280;
+            width_ = 1280;
             height_ = 720;
         }
         spdlog::info("HostWindowLayer created: {}x{}", width_, height_);
@@ -95,22 +95,29 @@ public:
         // UpdateDrawBuffer() which knows the correct letterbox viewport.
         // Setting DestRect here would overwrite the viewport offset and
         // cause mouse Y-axis misalignment.
-        if (!owner_) return;
-        auto* dd = owner_->GetDrawDevice();
-        if (!dd) return;
+        if(!owner_)
+            return;
+        auto *dd = owner_->GetDrawDevice();
+        if(!dd)
+            return;
 
         width_ = w;
         height_ = h;
 
-        auto& egl = krkr::GetEngineEGLContext();
-        tjs_int surf_w = egl.IsValid() ? static_cast<tjs_int>(egl.GetWidth())  : w;
-        tjs_int surf_h = egl.IsValid() ? static_cast<tjs_int>(egl.GetHeight()) : h;
-        if (surf_w <= 0) surf_w = w;
-        if (surf_h <= 0) surf_h = h;
+        auto &egl = krkr::GetEngineEGLContext();
+        tjs_int surf_w =
+            egl.IsValid() ? static_cast<tjs_int>(egl.GetWidth()) : w;
+        tjs_int surf_h =
+            egl.IsValid() ? static_cast<tjs_int>(egl.GetHeight()) : h;
+        if(surf_w <= 0)
+            surf_w = w;
+        if(surf_h <= 0)
+            surf_h = h;
 
         dd->SetWindowSize(surf_w, surf_h);
-        spdlog::debug("HostWindowLayer::SetPaintBoxSize: layer={}x{}, surface={}x{}",
-                      w, h, surf_w, surf_h);
+        spdlog::debug(
+            "HostWindowLayer::SetPaintBoxSize: layer={}x{}, surface={}x{}", w,
+            h, surf_w, surf_h);
     }
 
     bool GetFormEnabled() override { return !closing_; }
@@ -189,15 +196,17 @@ public:
         // When an IOSurface is attached, this goes directly to the shared
         // SurfaceTexture (zero-copy to the host shell). Otherwise, falls back
         // to the EGL Pbuffer for glReadPixels-based retrieval.
-        if (!tex) return;
+        if(!tex)
+            return;
 
         const tjs_uint tw = tex->GetWidth();
         const tjs_uint th = tex->GetHeight();
-        if (tw == 0 || th == 0) return;
+        if(tw == 0 || th == 0)
+            return;
 
         EnsureBlitResources();
 
-        auto& egl = krkr::GetEngineEGLContext();
+        auto &egl = krkr::GetEngineEGLContext();
 
         // ── Phase 1: Prepare the blit source texture ──────────────
         // This MUST happen BEFORE BindRenderTarget(), because
@@ -208,41 +217,44 @@ public:
         const uint32_t nativeGLTex = tex->GetNativeGLTextureId();
         GLuint blitSrcTexture;
 
-        if (nativeGLTex != 0) {
+        if(nativeGLTex != 0) {
             // GPU fast-path: the composited scene is already in a GL texture.
             // We must detach it from the engine's FBO first to avoid
             // sampling a texture that is still an FBO attachment.
-            // TVPSetRenderTarget(0) will unbind any texture from the engine FBO.
+            // TVPSetRenderTarget(0) will unbind any texture from the engine
+            // FBO.
             extern void TVPSetRenderTarget(GLuint);
 
             // ── 决定性探针：对比 blit 源纹理(nativeGLTex) 与引擎当前合成所写的
             // render-target 附件纹理 id。
             //   nativeGLTex == rtTex -> 引擎写进了我们采样的同一纹理：
             //      源黑 = 引擎画了黑/没画（问题在合成内容/脚本，非纹理脱节）。
-            //   nativeGLTex != rtTex -> 引擎画进了别的纹理：二次打开主 DrawBuffer 与
+            //   nativeGLTex != rtTex -> 引擎画进了别的纹理：二次打开主
+            //   DrawBuffer 与
             //      blit 源脱节（重启状态残留）。仅 KRKR_RENDER_PROBE 时编译。
 #if defined(KRKR_RENDER_PROBE)
             {
                 GLint curFbo = 0;
                 glGetIntegerv(GL_FRAMEBUFFER_BINDING, &curFbo);
                 GLint rtTex = 0, rtType = 0;
-                if (curFbo != 0) {
+                if(curFbo != 0) {
                     glGetFramebufferAttachmentParameteriv(
                         GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                         GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &rtType);
-                    if (rtType == GL_TEXTURE) {
+                    if(rtType == GL_TEXTURE) {
                         glGetFramebufferAttachmentParameteriv(
                             GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                             GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &rtTex);
                     }
                 }
                 spdlog::info(
-                    "HostWindowLayer::RTProbe: blitSrcTex={} engineCurFbo={} fboAttachedTex={} rtType=0x{:x}{}",
+                    "HostWindowLayer::RTProbe: blitSrcTex={} engineCurFbo={} "
+                    "fboAttachedTex={} rtType=0x{:x}{}",
                     static_cast<unsigned>(nativeGLTex),
-                    static_cast<int>(curFbo),
-                    static_cast<int>(rtTex),
+                    static_cast<int>(curFbo), static_cast<int>(rtTex),
                     static_cast<unsigned>(rtType),
-                    (nativeGLTex == static_cast<uint32_t>(rtTex)) ? " [SAME]" : " [DIFF]");
+                    (nativeGLTex == static_cast<uint32_t>(rtTex)) ? " [SAME]"
+                                                                  : " [DIFF]");
             }
 #endif // KRKR_RENDER_PROBE
 
@@ -252,19 +264,20 @@ public:
             // CPU fallback: read pixel data and upload to our blit texture.
             blitSrcTexture = blit_texture_;
             const tjs_int pitch = tex->GetPitch();
-            const void* pixelData = tex->GetPixelData();
-            if (!pixelData) {
+            const void *pixelData = tex->GetPixelData();
+            if(!pixelData) {
                 // Fallback: read line by line via GetScanLineForRead.
                 // NOTE: This may call TVPSetRenderTarget() internally,
                 // which changes the current FBO binding — that's fine
                 // because we haven't bound the IOSurface FBO yet.
-                if (blit_pixel_buf_.size() < static_cast<size_t>(tw * th * 4)) {
+                if(blit_pixel_buf_.size() < static_cast<size_t>(tw * th * 4)) {
                     blit_pixel_buf_.resize(tw * th * 4);
                 }
-                for (tjs_uint y = 0; y < th; ++y) {
-                    const void* line = tex->GetScanLineForRead(y);
-                    if (line) {
-                        std::memcpy(blit_pixel_buf_.data() + y * tw * 4, line, tw * 4);
+                for(tjs_uint y = 0; y < th; ++y) {
+                    const void *line = tex->GetScanLineForRead(y);
+                    if(line) {
+                        std::memcpy(blit_pixel_buf_.data() + y * tw * 4, line,
+                                    tw * 4);
                     }
                 }
                 pixelData = blit_pixel_buf_.data();
@@ -273,15 +286,16 @@ public:
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, blit_texture_);
             // Use GL_UNPACK_ROW_LENGTH if pitch differs from width*4
-            if (pitch != static_cast<tjs_int>(tw * 4)) {
+            if(pitch != static_cast<tjs_int>(tw * 4)) {
                 glPixelStorei(GL_UNPACK_ROW_LENGTH, pitch / 4);
             }
             // Use glTexSubImage2D when the texture size hasn't changed,
             // avoiding per-frame texture memory reallocation.
-            if (blit_tex_w_ == tw && blit_tex_h_ == th) {
+            if(blit_tex_w_ == tw && blit_tex_h_ == th) {
                 glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0,
-                                static_cast<GLsizei>(tw), static_cast<GLsizei>(th),
-                                GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+                                static_cast<GLsizei>(tw),
+                                static_cast<GLsizei>(th), GL_RGBA,
+                                GL_UNSIGNED_BYTE, pixelData);
             } else {
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
                              static_cast<GLsizei>(tw), static_cast<GLsizei>(th),
@@ -289,28 +303,30 @@ public:
                 blit_tex_w_ = tw;
                 blit_tex_h_ = th;
             }
-            if (pitch != static_cast<tjs_int>(tw * 4)) {
+            if(pitch != static_cast<tjs_int>(tw * 4)) {
                 glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
             }
         }
 
         // ── 诊断插桩：记录 blit 分支，并对 blit 源纹理抽样 ──
         // 目的：区分黑屏（IOSurface 全黑）的根因归属。
-        //   SourceSample !黑 -> 引擎合成纹理有画面，黑屏在「blit 到 IOSurface」这步
-        //   SourceSample 全黑 -> 引擎 GL 合成本身没把画面画进源纹理。
+        //   SourceSample !黑 -> 引擎合成纹理有画面，黑屏在「blit 到
+        //   IOSurface」这步 SourceSample 全黑 -> 引擎 GL
+        //   合成本身没把画面画进源纹理。
         // 频率提到每 5 帧，并在同一采样点对源纹理连续读两次（相隔若干 draw 后）
         // 以排除「单帧瞬时闪」；同时打印全局图层对象数 layers，区分
         // 「引擎没建/没东西画」与「画了但没进源纹理」两条线。
-        // 诊断插桩：仅当编译期定义 KRKR_RENDER_PROBE 时运行（每 5 帧读像素+打日志，
-        // 属黑屏/渲染诊断探针）。默认 release 关闭，避免每帧 glReadPixels 与日志刷屏；
-        // 遇到黑屏/渲染问题再打开（见 docs/dev/rendering-diagnosis.md）。
+        // 诊断插桩：仅当编译期定义 KRKR_RENDER_PROBE 时运行（每 5
+        // 帧读像素+打日志， 属黑屏/渲染诊断探针）。默认 release 关闭，避免每帧
+        // glReadPixels 与日志刷屏； 遇到黑屏/渲染问题再打开（见
+        // docs/dev/rendering-diagnosis.md）。
 #if defined(KRKR_RENDER_PROBE)
         static int s_blitDbg = 0;
         const bool kBlitDump = ((s_blitDbg++) % 5) == 1;
 #else
         const bool kBlitDump = false;
 #endif
-        if (kBlitDump) {
+        if(kBlitDump) {
             // 引擎本段(自上次 GetRenderStat 清零以来)实际执行的 GL 绘制次数：
             //   draw 持续增长 -> 引擎在合成图层，黑的是「画了但没进 tex4」
             //   draw 归零      -> 引擎没发起合成，问题在调度/无可见图层
@@ -320,11 +336,12 @@ public:
                 ::TVPGetRenderManager()->GetRenderStat(engDraw, engVmem);
             }
             spdlog::info(
-                "HostWindowLayer::UpdateDrawBuffer: path={} nativeTex={} srcTex={} blitTex={} {}x{} layers={} draw={}",
+                "HostWindowLayer::UpdateDrawBuffer: path={} nativeTex={} "
+                "srcTex={} blitTex={} {}x{} layers={} draw={}",
                 nativeGLTex ? "GPU" : "CPU", nativeGLTex, blitSrcTexture,
-                blit_texture_, static_cast<unsigned>(tw), static_cast<unsigned>(th),
-                TVPGetLayerCount(), engDraw);
-            if (blitSrcTexture != 0) {
+                blit_texture_, static_cast<unsigned>(tw),
+                static_cast<unsigned>(th), TVPGetLayerCount(), engDraw);
+            if(blitSrcTexture != 0) {
                 GLint prevFbo = 0;
                 glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
                 GLuint dbgFbo = 0;
@@ -332,43 +349,60 @@ public:
                 glBindFramebuffer(GL_FRAMEBUFFER, dbgFbo);
                 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                                        GL_TEXTURE_2D, blitSrcTexture, 0);
-                int nonBlack = 0; // 提升到 blitSrcTexture 作用域，供下方黑屏探针使用
-                if (glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE) {
-                    // glFlush 一次后再采，确认 readback 读到最终合成结果而非中途状态
+                int nonBlack =
+                    0; // 提升到 blitSrcTexture 作用域，供下方黑屏探针使用
+                if(glCheckFramebufferStatus(GL_FRAMEBUFFER) ==
+                   GL_FRAMEBUFFER_COMPLETE) {
+                    // glFlush 一次后再采，确认 readback
+                    // 读到最终合成结果而非中途状态
                     glFlush();
-                    uint64_t sR=0, sG=0, sB=0, sA=0;
+                    uint64_t sR = 0, sG = 0, sB = 0, sA = 0;
                     unsigned char px[4];
-                    for (int gy=0; gy<5; ++gy) for (int gx=0; gx<5; ++gx) {
-                        const int x=(int)((gx+0.5f)*static_cast<float>(tw)/5.0f);
-                        const int y=(int)((gy+0.5f)*static_cast<float>(th)/5.0f);
-                        px[0]=px[1]=px[2]=px[3]=0;
-                        glReadPixels(x,y,1,1,GL_RGBA,GL_UNSIGNED_BYTE,px);
-                        sR+=px[0]; sG+=px[1]; sB+=px[2]; sA+=px[3];
-                        if (px[0]>8 || px[1]>8 || px[2]>8) ++nonBlack;
-                    }
-                    spdlog::info("HostWindowLayer::SourceSample: nonBlack={}/25 avg=({},{},{},{})",
-                                 nonBlack, (int)(sR/25),(int)(sG/25),(int)(sB/25),(int)(sA/25));
+                    for(int gy = 0; gy < 5; ++gy)
+                        for(int gx = 0; gx < 5; ++gx) {
+                            const int x = (int)((gx + 0.5f) *
+                                                static_cast<float>(tw) / 5.0f);
+                            const int y = (int)((gy + 0.5f) *
+                                                static_cast<float>(th) / 5.0f);
+                            px[0] = px[1] = px[2] = px[3] = 0;
+                            glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE,
+                                         px);
+                            sR += px[0];
+                            sG += px[1];
+                            sB += px[2];
+                            sA += px[3];
+                            if(px[0] > 8 || px[1] > 8 || px[2] > 8)
+                                ++nonBlack;
+                        }
+                    spdlog::info("HostWindowLayer::SourceSample: "
+                                 "nonBlack={}/25 avg=({},{},{},{})",
+                                 nonBlack, (int)(sR / 25), (int)(sG / 25),
+                                 (int)(sB / 25), (int)(sA / 25));
                 } else {
-                    spdlog::warn("HostWindowLayer::SourceSample: FBO incomplete 0x{:x}",
-                                 glCheckFramebufferStatus(GL_FRAMEBUFFER));
+                    spdlog::warn(
+                        "HostWindowLayer::SourceSample: FBO incomplete 0x{:x}",
+                        glCheckFramebufferStatus(GL_FRAMEBUFFER));
                 }
                 glBindFramebuffer(GL_FRAMEBUFFER, prevFbo);
                 glDeleteFramebuffers(1, &dbgFbo);
 
                 // ── 黑屏探针 ─────────────────────────────────────────────
-                // 判定：引擎在持续绘制(engDraw>0) 但 blit 源纹理采样全黑(nonBlack==0)。
-                // 连续 kBlackReportThreshold 次出现即判定黑屏已持久化，上报：
-                //   1) 视频 overlay 是否在播（验证 krmovie Present stub 阻塞假设）；
-                //   2) 引擎当前绘制计数与图层数，供定位脚本/调度问题。
-                if (engDraw > 0 && nonBlack == 0) {
+                // 判定：引擎在持续绘制(engDraw>0) 但 blit
+                // 源纹理采样全黑(nonBlack==0)。 连续 kBlackReportThreshold
+                // 次出现即判定黑屏已持久化，上报：
+                //   1) 视频 overlay 是否在播（验证 krmovie Present stub
+                //   阻塞假设）； 2)
+                //   引擎当前绘制计数与图层数，供定位脚本/调度问题。
+                if(engDraw > 0 && nonBlack == 0) {
                     ++s_blackSampleCount;
-                    if (s_blackSampleCount >= kBlackReportThreshold &&
-                        !s_blackReported) {
+                    if(s_blackSampleCount >= kBlackReportThreshold &&
+                       !s_blackReported) {
                         s_blackReported = true;
                         std::string ovl = tTJSNI_VideoOverlay::DumpDebugStats();
-                        spdlog::warn(
-                            "HostWindowLayer::BlackScreen: engine keeps drawing (draw={}, layers={}) but blit source is black. {}",
-                            engDraw, TVPGetLayerCount(), ovl);
+                        spdlog::warn("HostWindowLayer::BlackScreen: engine "
+                                     "keeps drawing (draw={}, layers={}) but "
+                                     "blit source is black. {}",
+                                     engDraw, TVPGetLayerCount(), ovl);
                     }
                 } else {
                     s_blackSampleCount = 0;
@@ -384,10 +418,10 @@ public:
 
         // Determine the actual render target dimensions
         uint32_t fbW, fbH;
-        if (egl.HasIOSurface()) {
+        if(egl.HasIOSurface()) {
             fbW = egl.GetIOSurfaceWidth();
             fbH = egl.GetIOSurfaceHeight();
-        } else if (egl.HasNativeWindow()) {
+        } else if(egl.HasNativeWindow()) {
             fbW = egl.GetNativeWindowWidth();
             fbH = egl.GetNativeWindowHeight();
         } else {
@@ -396,15 +430,15 @@ public:
         }
         // Compute letterbox/pillarbox viewport to preserve game aspect ratio.
         float texAspect = static_cast<float>(tw) / static_cast<float>(th);
-        float fbAspect  = static_cast<float>(fbW) / static_cast<float>(fbH);
+        float fbAspect = static_cast<float>(fbW) / static_cast<float>(fbH);
         GLsizei vpX = 0, vpY = 0;
         GLsizei vpW = static_cast<GLsizei>(fbW);
         GLsizei vpH = static_cast<GLsizei>(fbH);
-        if (texAspect > fbAspect) {
+        if(texAspect > fbAspect) {
             vpW = static_cast<GLsizei>(fbW);
             vpH = static_cast<GLsizei>(static_cast<float>(fbW) / texAspect);
             vpY = static_cast<GLsizei>((fbH - vpH) / 2);
-        } else if (texAspect < fbAspect) {
+        } else if(texAspect < fbAspect) {
             vpH = static_cast<GLsizei>(fbH);
             vpW = static_cast<GLsizei>(static_cast<float>(fbH) * texAspect);
             vpX = static_cast<GLsizei>((fbW - vpW) / 2);
@@ -420,13 +454,13 @@ public:
 
         // Update DrawDevice dest rect so coordinate transforms
         // (surface pixels → game layer) work correctly with letterbox offset.
-        if (owner_) {
-            auto* dd = owner_->GetDrawDevice();
-            if (dd) {
+        if(owner_) {
+            auto *dd = owner_->GetDrawDevice();
+            if(dd) {
                 tTVPRect dest;
-                dest.left   = static_cast<tjs_int>(vpX);
-                dest.top    = static_cast<tjs_int>(vpY);
-                dest.right  = static_cast<tjs_int>(vpX + vpW);
+                dest.left = static_cast<tjs_int>(vpX);
+                dest.top = static_cast<tjs_int>(vpY);
+                dest.right = static_cast<tjs_int>(vpX + vpW);
                 dest.bottom = static_cast<tjs_int>(vpY + vpH);
                 dd->SetDestRectangle(dest);
                 dd->SetClipRectangle(dest);
@@ -457,10 +491,10 @@ public:
         // The engine texture's logical size (tw x th) may be smaller
         // than the actual GL texture (internalW x internalH).
         float uvScaleU = 1.0f, uvScaleV = 1.0f;
-        if (nativeGLTex != 0) {
+        if(nativeGLTex != 0) {
             const tjs_uint intW = tex->GetInternalWidth();
             const tjs_uint intH = tex->GetInternalHeight();
-            if (intW > 0 && intH > 0) {
+            if(intW > 0 && intH > 0) {
                 uvScaleU = static_cast<float>(tw) / static_cast<float>(intW);
                 uvScaleV = static_cast<float>(th) / static_cast<float>(intH);
             }
@@ -470,10 +504,10 @@ public:
         glBindBuffer(GL_ARRAY_BUFFER, blit_vbo_);
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
-                              (void*)0);
+                              (void *)0);
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
-                              (void*)(2 * sizeof(float)));
+                              (void *)(2 * sizeof(float)));
 
         glDisable(GL_BLEND);
         glDisable(GL_DEPTH_TEST);
@@ -487,33 +521,37 @@ public:
         glBindTexture(GL_TEXTURE_2D, 0);
 
         // 诊断：blit 全屏 quad 后立刻读当前绑定 FBO（IOSurface fbo2）中心像素
-        //  + glGetError，区分「blit 绘制没写进 fbo2」还是「写进去了但 IOSurface 层未落地」。
-        // 中心像素非黑 -> blit 写入成功，问题在 SurfaceTexture/宿主侧落地与同步；
-        // 中心像素黑   -> blit 全屏 quad 绘制本身失败（shader/uniform/状态）。
-        if (kBlitDump) {
+        //  + glGetError，区分「blit 绘制没写进 fbo2」还是「写进去了但 IOSurface
+        //  层未落地」。
+        // 中心像素非黑 -> blit 写入成功，问题在
+        // SurfaceTexture/宿主侧落地与同步； 中心像素黑   -> blit 全屏 quad
+        // 绘制本身失败（shader/uniform/状态）。
+        if(kBlitDump) {
             GLenum postErr = glGetError();
-            unsigned char dbgPx[4] = {0, 0, 0, 0};
+            unsigned char dbgPx[4] = { 0, 0, 0, 0 };
             GLint dbgFbo = 0;
             glGetIntegerv(GL_FRAMEBUFFER_BINDING, &dbgFbo);
-            if (fbW > 0 && fbH > 0) {
-                glReadPixels(static_cast<GLint>(fbW / 2), static_cast<GLint>(fbH / 2),
-                             1, 1, GL_RGBA, GL_UNSIGNED_BYTE, dbgPx);
+            if(fbW > 0 && fbH > 0) {
+                glReadPixels(static_cast<GLint>(fbW / 2),
+                             static_cast<GLint>(fbH / 2), 1, 1, GL_RGBA,
+                             GL_UNSIGNED_BYTE, dbgPx);
             }
-            spdlog::info(
-                "HostWindowLayer::PostBlit: err=0x{:x} curFbo={} size={}x{} center=({},{},{},{})",
-                static_cast<unsigned>(postErr), dbgFbo,
-                static_cast<unsigned>(fbW), static_cast<unsigned>(fbH),
-                dbgPx[0], dbgPx[1], dbgPx[2], dbgPx[3]);
+            spdlog::info("HostWindowLayer::PostBlit: err=0x{:x} curFbo={} "
+                         "size={}x{} center=({},{},{},{})",
+                         static_cast<unsigned>(postErr), dbgFbo,
+                         static_cast<unsigned>(fbW), static_cast<unsigned>(fbH),
+                         dbgPx[0], dbgPx[1], dbgPx[2], dbgPx[3]);
         }
 
-        if (g_postDrawHook) g_postDrawHook();
+        if(g_postDrawHook)
+            g_postDrawHook();
 
         // In IOSurface/WindowSurface mode, glFlush() is sufficient —
         // IOSurface has GPU-GPU sync, and WindowSurface (SurfaceTexture)
         // is synchronized by eglSwapBuffers in TVPForceSwapBuffer.
         // In Pbuffer mode, glFinish() is required because the legacy
         // path uses glReadPixels which needs GPU to be done.
-        if (egl.HasIOSurface() || egl.HasNativeWindow()) {
+        if(egl.HasIOSurface() || egl.HasNativeWindow()) {
             glFlush();
         } else {
             glFinish();
@@ -527,9 +565,7 @@ public:
         egl.MarkFrameDirty();
     }
 
-    void InvalidateClose() override {
-        closing_ = true;
-    }
+    void InvalidateClose() override { closing_ = true; }
 
     bool GetWindowActive() override { return active_; }
 
@@ -540,7 +576,7 @@ public:
     }
 
     void OnCloseQueryCalled(bool b) override {
-        if (b) {
+        if(b) {
             Close();
         }
     }
@@ -587,10 +623,11 @@ public:
 
 private:
     void EnsureBlitResources() {
-        if (blit_program_ != 0) return;
+        if(blit_program_ != 0)
+            return;
 
         // Vertex shader: fullscreen quad with optional Y flip and UV scale
-        const char* vs_src = R"(#version 300 es
+        const char *vs_src = R"(#version 300 es
             layout(location = 0) in vec2 aPos;
             layout(location = 1) in vec2 aUV;
             uniform float uFlipY;
@@ -603,7 +640,7 @@ private:
             }
         )";
 
-        const char* fs_src = R"(#version 300 es
+        const char *fs_src = R"(#version 300 es
             precision mediump float;
             in vec2 vUV;
             out vec4 fragColor;
@@ -613,13 +650,13 @@ private:
             }
         )";
 
-        auto compileShader = [](GLenum type, const char* src) -> GLuint {
+        auto compileShader = [](GLenum type, const char *src) -> GLuint {
             GLuint s = glCreateShader(type);
             glShaderSource(s, 1, &src, nullptr);
             glCompileShader(s);
             GLint ok = 0;
             glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
-            if (!ok) {
+            if(!ok) {
                 char log[512];
                 glGetShaderInfoLog(s, sizeof(log), nullptr, log);
                 spdlog::error("Blit shader compile error: {}", log);
@@ -637,7 +674,7 @@ private:
 
         GLint ok = 0;
         glGetProgramiv(blit_program_, GL_LINK_STATUS, &ok);
-        if (!ok) {
+        if(!ok) {
             char log[512];
             glGetProgramInfoLog(blit_program_, sizeof(log), nullptr, log);
             spdlog::error("Blit program link error: {}", log);
@@ -656,10 +693,10 @@ private:
         // Texture: (0,0) is top-left in krkr2 convention
         const float quad[] = {
             // pos        // uv
-            -1.f, -1.f,   0.f, 1.f,  // bottom-left  → tex bottom (v=1)
-             1.f, -1.f,   1.f, 1.f,  // bottom-right
-            -1.f,  1.f,   0.f, 0.f,  // top-left     → tex top (v=0)
-             1.f,  1.f,   1.f, 0.f,  // top-right
+            -1.f, -1.f, 0.f, 1.f, // bottom-left  → tex bottom (v=1)
+            1.f,  -1.f, 1.f, 1.f, // bottom-right
+            -1.f, 1.f,  0.f, 0.f, // top-left     → tex top (v=0)
+            1.f,  1.f,  1.f, 0.f, // top-right
         };
 
         glGenBuffers(1, &blit_vbo_);
@@ -697,11 +734,11 @@ private:
     GLuint blit_program_ = 0;
     GLuint blit_vbo_ = 0;
     GLuint blit_texture_ = 0;
-    tjs_uint blit_tex_w_ = 0;   // Last allocated texture width
-    tjs_uint blit_tex_h_ = 0;   // Last allocated texture height
-    GLint  blit_tex_uniform_ = -1;
-    GLint  blit_flipy_uniform_ = -1;
-    GLint  blit_uvscale_uniform_ = -1;
+    tjs_uint blit_tex_w_ = 0; // Last allocated texture width
+    tjs_uint blit_tex_h_ = 0; // Last allocated texture height
+    GLint blit_tex_uniform_ = -1;
+    GLint blit_flipy_uniform_ = -1;
+    GLint blit_uvscale_uniform_ = -1;
     std::vector<uint8_t> blit_pixel_buf_;
 };
 
@@ -731,7 +768,7 @@ iWindowLayer *TVPCreateAndAddWindow(tTJSNI_Window *w) {
 void TVPConsoleLog(const ttstr &mes, bool important) {
     // Convert TJS string to UTF-8 for spdlog
     tTJSNarrowStringHolder narrow_mes(mes.c_str());
-    if (important) {
+    if(important) {
         spdlog::info("[TVP Console] {}", narrow_mes.operator const char *());
     } else {
         spdlog::debug("[TVP Console] {}", narrow_mes.operator const char *());
@@ -742,10 +779,10 @@ void TVPConsoleLog(const ttstr &mes, bool important) {
 // TJS::TVPConsoleLog — originally in MainScene.cpp (TJS2 namespace version)
 // ---------------------------------------------------------------------------
 namespace TJS {
-void TVPConsoleLog(const tTJSString &str) {
-    tTJSNarrowStringHolder narrow(str.c_str());
-    spdlog::debug("[TJS Console] {}", narrow.operator const char *());
-}
+    void TVPConsoleLog(const tTJSString &str) {
+        tTJSNarrowStringHolder narrow(str.c_str());
+        spdlog::debug("[TJS Console] {}", narrow.operator const char *());
+    }
 } // namespace TJS
 
 // ---------------------------------------------------------------------------
@@ -781,26 +818,29 @@ ttstr TVPGetPlatformName() {
 static std::string s_internalPreferencePath;
 
 const std::string &TVPGetInternalPreferencePath() {
-    if (s_internalPreferencePath.empty()) {
+    if(s_internalPreferencePath.empty()) {
 #if defined(__APPLE__)
         const char *home = getenv("HOME");
-        if (home) {
-            s_internalPreferencePath = std::string(home) + "/Library/Application Support/krkr2/";
+        if(home) {
+            s_internalPreferencePath =
+                std::string(home) + "/Library/Application Support/krkr2/";
         } else {
             s_internalPreferencePath = "/tmp/krkr2/";
         }
 #elif defined(__ANDROID__)
-        // On Android, /tmp does not exist. Use the app's private data directory.
-        // Read package name from /proc/self/cmdline to build the path.
+        // On Android, /tmp does not exist. Use the app's private data
+        // directory. Read package name from /proc/self/cmdline to build the
+        // path.
         std::string packageName;
         {
             std::ifstream cmdline("/proc/self/cmdline");
-            if (cmdline.is_open()) {
+            if(cmdline.is_open()) {
                 std::getline(cmdline, packageName, '\0');
             }
         }
-        if (!packageName.empty()) {
-            s_internalPreferencePath = "/data/data/" + packageName + "/files/krkr2/";
+        if(!packageName.empty()) {
+            s_internalPreferencePath =
+                "/data/data/" + packageName + "/files/krkr2/";
         } else {
             // Fallback: use a path that Android apps can typically write to
             s_internalPreferencePath = "/data/local/tmp/krkr2/";
@@ -820,10 +860,10 @@ const std::string &TVPGetInternalPreferencePath() {
 static std::vector<std::string> s_appHomeDirs;
 
 const std::vector<std::string> &TVPGetApplicationHomeDirectory() {
-    if (s_appHomeDirs.empty()) {
-        if (!TVPNativeProjectDir.IsEmpty()) {
+    if(s_appHomeDirs.empty()) {
+        if(!TVPNativeProjectDir.IsEmpty()) {
             std::string dir = TVPNativeProjectDir.AsNarrowStdString();
-            while (!dir.empty() && dir.back() == '/')
+            while(!dir.empty() && dir.back() == '/')
                 dir.pop_back();
             s_appHomeDirs.push_back(dir);
         } else {
@@ -839,10 +879,11 @@ const std::vector<std::string> &TVPGetApplicationHomeDirectory() {
 // ---------------------------------------------------------------------------
 bool TVPCopyFile(const std::string &from, const std::string &to) {
     std::error_code ec;
-    std::filesystem::copy_file(from, to,
-        std::filesystem::copy_options::overwrite_existing, ec);
-    if (ec) {
-        spdlog::error("TVPCopyFile failed: {} -> {} ({})", from, to, ec.message());
+    std::filesystem::copy_file(
+        from, to, std::filesystem::copy_options::overwrite_existing, ec);
+    if(ec) {
+        spdlog::error("TVPCopyFile failed: {} -> {} ({})", from, to,
+                      ec.message());
         return false;
     }
     return true;
@@ -855,9 +896,9 @@ bool TVPCopyFile(const std::string &from, const std::string &to) {
 // ---------------------------------------------------------------------------
 std::string TVPShowFileSelector(const std::string &title,
                                 const std::string &init_dir,
-                                std::string default_ext,
-                                bool is_save) {
-    spdlog::warn("TVPShowFileSelector: stub — file selection handled by the host shell");
+                                std::string default_ext, bool is_save) {
+    spdlog::warn(
+        "TVPShowFileSelector: stub — file selection handled by the host shell");
     return "";
 }
 
@@ -866,7 +907,8 @@ std::string TVPShowFileSelector(const std::string &title,
 // Shows a popup context menu. Handled by the host shell.
 // ---------------------------------------------------------------------------
 void TVPShowPopMenu(tTJSNI_MenuItem *menu) {
-    spdlog::warn("TVPShowPopMenu: stub — popup menus handled by the host shell");
+    spdlog::warn(
+        "TVPShowPopMenu: stub — popup menus handled by the host shell");
 }
 
 // ---------------------------------------------------------------------------
@@ -874,5 +916,6 @@ void TVPShowPopMenu(tTJSNI_MenuItem *menu) {
 // Opens the URL for the patch library website.
 // ---------------------------------------------------------------------------
 void TVPOpenPatchLibUrl() {
-    spdlog::warn("TVPOpenPatchLibUrl: stub — URL opening handled by the host shell");
+    spdlog::warn(
+        "TVPOpenPatchLibUrl: stub — URL opening handled by the host shell");
 }

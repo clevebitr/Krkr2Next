@@ -19,7 +19,7 @@
 
 #include <atomic>
 
-static std::atomic<int64_t> sTJSCustomObjectCount{0};
+static std::atomic<int64_t> sTJSCustomObjectCount{ 0 };
 static std::atomic<int64_t> sObjByHash[8] = {};
 
 extern "C" int64_t TJS_GetCustomObjectCount() {
@@ -349,8 +349,10 @@ namespace TJS {
             hashbits = TJSObjectHashBitsLimit;
         {
             int idx = hashbits;
-            if(idx < 0) idx = 0;
-            if(idx > 7) idx = 7;
+            if(idx < 0)
+                idx = 0;
+            if(idx > 7)
+                idx = 7;
             sObjByHash[idx].fetch_add(1, std::memory_order_relaxed);
         }
         HashSize = (1 << hashbits);
@@ -382,8 +384,12 @@ namespace TJS {
         {
             int bits = 0;
             tjs_int sz = HashSize;
-            while(sz > 1) { sz >>= 1; bits++; }
-            if(bits > 7) bits = 7;
+            while(sz > 1) {
+                sz >>= 1;
+                bits++;
+            }
+            if(bits > 7)
+                bits = 7;
             sObjByHash[bits].fetch_sub(1, std::memory_order_relaxed);
         }
         for(tjs_int i = TJS_MAX_NATIVE_CLASS - 1; i >= 0; i--) {

@@ -794,8 +794,11 @@ namespace TJS {
         {
             static std::unordered_map<uintptr_t, uint64_t> recentDumps;
             auto now = std::chrono::steady_clock::now().time_since_epoch();
-            uint64_t nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
-            uintptr_t key = reinterpret_cast<uintptr_t>(Block) ^ static_cast<uintptr_t>(codepos);
+            uint64_t nowMs =
+                std::chrono::duration_cast<std::chrono::milliseconds>(now)
+                    .count();
+            uintptr_t key = reinterpret_cast<uintptr_t>(Block) ^
+                static_cast<uintptr_t>(codepos);
             auto it = recentDumps.find(key);
             if(it != recentDumps.end() && nowMs - it->second < 10000) {
                 return;
@@ -811,7 +814,8 @@ namespace TJS {
             }
         }
 
-        if(!Block) return;
+        if(!Block)
+            return;
         tTJS *tjs = CachedTJSEngine;
         ttstr info{ fmt::format(
             "==== An exception occurred at {}, VM ip = {} ==== ",
@@ -2514,7 +2518,8 @@ namespace TJS {
                 const tjs_char *p;
                 tjs_int pat_len = pattern.GetLen();
                 if(pat_len == 0) {
-                    if(result) *result = target;
+                    if(result)
+                        *result = target;
                     return;
                 }
                 while((p = TJS_strstr(start, pattern.c_str())) != nullptr) {
@@ -2523,7 +2528,8 @@ namespace TJS {
                     start = p + pat_len;
                 }
                 res += start;
-                if(result) *result = res;
+                if(result)
+                    *result = res;
             } else {
                 tTJSVariantClosure clo = args[0]->AsObjectClosureNoAddRef();
                 tTJSVariant str = target;

@@ -17,7 +17,7 @@
 
 #include <atomic>
 
-static std::atomic<int64_t> sTJSScriptBlockCount{0};
+static std::atomic<int64_t> sTJSScriptBlockCount{ 0 };
 
 extern "C" int64_t TJS_GetScriptBlockCount() {
     return sTJSScriptBlockCount.load(std::memory_order_relaxed);

@@ -480,7 +480,8 @@ private:
     void ImageLayerSizeChanged(); // called from geographical management
 public:
     tTVPBaseTexture *GetMainImage() {
-        if(_bitmapEvicted) EnsureBitmap();
+        if(_bitmapEvicted)
+            EnsureBitmap();
         ApplyFont();
         return MainImage;
     }

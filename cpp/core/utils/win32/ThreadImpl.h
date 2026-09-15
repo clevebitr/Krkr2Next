@@ -27,7 +27,7 @@ class tTVPThread {
     std::mutex _mutex; // for suspend
     std::condition_variable _cond;
     bool Suspended;
-    std::atomic<bool> Finished{false}; // set when thread function returns
+    std::atomic<bool> Finished{ false }; // set when thread function returns
 
     static void * /*__stdcall*/ StartProc(void *arg);
 

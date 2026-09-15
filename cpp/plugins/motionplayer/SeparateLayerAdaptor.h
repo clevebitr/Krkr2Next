@@ -9,8 +9,8 @@ namespace motion {
 
     class SeparateLayerAdaptor {
     public:
-        explicit SeparateLayerAdaptor(iTJSDispatch2 *owner = nullptr)
-            : _owner(owner) {
+        explicit SeparateLayerAdaptor(iTJSDispatch2 *owner = nullptr) :
+            _owner(owner) {
             if(_owner) {
                 _owner->AddRef();
             }
@@ -48,6 +48,7 @@ namespace motion {
     };
 } // namespace motion
 
-/** When \a base is a SeparateLayerAdaptor, returns its underlying Layer (with layerTreeOwnerInterface).
- *  Otherwise returns \a base. Used so Layer constructor receives an owner that has layerTreeOwnerInterface. */
+/** When \a base is a SeparateLayerAdaptor, returns its underlying Layer (with
+ * layerTreeOwnerInterface). Otherwise returns \a base. Used so Layer
+ * constructor receives an owner that has layerTreeOwnerInterface. */
 iTJSDispatch2 *ResolveLayerTreeOwnerBase(iTJSDispatch2 *base);

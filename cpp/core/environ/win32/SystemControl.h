@@ -69,6 +69,7 @@ public:
 extern tTVPSystemControl *TVPSystemControl;
 extern bool TVPSystemControlAlive;
 
-void TVPRegisterPSBCacheInfoCallback(bool (*cb)(size_t &usedBytes, size_t &limitBytes));
+void TVPRegisterPSBCacheInfoCallback(bool (*cb)(size_t &usedBytes,
+                                                size_t &limitBytes));
 
 #endif

@@ -812,7 +812,8 @@ bool Appearance::getLineCap(tTJSVariant &in, GpLineCap &cap,
 void LayerExDraw::updateRect(RectFClass &rect) {
     if(updateWhenDraw) {
         tTVPRect rc((tjs_int)rect.X, (tjs_int)rect.Y,
-                    (tjs_int)(rect.X + rect.Width), (tjs_int)(rect.Y + rect.Height));
+                    (tjs_int)(rect.X + rect.Width),
+                    (tjs_int)(rect.Y + rect.Height));
         _this->Update(rc);
     }
 }

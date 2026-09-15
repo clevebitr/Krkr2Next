@@ -23,19 +23,19 @@
 // TVPMainScene implementation — thin delegation to EngineLoop
 // ---------------------------------------------------------------------------
 
-static TVPMainScene* _instance = nullptr;
+static TVPMainScene *_instance = nullptr;
 
 TVPMainScene::TVPMainScene() = default;
 TVPMainScene::~TVPMainScene() {
-    if (_instance == this) {
+    if(_instance == this) {
         _instance = nullptr;
     }
 }
 
-TVPMainScene* TVPMainScene::GetInstance() { return _instance; }
+TVPMainScene *TVPMainScene::GetInstance() { return _instance; }
 
-TVPMainScene* TVPMainScene::CreateInstance() {
-    if (!_instance) {
+TVPMainScene *TVPMainScene::CreateInstance() {
+    if(!_instance) {
         _instance = new TVPMainScene();
         // Ensure EngineLoop singleton is also created
         EngineLoop::CreateInstance();
@@ -45,21 +45,21 @@ TVPMainScene* TVPMainScene::CreateInstance() {
 
 void TVPMainScene::scheduleUpdate() {
     _updateScheduled = true;
-    if (auto* loop = EngineLoop::GetInstance()) {
+    if(auto *loop = EngineLoop::GetInstance()) {
         loop->Start();
     }
 }
 
 void TVPMainScene::update(float delta) {
-    if (auto* loop = EngineLoop::GetInstance()) {
+    if(auto *loop = EngineLoop::GetInstance()) {
         loop->Tick(delta);
     }
 }
 
-bool TVPMainScene::startupFrom(const std::string& path) {
-    if (auto* loop = EngineLoop::GetInstance()) {
+bool TVPMainScene::startupFrom(const std::string &path) {
+    if(auto *loop = EngineLoop::GetInstance()) {
         bool result = loop->StartupFrom(path);
-        if (result) {
+        if(result) {
             _started = true;
             _updateScheduled = true;
         }
@@ -68,6 +68,6 @@ bool TVPMainScene::startupFrom(const std::string& path) {
     return false;
 }
 
-void TVPMainScene::doStartup(const std::string& path) {
+void TVPMainScene::doStartup(const std::string &path) {
     // Delegated — EngineLoop::StartupFrom calls DoStartup internally
 }

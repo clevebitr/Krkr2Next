@@ -22,7 +22,8 @@
 void TVPInitUIExtension();
 
 // Forward declaration — forces linker to include the OpenGL render manager
-// translation unit (which would otherwise be dead-stripped in static library builds)
+// translation unit (which would otherwise be dead-stripped in static library
+// builds)
 extern void TVPForceRegisterOpenGLRenderManager();
 
 extern "C" void SDL_SetMainReady();
@@ -40,14 +41,17 @@ bool TVPEngineBootstrap::s_initialized = false;
 // ---------------------------------------------------------------------------
 
 bool TVPEngineBootstrap::Initialize(uint32_t width, uint32_t height) {
-    if (s_initialized) {
-        spdlog::warn("TVPEngineBootstrap::Initialize called but already initialized");
+    if(s_initialized) {
+        spdlog::warn(
+            "TVPEngineBootstrap::Initialize called but already initialized");
         return true;
     }
 
     // 1. SDL setup (required for audio / misc subsystems)
     SDL_SetMainReady();
-    // TVPMainThreadID is captured at dylib load time (static init in Application.cpp) not the main() entry point, so it may be incorrect if the dylib is loaded on a different thread.
+    // TVPMainThreadID is captured at dylib load time (static init in
+    // Application.cpp) not the main() entry point, so it may be incorrect if
+    // the dylib is loaded on a different thread.
     spdlog::debug("EngineBootstrap: starting initialization");
     spdlog::default_logger()->flush();
 
@@ -67,13 +71,14 @@ bool TVPEngineBootstrap::Initialize(uint32_t width, uint32_t height) {
     InitializeLocale();
 
     s_initialized = true;
-    spdlog::info("EngineBootstrap: initialization complete ({}x{})", width, height);
+    spdlog::info("EngineBootstrap: initialization complete ({}x{})", width,
+                 height);
     spdlog::default_logger()->flush();
     return true;
 }
 
 void TVPEngineBootstrap::Shutdown() {
-    if (!s_initialized) {
+    if(!s_initialized) {
         return;
     }
 
@@ -83,14 +88,15 @@ void TVPEngineBootstrap::Shutdown() {
 }
 
 bool TVPEngineBootstrap::Resize(uint32_t width, uint32_t height) {
-    if (!s_initialized) {
+    if(!s_initialized) {
         spdlog::error("EngineBootstrap::Resize called before Initialize");
         return false;
     }
 
-    auto& egl = krkr::GetEngineEGLContext();
-    if (!egl.Resize(width, height)) {
-        spdlog::error("EngineBootstrap::Resize failed for {}x{}", width, height);
+    auto &egl = krkr::GetEngineEGLContext();
+    if(!egl.Resize(width, height)) {
+        spdlog::error("EngineBootstrap::Resize failed for {}x{}", width,
+                      height);
         return false;
     }
 
@@ -100,19 +106,17 @@ bool TVPEngineBootstrap::Resize(uint32_t width, uint32_t height) {
     return true;
 }
 
-bool TVPEngineBootstrap::IsInitialized() {
-    return s_initialized;
-}
+bool TVPEngineBootstrap::IsInitialized() { return s_initialized; }
 
 // ---------------------------------------------------------------------------
 // Private helpers
 // ---------------------------------------------------------------------------
 
 void TVPEngineBootstrap::InitializeGraphics(uint32_t width, uint32_t height) {
-    auto& egl = krkr::GetEngineEGLContext();
-    if (!egl.Initialize(width, height)) {
+    auto &egl = krkr::GetEngineEGLContext();
+    if(!egl.Initialize(width, height)) {
         spdlog::error("EngineBootstrap: EGL context initialization failed, "
-                       "rendering may not work correctly");
+                      "rendering may not work correctly");
         return;
     }
 
@@ -123,10 +127,11 @@ void TVPEngineBootstrap::InitializeGraphics(uint32_t width, uint32_t height) {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    // EGL context（重）建完成、已 make current：通知已注册的渲染器重建其 GL 对象
-    // （shader/共享 FBO）。runtime-restart 时 context 被 Shutdown 销毁再重建，渲染器
-    // 是进程级复用单例，旧 context 的 GL id 全部失效，必须在重建后刷新，否则
-    // 二次打开渲染黑屏/乱屏（首次 open 该回调列表为空，无副作用）。
+    // EGL context（重）建完成、已 make current：通知已注册的渲染器重建其 GL
+    // 对象 （shader/共享 FBO）。runtime-restart 时 context 被 Shutdown
+    // 销毁再重建，渲染器 是进程级复用单例，旧 context 的 GL id
+    // 全部失效，必须在重建后刷新，否则 二次打开渲染黑屏/乱屏（首次 open
+    // 该回调列表为空，无副作用）。
     krkr::gl::FireRendererRecreated();
 
     spdlog::info("EngineBootstrap: EGL context ready");

@@ -44,14 +44,14 @@ namespace PSB {
             return {};
         }
 
-        std::shared_ptr<PSBDictionary> GetDictionaryValue(
-            const std::shared_ptr<IPSBValue> &value) {
+        std::shared_ptr<PSBDictionary>
+        GetDictionaryValue(const std::shared_ptr<IPSBValue> &value) {
             return std::dynamic_pointer_cast<PSBDictionary>(value);
         }
 
-        std::shared_ptr<PSBResource> GetDirectResource(
-            const std::shared_ptr<PSBDictionary> &dict,
-            const std::string &key) {
+        std::shared_ptr<PSBResource>
+        GetDirectResource(const std::shared_ptr<PSBDictionary> &dict,
+                          const std::string &key) {
             if(!dict) {
                 return nullptr;
             }
@@ -62,27 +62,29 @@ namespace PSB {
             return std::dynamic_pointer_cast<PSBResource>(it->second);
         }
 
-        std::shared_ptr<PSBResource> FindResourceRecursive(
-            const std::shared_ptr<IPSBValue> &value,
-            const std::string &key,
-            int depth = 0) {
+        std::shared_ptr<PSBResource>
+        FindResourceRecursive(const std::shared_ptr<IPSBValue> &value,
+                              const std::string &key, int depth = 0) {
             if(!value || depth > 3) {
                 return nullptr;
             }
-            if(const auto dict = std::dynamic_pointer_cast<PSBDictionary>(value)) {
+            if(const auto dict =
+                   std::dynamic_pointer_cast<PSBDictionary>(value)) {
                 if(auto direct = GetDirectResource(dict, key)) {
                     return direct;
                 }
                 for(const auto &[childKey, childValue] : *dict) {
                     (void)childKey;
-                    if(auto nested = FindResourceRecursive(childValue, key, depth + 1)) {
+                    if(auto nested =
+                           FindResourceRecursive(childValue, key, depth + 1)) {
                         return nested;
                     }
                 }
             } else if(const auto list =
                           std::dynamic_pointer_cast<PSBList>(value)) {
                 for(const auto &childValue : *list) {
-                    if(auto nested = FindResourceRecursive(childValue, key, depth + 1)) {
+                    if(auto nested =
+                           FindResourceRecursive(childValue, key, depth + 1)) {
                         return nested;
                     }
                 }
@@ -96,10 +98,12 @@ namespace PSB {
             if(!value || depth > 3) {
                 return {};
             }
-            if(const auto dict = std::dynamic_pointer_cast<PSBDictionary>(value)) {
+            if(const auto dict =
+                   std::dynamic_pointer_cast<PSBDictionary>(value)) {
                 for(const auto &key : keys) {
                     if(const auto it = dict->find(key); it != dict->end()) {
-                        if(const auto str = GetStringValue(it->second); !str.empty()) {
+                        if(const auto str = GetStringValue(it->second);
+                           !str.empty()) {
                             return str;
                         }
                     }
@@ -127,12 +131,12 @@ namespace PSB {
 
         int FindNumberRecursive(const std::shared_ptr<IPSBValue> &value,
                                 const std::vector<std::string> &keys,
-                                int fallback,
-                                int depth = 0) {
+                                int fallback, int depth = 0) {
             if(!value || depth > 3) {
                 return fallback;
             }
-            if(const auto dict = std::dynamic_pointer_cast<PSBDictionary>(value)) {
+            if(const auto dict =
+                   std::dynamic_pointer_cast<PSBDictionary>(value)) {
                 for(const auto &key : keys) {
                     if(const auto it = dict->find(key); it != dict->end()) {
                         const int found = GetNumberValue(it->second, fallback);
@@ -143,8 +147,8 @@ namespace PSB {
                 }
                 for(const auto &[childKey, childValue] : *dict) {
                     (void)childKey;
-                    const int nested =
-                        FindNumberRecursive(childValue, keys, fallback, depth + 1);
+                    const int nested = FindNumberRecursive(childValue, keys,
+                                                           fallback, depth + 1);
                     if(nested != fallback) {
                         return nested;
                     }
@@ -152,8 +156,8 @@ namespace PSB {
             } else if(const auto list =
                           std::dynamic_pointer_cast<PSBList>(value)) {
                 for(const auto &childValue : *list) {
-                    const int nested =
-                        FindNumberRecursive(childValue, keys, fallback, depth + 1);
+                    const int nested = FindNumberRecursive(childValue, keys,
+                                                           fallback, depth + 1);
                     if(nested != fallback) {
                         return nested;
                     }
@@ -190,10 +194,12 @@ namespace PSB {
             if(value.empty() || value.size() > 256) {
                 return false;
             }
-            return value.rfind("motion/", 0) == 0 || value.rfind("src/", 0) == 0;
+            return value.rfind("motion/", 0) == 0 ||
+                value.rfind("src/", 0) == 0;
         }
 
-        std::string DetectImageExtension(const std::shared_ptr<PSBResource> &resource) {
+        std::string
+        DetectImageExtension(const std::shared_ptr<PSBResource> &resource) {
             if(!resource || resource->data.empty()) {
                 return {};
             }
@@ -217,9 +223,9 @@ namespace PSB {
             return ".png";
         }
 
-        void ApplyImageMetadata(ImageMetadata &meta,
-                                const std::shared_ptr<PSBDictionary> &dict,
-                                const std::shared_ptr<PSBDictionary> &parent = nullptr) {
+        void ApplyImageMetadata(
+            ImageMetadata &meta, const std::shared_ptr<PSBDictionary> &dict,
+            const std::shared_ptr<PSBDictionary> &parent = nullptr) {
             if(!dict) {
                 return;
             }
@@ -233,76 +239,76 @@ namespace PSB {
             // org = pos - M*(originX+ox, originY+oy). Without it full-canvas
             // logos (e.g. yuzusoft's centered yuzu_logo) lose their centering
             // pivot and per-glyph pivot points.
-            // 图标热点（旋转/锚点枢轴）。M2 参考读取源 icon 的 originX/originY，
-            // 用于绘制锚点公式 org = pos - M*(originX+ox, originY+oy)。缺它则
-            // 全画布 logo（如居中的 yuzusoft yuzu_logo）丢失居中枢轴、各字形的
-            // 枢轴点也会漂移。
-            meta.setOriginX(GetNumberValue((*dict)["originX"], meta.getOriginX()));
-            meta.setOriginY(GetNumberValue((*dict)["originY"], meta.getOriginY()));
-            meta.setOpacity(GetNumberValue((*dict)["opacity"], meta.getOpacity()));
+            // 图标热点（旋转/锚点枢轴）。M2 参考读取源 icon 的
+            // originX/originY， 用于绘制锚点公式 org = pos - M*(originX+ox,
+            // originY+oy)。缺它则 全画布 logo（如居中的 yuzusoft
+            // yuzu_logo）丢失居中枢轴、各字形的 枢轴点也会漂移。
+            meta.setOriginX(
+                GetNumberValue((*dict)["originX"], meta.getOriginX()));
+            meta.setOriginY(
+                GetNumberValue((*dict)["originY"], meta.getOriginY()));
+            meta.setOpacity(
+                GetNumberValue((*dict)["opacity"], meta.getOpacity()));
             meta.setVisible(GetNumberValue((*dict)["visible"],
                                            meta.getVisible() ? 1 : 0) != 0);
             meta.setLayerType(
                 GetNumberValue((*dict)["layer_type"], meta.getLayerType()));
 
-            if(const auto type = GetStringValue((*dict)["type"]); !type.empty()) {
+            if(const auto type = GetStringValue((*dict)["type"]);
+               !type.empty()) {
                 meta.setType(type);
             }
             if(meta.getType().empty()) {
-                if(const auto texType =
-                       GetStringValue((*dict)["texture_type"]); !texType.empty()) {
+                if(const auto texType = GetStringValue((*dict)["texture_type"]);
+                   !texType.empty()) {
                     meta.setType(texType);
                 }
             }
             if(meta.getType().empty()) {
-                if(const auto pixelType =
-                       GetStringValue((*dict)["pixel_type"]); !pixelType.empty()) {
+                if(const auto pixelType = GetStringValue((*dict)["pixel_type"]);
+                   !pixelType.empty()) {
                     meta.setType(pixelType);
                 }
             }
             if(meta.getType().empty() && parent) {
-                if(const auto parentType =
-                       GetStringValue((*parent)["type"]); !parentType.empty()) {
+                if(const auto parentType = GetStringValue((*parent)["type"]);
+                   !parentType.empty()) {
                     meta.setType(parentType);
                 }
             }
             if(meta.getType().empty() && parent) {
                 if(const auto parentTexType =
-                       GetStringValue((*parent)["texture_type"]); !parentTexType.empty()) {
+                       GetStringValue((*parent)["texture_type"]);
+                   !parentTexType.empty()) {
                     meta.setType(parentTexType);
                 }
             }
             if(meta.getType().empty()) {
-                if(const auto nestedType =
-                       FindStringRecursive(dict, { "type", "texture_type",
-                                                   "pixel_type" });
+                if(const auto nestedType = FindStringRecursive(
+                       dict, { "type", "texture_type", "pixel_type" });
                    !nestedType.empty()) {
                     meta.setType(nestedType);
                 }
             }
             if(meta.getType().empty() && parent) {
-                if(const auto nestedParentType =
-                       FindStringRecursive(parent, { "type", "texture_type",
-                                                     "pixel_type" });
+                if(const auto nestedParentType = FindStringRecursive(
+                       parent, { "type", "texture_type", "pixel_type" });
                    !nestedParentType.empty()) {
                     meta.setType(nestedParentType);
                 }
             }
-            if(const auto palType =
-                   FindStringRecursive(dict, { "pal_type", "palette_type",
-                                               "clut_type" });
+            if(const auto palType = FindStringRecursive(
+                   dict, { "pal_type", "palette_type", "clut_type" });
                !palType.empty()) {
                 meta.setPalType(palType);
             } else if(parent) {
-                if(const auto parentPalType =
-                       FindStringRecursive(parent, { "pal_type", "palette_type",
-                                                     "clut_type" });
+                if(const auto parentPalType = FindStringRecursive(
+                       parent, { "pal_type", "palette_type", "clut_type" });
                    !parentPalType.empty()) {
                     meta.setPalType(parentPalType);
                 }
             }
-            if(const auto palette =
-                   FindResourceRecursive(dict, "pal")) {
+            if(const auto palette = FindResourceRecursive(dict, "pal")) {
                 meta.setPalette(palette);
             } else if(const auto palette =
                           FindResourceRecursive(dict, "palette")) {
@@ -322,62 +328,66 @@ namespace PSB {
                !compress.empty()) {
                 meta.setCompress(ParseCompressType(compress));
             } else if(parent) {
-                if(const auto parentCompress =
-                       FindStringRecursive(parent, { "compress", "compression" });
+                if(const auto parentCompress = FindStringRecursive(
+                       parent, { "compress", "compression" });
                    !parentCompress.empty()) {
                     meta.setCompress(ParseCompressType(parentCompress));
                 }
             }
-            if(const auto label = GetStringValue((*dict)["name"]); !label.empty()) {
+            if(const auto label = GetStringValue((*dict)["name"]);
+               !label.empty()) {
                 meta.setLabel(label);
             }
 
             if(const auto clip =
                    std::dynamic_pointer_cast<PSBDictionary>((*dict)["clip"])) {
-                meta.setWidth(GetNumberValue((*clip)["width"],
-                                             GetNumberValue((*clip)["w"],
-                                                            meta.getWidth())));
-                meta.setHeight(GetNumberValue((*clip)["height"],
-                                              GetNumberValue((*clip)["h"],
-                                                             meta.getHeight())));
-                meta.setLeft(GetNumberValue((*clip)["left"],
-                                            GetNumberValue((*clip)["x"],
-                                                           meta.getLeft())));
-                meta.setTop(GetNumberValue((*clip)["top"],
-                                           GetNumberValue((*clip)["y"],
-                                                          meta.getTop())));
+                meta.setWidth(GetNumberValue(
+                    (*clip)["width"],
+                    GetNumberValue((*clip)["w"], meta.getWidth())));
+                meta.setHeight(GetNumberValue(
+                    (*clip)["height"],
+                    GetNumberValue((*clip)["h"], meta.getHeight())));
+                meta.setLeft(GetNumberValue(
+                    (*clip)["left"],
+                    GetNumberValue((*clip)["x"], meta.getLeft())));
+                meta.setTop(GetNumberValue(
+                    (*clip)["top"],
+                    GetNumberValue((*clip)["y"], meta.getTop())));
             }
 
             if(parent) {
                 if(meta.getWidth() <= 0) {
-                    meta.setWidth(GetNumberValue((*parent)["width"], meta.getWidth()));
+                    meta.setWidth(
+                        GetNumberValue((*parent)["width"], meta.getWidth()));
                 }
                 if(meta.getHeight() <= 0) {
-                    meta.setHeight(GetNumberValue((*parent)["height"], meta.getHeight()));
+                    meta.setHeight(
+                        GetNumberValue((*parent)["height"], meta.getHeight()));
                 }
                 if(meta.getLeft() == 0) {
-                    meta.setLeft(GetNumberValue((*parent)["left"], meta.getLeft()));
+                    meta.setLeft(
+                        GetNumberValue((*parent)["left"], meta.getLeft()));
                 }
                 if(meta.getTop() == 0) {
-                    meta.setTop(GetNumberValue((*parent)["top"], meta.getTop()));
+                    meta.setTop(
+                        GetNumberValue((*parent)["top"], meta.getTop()));
                 }
             }
 
             if(meta.getWidth() <= 0) {
                 meta.setWidth(FindNumberRecursive(dict, { "width", "w" },
-                                                 meta.getWidth()));
+                                                  meta.getWidth()));
             }
             if(meta.getHeight() <= 0) {
                 meta.setHeight(FindNumberRecursive(dict, { "height", "h" },
-                                                  meta.getHeight()));
+                                                   meta.getHeight()));
             }
         }
 
         void AddMotionResource(
             std::vector<std::unique_ptr<IResourceMetadata>> &resourceList,
             const std::string &path,
-            const std::shared_ptr<PSBResource> &resource,
-            PSBSpec spec,
+            const std::shared_ptr<PSBResource> &resource, PSBSpec spec,
             const std::shared_ptr<PSBDictionary> &dict = nullptr,
             const std::shared_ptr<PSBDictionary> &parent = nullptr) {
             if(path.empty() || !resource) {
@@ -399,45 +409,49 @@ namespace PSB {
             const std::string ext = DetectImageExtension(resource);
             if(!ext.empty() &&
                !(path.size() >= ext.size() &&
-                 path.compare(path.size() - ext.size(), ext.size(), ext) == 0)) {
+                 path.compare(path.size() - ext.size(), ext.size(), ext) ==
+                     0)) {
                 addOne(path + ext);
             }
         }
 
         void CollectMotionResources(
             std::vector<std::unique_ptr<IResourceMetadata>> &resourceList,
-            const std::shared_ptr<IPSBValue> &value,
-            const std::string &path,
+            const std::shared_ptr<IPSBValue> &value, const std::string &path,
             PSBSpec spec,
             const std::shared_ptr<PSBDictionary> &parent = nullptr) {
             if(!value) {
                 return;
             }
 
-            if(const auto resource = std::dynamic_pointer_cast<PSBResource>(value)) {
+            if(const auto resource =
+                   std::dynamic_pointer_cast<PSBResource>(value)) {
                 AddMotionResource(resourceList, path, resource, spec);
                 return;
             }
 
-            if(const auto dict = std::dynamic_pointer_cast<PSBDictionary>(value)) {
+            if(const auto dict =
+                   std::dynamic_pointer_cast<PSBDictionary>(value)) {
                 if(const auto directPixel = GetDirectResource(dict, "pixel")) {
                     const std::string pixelPath =
                         path.empty() ? "pixel" : path + "/pixel";
-                    AddMotionResource(resourceList, pixelPath, directPixel, spec,
-                                      dict, parent);
+                    AddMotionResource(resourceList, pixelPath, directPixel,
+                                      spec, dict, parent);
 
                     for(const auto &[key, child] : *dict) {
                         (void)key;
                         const auto aliasString =
                             std::dynamic_pointer_cast<PSBString>(child);
-                        if(!aliasString || !LooksLikeMotionAlias(aliasString->value)) {
+                        if(!aliasString ||
+                           !LooksLikeMotionAlias(aliasString->value)) {
                             continue;
                         }
                         AddMotionResource(resourceList, aliasString->value,
                                           directPixel, spec, dict, parent);
                         if(aliasString->value.size() < 6 ||
-                           aliasString->value.compare(aliasString->value.size() - 6,
-                                                      6, "/pixel") != 0) {
+                           aliasString->value.compare(
+                               aliasString->value.size() - 6, 6, "/pixel") !=
+                               0) {
                             AddMotionResource(resourceList,
                                               aliasString->value + "/pixel",
                                               directPixel, spec, dict, parent);
@@ -448,8 +462,10 @@ namespace PSB {
                     if(key == "pixel") {
                         continue;
                     }
-                    const std::string nextPath = path.empty() ? key : path + "/" + key;
-                    CollectMotionResources(resourceList, child, nextPath, spec, dict);
+                    const std::string nextPath =
+                        path.empty() ? key : path + "/" + key;
+                    CollectMotionResources(resourceList, child, nextPath, spec,
+                                           dict);
                 }
                 return;
             }
@@ -460,11 +476,12 @@ namespace PSB {
                     const std::string nextPath = path.empty()
                         ? std::to_string(i)
                         : path + "/" + std::to_string(i);
-                    CollectMotionResources(resourceList, child, nextPath, spec, parent);
+                    CollectMotionResources(resourceList, child, nextPath, spec,
+                                           parent);
                 }
             }
         }
-    }
+    } // namespace
 
     bool MotionType::isThisType(const PSBFile &psb) {
         const auto objects = psb.getObjects();

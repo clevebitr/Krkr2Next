@@ -19,20 +19,25 @@
 
 #define TJS_SCRIPT_CACHE_MAX 1024
 
-static std::atomic<int64_t> sExecCacheHit{0};
-static std::atomic<int64_t> sExecCacheMiss{0};
-static std::atomic<int64_t> sExecNamed{0};
-static std::atomic<int64_t> sEvalCacheHit{0};
-static std::atomic<int64_t> sEvalCacheMiss{0};
+static std::atomic<int64_t> sExecCacheHit{ 0 };
+static std::atomic<int64_t> sExecCacheMiss{ 0 };
+static std::atomic<int64_t> sExecNamed{ 0 };
+static std::atomic<int64_t> sEvalCacheHit{ 0 };
+static std::atomic<int64_t> sEvalCacheMiss{ 0 };
 
 extern "C" void TJS_GetScriptCacheStats(int64_t *exec_hit, int64_t *exec_miss,
-                                         int64_t *exec_named,
-                                         int64_t *eval_hit, int64_t *eval_miss) {
-    if(exec_hit) *exec_hit = sExecCacheHit.load(std::memory_order_relaxed);
-    if(exec_miss) *exec_miss = sExecCacheMiss.load(std::memory_order_relaxed);
-    if(exec_named) *exec_named = sExecNamed.load(std::memory_order_relaxed);
-    if(eval_hit) *eval_hit = sEvalCacheHit.load(std::memory_order_relaxed);
-    if(eval_miss) *eval_miss = sEvalCacheMiss.load(std::memory_order_relaxed);
+                                        int64_t *exec_named, int64_t *eval_hit,
+                                        int64_t *eval_miss) {
+    if(exec_hit)
+        *exec_hit = sExecCacheHit.load(std::memory_order_relaxed);
+    if(exec_miss)
+        *exec_miss = sExecCacheMiss.load(std::memory_order_relaxed);
+    if(exec_named)
+        *exec_named = sExecNamed.load(std::memory_order_relaxed);
+    if(eval_hit)
+        *eval_hit = sEvalCacheHit.load(std::memory_order_relaxed);
+    if(eval_miss)
+        *eval_miss = sEvalCacheMiss.load(std::memory_order_relaxed);
 }
 
 namespace TJS {

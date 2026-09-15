@@ -14,31 +14,31 @@
  * 已废弃：ANGLE 已从本项目移除，渲染走平台原生 EGL/GLES。
  * 该键仍被接受但取值被忽略（返回 OK），以免旧设置文件导致初始化失败。
  */
-#define ENGINE_OPTION_ANGLE_BACKEND       "angle_backend"
+#define ENGINE_OPTION_ANGLE_BACKEND "angle_backend"
 
 /** Frame rate limit (0 = unlimited / follow vsync). */
-#define ENGINE_OPTION_FPS_LIMIT           "fps_limit"
+#define ENGINE_OPTION_FPS_LIMIT "fps_limit"
 
 /** Render pipeline selection ("opengl" or "software"). */
-#define ENGINE_OPTION_RENDERER            "renderer"
+#define ENGINE_OPTION_RENDERER "renderer"
 
 /** Memory profile ("balanced" / "aggressive").
  *  Consumed by the C++ memory governor via TVPGetCommandLine(). */
-#define ENGINE_OPTION_MEMORY_PROFILE      "memory_profile"
+#define ENGINE_OPTION_MEMORY_PROFILE "memory_profile"
 
 /** Runtime memory budget in MB (0 = auto).
  *  Consumed by the C++ memory governor via TVPGetCommandLine(). */
-#define ENGINE_OPTION_MEMORY_BUDGET_MB    "memory_budget_mb"
+#define ENGINE_OPTION_MEMORY_BUDGET_MB "memory_budget_mb"
 
 /** Memory governor log interval in milliseconds.
  *  Consumed by the C++ memory governor via TVPGetCommandLine(). */
 #define ENGINE_OPTION_MEMORY_LOG_INTERVAL_MS "memory_log_interval_ms"
 
 /** PSB resource cache budget in MB. */
-#define ENGINE_OPTION_PSB_CACHE_MB        "psb_cache_mb"
+#define ENGINE_OPTION_PSB_CACHE_MB "psb_cache_mb"
 
 /** PSB resource cache max entry count. */
-#define ENGINE_OPTION_PSB_CACHE_ENTRIES   "psb_cache_entries"
+#define ENGINE_OPTION_PSB_CACHE_ENTRIES "psb_cache_entries"
 
 /** Archive cache max entry count. */
 #define ENGINE_OPTION_ARCHIVE_CACHE_COUNT "archive_cache_count"
@@ -48,15 +48,15 @@
 
 /* ── 已废弃的 ANGLE Backend 取值（仅为兼容旧设置文件保留） ───────── */
 
-#define ENGINE_ANGLE_BACKEND_GLES         "gles"
-#define ENGINE_ANGLE_BACKEND_VULKAN       "vulkan"
+#define ENGINE_ANGLE_BACKEND_GLES "gles"
+#define ENGINE_ANGLE_BACKEND_VULKAN "vulkan"
 
 /* ── Renderer Values ────────────────────────────────────────────── */
 
-#define ENGINE_RENDERER_OPENGL            "opengl"
-#define ENGINE_RENDERER_SOFTWARE          "software"
+#define ENGINE_RENDERER_OPENGL "opengl"
+#define ENGINE_RENDERER_SOFTWARE "software"
 
-#define ENGINE_MEMORY_PROFILE_BALANCED    "balanced"
-#define ENGINE_MEMORY_PROFILE_AGGRESSIVE  "aggressive"
+#define ENGINE_MEMORY_PROFILE_BALANCED "balanced"
+#define ENGINE_MEMORY_PROFILE_AGGRESSIVE "aggressive"
 
-#endif  /* KRKR2_ENGINE_OPTIONS_H_ */
+#endif /* KRKR2_ENGINE_OPTIONS_H_ */

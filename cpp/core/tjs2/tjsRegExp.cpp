@@ -222,359 +222,363 @@ namespace TJS {
     //---------------------------------------------------------------------------
     tjs_uint32 tTJSNC_RegExp::ClassID = (tjs_uint32)-1;
 
-    tTJSNC_RegExp::tTJSNC_RegExp() :
-        tTJSNativeClass(TJS_W("RegExp")){
-            // class constructor
+    tTJSNC_RegExp::tTJSNC_RegExp() : tTJSNativeClass(TJS_W("RegExp")) {
+        // class constructor
 
-            TJS_BEGIN_NATIVE_MEMBERS(
-                /*TJS class name*/
-                RegExp) TJS_DECL_EMPTY_FINALIZE_METHOD
-                //----------------------------------------------------------------------
-                TJS_BEGIN_NATIVE_CONSTRUCTOR_DECL(
-                    /*var. name*/ _this,
-                    /*var. type*/ tTJSNI_RegExp,
-                    /*TJS class name*/ RegExp){
-                    /*
-                        TJS constructor
-                    */
+        TJS_BEGIN_NATIVE_MEMBERS(
+            /*TJS class name*/
+            RegExp)
+        TJS_DECL_EMPTY_FINALIZE_METHOD
+        //----------------------------------------------------------------------
+        TJS_BEGIN_NATIVE_CONSTRUCTOR_DECL(
+            /*var. name*/ _this,
+            /*var. type*/ tTJSNI_RegExp,
+            /*TJS class name*/ RegExp) {
+            /*
+                TJS constructor
+            */
 
-                    if(numparams >= 1)
-                        tTJSNC_RegExp::Compile(numparams, param, _this);
+            if(numparams >= 1)
+                tTJSNC_RegExp::Compile(numparams, param, _this);
 
-                    return TJS_S_OK;
-                }
-                TJS_END_NATIVE_CONSTRUCTOR_DECL(/*TJS class name*/ RegExp)
-//----------------------------------------------------------------------
-TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ compile) {
-    TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
-                            /*var. type*/ tTJSNI_RegExp);
-
-    /*
-        compiles given regular expression and flags.
-    */
-
-    if(numparams < 1)
-        return TJS_E_BADPARAMCOUNT;
-
-    tTJSNC_RegExp::Compile(numparams, param, _this);
-
-    return TJS_S_OK;
-}
-TJS_END_NATIVE_METHOD_DECL(/*func. name*/ compile)
-//----------------------------------------------------------------------
-TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ _compile) {
-    TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
-                            /*var. type*/ tTJSNI_RegExp);
-
-    /*
-        internal function; compiles given constant regular expression.
-        input expression is following format:
-        //flags/expression
-        where flags is flag letters ( [gil] )
-        and expression is a Regular Expression
-    */
-
-    if(numparams != 1)
-        return TJS_E_BADPARAMCOUNT;
-
-    ttstr expr = *param[0];
-
-    const tjs_char *p = expr.c_str();
-    if(!p || !p[0])
-        return TJS_E_FAIL;
-
-    if(p[0] != TJS_W('/') || p[1] != TJS_W('/'))
-        return TJS_E_FAIL;
-
-    p += 2;
-    const tjs_char *exprstart = TJS_strchr(p, TJS_W('/'));
-    if(!exprstart)
-        return TJS_E_FAIL;
-    exprstart++;
-
-    tjs_uint32 flags = TJSGetRegExpFlagsFromString(p);
-
-    try {
-        if(_this->RegEx) {
-            onig_free(_this->RegEx);
-            _this->RegEx = nullptr;
+            return TJS_S_OK;
         }
+        TJS_END_NATIVE_CONSTRUCTOR_DECL(/*TJS class name*/ RegExp)
+        //----------------------------------------------------------------------
+        TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ compile) {
+            TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
+                                    /*var. type*/ tTJSNI_RegExp);
 
-        ttstr pattern(exprstart,
-                      (tjs_int)(expr.c_str() + expr.length() - exprstart));
+            /*
+                compiles given regular expression and flags.
+            */
 
-        ttstr fixed;
-        const tjs_char *s = pattern.c_str();
-        tjs_int len = pattern.GetLen();
-        for(tjs_int i = 0; i < len; i++) {
-            if(s[i] == TJS_W('\\') && i + 1 < len &&
-               s[i + 1] == TJS_W('x')) {
-                tjs_int hexStart = i + 2;
-                tjs_int hexLen = 0;
-                while(hexStart + hexLen < len &&
-                      ((s[hexStart + hexLen] >= TJS_W('0') &&
-                        s[hexStart + hexLen] <= TJS_W('9')) ||
-                       (s[hexStart + hexLen] >= TJS_W('a') &&
-                        s[hexStart + hexLen] <= TJS_W('f')) ||
-                       (s[hexStart + hexLen] >= TJS_W('A') &&
-                        s[hexStart + hexLen] <= TJS_W('F'))))
-                    hexLen++;
-                if(hexLen > 2) {
-                    fixed += TJS_W("\\x{");
-                    fixed += ttstr(s + hexStart, hexLen);
-                    fixed += TJS_W("}");
-                    i = hexStart + hexLen - 1;
-                    continue;
+            if(numparams < 1)
+                return TJS_E_BADPARAMCOUNT;
+
+            tTJSNC_RegExp::Compile(numparams, param, _this);
+
+            return TJS_S_OK;
+        }
+        TJS_END_NATIVE_METHOD_DECL(/*func. name*/ compile)
+        //----------------------------------------------------------------------
+        TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ _compile) {
+            TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
+                                    /*var. type*/ tTJSNI_RegExp);
+
+            /*
+                internal function; compiles given constant regular expression.
+                input expression is following format:
+                //flags/expression
+                where flags is flag letters ( [gil] )
+                and expression is a Regular Expression
+            */
+
+            if(numparams != 1)
+                return TJS_E_BADPARAMCOUNT;
+
+            ttstr expr = *param[0];
+
+            const tjs_char *p = expr.c_str();
+            if(!p || !p[0])
+                return TJS_E_FAIL;
+
+            if(p[0] != TJS_W('/') || p[1] != TJS_W('/'))
+                return TJS_E_FAIL;
+
+            p += 2;
+            const tjs_char *exprstart = TJS_strchr(p, TJS_W('/'));
+            if(!exprstart)
+                return TJS_E_FAIL;
+            exprstart++;
+
+            tjs_uint32 flags = TJSGetRegExpFlagsFromString(p);
+
+            try {
+                if(_this->RegEx) {
+                    onig_free(_this->RegEx);
+                    _this->RegEx = nullptr;
                 }
+
+                ttstr pattern(
+                    exprstart,
+                    (tjs_int)(expr.c_str() + expr.length() - exprstart));
+
+                ttstr fixed;
+                const tjs_char *s = pattern.c_str();
+                tjs_int len = pattern.GetLen();
+                for(tjs_int i = 0; i < len; i++) {
+                    if(s[i] == TJS_W('\\') && i + 1 < len &&
+                       s[i + 1] == TJS_W('x')) {
+                        tjs_int hexStart = i + 2;
+                        tjs_int hexLen = 0;
+                        while(hexStart + hexLen < len &&
+                              ((s[hexStart + hexLen] >= TJS_W('0') &&
+                                s[hexStart + hexLen] <= TJS_W('9')) ||
+                               (s[hexStart + hexLen] >= TJS_W('a') &&
+                                s[hexStart + hexLen] <= TJS_W('f')) ||
+                               (s[hexStart + hexLen] >= TJS_W('A') &&
+                                s[hexStart + hexLen] <= TJS_W('F'))))
+                            hexLen++;
+                        if(hexLen > 2) {
+                            fixed += TJS_W("\\x{");
+                            fixed += ttstr(s + hexStart, hexLen);
+                            fixed += TJS_W("}");
+                            i = hexStart + hexLen - 1;
+                            continue;
+                        }
+                    }
+                    fixed += s[i];
+                }
+
+                const tjs_char *fp = fixed.c_str();
+                OnigErrorInfo einfo;
+                int r =
+                    onig_new(&(_this->RegEx), (UChar *)fp,
+                             (UChar *)(fp + fixed.GetLen()),
+                             flags & ((ONIG_OPTION_MAXBIT << 1) - 1),
+                             ONIG_ENCODING_UTF16_LE, ONIG_SYNTAX_PERL, &einfo);
+                if(r) {
+                    char s[ONIG_MAX_ERROR_MESSAGE_LEN];
+                    onig_error_code_to_str((UChar *)s, r, &einfo);
+                    TJS_eTJSError(s);
+                }
+            } catch(std::exception &e) {
+                TJS_eTJSError(e.what());
             }
-            fixed += s[i];
+
+            _this->Flags = flags;
+
+            return TJS_S_OK;
         }
+        TJS_END_NATIVE_METHOD_DECL(/*func. name*/ _compile)
+        //----------------------------------------------------------------------
+        TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ test) {
+            TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
+                                    /*var. type*/ tTJSNI_RegExp);
 
-        const tjs_char *fp = fixed.c_str();
-        OnigErrorInfo einfo;
-        int r = onig_new(&(_this->RegEx), (UChar *)fp,
-                         (UChar *)(fp + fixed.GetLen()),
-                         flags & ((ONIG_OPTION_MAXBIT << 1) - 1),
-                         ONIG_ENCODING_UTF16_LE, ONIG_SYNTAX_PERL, &einfo);
-        if(r) {
-            char s[ONIG_MAX_ERROR_MESSAGE_LEN];
-            onig_error_code_to_str((UChar *)s, r, &einfo);
-            TJS_eTJSError(s);
+            /*
+                do the text searching.
+                return match found ( true ), or not found ( false ).
+                this function *changes* internal status.
+            */
+
+            if(numparams < 1)
+                return TJS_E_BADPARAMCOUNT;
+
+            ttstr target(*param[0]);
+            OnigRegion *region = onig_region_new();
+            bool matched = tTJSNC_RegExp::Exec(region, target, _this);
+            onig_region_free(region, 1);
+
+            tTJSNC_RegExp::LastRegExp = tTJSVariant(objthis, objthis);
+
+            if(result) {
+                *result = matched;
+            }
+
+            return TJS_S_OK;
         }
-    } catch(std::exception &e) {
-        TJS_eTJSError(e.what());
-    }
+        TJS_END_NATIVE_METHOD_DECL(/*func. name*/ test)
+        //----------------------------------------------------------------------
+        TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ match) {
+            TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
+                                    /*var. type*/ tTJSNI_RegExp);
 
-    _this->Flags = flags;
+            /*
+                do the text searching.
+                this function is the same as test, except for its return
+               value. match returns an array that contains each matching part.
+                if match failed, returns empty array. eg.
+                any internal status will not be changed.
+            */
 
-    return TJS_S_OK;
-}
-TJS_END_NATIVE_METHOD_DECL(/*func. name*/ _compile)
-//----------------------------------------------------------------------
-TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ test) {
-    TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
-                            /*var. type*/ tTJSNI_RegExp);
+            if(numparams < 1)
+                return TJS_E_BADPARAMCOUNT;
 
-    /*
-        do the text searching.
-        return match found ( true ), or not found ( false ).
-        this function *changes* internal status.
-    */
+            if(result) {
+                ttstr target(*param[0]);
+                OnigRegion *region = onig_region_new();
+                bool matched = tTJSNC_RegExp::Match(region, target, _this);
+                iTJSDispatch2 *array = tTJSNC_RegExp::GetResultArray(
+                    matched, target, _this, region);
+                onig_region_free(region, 1);
+                *result = tTJSVariant(array, array);
+                array->Release();
+            }
 
-    if(numparams < 1)
-        return TJS_E_BADPARAMCOUNT;
-
-    ttstr target(*param[0]);
-    OnigRegion *region = onig_region_new();
-    bool matched = tTJSNC_RegExp::Exec(region, target, _this);
-    onig_region_free(region, 1);
-
-    tTJSNC_RegExp::LastRegExp = tTJSVariant(objthis, objthis);
-
-    if(result) {
-        *result = matched;
-    }
-
-    return TJS_S_OK;
-}
-TJS_END_NATIVE_METHOD_DECL(/*func. name*/ test)
-//----------------------------------------------------------------------
-TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ match) {
-    TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
-                            /*var. type*/ tTJSNI_RegExp);
-
-    /*
-        do the text searching.
-        this function is the same as test, except for its return
-       value. match returns an array that contains each matching part.
-        if match failed, returns empty array. eg.
-        any internal status will not be changed.
-    */
-
-    if(numparams < 1)
-        return TJS_E_BADPARAMCOUNT;
-
-    if(result) {
-        ttstr target(*param[0]);
-        OnigRegion *region = onig_region_new();
-        bool matched = tTJSNC_RegExp::Match(region, target, _this);
-        iTJSDispatch2 *array =
-            tTJSNC_RegExp::GetResultArray(matched, target, _this, region);
-        onig_region_free(region, 1);
-        *result = tTJSVariant(array, array);
-        array->Release();
-    }
-
-    return TJS_S_OK;
-}
-TJS_END_NATIVE_METHOD_DECL(/*func. name*/ match)
-//----------------------------------------------------------------------
-TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ exec) {
-    TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
-                            /*var. type*/ tTJSNI_RegExp);
-
-    /*
-        same as the match except for the internal status' change.
-        var ar;
-        var pat = /:(\d+):(\d+):/g;
-        while((ar = pat.match(target)).count)
-        {
-            // ...
+            return TJS_S_OK;
         }
-    */
+        TJS_END_NATIVE_METHOD_DECL(/*func. name*/ match)
+        //----------------------------------------------------------------------
+        TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ exec) {
+            TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
+                                    /*var. type*/ tTJSNI_RegExp);
 
-    if(numparams < 1)
-        return TJS_E_BADPARAMCOUNT;
+            /*
+                same as the match except for the internal status' change.
+                var ar;
+                var pat = /:(\d+):(\d+):/g;
+                while((ar = pat.match(target)).count)
+                {
+                    // ...
+                }
+            */
 
-    ttstr target(*param[0]);
-    OnigRegion *region = onig_region_new();
-    tTJSNC_RegExp::Exec(region, target, _this);
-    onig_region_free(region, 1);
+            if(numparams < 1)
+                return TJS_E_BADPARAMCOUNT;
 
-    tTJSNC_RegExp::LastRegExp = tTJSVariant(objthis, objthis);
+            ttstr target(*param[0]);
+            OnigRegion *region = onig_region_new();
+            tTJSNC_RegExp::Exec(region, target, _this);
+            onig_region_free(region, 1);
 
-    if(result) {
+            tTJSNC_RegExp::LastRegExp = tTJSVariant(objthis, objthis);
+
+            if(result) {
+                *result = _this->Array;
+            }
+
+            return TJS_S_OK;
+        }
+        TJS_END_NATIVE_METHOD_DECL(/*func. name*/ exec)
+        //----------------------------------------------------------------------
+        TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ replace) {
+            TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
+                                    /*var. type*/ tTJSNI_RegExp);
+
+            /*
+                replaces the string
+
+                newstring = /regexp/.replace(orgstring, newsubstring);
+                newsubstring can be:
+                    1. normal string ( literal or expression that respresents
+               string )
+                    2. a function
+                function is called as in RegExp's context, returns new
+               substring.
+
+                or
+
+                newstring = string.replace(/regexp/, newsubstring);
+                    ( via String.replace method )
+
+                replace method ignores start property, and does not change any
+                    internal status.
+            */
+
+            if(numparams < 2)
+                return TJS_E_BADPARAMCOUNT;
+
+            ttstr res;
+            replace_regex(param, numparams, _this, objthis, res);
+            if(result)
+                *result = res;
+
+            return TJS_S_OK;
+        }
+        TJS_END_NATIVE_METHOD_DECL(/*func. name*/ replace)
+        //----------------------------------------------------------------------
+        TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ replace_alias) {
+            TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
+                                    /*var. type*/ tTJSNI_RegExp);
+
+            if(numparams < 2)
+                return TJS_E_BADPARAMCOUNT;
+
+            ttstr res;
+            replace_regex(param, numparams, _this, objthis, res);
+            if(result)
+                *result = res;
+
+            return TJS_S_OK;
+        }
+        TJS_END_NATIVE_METHOD_DECL_INT
+        TJSNativeClassRegisterNCM(
+            TJS_NCM_REG_THIS, TJS_W("replace"),
+            TJSCreateNativeClassMethod(NCM_replace_alias::Process), __classname,
+            nitMethod);
+        //----------------------------------------------------------------------
+        TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ split) {
+            TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
+                                    /*var. type*/ tTJSNI_RegExp);
+
+            /*
+                replaces the string
+
+                array = /regexp/.replace(targetstring, <reserved>,
+               purgeempty);
+
+                or
+
+                array = targetstring.split(/regexp/, <reserved>, purgeempty);
+
+                or
+
+                array = [].split(/regexp/, targetstring, <reserved>,
+               purgeempty);
+
+                this method does not update properties
+            */
+
+            if(numparams < 1)
+                return TJS_E_BADPARAMCOUNT;
+
+            ttstr target(*param[0]);
+
+            bool purgeempty = false;
+            if(numparams >= 3)
+                purgeempty = param[2]->operator bool();
+
+            iTJSDispatch2 *array = nullptr;
+
+            _this->Split(&array, target, purgeempty);
+
+            if(result)
+                *result = tTJSVariant(array, array);
+
+            array->Release();
+
+            return TJS_S_OK;
+        }
+        TJS_END_NATIVE_METHOD_DECL(/*func. name*/ split)
+        //----------------------------------------------------------------------
+        TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ split_alias) {
+            TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
+                                    /*var. type*/ tTJSNI_RegExp);
+
+            if(numparams < 1)
+                return TJS_E_BADPARAMCOUNT;
+
+            ttstr target(*param[0]);
+            bool purgeempty = false;
+            if(numparams >= 3)
+                purgeempty = param[2]->operator bool();
+
+            iTJSDispatch2 *array = nullptr;
+            _this->Split(&array, target, purgeempty);
+            if(result)
+                *result = tTJSVariant(array, array);
+            array->Release();
+
+            return TJS_S_OK;
+        }
+        TJS_END_NATIVE_METHOD_DECL_INT
+        TJSNativeClassRegisterNCM(
+            TJS_NCM_REG_THIS, TJS_W("split"),
+            TJSCreateNativeClassMethod(NCM_split_alias::Process), __classname,
+            nitMethod);
+        //----------------------------------------------------------------------
+        TJS_BEGIN_NATIVE_PROP_DECL(matches){ TJS_BEGIN_NATIVE_PROP_GETTER{
+            TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
+                                    /*var. type*/ tTJSNI_RegExp);
         *result = _this->Array;
+        return TJS_S_OK;
     }
+    TJS_END_NATIVE_PROP_GETTER
 
-    return TJS_S_OK;
-}
-TJS_END_NATIVE_METHOD_DECL(/*func. name*/ exec)
-//----------------------------------------------------------------------
-TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ replace) {
-    TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
-                            /*var. type*/ tTJSNI_RegExp);
-
-    /*
-        replaces the string
-
-        newstring = /regexp/.replace(orgstring, newsubstring);
-        newsubstring can be:
-            1. normal string ( literal or expression that respresents
-       string )
-            2. a function
-        function is called as in RegExp's context, returns new
-       substring.
-
-        or
-
-        newstring = string.replace(/regexp/, newsubstring);
-            ( via String.replace method )
-
-        replace method ignores start property, and does not change any
-            internal status.
-    */
-
-    if(numparams < 2)
-        return TJS_E_BADPARAMCOUNT;
-
-    ttstr res;
-    replace_regex(param, numparams, _this, objthis, res);
-    if(result)
-        *result = res;
-
-    return TJS_S_OK;
-}
-TJS_END_NATIVE_METHOD_DECL(/*func. name*/ replace)
-//----------------------------------------------------------------------
-TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ replace_alias) {
-    TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
-                            /*var. type*/ tTJSNI_RegExp);
-
-    if(numparams < 2)
-        return TJS_E_BADPARAMCOUNT;
-
-    ttstr res;
-    replace_regex(param, numparams, _this, objthis, res);
-    if(result)
-        *result = res;
-
-    return TJS_S_OK;
-}
-TJS_END_NATIVE_METHOD_DECL_INT
-TJSNativeClassRegisterNCM(TJS_NCM_REG_THIS, TJS_W("replace"),
-                          TJSCreateNativeClassMethod(NCM_replace_alias::Process),
-                          __classname, nitMethod);
-//----------------------------------------------------------------------
-TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ split) {
-    TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
-                            /*var. type*/ tTJSNI_RegExp);
-
-    /*
-        replaces the string
-
-        array = /regexp/.replace(targetstring, <reserved>,
-       purgeempty);
-
-        or
-
-        array = targetstring.split(/regexp/, <reserved>, purgeempty);
-
-        or
-
-        array = [].split(/regexp/, targetstring, <reserved>,
-       purgeempty);
-
-        this method does not update properties
-    */
-
-    if(numparams < 1)
-        return TJS_E_BADPARAMCOUNT;
-
-    ttstr target(*param[0]);
-
-    bool purgeempty = false;
-    if(numparams >= 3)
-        purgeempty = param[2]->operator bool();
-
-    iTJSDispatch2 *array = nullptr;
-
-    _this->Split(&array, target, purgeempty);
-
-    if(result)
-        *result = tTJSVariant(array, array);
-
-    array->Release();
-
-    return TJS_S_OK;
-}
-TJS_END_NATIVE_METHOD_DECL(/*func. name*/ split)
-//----------------------------------------------------------------------
-TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ split_alias) {
-    TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
-                            /*var. type*/ tTJSNI_RegExp);
-
-    if(numparams < 1)
-        return TJS_E_BADPARAMCOUNT;
-
-    ttstr target(*param[0]);
-    bool purgeempty = false;
-    if(numparams >= 3)
-        purgeempty = param[2]->operator bool();
-
-    iTJSDispatch2 *array = nullptr;
-    _this->Split(&array, target, purgeempty);
-    if(result)
-        *result = tTJSVariant(array, array);
-    array->Release();
-
-    return TJS_S_OK;
-}
-TJS_END_NATIVE_METHOD_DECL_INT
-TJSNativeClassRegisterNCM(TJS_NCM_REG_THIS, TJS_W("split"),
-                          TJSCreateNativeClassMethod(NCM_split_alias::Process),
-                          __classname, nitMethod);
-//----------------------------------------------------------------------
-TJS_BEGIN_NATIVE_PROP_DECL(matches){ TJS_BEGIN_NATIVE_PROP_GETTER{
-    TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
-                            /*var. type*/ tTJSNI_RegExp);
-*result = _this->Array;
-return TJS_S_OK;
-}
-TJS_END_NATIVE_PROP_GETTER
-
-TJS_DENY_NATIVE_PROP_SETTER
-}
+    TJS_DENY_NATIVE_PROP_SETTER
+} // namespace TJS
 TJS_END_NATIVE_PROP_DECL(matches)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(cap){ TJS_BEGIN_NATIVE_PROP_GETTER{

@@ -258,13 +258,9 @@ void VideoPresentOverlay::PresentPicture(float dt) {
     // This will be re-implemented via host texture sharing.
 }
 
-void KRMovie::VideoPresentOverlay::Play() {
-    TVPMoviePlayer::Play();
-}
+void KRMovie::VideoPresentOverlay::Play() { TVPMoviePlayer::Play(); }
 
-void KRMovie::VideoPresentOverlay::Stop() {
-    TVPMoviePlayer::Stop();
-}
+void KRMovie::VideoPresentOverlay::Stop() { TVPMoviePlayer::Stop(); }
 
 MoviePlayerOverlay::~MoviePlayerOverlay() {
     assert(std::this_thread::get_id() == TVPMainThreadID);

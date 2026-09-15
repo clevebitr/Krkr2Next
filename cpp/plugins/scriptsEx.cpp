@@ -965,10 +965,8 @@ tjs_error ScriptsAdd::safeEvalStorage(tTJSVariant *result, tjs_int numparams,
     return TJS_S_OK;
 }
 //----------------------------------------------------------------------
-static tjs_error loadDataPack(tTJSVariant *result,
-                              tjs_int numparams,
-                              tTJSVariant **param,
-                              iTJSDispatch2 *objthis) {
+static tjs_error loadDataPack(tTJSVariant *result, tjs_int numparams,
+                              tTJSVariant **param, iTJSDispatch2 *objthis) {
     if(numparams < 1)
         return TJS_E_BADPARAMCOUNT;
     if(result) {

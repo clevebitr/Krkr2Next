@@ -22,13 +22,15 @@
 static inline void *TLGArenaAlloc(size_t size, int align) {
     if(TVPDecodeArenaActive()) {
         void *p = TVPDecodeArenaAlloc(size + align + 16);
-        if(p) return p;
+        if(p)
+            return p;
     }
     return TJSAlignedAlloc(size, align);
 }
 
 static inline void TLGArenaDealloc(void *ptr) {
-    if(TVPDecodeArenaActive()) return;
+    if(TVPDecodeArenaActive())
+        return;
     TJSAlignedDealloc(ptr);
 }
 

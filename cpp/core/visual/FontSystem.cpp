@@ -72,7 +72,8 @@ ttstr FontSystem::GetBeingFont(ttstr fonts) {
     // font candidates are given by "fonts", separated by comma.
     // Yuzusoft 系作品（千恋万花等）的菜单/选项字体 face 形如
     //   "PrerenderFont(スキップ),ＭＳ ゴシック"
-    // 其中 "PrerenderFont(參數)" 是 KrKr 的"预渲染/位图字体"指示符：提示该文字应
+    // 其中 "PrerenderFont(參數)" 是 KrKr
+    // 的"预渲染/位图字体"指示符：提示该文字应
     // 走预渲染字体通道（按逗号后的真实字体度量排版），而不是把整个前缀当作一个
     // 系统字体名去匹配失败后任意 fallback。剥离该前缀后，逗号后的真实字体名才
     // 能进入候选匹配，从而保持等宽全角字身，避免"字变小、偏左上、下半被裁"。
@@ -89,8 +90,9 @@ ttstr FontSystem::GetBeingFont(ttstr fonts) {
     // Strip a leading "PrerenderFont(...)" / "PreRenderFont(...)" directive.
     // The paren block carries generic parameters (e.g. スキップ=skip) that are
     // NOT a real font name; the actual font candidate follows the comma.
-    // 剥离前缀 "PrerenderFont(...)" / "PreRenderFont(...)" 指令：括号内是通用参数
-    //（如 スキップ=skip），并非真实字体名；真正的字体候选在逗号之后。
+    // 剥离前缀 "PrerenderFont(...)" / "PreRenderFont(...)"
+    // 指令：括号内是通用参数
+    // （如 スキップ=skip），并非真实字体名；真正的字体候选在逗号之后。
     {
         int ob = fonts.IndexOf(TJS_W("("));
         if(ob > 0) {
@@ -156,9 +158,10 @@ ttstr FontSystem::GetBeingFont(ttstr fonts) {
     // cell. Before dropping to the plain default face, prefer a registered
     // monospace / fullwidth CJK font so option text keeps its square cell and
     // does not shrink / shift out of its box.
-    // 等宽/全角优先回退：PrerenderFont 标记的菜单/选项字体（如 MS ゴシック）按等宽全角
-    // 字身排版。在落到普通默认字体之前，优先选择已注册的等宽/全角 CJK 字体，保持选项
-    // 文字的正方字身，避免字缩小、偏移出框。
+    // 等宽/全角优先回退：PrerenderFont 标记的菜单/选项字体（如 MS
+    // ゴシック）按等宽全角
+    // 字身排版。在落到普通默认字体之前，优先选择已注册的等宽/全角 CJK
+    // 字体，保持选项 文字的正方字身，避免字缩小、偏移出框。
     if(vfont) {
         return ttstr(TJS_W("@")) + TVPGetDefaultFontName();
     } else {
@@ -182,17 +185,20 @@ ttstr FontSystem::GetBeingFont(ttstr fonts) {
                low.find(" cjk") != std::string::npos ||
                low.find("sans cjk") != std::string::npos) {
                 if(!below_printed) {
-                    TVPAddLog(ttstr(TJS_W("FontSystem::GetBeingFont: mono/fullwidth "
-                                          "fallback -> ")) + n);
+                    TVPAddLog(
+                        ttstr(TJS_W("FontSystem::GetBeingFont: mono/fullwidth "
+                                    "fallback -> ")) +
+                        n);
                 }
                 return n;
             }
         }
         if(!below_printed) {
             below_printed = true;
-            TVPAddLog(ttstr(TJS_W("FontSystem::GetBeingFont: no mono/fullwidth; "
-                                  "using default ")) +
-                      TVPGetDefaultFontName());
+            TVPAddLog(
+                ttstr(TJS_W("FontSystem::GetBeingFont: no mono/fullwidth; "
+                            "using default ")) +
+                TVPGetDefaultFontName());
         }
         return TVPGetDefaultFontName();
     }

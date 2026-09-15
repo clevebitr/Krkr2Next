@@ -72,14 +72,16 @@ struct PNG_read_chunk_callback_user_struct {
 static png_voidp PNG_malloc(png_structp ps, png_size_t size) {
     if(TVPDecodeArenaActive()) {
         void *p = TVPDecodeArenaAlloc(size);
-        if(p) return p;
+        if(p)
+            return p;
     }
     return malloc(size);
 }
 //---------------------------------------------------------------------------
 // user_free_fn
 static void PNG_free(png_structp ps, void * /* png_structp*/ mem) {
-    if(TVPDecodeArenaActive()) return;
+    if(TVPDecodeArenaActive())
+        return;
     free(mem);
 }
 //---------------------------------------------------------------------------

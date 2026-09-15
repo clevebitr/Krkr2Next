@@ -45,10 +45,10 @@ bool TVPCheckGLExtension(const std::string &extname);
 #define CHECK_GL_ERROR_DEBUG()                                                 \
     do {                                                                       \
         GLenum __error = glGetError();                                         \
-        if (__error) {                                                         \
+        if(__error) {                                                          \
             /* Log but don't assert — some errors are recoverable */           \
         }                                                                      \
-    } while (false)
+    } while(false)
 #else
 #define CHECK_GL_ERROR_DEBUG() ((void)0)
 #endif

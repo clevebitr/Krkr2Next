@@ -897,7 +897,10 @@ namespace TJS {
                 case tvtObject:
                     TJSThrowVariantConvertError(*this, tvtInteger, tvtReal);
                 case tvtString:
-                    if(String) String->ToNumber(targ); else targ = (tjs_int)0;
+                    if(String)
+                        String->ToNumber(targ);
+                    else
+                        targ = (tjs_int)0;
                     return;
                 case tvtInteger:
                     targ = Integer;
@@ -1174,7 +1177,10 @@ namespace TJS {
 
             if(vt == tvtString) {
                 tTJSVariant val;
-                if(String) String->ToNumber(val); else val = 0;
+                if(String)
+                    String->ToNumber(val);
+                else
+                    val = 0;
                 return val;
             }
 

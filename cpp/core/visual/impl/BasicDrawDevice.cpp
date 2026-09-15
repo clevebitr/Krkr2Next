@@ -560,8 +560,8 @@ void tTVPBasicDrawDevice::Show() {
 #if defined(KRKR_RENDER_PROBE)
         else {
             // form 或主层 LayerManager 缺失：Show 被调但守卫生效，无法 blit。
-            spdlog::info("BasicShow: skip (form={} managers={})",
-                         (void *)form, Managers.size());
+            spdlog::info("BasicShow: skip (form={} managers={})", (void *)form,
+                         Managers.size());
             spdlog::default_logger()->flush();
         }
 #endif

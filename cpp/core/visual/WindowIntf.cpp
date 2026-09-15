@@ -696,7 +696,8 @@ void tTJSNI_BaseWindow::RequestUpdate() {
     // is called from primary layer
 #if defined(KRKR_RENDER_PROBE)
     {
-        // 重绘请求计数探针（低频率，每 60 次打一条）：判断二次打开"游戏是否仍在请求重绘"。
+        // 重绘请求计数探针（低频率，每 60
+        // 次打一条）：判断二次打开"游戏是否仍在请求重绘"。
         static unsigned s_reqUpd = 0;
         if((++s_reqUpd % 60) == 1)
             spdlog::info("RequestUpdate: repaint requested (cum={})", s_reqUpd);

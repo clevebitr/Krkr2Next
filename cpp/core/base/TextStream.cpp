@@ -99,7 +99,7 @@ std::string checkTextEncoding(const void *buf, size_t size,
                 if(!isValidUTF8(raw, size))
                     encoding = "cp932";
             } else if(encoding != "cp932" && encoding != "EUC-JP" &&
-                       encoding != "ISO-2022-JP") {
+                      encoding != "ISO-2022-JP") {
                 encoding = "cp932";
             }
         }
@@ -137,12 +137,12 @@ public:
                 else if(size >= 5 && raw[3] == 0xFE && raw[4] == 0xFF)
                     hdr = 5; // skip unencrypted UTF-16BE BOM
                 size_t data_size = size - hdr;
-                if(data_size & 1) data_size--;
+                if(data_size & 1)
+                    data_size--;
                 size_t len = data_size / 2;
                 _buffer.resize(len);
                 for(size_t i = 0; i < len; i++) {
-                    char16_t ch =
-                        static_cast<char16_t>(raw[hdr + i * 2]) |
+                    char16_t ch = static_cast<char16_t>(raw[hdr + i * 2]) |
                         (static_cast<char16_t>(raw[hdr + i * 2 + 1]) << 8);
                     if(m == 0) {
                         if(ch >= 0x20)

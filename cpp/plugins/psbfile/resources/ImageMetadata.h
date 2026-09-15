@@ -50,7 +50,9 @@ namespace PSB {
         [[nodiscard]] std::string getType() const noexcept {
             return this->_typeString.value;
         }
-        void setType(const std::string &type) { this->_typeString.value = type; }
+        void setType(const std::string &type) {
+            this->_typeString.value = type;
+        }
 
         [[nodiscard]] std::string getPalType() const noexcept {
             return this->_paletteTypeString.value;
@@ -62,7 +64,9 @@ namespace PSB {
         [[nodiscard]] const PSBResource &getPalette() const noexcept {
             return this->_palette;
         }
-        void setPalette(const PSBResource &palette) { this->_palette = palette; }
+        void setPalette(const PSBResource &palette) {
+            this->_palette = palette;
+        }
         void setPalette(const std::shared_ptr<PSBResource> &palette) {
             if(palette) {
                 this->_palette = *palette;

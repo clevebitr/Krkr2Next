@@ -30,7 +30,8 @@
 
 tTJSHashTable<ttstr, TVPFontNamePathInfo, tTVPttstrHash> TVPFontNames;
 static ttstr TVPDefaultFontName;
-static bool TVPFontNamesInit = false; // 文件作用域，供 TVPResetFontImplForRestart 复位
+static bool TVPFontNamesInit =
+    false; // 文件作用域，供 TVPResetFontImplForRestart 复位
 const ttstr &TVPGetDefaultFontName() { return TVPDefaultFontName; }
 void TVPGetAllFontList(std::vector<ttstr> &list) {
     auto itend = TVPFontNames.GetLast();
@@ -63,7 +64,8 @@ void TVPReleaseFontLibrary() {
 //---------------------------------------------------------------------------
 void TVPResetFontImplForRestart() { // 对照上游 PR#12
     TVPReleaseFontLibrary();
-    TVPFontLibrary = nullptr; // 本地 TVPReleaseFontLibrary 不置空，二次 init 需重建
+    TVPFontLibrary =
+        nullptr; // 本地 TVPReleaseFontLibrary 不置空，二次 init 需重建
     TVPFontNames.Clear();
     TVPDefaultFontName.Clear();
     TVPFontNamesInit = false;
@@ -242,46 +244,54 @@ void TVPInitFontNames() {
         // (falls through to the "internal storage" block)
 #else
         // macOS: system fonts are accessible via the engine's storage layer
-        if(TVPEnumFontsProc(TJS_W("file://./System/Library/Fonts/PingFang.ttc")))
+        if(TVPEnumFontsProc(
+               TJS_W("file://./System/Library/Fonts/PingFang.ttc")))
             break;
         if(TVPEnumFontsProc(
                TJS_W("file://./System/Library/Fonts/Hiragino Sans GB.ttc")))
             break;
-        if(TVPEnumFontsProc(
-               TJS_W("file://./System/Library/Fonts/Supplemental/Arial Unicode.ttf")))
+        if(TVPEnumFontsProc(TJS_W(
+               "file://./System/Library/Fonts/Supplemental/Arial Unicode.ttf")))
             break;
 #endif
 #endif
 
         { // from internal storage (or system fonts on iOS)
             // Read font file using standard file I/O
-            auto tryReadFont = [](const std::string &path) -> std::vector<uint8_t> {
+            auto tryReadFont =
+                [](const std::string &path) -> std::vector<uint8_t> {
                 std::ifstream ifs(path, std::ios::binary | std::ios::ate);
-                if (!ifs.is_open()) return {};
+                if(!ifs.is_open())
+                    return {};
                 auto size = ifs.tellg();
-                if (size <= 0) return {};
+                if(size <= 0)
+                    return {};
                 std::vector<uint8_t> data(static_cast<size_t>(size));
                 ifs.seekg(0);
-                ifs.read(reinterpret_cast<char*>(data.data()), size);
+                ifs.read(reinterpret_cast<char *>(data.data()), size);
                 return data;
             };
 
             // Helper: load a font from POSIX path and register it.
-            auto tryLoadFontDirect = [&tryReadFont](const std::string &path,
-                                                     const std::string &label) -> bool {
+            auto tryLoadFontDirect =
+                [&tryReadFont](const std::string &path,
+                               const std::string &label) -> bool {
                 auto fdata = tryReadFont(path);
-                if (fdata.empty()) return false;
+                if(fdata.empty())
+                    return false;
                 spdlog::info("loaded system font: {}", path);
                 return TVPInternalEnumFonts(
-                    fdata.data(), fdata.size(), label.c_str(),
-                    [&tryReadFont](TVPFontNamePathInfo *info) -> tTJSBinaryStream * {
-                        auto d = tryReadFont(info->Path.AsStdString());
-                        if (d.empty()) return nullptr;
-                        auto *ret = new tTVPMemoryStream();
-                        ret->WriteBuffer(d.data(), d.size());
-                        ret->SetPosition(0);
-                        return ret;
-                    }) > 0;
+                           fdata.data(), fdata.size(), label.c_str(),
+                           [&tryReadFont](TVPFontNamePathInfo *info)
+                               -> tTJSBinaryStream * {
+                               auto d = tryReadFont(info->Path.AsStdString());
+                               if(d.empty())
+                                   return nullptr;
+                               auto *ret = new tTVPMemoryStream();
+                               ret->WriteBuffer(d.data(), d.size());
+                               ret->SetPosition(0);
+                               return ret;
+                           }) > 0;
             };
 
 #if defined(__ANDROID__)
@@ -299,64 +309,76 @@ void TVPInitFontNames() {
 #if defined(__APPLE__) && TARGET_OS_IOS
             // iOS: use CoreText API to get system font data (sandbox-safe).
             {
-                // Preferred font names in order: Hiragino Sans (JP), PingFang SC (CN)
-                static const char *preferredFonts[] = {
-                    "HiraginoSans-W3",
-                    "PingFangSC-Regular",
-                    "HiraMinProN-W3",
-                    nullptr
-                };
+                // Preferred font names in order: Hiragino Sans (JP), PingFang
+                // SC (CN)
+                static const char *preferredFonts[] = { "HiraginoSans-W3",
+                                                        "PingFangSC-Regular",
+                                                        "HiraMinProN-W3",
+                                                        nullptr };
                 bool loaded = false;
-                for (const char **fname = preferredFonts; *fname && !loaded; ++fname) {
+                for(const char **fname = preferredFonts; *fname && !loaded;
+                    ++fname) {
                     CFStringRef fontName = CFStringCreateWithCString(
                         kCFAllocatorDefault, *fname, kCFStringEncodingUTF8);
-                    if (!fontName) continue;
+                    if(!fontName)
+                        continue;
 
-                    CTFontRef ctFont = CTFontCreateWithName(fontName, 12.0, nullptr);
+                    CTFontRef ctFont =
+                        CTFontCreateWithName(fontName, 12.0, nullptr);
                     CFRelease(fontName);
-                    if (!ctFont) continue;
+                    if(!ctFont)
+                        continue;
 
                     // Get the font URL from the CTFont descriptor
                     CTFontDescriptorRef desc = CTFontCopyFontDescriptor(ctFont);
                     CFURLRef fontURL = desc
-                        ? (CFURLRef)CTFontDescriptorCopyAttribute(desc, kCTFontURLAttribute)
+                        ? (CFURLRef)CTFontDescriptorCopyAttribute(
+                              desc, kCTFontURLAttribute)
                         : nullptr;
 
-                    if (fontURL) {
+                    if(fontURL) {
                         char pathBuf[1024];
-                        if (CFURLGetFileSystemRepresentation(fontURL, true,
-                                (UInt8 *)pathBuf, sizeof(pathBuf))) {
+                        if(CFURLGetFileSystemRepresentation(fontURL, true,
+                                                            (UInt8 *)pathBuf,
+                                                            sizeof(pathBuf))) {
                             std::string fontPath(pathBuf);
-                            spdlog::info("iOS CoreText font path: {}", fontPath);
-                            if (tryLoadFontDirect(fontPath, fontPath)) {
+                            spdlog::info("iOS CoreText font path: {}",
+                                         fontPath);
+                            if(tryLoadFontDirect(fontPath, fontPath)) {
                                 loaded = true;
                             }
                         }
                         CFRelease(fontURL);
                     }
-                    if (desc) CFRelease(desc);
+                    if(desc)
+                        CFRelease(desc);
                     CFRelease(ctFont);
                 }
-                if (loaded) break;
+                if(loaded)
+                    break;
             }
 #endif
 
             auto data = tryReadFont("NotoSansCJK-Regular.ttc");
-            if (data.empty()) {
+            if(data.empty()) {
                 data = tryReadFont("fonts/NotoSansCJK-Regular.ttc");
             }
-            if (data.empty()) {
-                spdlog::warn("internal font file not found: NotoSansCJK-Regular.ttc");
+            if(data.empty()) {
+                spdlog::warn(
+                    "internal font file not found: NotoSansCJK-Regular.ttc");
             } else if(TVPInternalEnumFonts(
-                   data.data(), data.size(), "NotoSansCJK-Regular.ttc",
-                   [&tryReadFont](TVPFontNamePathInfo *info) -> tTJSBinaryStream * {
-                       auto fdata = tryReadFont(info->Path.AsStdString());
-                       if (fdata.empty()) return nullptr;
-                       auto *ret = new tTVPMemoryStream();
-                       ret->WriteBuffer(fdata.data(), fdata.size());
-                       ret->SetPosition(0);
-                       return ret;
-                   }))
+                          data.data(), data.size(), "NotoSansCJK-Regular.ttc",
+                          [&tryReadFont](
+                              TVPFontNamePathInfo *info) -> tTJSBinaryStream * {
+                              auto fdata =
+                                  tryReadFont(info->Path.AsStdString());
+                              if(fdata.empty())
+                                  return nullptr;
+                              auto *ret = new tTVPMemoryStream();
+                              ret->WriteBuffer(fdata.data(), fdata.size());
+                              ret->SetPosition(0);
+                              return ret;
+                          }))
                 break;
         }
     } while(false);

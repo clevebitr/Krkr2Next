@@ -141,7 +141,9 @@ void tTVPBitmapBitsAlloc::FreeAllocator() {
         delete Allocator;
     Allocator = nullptr;
 }
-void tTVPBitmapBitsAlloc::ResetForRestart() { FreeAllocator(); } // 对照上游 PR#12
+void tTVPBitmapBitsAlloc::ResetForRestart() {
+    FreeAllocator();
+} // 对照上游 PR#12
 static tTVPAtExit TVPUninitMessageLoad(TVP_ATEXIT_PRI_CLEANUP,
                                        tTVPBitmapBitsAlloc::FreeAllocator);
 

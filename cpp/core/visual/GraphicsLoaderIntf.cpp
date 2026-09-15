@@ -100,7 +100,8 @@ static void TVPLoadGraphicRouter(void *formatdata, void *callbackdata,
                  header[0], header[1], header[2], header[3]);
     sizecallback(callbackdata, 1, 1, gpfRGBA);
     void *buf = scanlinecallback(callbackdata, 0);
-    if(buf) memset(buf, 0, 4);
+    if(buf)
+        memset(buf, 0, 4);
     scanlinecallback(callbackdata, -1);
 }
 
@@ -1943,8 +1944,7 @@ int TVPLoadGraphic(iTVPBaseBitmap *dest, const ttstr &name, tjs_int32 keyidx,
         // (but NOT .amv which is now handled by the AMV decoder).
         ttstr ext = TVPExtractStorageExt(nname);
         ext.ToLowerCase();
-        bool unsupportedVideo =
-            ext == TJS_W(".avi") || ext == TJS_W(".wmv") ||
+        bool unsupportedVideo = ext == TJS_W(".avi") || ext == TJS_W(".wmv") ||
             ext == TJS_W(".mp4") || ext == TJS_W(".mpg") ||
             ext == TJS_W(".mpeg") || ext == TJS_W(".mov") ||
             ext == TJS_W(".flv");
@@ -1952,7 +1952,8 @@ int TVPLoadGraphic(iTVPBaseBitmap *dest, const ttstr &name, tjs_int32 keyidx,
         if(unsupportedVideo) {
             bmp = new tTVPBitmap(1, 1, 32);
             void *bits = bmp->GetScanLine(0);
-            if(bits) memset(bits, 0, 4);
+            if(bits)
+                memset(bits, 0, 4);
         } else {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
             TVPDecodeArena::Instance().Begin();

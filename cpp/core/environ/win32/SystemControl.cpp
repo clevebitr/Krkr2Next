@@ -38,13 +38,14 @@ extern "C" int64_t TJS_GetInterCodeContextCount();
 extern "C" int64_t TJS_GetVSNetBytes();
 extern "C" int64_t TJS_GetOrphanedICCCount();
 extern "C" void TJS_GetScriptCacheStats(int64_t *exec_hit, int64_t *exec_miss,
-                                         int64_t *exec_named,
-                                         int64_t *eval_hit, int64_t *eval_miss);
+                                        int64_t *exec_named, int64_t *eval_hit,
+                                        int64_t *eval_miss);
 extern "C" void TJS_GetObjByHashBits(int64_t out[8]);
 extern "C" void TJS_GetDictStats(int64_t *created, int64_t *destroyed);
 extern "C" void TJS_GetArrayStats(int64_t *created, int64_t *destroyed);
 
-static bool (*g_GetPSBCacheInfo)(size_t &usedBytes, size_t &limitBytes) = nullptr;
+static bool (*g_GetPSBCacheInfo)(size_t &usedBytes,
+                                 size_t &limitBytes) = nullptr;
 
 void TVPRegisterPSBCacheInfoCallback(bool (*cb)(size_t &, size_t &)) {
     g_GetPSBCacheInfo = cb;
@@ -74,38 +75,38 @@ static bool TVPGetMainThreadPriorityControl() {
 }
 
 namespace {
-tjs_int TVPClampInt(tjs_int value, tjs_int min_value, tjs_int max_value) {
-    if(value < min_value)
-        return min_value;
-    if(value > max_value)
-        return max_value;
-    return value;
-}
+    tjs_int TVPClampInt(tjs_int value, tjs_int min_value, tjs_int max_value) {
+        if(value < min_value)
+            return min_value;
+        if(value > max_value)
+            return max_value;
+        return value;
+    }
 
-tjs_int TVPGetIntegerOption(const tjs_char *name, tjs_int fallback,
-                            tjs_int min_value, tjs_int max_value) {
-    tTJSVariant val;
-    if(!TVPGetCommandLine(name, &val))
-        return fallback;
-    return TVPClampInt((tjs_int)val.AsInteger(), min_value, max_value);
-}
+    tjs_int TVPGetIntegerOption(const tjs_char *name, tjs_int fallback,
+                                tjs_int min_value, tjs_int max_value) {
+        tTJSVariant val;
+        if(!TVPGetCommandLine(name, &val))
+            return fallback;
+        return TVPClampInt((tjs_int)val.AsInteger(), min_value, max_value);
+    }
 
-tjs_int TVPGetSystemTotalMemoryMB() {
-    TVPMemoryInfo meminfo{};
-    TVPGetMemoryInfo(meminfo);
-    if(meminfo.MemTotal == 0)
-        return 0;
-    return static_cast<tjs_int>(meminfo.MemTotal / 1024);
-}
+    tjs_int TVPGetSystemTotalMemoryMB() {
+        TVPMemoryInfo meminfo{};
+        TVPGetMemoryInfo(meminfo);
+        if(meminfo.MemTotal == 0)
+            return 0;
+        return static_cast<tjs_int>(meminfo.MemTotal / 1024);
+    }
 
-tjs_int TVPResolveBudgetMB(tjs_int configured_budget_mb) {
-    if(configured_budget_mb > 0)
-        return configured_budget_mb;
-    const tjs_int total_mb = TVPGetSystemTotalMemoryMB();
-    if(total_mb <= 0)
-        return 768;
-    return TVPClampInt(total_mb / 4, 512, 1024);
-}
+    tjs_int TVPResolveBudgetMB(tjs_int configured_budget_mb) {
+        if(configured_budget_mb > 0)
+            return configured_budget_mb;
+        const tjs_int total_mb = TVPGetSystemTotalMemoryMB();
+        if(total_mb <= 0)
+            return 768;
+        return TVPClampInt(total_mb / 4, 512, 1024);
+    }
 } // namespace
 
 void tTVPSystemControl::ReloadMemoryGovernorConfig(bool force) {
@@ -127,8 +128,8 @@ void tTVPSystemControl::ReloadMemoryGovernorConfig(bool force) {
     }
 
     MemoryBudgetMB = TVPGetIntegerOption(TJS_W("memory_budget_mb"), 0, 0, 8192);
-    MemoryLogIntervalMS =
-        TVPGetIntegerOption(TJS_W("memory_log_interval_ms"), 12000, 3000, 120000);
+    MemoryLogIntervalMS = TVPGetIntegerOption(TJS_W("memory_log_interval_ms"),
+                                              12000, 3000, 120000);
 }
 
 void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
@@ -173,14 +174,15 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
     }
 #endif
 
-    const tjs_int base_graphic_limit_mb =
-        TVPClampInt(budget_mb / (MemoryProfile ? 10 : 12), 16,
-                    MemoryProfile ? 64 : 96);
+    const tjs_int base_graphic_limit_mb = TVPClampInt(
+        budget_mb / (MemoryProfile ? 10 : 12), 16, MemoryProfile ? 64 : 96);
     tjs_int target_graphic_limit_mb = base_graphic_limit_mb;
     if(pressure == 1)
-        target_graphic_limit_mb = TVPClampInt(base_graphic_limit_mb * 2 / 3, 24, 64);
+        target_graphic_limit_mb =
+            TVPClampInt(base_graphic_limit_mb * 2 / 3, 24, 64);
     else if(pressure >= 2)
-        target_graphic_limit_mb = TVPClampInt(base_graphic_limit_mb / 3, 24, 48);
+        target_graphic_limit_mb =
+            TVPClampInt(base_graphic_limit_mb / 3, 24, 48);
 
     const tjs_uint64 target_graphic_bytes =
         static_cast<tjs_uint64>(target_graphic_limit_mb) * 1024ULL * 1024ULL;
@@ -296,8 +298,10 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
         if(g_GetPSBCacheInfo) {
             size_t usedBytes = 0, limitBytes = 0;
             if(g_GetPSBCacheInfo(usedBytes, limitBytes)) {
-                psb_used_mb = static_cast<tjs_int>(usedBytes / (1024ULL * 1024ULL));
-                psb_limit_mb = static_cast<tjs_int>(limitBytes / (1024ULL * 1024ULL));
+                psb_used_mb =
+                    static_cast<tjs_int>(usedBytes / (1024ULL * 1024ULL));
+                psb_limit_mb =
+                    static_cast<tjs_int>(limitBytes / (1024ULL * 1024ULL));
             }
         }
 
@@ -313,21 +317,28 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
 
         int64_t tjsNetBytes = 0, tjsAllocCount = 0, tjsFreeCount = 0;
         TJS_GetMallocStats(tjsNetBytes, tjsAllocCount, tjsFreeCount);
-        const tjs_int tjs_net_mb = static_cast<tjs_int>(tjsNetBytes / (1024LL * 1024LL));
+        const tjs_int tjs_net_mb =
+            static_cast<tjs_int>(tjsNetBytes / (1024LL * 1024LL));
 
-        const tjs_int tracked_mb = graphic_used_mb + psb_used_mb + vmem_mb +
-                                    xp3_seg_mb + layermem_mb;
+        const tjs_int tracked_mb =
+            graphic_used_mb + psb_used_mb + vmem_mb + xp3_seg_mb + layermem_mb;
         const tjs_int untracked_mb = self_used_mb - tracked_mb;
 
-        const tjs_int obj_count = static_cast<tjs_int>(TJS_GetCustomObjectCount());
-        const tjs_int sb_count = static_cast<tjs_int>(TJS_GetScriptBlockCount());
-        const tjs_int icc_count = static_cast<tjs_int>(TJS_GetInterCodeContextCount());
-        const tjs_int orphan_icc = static_cast<tjs_int>(TJS_GetOrphanedICCCount());
-        const tjs_int vs_mb = static_cast<tjs_int>(TJS_GetVSNetBytes() / (1024LL * 1024LL));
+        const tjs_int obj_count =
+            static_cast<tjs_int>(TJS_GetCustomObjectCount());
+        const tjs_int sb_count =
+            static_cast<tjs_int>(TJS_GetScriptBlockCount());
+        const tjs_int icc_count =
+            static_cast<tjs_int>(TJS_GetInterCodeContextCount());
+        const tjs_int orphan_icc =
+            static_cast<tjs_int>(TJS_GetOrphanedICCCount());
+        const tjs_int vs_mb =
+            static_cast<tjs_int>(TJS_GetVSNetBytes() / (1024LL * 1024LL));
 
-        int64_t exec_hit=0, exec_miss=0, exec_named=0, eval_hit=0, eval_miss=0;
-        TJS_GetScriptCacheStats(&exec_hit, &exec_miss, &exec_named,
-                                &eval_hit, &eval_miss);
+        int64_t exec_hit = 0, exec_miss = 0, exec_named = 0, eval_hit = 0,
+                eval_miss = 0;
+        TJS_GetScriptCacheStats(&exec_hit, &exec_miss, &exec_named, &eval_hit,
+                                &eval_miss);
 
         static tjs_int sPrevHeapMB = 0, sPrevObjCount = 0, sPrevSBCount = 0;
         static tjs_int sPrevVsMB = 0, sPrevTjsMB = 0, sPrevUsedMB = 0;
@@ -355,28 +366,21 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
                   TJS_W(" gcache=") + ttstr(graphic_used_mb) + TJS_W("/") +
                   ttstr(graphic_limit_mb) + TJS_W("MB psbcache=") +
                   ttstr(psb_used_mb) + TJS_W("/") + ttstr(psb_limit_mb) +
-                  TJS_W("MB vmem=") + ttstr(vmem_mb) +
-                  TJS_W("MB xp3seg=") + ttstr(xp3_seg_mb) +
-                  TJS_W("MB layers=") + ttstr(layer_count) +
-                  TJS_W("/") + ttstr(layermem_mb) +
-                  TJS_W("MB heap=") + ttstr(heap_in_use_mb) + TJS_W("/") +
-                  ttstr(heap_alloc_mb) +
-                  TJS_W("MB tjs=") + ttstr(tjs_net_mb) +
-                  TJS_W("MB vs=") + ttstr(vs_mb) +
-                  TJS_W("MB obj=") + ttstr(obj_count) +
-                  TJS_W(" sb=") + ttstr(sb_count) +
-                  TJS_W(" icc=") + ttstr(icc_count) +
-                  TJS_W(" orphan=") + ttstr(orphan_icc) +
-                  TJS_W(" untracked=") +
-                  ttstr(untracked_mb) + TJS_W("MB"));
+                  TJS_W("MB vmem=") + ttstr(vmem_mb) + TJS_W("MB xp3seg=") +
+                  ttstr(xp3_seg_mb) + TJS_W("MB layers=") + ttstr(layer_count) +
+                  TJS_W("/") + ttstr(layermem_mb) + TJS_W("MB heap=") +
+                  ttstr(heap_in_use_mb) + TJS_W("/") + ttstr(heap_alloc_mb) +
+                  TJS_W("MB tjs=") + ttstr(tjs_net_mb) + TJS_W("MB vs=") +
+                  ttstr(vs_mb) + TJS_W("MB obj=") + ttstr(obj_count) +
+                  TJS_W(" sb=") + ttstr(sb_count) + TJS_W(" icc=") +
+                  ttstr(icc_count) + TJS_W(" orphan=") + ttstr(orphan_icc) +
+                  TJS_W(" untracked=") + ttstr(untracked_mb) + TJS_W("MB"));
 
         TVPAddLog(ttstr(TJS_W("(mem_delta) d_used=")) + ttstr(d_used) +
-                  TJS_W("MB d_heap=") + ttstr(d_heap) +
-                  TJS_W("MB d_tjs=") + ttstr(d_tjs) +
-                  TJS_W("MB d_vs=") + ttstr(d_vs) +
-                  TJS_W("MB d_obj=") + ttstr(d_obj) +
-                  TJS_W(" d_sb=") + ttstr(d_sb) +
-                  TJS_W(" d_icc=") + ttstr(d_icc) +
+                  TJS_W("MB d_heap=") + ttstr(d_heap) + TJS_W("MB d_tjs=") +
+                  ttstr(d_tjs) + TJS_W("MB d_vs=") + ttstr(d_vs) +
+                  TJS_W("MB d_obj=") + ttstr(d_obj) + TJS_W(" d_sb=") +
+                  ttstr(d_sb) + TJS_W(" d_icc=") + ttstr(d_icc) +
                   TJS_W(" cache:exec_hit=") + ttstr((tjs_int)exec_hit) +
                   TJS_W(" exec_miss=") + ttstr((tjs_int)exec_miss) +
                   TJS_W(" exec_named=") + ttstr((tjs_int)exec_named) +
@@ -385,22 +389,20 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
 
         int64_t obh[8];
         TJS_GetObjByHashBits(obh);
-        int64_t dict_c=0, dict_d=0, arr_c=0, arr_d=0;
+        int64_t dict_c = 0, dict_d = 0, arr_c = 0, arr_d = 0;
         TJS_GetDictStats(&dict_c, &dict_d);
         TJS_GetArrayStats(&arr_c, &arr_d);
-        TVPAddLog(ttstr(TJS_W("(obj_detail) h0=")) + ttstr((tjs_int)obh[0]) +
-                  TJS_W(" h1=") + ttstr((tjs_int)obh[1]) +
-                  TJS_W(" h2=") + ttstr((tjs_int)obh[2]) +
-                  TJS_W(" h3=") + ttstr((tjs_int)obh[3]) +
-                  TJS_W(" h4=") + ttstr((tjs_int)obh[4]) +
-                  TJS_W(" h5+") + ttstr((tjs_int)(obh[5]+obh[6]+obh[7])) +
-                  TJS_W(" dict=") + ttstr((tjs_int)(dict_c-dict_d)) +
-                  TJS_W("(+") + ttstr((tjs_int)dict_c) +
-                  TJS_W("/-") + ttstr((tjs_int)dict_d) +
-                  TJS_W(") arr=") + ttstr((tjs_int)(arr_c-arr_d)) +
-                  TJS_W("(+") + ttstr((tjs_int)arr_c) +
-                  TJS_W("/-") + ttstr((tjs_int)arr_d) +
-                  TJS_W(")"));
+        TVPAddLog(
+            ttstr(TJS_W("(obj_detail) h0=")) + ttstr((tjs_int)obh[0]) +
+            TJS_W(" h1=") + ttstr((tjs_int)obh[1]) + TJS_W(" h2=") +
+            ttstr((tjs_int)obh[2]) + TJS_W(" h3=") + ttstr((tjs_int)obh[3]) +
+            TJS_W(" h4=") + ttstr((tjs_int)obh[4]) + TJS_W(" h5+") +
+            ttstr((tjs_int)(obh[5] + obh[6] + obh[7])) + TJS_W(" dict=") +
+            ttstr((tjs_int)(dict_c - dict_d)) + TJS_W("(+") +
+            ttstr((tjs_int)dict_c) + TJS_W("/-") + ttstr((tjs_int)dict_d) +
+            TJS_W(") arr=") + ttstr((tjs_int)(arr_c - arr_d)) + TJS_W("(+") +
+            ttstr((tjs_int)arr_c) + TJS_W("/-") + ttstr((tjs_int)arr_d) +
+            TJS_W(")"));
     }
 }
 

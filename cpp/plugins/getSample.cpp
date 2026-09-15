@@ -181,8 +181,10 @@ NCB_ATTACH_FUNCTION(setDefaultAheads, WaveSoundBuffer,
                     WaveSoundBufferAdd::setDefaultAheads);
 
 static tjs_error enableGetSampleGetter(tTJSVariant *result, tjs_int numparams,
-                                       tTJSVariant **param, iTJSDispatch2 *objthis) {
-    if (result) *result = (tjs_int)1;
+                                       tTJSVariant **param,
+                                       iTJSDispatch2 *objthis) {
+    if(result)
+        *result = (tjs_int)1;
     return TJS_S_OK;
 }
 NCB_ATTACH_FUNCTION(enableGetSample, WaveSoundBuffer, enableGetSampleGetter);

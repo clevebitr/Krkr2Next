@@ -31,5 +31,6 @@ TVPCreateNativeClass_ClassFoo,TJS_W("Window,Layer"));
 */
 extern void TVPCauseAtInstallExtensionClass(iTJSDispatch2 *global);
 
-// 复位「待安装扩展类」登记状态，使 engine_destroy 后可干净二次启动（runtime-restart）。
+// 复位「待安装扩展类」登记状态，使 engine_destroy
+// 后可干净二次启动（runtime-restart）。
 extern void TVPResetExtensionClassInstallStateForRestart();

@@ -17,12 +17,14 @@
 #include "tjsDebug.h"
 #include <atomic>
 
-static std::atomic<int64_t> sTJSDictCreateCount{0};
-static std::atomic<int64_t> sTJSDictDestroyCount{0};
+static std::atomic<int64_t> sTJSDictCreateCount{ 0 };
+static std::atomic<int64_t> sTJSDictDestroyCount{ 0 };
 
 extern "C" void TJS_GetDictStats(int64_t *created, int64_t *destroyed) {
-    if(created) *created = sTJSDictCreateCount.load(std::memory_order_relaxed);
-    if(destroyed) *destroyed = sTJSDictDestroyCount.load(std::memory_order_relaxed);
+    if(created)
+        *created = sTJSDictCreateCount.load(std::memory_order_relaxed);
+    if(destroyed)
+        *destroyed = sTJSDictDestroyCount.load(std::memory_order_relaxed);
 }
 
 namespace TJS {

@@ -14,137 +14,135 @@ static constexpr int kMaxTextureUnits = 16;
 static constexpr int kMaxVertexAttribs = 16;
 
 namespace krkr {
-namespace gl {
+    namespace gl {
 
-// ---------------------------------------------------------------------------
-// Internal state
-// ---------------------------------------------------------------------------
-namespace {
+        // ---------------------------------------------------------------------------
+        // Internal state
+        // ---------------------------------------------------------------------------
+        namespace {
 
-// Currently active texture unit (GL_TEXTURE0 .. GL_TEXTUREN)
-GLenum s_activeTextureUnit = GL_TEXTURE0;
+            // Currently active texture unit (GL_TEXTURE0 .. GL_TEXTUREN)
+            GLenum s_activeTextureUnit = GL_TEXTURE0;
 
-// Bound texture per unit (index = unit - GL_TEXTURE0)
-GLuint s_boundTextures[kMaxTextureUnits] = {};
+            // Bound texture per unit (index = unit - GL_TEXTURE0)
+            GLuint s_boundTextures[kMaxTextureUnits] = {};
 
-// Currently used shader program
-GLuint s_currentProgram = 0;
+            // Currently used shader program
+            GLuint s_currentProgram = 0;
 
-// Bitmask of currently enabled vertex attrib arrays
-unsigned int s_enabledVertexAttribs = 0;
+            // Bitmask of currently enabled vertex attrib arrays
+            unsigned int s_enabledVertexAttribs = 0;
 
-} // anonymous namespace
+        } // anonymous namespace
 
-// ---------------------------------------------------------------------------
-// Texture binding
-// ---------------------------------------------------------------------------
+        // ---------------------------------------------------------------------------
+        // Texture binding
+        // ---------------------------------------------------------------------------
 
-void BindTexture2D(GLuint textureId) {
-    BindTexture2DN(0, textureId);
-}
+        void BindTexture2D(GLuint textureId) { BindTexture2DN(0, textureId); }
 
-void BindTexture2DN(unsigned int slot, GLuint textureId) {
-    GLenum unit = GL_TEXTURE0 + slot;
-    // Always call GL directly: external code (e.g. the host shell) may
-    // reset GL state behind our back, making cached values stale.
-    s_activeTextureUnit = unit;
-    glActiveTexture(unit);
-    if (slot < kMaxTextureUnits) {
-        s_boundTextures[slot] = textureId;
-    }
-    glBindTexture(GL_TEXTURE_2D, textureId);
-}
-
-void ActiveTexture(GLenum textureUnit) {
-    s_activeTextureUnit = textureUnit;
-    glActiveTexture(textureUnit);
-}
-
-void DeleteTexture(GLuint textureId) {
-    // Invalidate from cache
-    for (int i = 0; i < kMaxTextureUnits; ++i) {
-        if (s_boundTextures[i] == textureId) {
-            s_boundTextures[i] = 0;
+        void BindTexture2DN(unsigned int slot, GLuint textureId) {
+            GLenum unit = GL_TEXTURE0 + slot;
+            // Always call GL directly: external code (e.g. the host shell) may
+            // reset GL state behind our back, making cached values stale.
+            s_activeTextureUnit = unit;
+            glActiveTexture(unit);
+            if(slot < kMaxTextureUnits) {
+                s_boundTextures[slot] = textureId;
+            }
+            glBindTexture(GL_TEXTURE_2D, textureId);
         }
-    }
-    glDeleteTextures(1, &textureId);
-}
 
-// ---------------------------------------------------------------------------
-// Shader program
-// ---------------------------------------------------------------------------
-
-void UseProgram(GLuint program) {
-    s_currentProgram = program;
-    glUseProgram(program);
-}
-
-// ---------------------------------------------------------------------------
-// Vertex attributes
-// ---------------------------------------------------------------------------
-
-void EnableVertexAttribs(unsigned int flags) {
-    // Always call GL directly to avoid stale cache issues.
-    for (int i = 0; i < kMaxVertexAttribs; ++i) {
-        unsigned int bit = 1u << i;
-        if (flags & bit) {
-            glEnableVertexAttribArray(i);
-        } else if (s_enabledVertexAttribs & bit) {
-            glDisableVertexAttribArray(i);
+        void ActiveTexture(GLenum textureUnit) {
+            s_activeTextureUnit = textureUnit;
+            glActiveTexture(textureUnit);
         }
-    }
-    s_enabledVertexAttribs = flags;
-}
 
-// ---------------------------------------------------------------------------
-// Blend state
-// ---------------------------------------------------------------------------
+        void DeleteTexture(GLuint textureId) {
+            // Invalidate from cache
+            for(int i = 0; i < kMaxTextureUnits; ++i) {
+                if(s_boundTextures[i] == textureId) {
+                    s_boundTextures[i] = 0;
+                }
+            }
+            glDeleteTextures(1, &textureId);
+        }
 
-void BlendResetToCache() {
-    // Force GL to re-apply blend state on next draw.
-    // The original engine tracks blend src/dst factors; since the engine
-    // always sets blend via raw glBlendFunc/glBlendFuncSeparate
-    // before each draw, we just need to ensure the cache won't
-    // suppress the next call. With raw GL calls this is a no-op
-    // because there is no blend cache layer above us.
-    //
-    // Kept as an empty function for API compatibility; if we later
-    // add blend caching, implement the reset here.
-}
+        // ---------------------------------------------------------------------------
+        // Shader program
+        // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Cache invalidation
-// ---------------------------------------------------------------------------
+        void UseProgram(GLuint program) {
+            s_currentProgram = program;
+            glUseProgram(program);
+        }
 
-void InvalidateStateCache() {
-    s_activeTextureUnit = GL_TEXTURE0;
-    for (int i = 0; i < kMaxTextureUnits; ++i) {
-        s_boundTextures[i] = 0;
-    }
-    s_currentProgram = 0;
-    s_enabledVertexAttribs = 0;
-}
+        // ---------------------------------------------------------------------------
+        // Vertex attributes
+        // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Renderer recreated callbacks
-// ---------------------------------------------------------------------------
+        void EnableVertexAttribs(unsigned int flags) {
+            // Always call GL directly to avoid stale cache issues.
+            for(int i = 0; i < kMaxVertexAttribs; ++i) {
+                unsigned int bit = 1u << i;
+                if(flags & bit) {
+                    glEnableVertexAttribArray(i);
+                } else if(s_enabledVertexAttribs & bit) {
+                    glDisableVertexAttribArray(i);
+                }
+            }
+            s_enabledVertexAttribs = flags;
+        }
 
-namespace {
-    std::vector<std::function<void()>> s_rendererRecreatedCallbacks;
-} // anonymous namespace
+        // ---------------------------------------------------------------------------
+        // Blend state
+        // ---------------------------------------------------------------------------
 
-void OnRendererRecreated(std::function<void()> callback) {
-    s_rendererRecreatedCallbacks.push_back(std::move(callback));
-}
+        void BlendResetToCache() {
+            // Force GL to re-apply blend state on next draw.
+            // The original engine tracks blend src/dst factors; since the
+            // engine always sets blend via raw glBlendFunc/glBlendFuncSeparate
+            // before each draw, we just need to ensure the cache won't
+            // suppress the next call. With raw GL calls this is a no-op
+            // because there is no blend cache layer above us.
+            //
+            // Kept as an empty function for API compatibility; if we later
+            // add blend caching, implement the reset here.
+        }
 
-void FireRendererRecreated() {
-    // Invalidate all caches first
-    InvalidateStateCache();
-    // Then notify all registered listeners
-    for (auto& cb : s_rendererRecreatedCallbacks) {
-        cb();
-    }
-}
+        // ---------------------------------------------------------------------------
+        // Cache invalidation
+        // ---------------------------------------------------------------------------
 
-} // namespace gl
+        void InvalidateStateCache() {
+            s_activeTextureUnit = GL_TEXTURE0;
+            for(int i = 0; i < kMaxTextureUnits; ++i) {
+                s_boundTextures[i] = 0;
+            }
+            s_currentProgram = 0;
+            s_enabledVertexAttribs = 0;
+        }
+
+        // ---------------------------------------------------------------------------
+        // Renderer recreated callbacks
+        // ---------------------------------------------------------------------------
+
+        namespace {
+            std::vector<std::function<void()>> s_rendererRecreatedCallbacks;
+        } // anonymous namespace
+
+        void OnRendererRecreated(std::function<void()> callback) {
+            s_rendererRecreatedCallbacks.push_back(std::move(callback));
+        }
+
+        void FireRendererRecreated() {
+            // Invalidate all caches first
+            InvalidateStateCache();
+            // Then notify all registered listeners
+            for(auto &cb : s_rendererRecreatedCallbacks) {
+                cb();
+            }
+        }
+
+    } // namespace gl
 } // namespace krkr

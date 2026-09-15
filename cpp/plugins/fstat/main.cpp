@@ -424,7 +424,8 @@ public:
     static bool moveFile(const tjs_char *from, const tjs_char *to) {
         bool r = false;
         ttstr fromPlaced = TVPGetPlacedPath(from);
-        if(fromPlaced.IsEmpty()) return false;
+        if(fromPlaced.IsEmpty())
+            return false;
 
         const ttstr &fromFile(TVPGetLocallyAccessibleName(fromPlaced));
         const ttstr &toFile(

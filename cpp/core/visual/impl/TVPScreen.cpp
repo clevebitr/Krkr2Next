@@ -7,11 +7,11 @@
 int tTVPScreen::GetWidth() { return 2048; }
 int tTVPScreen::GetHeight() {
     // Use EGL surface dimensions if available, otherwise fallback to width
-    auto& egl = krkr::GetEngineEGLContext();
-    if (egl.IsValid()) {
+    auto &egl = krkr::GetEngineEGLContext();
+    if(egl.IsValid()) {
         uint32_t w = egl.GetWidth();
         uint32_t h = egl.GetHeight();
-        if (w > 0 && h > 0) {
+        if(w > 0 && h > 0) {
             int baseW = GetWidth();
             return baseW * static_cast<int>(h) / static_cast<int>(w);
         }

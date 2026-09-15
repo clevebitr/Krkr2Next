@@ -23,7 +23,7 @@
 #include "tjs.tab.hpp"
 #include "tjsError.h"
 
-static std::atomic<int64_t> sTJSInterCodeContextCount{0};
+static std::atomic<int64_t> sTJSInterCodeContextCount{ 0 };
 
 extern "C" int64_t TJS_GetInterCodeContextCount() {
     return sTJSInterCodeContextCount.load(std::memory_order_relaxed);
@@ -34,11 +34,11 @@ extern "C" int64_t TJS_GetInterCodeContextCount() {
 //---------------------------------------------------------------------------
 namespace {
     using SteadyClock = std::chrono::steady_clock;
-    using TimePoint   = SteadyClock::time_point;
+    using TimePoint = SteadyClock::time_point;
 
     std::mutex sOrphanMutex;
-    std::unordered_map<TJS::tTJSInterCodeContext*, TimePoint> sOrphanICCs;
-}
+    std::unordered_map<TJS::tTJSInterCodeContext *, TimePoint> sOrphanICCs;
+} // namespace
 
 static void RegisterOrphanICC(TJS::tTJSInterCodeContext *icc) {
     std::lock_guard<std::mutex> lock(sOrphanMutex);
@@ -51,19 +51,21 @@ static void UnregisterOrphanICC(TJS::tTJSInterCodeContext *icc) {
 }
 
 extern "C" void TJS_CollectOrphanedICCs(bool force) {
-    std::vector<TJS::tTJSInterCodeContext*> toCollect;
+    std::vector<TJS::tTJSInterCodeContext *> toCollect;
     {
         auto now = SteadyClock::now();
         std::lock_guard<std::mutex> lock(sOrphanMutex);
         for(auto &[icc, ts] : sOrphanICCs) {
-            if(force || std::chrono::duration_cast<std::chrono::seconds>(
-                            now - ts).count() >= 10)
+            if(force ||
+               std::chrono::duration_cast<std::chrono::seconds>(now - ts)
+                       .count() >= 10)
                 toCollect.push_back(icc);
         }
         for(auto *icc : toCollect)
             sOrphanICCs.erase(icc);
     }
-    if(toCollect.empty()) return;
+    if(toCollect.empty())
+        return;
     for(auto *icc : toCollect)
         icc->Release();
     spdlog::debug("TJS_CollectOrphanedICCs: released {} orphaned ICCs{}",
@@ -431,7 +433,8 @@ namespace TJS // following is in the namespace
 
     //---------------------------------------------------------------------------
     void tTJSInterCodeContext::ClearBlockPointer() {
-        if(!Block) return;
+        if(!Block)
+            return;
         Block = nullptr;
         AddRef();
         RegisterOrphanICC(this);
@@ -1142,7 +1145,8 @@ namespace TJS // following is in the namespace
             return 0;
 
         tjs_int srcpos = CodePosToSrcPos(codepos);
-        if(!Block) return 0;
+        if(!Block)
+            return 0;
         tjs_int line = Block->SrcPosToLine(srcpos);
         srcpos = Block->LineToSrcPos(line);
 
@@ -1162,8 +1166,8 @@ namespace TJS // following is in the namespace
     ttstr
     tTJSInterCodeContext::GetPositionDescriptionString(tjs_int codepos) const {
         if(!Block)
-            return ttstr(TJS_W("(expression)")) +
-                TJS_W("[") + GetShortDescription() + TJS_W("]");
+            return ttstr(TJS_W("(expression)")) + TJS_W("[") +
+                GetShortDescription() + TJS_W("]");
         return Block->GetLineDescriptionString(CodePosToSrcPos(codepos)) +
             TJS_W("[") + GetShortDescription() + TJS_W("]");
     }

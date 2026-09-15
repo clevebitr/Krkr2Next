@@ -257,7 +257,10 @@ void *tTVPMemoryStream::Alloc(size_t size) {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
     if(size >= kStreamMmapThreshold) {
         void *p = TVPMmapAlloc(size);
-        if(p) { UseMmap = true; return p; }
+        if(p) {
+            UseMmap = true;
+            return p;
+        }
     }
 #endif
     UseMmap = false;
@@ -269,7 +272,8 @@ void *tTVPMemoryStream::Realloc(void *orgblock, size_t size) {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
     if(UseMmap) {
         void *newblock = TVPMmapAlloc(size);
-        if(!newblock) return nullptr;
+        if(!newblock)
+            return nullptr;
         if(orgblock) {
             size_t copySize = (AllocSize < size) ? AllocSize : size;
             memcpy(newblock, orgblock, copySize);
@@ -279,7 +283,10 @@ void *tTVPMemoryStream::Realloc(void *orgblock, size_t size) {
     }
     if(size >= kStreamMmapThreshold && !orgblock) {
         void *p = TVPMmapAlloc(size);
-        if(p) { UseMmap = true; return p; }
+        if(p) {
+            UseMmap = true;
+            return p;
+        }
     }
 #endif
     return TJS_realloc(orgblock, size);

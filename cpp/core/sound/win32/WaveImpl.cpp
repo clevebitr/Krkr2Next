@@ -1517,10 +1517,11 @@ tTVPWaveSoundBufferThread::tTVPWaveSoundBufferThread() :
 tTVPWaveSoundBufferThread::~tTVPWaveSoundBufferThread() {
     SetPriority(ttpNormal);
     Resume();
-    // 必须**先**置结束标志再 join：Execute() 是 while(!GetTerminated()) 无限循环，
-    // 原实现在 WaitFor()（Handle.join()）之后才 Terminate()，线程永远收不到结束
-    // 标志 → join 永久阻塞。硬性进程退出时被 OS 回收掩盖，runtime-restart 的进程内
-    // 优雅 teardown（TVPShutdownWaveSoundBuffers）必然命中 -> 退出卡死。
+    // 必须**先**置结束标志再 join：Execute() 是 while(!GetTerminated())
+    // 无限循环， 原实现在 WaitFor()（Handle.join()）之后才
+    // Terminate()，线程永远收不到结束 标志 → join 永久阻塞。硬性进程退出时被 OS
+    // 回收掩盖，runtime-restart 的进程内 优雅
+    // teardown（TVPShutdownWaveSoundBuffers）必然命中 -> 退出卡死。
     Terminate();
     Event.Set(); // 唤醒 Event.WaitFor(timeout)，让循环立刻退出
     WaitFor();
@@ -1699,7 +1700,8 @@ static void TVPReleaseSoundBuffers(bool disableevent = true) {
 
 //---------------------------------------------------------------------------
 static void TVPShutdownWaveSoundBuffers() {
-    // 逐 handler 打点：真机退出卡死时据最后一条日志定位卡在哪个 at-exit handler。
+    // 逐 handler 打点：真机退出卡死时据最后一条日志定位卡在哪个 at-exit
+    // handler。
     spdlog::info("at-exit PREPARE: ShutdownWaveSoundBuffers begin");
     // clean up soundbuffers at exit
     if(TVPWaveSoundBufferThread)
@@ -1716,9 +1718,10 @@ static tTVPAtExit
 // TVPStopAllWaveSoundsForRestart : runtime-restart 专用声音停止
 //---------------------------------------------------------------------------
 // tTVPAtExit 是一次性的：首次 engine_destroy 的 TVPCauseAtExit 会 delete 置空
-// TVPAtExitInfos，之后重启的 teardown 不再执行 ShutdownWaveSoundBuffers，导致上一游戏
-// 正在播放的 BGM/音效（由 TVPWaveSoundBufferThread 混音输出）继续响、叠进下一游戏
-// （真机：切游戏后 BGM 重叠，甚至首屏 logo 就带着上一游戏的 BGM）。这里在重启末尾
+// TVPAtExitInfos，之后重启的 teardown 不再执行
+// ShutdownWaveSoundBuffers，导致上一游戏 正在播放的 BGM/音效（由
+// TVPWaveSoundBufferThread 混音输出）继续响、叠进下一游戏 （真机：切游戏后 BGM
+// 重叠，甚至首屏 logo 就带着上一游戏的 BGM）。这里在重启末尾
 // 显式停掉混音线程并释放存活 buffer。
 void TVPStopAllWaveSoundsForRestart() {
     if(TVPWaveSoundBufferThread)

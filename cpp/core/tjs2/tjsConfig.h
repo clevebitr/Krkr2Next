@@ -71,7 +71,8 @@ namespace TJS {
 
     void TJS_free(void *buf);
 
-    void TJS_GetMallocStats(int64_t &netBytes, int64_t &allocCount, int64_t &freeCount);
+    void TJS_GetMallocStats(int64_t &netBytes, int64_t &allocCount,
+                            int64_t &freeCount);
 
 #define TJS_nsprintf sprintf
 #define TJS_nstrcpy strcpy

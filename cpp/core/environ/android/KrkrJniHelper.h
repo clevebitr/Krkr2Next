@@ -14,56 +14,55 @@
 
 namespace krkr {
 
-class JniHelper {
-public:
-    /// Store the JavaVM pointer (called from JNI_OnLoad).
-    static void setJavaVM(JavaVM* vm);
+    class JniHelper {
+    public:
+        /// Store the JavaVM pointer (called from JNI_OnLoad).
+        static void setJavaVM(JavaVM *vm);
 
-    /// Get the stored JavaVM pointer.
-    static JavaVM* getJavaVM();
+        /// Get the stored JavaVM pointer.
+        static JavaVM *getJavaVM();
 
-    /// Get a JNIEnv for the current thread (attaches if needed).
-    static JNIEnv* getEnv();
+        /// Get a JNIEnv for the current thread (attaches if needed).
+        static JNIEnv *getEnv();
 
-    /// Convert jstring → std::string (UTF-8). Handles null safely.
-    static std::string jstring2string(jstring str);
+        /// Convert jstring → std::string (UTF-8). Handles null safely.
+        static std::string jstring2string(jstring str);
 
-    /// Method lookup result.
-    struct MethodInfo {
-        JNIEnv* env = nullptr;
-        jclass classID = nullptr;
-        jmethodID methodID = nullptr;
+        /// Method lookup result.
+        struct MethodInfo {
+            JNIEnv *env = nullptr;
+            jclass classID = nullptr;
+            jmethodID methodID = nullptr;
+        };
+
+        /**
+         * Look up a static method on a Java class.
+         * @param info      Output: env, classID, methodID
+         * @param className JNI class name (e.g.
+         * "org/tvp/kirikiri2/KR2Activity")
+         * @param methodName Method name
+         * @param signature  JNI method signature
+         * @return true if found, false otherwise
+         *
+         * NOTE: The caller is responsible for calling
+         *       env->DeleteLocalRef(info.classID) after use.
+         */
+        static bool getStaticMethodInfo(MethodInfo &info, const char *className,
+                                        const char *methodName,
+                                        const char *signature);
+
+        /**
+         * Look up an instance method on a Java class.
+         * @param info      Output: env, classID, methodID
+         * @param className JNI class name
+         * @param methodName Method name
+         * @param signature  JNI method signature
+         * @return true if found, false otherwise
+         */
+        static bool getMethodInfo(MethodInfo &info, const char *className,
+                                  const char *methodName,
+                                  const char *signature);
     };
-
-    /**
-     * Look up a static method on a Java class.
-     * @param info      Output: env, classID, methodID
-     * @param className JNI class name (e.g. "org/tvp/kirikiri2/KR2Activity")
-     * @param methodName Method name
-     * @param signature  JNI method signature
-     * @return true if found, false otherwise
-     *
-     * NOTE: The caller is responsible for calling
-     *       env->DeleteLocalRef(info.classID) after use.
-     */
-    static bool getStaticMethodInfo(MethodInfo& info,
-                                     const char* className,
-                                     const char* methodName,
-                                     const char* signature);
-
-    /**
-     * Look up an instance method on a Java class.
-     * @param info      Output: env, classID, methodID
-     * @param className JNI class name
-     * @param methodName Method name
-     * @param signature  JNI method signature
-     * @return true if found, false otherwise
-     */
-    static bool getMethodInfo(MethodInfo& info,
-                               const char* className,
-                               const char* methodName,
-                               const char* signature);
-};
 
 } // namespace krkr
 

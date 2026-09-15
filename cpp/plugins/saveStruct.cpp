@@ -232,8 +232,7 @@ public:
         tTJSBinaryStream *stream =
             TVPCreateStream(param[0]->AsString(), TJS_BS_WRITE);
         try {
-            tTVPStringStream writer(stream,
-                                    numparams > 2 ? (int)*param[2] : 0);
+            tTVPStringStream writer(stream, numparams > 2 ? (int)*param[2] : 0);
             tjs_int count = 0;
             {
                 tTJSVariant result;
@@ -272,8 +271,7 @@ public:
         tTJSBinaryStream *stream =
             TVPCreateStream(param[0]->AsString(), TJS_BS_WRITE);
         try {
-            tTVPStringStream writer(stream,
-                                    numparams > 2 ? (int)*param[2] : 0);
+            tTVPStringStream writer(stream, numparams > 2 ? (int)*param[2] : 0);
             getArrayString(objthis, &writer);
         } catch(...) {
             delete stream;
@@ -329,8 +327,7 @@ public:
         tTJSBinaryStream *stream =
             TVPCreateStream(param[0]->AsString(), TJS_BS_WRITE);
         try {
-            tTVPStringStream writer(stream,
-                                    numparams > 2 ? (int)*param[2] : 0);
+            tTVPStringStream writer(stream, numparams > 2 ? (int)*param[2] : 0);
             getDictString(objthis, &writer);
         } catch(...) {
             delete stream;

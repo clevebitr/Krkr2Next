@@ -21,4 +21,4 @@ void TVPGL_SIMD_Init();
 }
 #endif
 
-#endif  // __TVPGL_SIMD_INIT_H__
+#endif // __TVPGL_SIMD_INIT_H__

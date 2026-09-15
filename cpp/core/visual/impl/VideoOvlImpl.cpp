@@ -85,22 +85,34 @@ static tTVPAtExit TVPShutdownVideoOverlayAtExit(TVP_ATEXIT_PRI_PREPARE,
 // 嵌套内部使用的状态名转换
 static const tjs_char *VideoStatusName(tTVPVideoStatus st) {
     switch(st) {
-        case vsStopped:    return TJS_W("stopped");
-        case vsPlaying:    return TJS_W("playing");
-        case vsPaused:     return TJS_W("paused");
-        case vsProcessing: return TJS_W("processing");
-        case vsEnded:      return TJS_W("ended");
-        case vsReady:      return TJS_W("ready");
-        default:            return TJS_W("?");
+        case vsStopped:
+            return TJS_W("stopped");
+        case vsPlaying:
+            return TJS_W("playing");
+        case vsPaused:
+            return TJS_W("paused");
+        case vsProcessing:
+            return TJS_W("processing");
+        case vsEnded:
+            return TJS_W("ended");
+        case vsReady:
+            return TJS_W("ready");
+        default:
+            return TJS_W("?");
     }
 }
 static const tjs_char *VideoModeName(tTVPVideoOverlayMode m) {
     switch(m) {
-        case vomOverlay: return TJS_W("overlay");
-        case vomLayer:   return TJS_W("layer");
-        case vomMixer:   return TJS_W("mixer");
-        case vomMFEVR:   return TJS_W("mfeVR");
-        default:          return TJS_W("?");
+        case vomOverlay:
+            return TJS_W("overlay");
+        case vomLayer:
+            return TJS_W("layer");
+        case vomMixer:
+            return TJS_W("mixer");
+        case vomMFEVR:
+            return TJS_W("mfeVR");
+        default:
+            return TJS_W("?");
     }
 }
 //---------------------------------------------------------------------------
@@ -313,10 +325,18 @@ void tTJSNI_VideoOverlay::Open(const ttstr &_name) {
     {
         const tjs_char *mn = TJS_W("?");
         switch(Mode) {
-            case vomOverlay: mn = TJS_W("overlay"); break;
-            case vomLayer:   mn = TJS_W("layer");   break;
-            case vomMixer:   mn = TJS_W("mixer");   break;
-            case vomMFEVR:   mn = TJS_W("mfeVR");   break;
+            case vomOverlay:
+                mn = TJS_W("overlay");
+                break;
+            case vomLayer:
+                mn = TJS_W("layer");
+                break;
+            case vomMixer:
+                mn = TJS_W("mixer");
+                break;
+            case vomMFEVR:
+                mn = TJS_W("mfeVR");
+                break;
         }
         TVPAddLog(TJS_W("(info) VideoOverlay.Open: mode=") + ttstr(mn) +
                   TJS_W(" file=") + _name);
@@ -383,7 +403,8 @@ void tTJSNI_VideoOverlay::Play() {
         VideoOverlay->Play();
         ClearWndProcMessages();
         if(Mode != vomMFEVR)
-            SetStatusAsync(ssPlay); // prevent onStatusChanged re-entering and freeing this
+            SetStatusAsync(
+                ssPlay); // prevent onStatusChanged re-entering and freeing this
     }
 }
 //---------------------------------------------------------------------------
@@ -393,7 +414,8 @@ void tTJSNI_VideoOverlay::Stop() {
         VideoOverlay->Stop();
         ClearWndProcMessages();
         if(Mode != vomMFEVR)
-            SetStatusAsync(ssStop); // prevent onStatusChanged re-entering and freeing this
+            SetStatusAsync(
+                ssStop); // prevent onStatusChanged re-entering and freeing this
     }
 }
 //---------------------------------------------------------------------------
@@ -403,7 +425,8 @@ void tTJSNI_VideoOverlay::Pause() {
         VideoOverlay->Pause();
         //		ClearWndProcMessages();
         if(Mode != vomMFEVR)
-            SetStatusAsync(ssPause); // async: prevent onStatusChanged re-entering and freeing this
+            SetStatusAsync(ssPause); // async: prevent onStatusChanged
+                                     // re-entering and freeing this
     }
 }
 void tTJSNI_VideoOverlay::Rewind() {
@@ -606,7 +629,9 @@ void tTJSNI_VideoOverlay::WndProc(NativeEvent &ev) {
                                         perLoop); // fire period event
                                                   // by loop rewind
                                 } else {
-                                    TVPAddLog(TJS_W("(info) Video EC_COMPLETE: releasing video resources"));
+                                    TVPAddLog(
+                                        TJS_W("(info) Video EC_COMPLETE: "
+                                              "releasing video resources"));
                                     SetStatusAsync(ssStop);
                                     VideoOverlay->Stop();
                                     if(CachedOverlay) {
@@ -615,8 +640,14 @@ void tTJSNI_VideoOverlay::WndProc(NativeEvent &ev) {
                                     }
                                     VideoOverlay->Release();
                                     VideoOverlay = nullptr;
-                                    if(Bitmap[0]) { delete Bitmap[0]; Bitmap[0] = nullptr; }
-                                    if(Bitmap[1]) { delete Bitmap[1]; Bitmap[1] = nullptr; }
+                                    if(Bitmap[0]) {
+                                        delete Bitmap[0];
+                                        Bitmap[0] = nullptr;
+                                    }
+                                    if(Bitmap[1]) {
+                                        delete Bitmap[1];
+                                        Bitmap[1] = nullptr;
+                                    }
                                     BmpBits[0] = BmpBits[1] = nullptr;
                                 }
                             }

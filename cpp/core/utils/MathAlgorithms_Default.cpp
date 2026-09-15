@@ -15,9 +15,10 @@
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void DeinterleaveApplyingWindow(float *__restrict dest[], const float *__restrict src,
-                                const float *__restrict win, int numch, size_t destofs,
-                                size_t len) {
+void DeinterleaveApplyingWindow(float *__restrict dest[],
+                                const float *__restrict src,
+                                const float *__restrict win, int numch,
+                                size_t destofs, size_t len) {
     size_t n;
     switch(numch) {
         case 1: // mono
@@ -51,9 +52,10 @@ void DeinterleaveApplyingWindow(float *__restrict dest[], const float *__restric
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void InterleaveOverlappingWindow(float *__restrict dest, const float *__restrict const *__restrict src,
-                                 const float *__restrict win, int numch, size_t srcofs,
-                                 size_t len) {
+void InterleaveOverlappingWindow(float *__restrict dest,
+                                 const float *__restrict const *__restrict src,
+                                 const float *__restrict win, int numch,
+                                 size_t srcofs, size_t len) {
     size_t n;
     switch(numch) {
         case 1: // mono

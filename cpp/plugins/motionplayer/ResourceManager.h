@@ -47,7 +47,8 @@ namespace motion {
         inline static std::mutex _mutex;
         inline static std::deque<std::string> _cacheOrder;
         inline static std::string _lastLoadedPath;
-        inline static std::unordered_map<std::string, std::shared_ptr<PSB::PSBFile>>
+        inline static std::unordered_map<std::string,
+                                         std::shared_ptr<PSB::PSBFile>>
             _loadedFiles;
     };
 } // namespace motion

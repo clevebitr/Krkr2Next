@@ -90,12 +90,19 @@ public:
     // 是否与请求的 Height 一致、以及 baseline/ascender 推导值是否合理。
     // 文字偏小或偏移出框的现象会对应到其中一项异常。
     [[nodiscard]] tjs_int GetPixelHeight() const {
-        if(!FTFace || !FTFace->size) return 0;
+        if(!FTFace || !FTFace->size)
+            return 0;
         return FTFace->size->metrics.y_ppem;
     }
-    [[nodiscard]] tjs_int GetAscender() const { return FTFace ? FTFace->ascender : 0; }
-    [[nodiscard]] tjs_int GetDescender() const { return FTFace ? FTFace->descender : 0; }
-    [[nodiscard]] tjs_int GetUnitsPerEM() const { return FTFace ? FTFace->units_per_EM : 0; }
+    [[nodiscard]] tjs_int GetAscender() const {
+        return FTFace ? FTFace->ascender : 0;
+    }
+    [[nodiscard]] tjs_int GetDescender() const {
+        return FTFace ? FTFace->descender : 0;
+    }
+    [[nodiscard]] tjs_int GetUnitsPerEM() const {
+        return FTFace ? FTFace->units_per_EM : 0;
+    }
 
     void SetOption(tjs_uint32 opt) { Options |= opt; }
     void ClearOption(tjs_uint32 opt) { Options &= ~opt; }
@@ -106,21 +113,26 @@ public:
         return Face ? Face->GetDefaultChar() : 0;
     }
     tjs_char GetFirstChar() {
-        if(!FTFace) return 0;
+        if(!FTFace)
+            return 0;
         FT_UInt gindex;
         return static_cast<tjs_char>(FT_Get_First_Char(FTFace, &gindex));
     }
 
     [[nodiscard]] tjs_int GetAscent() const {
-        if(!FTFace || !FTFace->size) return 0;
+        if(!FTFace || !FTFace->size)
+            return 0;
         tjs_int ppem = FTFace->size->metrics.y_ppem;
         tjs_int upe = FTFace->units_per_EM;
-        if(upe == 0) return 0;
+        if(upe == 0)
+            return 0;
         return FTFace->ascender * ppem / upe;
     }
     void GetUnderline(tjs_int &pos, tjs_int &thickness) const {
         if(!FTFace || !FTFace->size || FTFace->units_per_EM == 0) {
-            pos = 0; thickness = 1; return;
+            pos = 0;
+            thickness = 1;
+            return;
         }
         tjs_int ppem = FTFace->size->metrics.y_ppem;
         tjs_int upe = FTFace->units_per_EM;
@@ -137,7 +149,9 @@ public:
     }
     void GetStrikeOut(tjs_int &pos, tjs_int &thickness) const {
         if(!FTFace || !FTFace->size || FTFace->units_per_EM == 0) {
-            pos = 0; thickness = 1; return;
+            pos = 0;
+            thickness = 1;
+            return;
         }
         tjs_int ppem = FTFace->size->metrics.y_ppem;
         tjs_int upe = FTFace->units_per_EM;

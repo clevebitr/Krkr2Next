@@ -77,33 +77,38 @@ struct TVPJpegMemHooks {
 
 static thread_local TVPJpegMemHooks sJpegHooks;
 
-static void *JPEG_arena_alloc_small(j_common_ptr cinfo, int pool_id, size_t size) {
-    if (TVPDecodeArenaActive()) {
+static void *JPEG_arena_alloc_small(j_common_ptr cinfo, int pool_id,
+                                    size_t size) {
+    if(TVPDecodeArenaActive()) {
         void *p = TVPDecodeArenaAlloc(size);
-        if (p) return p;
+        if(p)
+            return p;
     }
     return sJpegHooks.orig_alloc_small(cinfo, pool_id, size);
 }
 
-static void *JPEG_arena_alloc_large(j_common_ptr cinfo, int pool_id, size_t size) {
-    if (TVPDecodeArenaActive()) {
+static void *JPEG_arena_alloc_large(j_common_ptr cinfo, int pool_id,
+                                    size_t size) {
+    if(TVPDecodeArenaActive()) {
         void *p = TVPDecodeArenaAlloc(size);
-        if (p) return p;
+        if(p)
+            return p;
     }
     return sJpegHooks.orig_alloc_large(cinfo, pool_id, size);
 }
 
 static void JPEG_arena_free_pool(j_common_ptr cinfo, int pool_id) {
-    if (TVPDecodeArenaActive()) return;
+    if(TVPDecodeArenaActive())
+        return;
     sJpegHooks.orig_free_pool(cinfo, pool_id);
 }
 
 static void JPEG_arena_self_destruct(j_common_ptr cinfo) {
-    if (TVPDecodeArenaActive()) {
+    if(TVPDecodeArenaActive()) {
         // Pool memory lives in the arena — skip free_pool walks.
         // But the memory manager struct itself was malloc'd by jpeg_create_*,
         // so we must free it here to avoid a leak.
-        if (cinfo->mem) {
+        if(cinfo->mem) {
             free(cinfo->mem);
             cinfo->mem = nullptr;
         }
@@ -114,7 +119,8 @@ static void JPEG_arena_self_destruct(j_common_ptr cinfo) {
 
 static void TVPInstallJpegArenaHooks(j_common_ptr cinfo) {
     jpeg_memory_mgr *mem = cinfo->mem;
-    if (!mem) return;
+    if(!mem)
+        return;
     sJpegHooks.orig_alloc_small = mem->alloc_small;
     sJpegHooks.orig_alloc_large = mem->alloc_large;
     sJpegHooks.orig_free_pool = mem->free_pool;

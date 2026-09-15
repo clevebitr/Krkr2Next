@@ -3,8 +3,8 @@
  * @brief Stub MainScene — replaces the original Scene-based MainScene.
  *
  * This is a lightweight engine loop driver that provides the same external
- * interface as the original TVPMainScene but without any external framework dependency.
- * It drives Application::Run() each frame and manages game startup.
+ * interface as the original TVPMainScene but without any external framework
+ * dependency. It drives Application::Run() each frame and manages game startup.
  */
 #pragma once
 

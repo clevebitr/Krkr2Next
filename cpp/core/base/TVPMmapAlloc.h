@@ -12,13 +12,15 @@ inline void *TVPMmapAlloc(size_t size) {
     totalSize = (totalSize + pageSize - 1) & ~(pageSize - 1);
     void *ptr = mmap(nullptr, totalSize, PROT_READ | PROT_WRITE,
                      MAP_PRIVATE | MAP_ANON, -1, 0);
-    if(ptr == MAP_FAILED) return nullptr;
+    if(ptr == MAP_FAILED)
+        return nullptr;
     *(size_t *)ptr = totalSize;
     return (char *)ptr + sizeof(size_t);
 }
 
 inline void TVPMmapFree(void *mem) {
-    if(!mem) return;
+    if(!mem)
+        return;
     char *base = (char *)mem - sizeof(size_t);
     size_t totalSize = *(size_t *)base;
     munmap(base, totalSize);

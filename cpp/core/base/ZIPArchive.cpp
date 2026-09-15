@@ -10,19 +10,20 @@
 #include <minizip/ioapi.h>
 
 // ZIPArchive.cpp is a self-contained minizip implementation that redefines
-// all struct types and most functions locally. We do NOT include <minizip/unzip.h>
-// because it would cause redefinition conflicts with our local structs.
-// Instead, we define only the macros and typedefs we need from unzip.h here.
+// all struct types and most functions locally. We do NOT include
+// <minizip/unzip.h> because it would cause redefinition conflicts with our
+// local structs. Instead, we define only the macros and typedefs we need from
+// unzip.h here.
 
 // --- From minizip/unzip.h: error codes ---
-#define UNZ_OK                          (0)
-#define UNZ_END_OF_LIST_OF_FILE         (-100)
-#define UNZ_ERRNO                       (Z_ERRNO)
-#define UNZ_EOF                         (0)
-#define UNZ_PARAMERROR                  (-102)
-#define UNZ_BADZIPFILE                  (-103)
-#define UNZ_INTERNALERROR               (-104)
-#define UNZ_CRCERROR                    (-105)
+#define UNZ_OK (0)
+#define UNZ_END_OF_LIST_OF_FILE (-100)
+#define UNZ_ERRNO (Z_ERRNO)
+#define UNZ_EOF (0)
+#define UNZ_PARAMERROR (-102)
+#define UNZ_BADZIPFILE (-103)
+#define UNZ_INTERNALERROR (-104)
+#define UNZ_CRCERROR (-105)
 
 // --- From minizip/unzip.h: unzFile handle type ---
 typedef voidp unzFile;
@@ -75,18 +76,20 @@ typedef struct unz64_file_pos_s {
 
 // --- Global info structs (used by unzGetGlobalInfo64/unzGetGlobalInfo) ---
 typedef struct unz_global_info64_s {
-    ZPOS64_T number_entry;       /* total number of entries in the central dir on this disk */
-    uLong size_comment;          /* size of the global comment of the zipfile */
+    ZPOS64_T number_entry; /* total number of entries in the central dir on this
+                              disk */
+    uLong size_comment; /* size of the global comment of the zipfile */
 } unz_global_info64;
 
 typedef struct unz_global_info_s {
-    uLong number_entry;          /* total number of entries in the central dir on this disk */
-    uLong size_comment;          /* size of the global comment of the zipfile */
+    uLong number_entry; /* total number of entries in the central dir on this
+                           disk */
+    uLong size_comment; /* size of the global comment of the zipfile */
 } unz_global_info;
 
 typedef struct unz_file_pos_s {
-    ZPOS64_T pos_in_zip_directory;   /* offset in file */
-    ZPOS64_T num_of_file;            /* # of file */
+    ZPOS64_T pos_in_zip_directory; /* offset in file */
+    ZPOS64_T num_of_file; /* # of file */
 } unz_file_pos;
 
 #ifdef STDC
@@ -2061,8 +2064,7 @@ static uLong zip_readfile(voidpf, voidpf s, void *buf, uLong size) {
     return ((ZipArchive *)s)->_st->Read(buf, size);
 }
 
-static uLong zip_writefile(voidpf, voidpf s, const void *buf,
-                           uLong size) {
+static uLong zip_writefile(voidpf, voidpf s, const void *buf, uLong size) {
     return ((ZipArchive *)s)->_st->Write(buf, size);
 }
 

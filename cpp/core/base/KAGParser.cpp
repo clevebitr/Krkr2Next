@@ -1448,7 +1448,7 @@ bool tTJSNI_KAGParser::EntryParam(bool &condition, const ttstr &attribname,
                 }
 
                 if(EntryParam(condition, name, macroParam, e, m, true,
-                             recursionDepth + 1)) {
+                              recursionDepth + 1)) {
                     DicObj->PropSetByVS(TJS_MEMBERENSURE,
                                         name.AsVariantStringNoAddRef(),
                                         &ValueVariant, DicObj);
@@ -1975,11 +1975,9 @@ parse_start:
                     each = val;
 
                     IfLevel++;
-                    WhileStack.push_back(tWhileStackData(nextLine, nextPos,
-                                                         ExcludeLevel, IfLevel,
-                                                         exp, each,
-                                                         LineBufferUsing,
-                                                         LineBuffer));
+                    WhileStack.push_back(tWhileStackData(
+                        nextLine, nextPos, ExcludeLevel, IfLevel, exp, each,
+                        LineBufferUsing, LineBuffer));
 
                     if(ExcludeLevel == -1) {
                         DicObj->PropGet(0, TJS_W("init"), nullptr, &val,
@@ -2322,7 +2320,8 @@ parse_start:
                         } else if(tagkind == tag_pmacro) {
                             tTJSVariant val;
                             DicObj->PropGet(0, __name_name.c_str(),
-                                            __name_name.GetHint(), &val, DicObj);
+                                            __name_name.GetHint(), &val,
+                                            DicObj);
                             ttstr macroname = val;
                             if(macroname.IsEmpty())
                                 TVPThrowExceptionMessage(TVPKAGSyntaxError);
@@ -2348,7 +2347,8 @@ parse_start:
                         } else if(tagkind == tag_erasepmacro) {
                             tTJSVariant val;
                             DicObj->PropGet(0, __name_name.c_str(),
-                                            __name_name.GetHint(), &val, DicObj);
+                                            __name_name.GetHint(), &val,
+                                            DicObj);
                             ttstr macroname = val;
                             if(TJS_FAILED(ParamMacros->DeleteMember(
                                    0, macroname.c_str(), 0, ParamMacros)))

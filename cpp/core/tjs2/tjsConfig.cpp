@@ -633,11 +633,12 @@ namespace TJS {
         return nullptr;
     }
 
-    static std::atomic<int64_t> sTJSMallocNetBytes{0};
-    static std::atomic<int64_t> sTJSMallocAllocCount{0};
-    static std::atomic<int64_t> sTJSMallocFreeCount{0};
+    static std::atomic<int64_t> sTJSMallocNetBytes{ 0 };
+    static std::atomic<int64_t> sTJSMallocAllocCount{ 0 };
+    static std::atomic<int64_t> sTJSMallocFreeCount{ 0 };
 
-    void TJS_GetMallocStats(int64_t &netBytes, int64_t &allocCount, int64_t &freeCount) {
+    void TJS_GetMallocStats(int64_t &netBytes, int64_t &allocCount,
+                            int64_t &freeCount) {
         netBytes = sTJSMallocNetBytes.load(std::memory_order_relaxed);
         allocCount = sTJSMallocAllocCount.load(std::memory_order_relaxed);
         freeCount = sTJSMallocFreeCount.load(std::memory_order_relaxed);
@@ -670,7 +671,8 @@ namespace TJS {
     void TJS_free(void *buf) {
         if(buf) {
             size_t *ptr = (size_t *)((char *)buf - sizeof(size_t));
-            sTJSMallocNetBytes.fetch_sub((int64_t)(*ptr), std::memory_order_relaxed);
+            sTJSMallocNetBytes.fetch_sub((int64_t)(*ptr),
+                                         std::memory_order_relaxed);
             sTJSMallocFreeCount.fetch_add(1, std::memory_order_relaxed);
             free(ptr);
         }

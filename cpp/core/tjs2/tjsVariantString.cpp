@@ -17,12 +17,11 @@
 #include <algorithm>
 #include <atomic>
 
-static std::atomic<int64_t> sTJSVS_NetBytes{0};
+static std::atomic<int64_t> sTJSVS_NetBytes{ 0 };
 
 extern "C" int64_t TJS_GetVSNetBytes() {
     return sTJSVS_NetBytes.load(std::memory_order_relaxed);
 }
-
 
 
 namespace TJS {
@@ -74,8 +73,9 @@ namespace TJS {
         if(!ret)
             TJSThrowStringAllocError();
         *(size_t *)ret = len; // embed size
-        sTJSVS_NetBytes.fetch_add((int64_t)(len * sizeof(tjs_char) + sizeof(size_t)),
-                                  std::memory_order_relaxed);
+        sTJSVS_NetBytes.fetch_add(
+            (int64_t)(len * sizeof(tjs_char) + sizeof(size_t)),
+            std::memory_order_relaxed);
         return (tjs_char *)(ret + sizeof(size_t));
     }
     //---------------------------------------------------------------------------
@@ -97,7 +97,8 @@ namespace TJS {
         if(!ret)
             TJSThrowStringAllocError();
         memcpy(ret + sizeof(size_t), ptr + 1, *ptr * sizeof(tjs_char));
-        sTJSVS_NetBytes.fetch_add((int64_t)newAllocSize, std::memory_order_relaxed);
+        sTJSVS_NetBytes.fetch_add((int64_t)newAllocSize,
+                                  std::memory_order_relaxed);
         *(size_t *)ret = len;
         TJSVS_free(buf);
         return (tjs_char *)(ret + sizeof(size_t));
@@ -105,8 +106,9 @@ namespace TJS {
     //---------------------------------------------------------------------------
     /*static inline*/ void TJSVS_free(tjs_char *buf) {
         size_t *ptr = (size_t *)((char *)buf - sizeof(size_t));
-        sTJSVS_NetBytes.fetch_sub((int64_t)(*ptr * sizeof(tjs_char) + sizeof(size_t)),
-                                  std::memory_order_relaxed);
+        sTJSVS_NetBytes.fetch_sub(
+            (int64_t)(*ptr * sizeof(tjs_char) + sizeof(size_t)),
+            std::memory_order_relaxed);
         free(ptr);
     }
     //---------------------------------------------------------------------------
@@ -448,7 +450,8 @@ namespace TJS {
     // tTJSVariantString
     //---------------------------------------------------------------------------
     void tTJSVariantString::Release() {
-        if(!this) return;
+        if(!this)
+            return;
 
         if(RefCount == 0) {
             TJSDeallocStringHeap(this);

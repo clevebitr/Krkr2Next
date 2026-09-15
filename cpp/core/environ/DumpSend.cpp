@@ -28,13 +28,13 @@ struct zlib_inmem_func64 : public zlib_filefunc64_def {
     }
 
     static uLong ZCALLBACK fread_file_func(voidpf opaque, voidpf stream,
-                                            void *buf, uLong size) {
+                                           void *buf, uLong size) {
         tTVPMemoryStream *str = (tTVPMemoryStream *)stream;
         return str->Read(buf, size);
     }
 
     static uLong ZCALLBACK fwrite_file_func(voidpf opaque, voidpf stream,
-                                             const void *buf, uLong size) {
+                                            const void *buf, uLong size) {
         tTVPMemoryStream *str = (tTVPMemoryStream *)stream;
         return str->Write(buf, size);
     }
@@ -131,10 +131,13 @@ uint32_t convert_to_dos_date(const struct tm *time) {
 #define FLAG_UTF8 (1 << 11)
 static void SendDumps(std::string dumpdir, std::vector<std::string> allDumps,
                       std::string packageName, std::string versionStr) {
-    // Dump upload will be re-implemented via platform-native HTTP or the host shell.
+    // Dump upload will be re-implemented via platform-native HTTP or the host
+    // shell.
     spdlog::warn("SendDumps: HTTP upload is currently disabled.");
-    spdlog::warn("SendDumps: {} dump file(s) will be deleted without uploading.", allDumps.size());
-    for (const std::string &filename : allDumps) {
+    spdlog::warn(
+        "SendDumps: {} dump file(s) will be deleted without uploading.",
+        allDumps.size());
+    for(const std::string &filename : allDumps) {
         std::string fullpath = dumpdir + "/" + filename;
         remove(fullpath.c_str());
     }

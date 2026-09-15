@@ -964,10 +964,10 @@ NCB_ATTACH_CLASS_WITH_HOOK(WindowEx, Window) {
                 &Class::setMaximizeBox, 0);
     RawCallback(TJS_W("minimizeBox"), &Class::getMinimizeBox,
                 &Class::setMinimizeBox, 0);
-    RawCallback(TJS_W("maximized"), &Class::getMaximized,
-                &Class::setMaximized, 0);
-    RawCallback(TJS_W("minimized"), &Class::getMinimized,
-                &Class::setMinimized, 0);
+    RawCallback(TJS_W("maximized"), &Class::getMaximized, &Class::setMaximized,
+                0);
+    RawCallback(TJS_W("minimized"), &Class::getMinimized, &Class::setMinimized,
+                0);
     RawCallback(TJS_W("showRestore"), &Class::showRestore, 0);
     RawCallback(TJS_W("resetWindowIcon"), &Class::resetWindowIcon, 0);
     RawCallback(TJS_W("setWindowIcon"), &Class::setWindowIcon, 0);
@@ -1428,7 +1428,7 @@ struct System {
                                         tTJSVariant **param,
                                         iTJSDispatch2 *objthis) {
         // Return an array with one monitor entry (primary)
-        if (result) {
+        if(result) {
             tjs_int w = tTVPScreen::GetDesktopWidth();
             tjs_int h = tTVPScreen::GetDesktopHeight();
 
@@ -1454,7 +1454,7 @@ struct System {
                                     iTJSDispatch2 *objthis) {
         // Return a dictionary with 'monitor' and 'work' sub-dictionaries
         // On non-Windows platforms, monitor == work (no taskbar deduction)
-        if (result) {
+        if(result) {
             tjs_int w = tTVPScreen::GetDesktopWidth();
             tjs_int h = tTVPScreen::GetDesktopHeight();
 

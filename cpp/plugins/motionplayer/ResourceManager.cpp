@@ -45,7 +45,8 @@ tjs_error motion::ResourceManager::setEmotePSBDecryptFunc(tTJSVariant *r,
 tTJSVariant motion::ResourceManager::load(ttstr path) const {
     // Cache keys are case-insensitive; the shared PSB object stays alive while
     // either the cache or a motion player still owns it.
-    // 缓存键不区分大小写；只要缓存或 motion player 持有对象，共享 PSB 就不会释放。
+    // 缓存键不区分大小写；只要缓存或 motion player 持有对象，共享 PSB
+    // 就不会释放。
     auto canonical = path.AsLowerCase().AsStdString();
     auto file = std::make_shared<PSB::PSBFile>();
     file->setSeed(_decryptSeed);
@@ -60,8 +61,9 @@ tTJSVariant motion::ResourceManager::load(ttstr path) const {
         std::lock_guard<std::mutex> lock(_mutex);
         _lastLoadedPath = canonical;
         _loadedFiles[canonical] = file;
-        _cacheOrder.erase(std::remove(_cacheOrder.begin(), _cacheOrder.end(), canonical),
-                          _cacheOrder.end());
+        _cacheOrder.erase(
+            std::remove(_cacheOrder.begin(), _cacheOrder.end(), canonical),
+            _cacheOrder.end());
         _cacheOrder.push_back(canonical);
         trimCacheLocked();
     }
@@ -84,8 +86,9 @@ void motion::ResourceManager::unload(const ttstr &path) const {
     const auto canonical = path.AsLowerCase().AsStdString();
     std::lock_guard<std::mutex> lock(_mutex);
     _loadedFiles.erase(canonical);
-    _cacheOrder.erase(std::remove(_cacheOrder.begin(), _cacheOrder.end(), canonical),
-                      _cacheOrder.end());
+    _cacheOrder.erase(
+        std::remove(_cacheOrder.begin(), _cacheOrder.end(), canonical),
+        _cacheOrder.end());
     if(_lastLoadedPath == canonical) {
         _lastLoadedPath.clear();
     }
@@ -105,12 +108,11 @@ ttstr motion::ResourceManager::getLastLoadedPath() {
 
 bool motion::ResourceManager::hasLoadedPath(const ttstr &path) {
     std::lock_guard<std::mutex> lock(_mutex);
-    return _loadedFiles.find(path.AsLowerCase().AsStdString()) != _loadedFiles.end();
+    return _loadedFiles.find(path.AsLowerCase().AsStdString()) !=
+        _loadedFiles.end();
 }
 
-int motion::ResourceManager::getDecryptSeed() {
-    return _decryptSeed;
-}
+int motion::ResourceManager::getDecryptSeed() { return _decryptSeed; }
 
 std::shared_ptr<PSB::PSBFile>
 motion::ResourceManager::getLoadedFile(const ttstr &path) {

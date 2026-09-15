@@ -40,7 +40,8 @@ using JniMethodInfo = krkr::JniHelper::MethodInfo;
 // #define KR2EntryJavaPath "org/tvp/kirikiri2/Kirikiroid2"
 
 // Defined (extern "C") in bridge/engine_api/src/engine_api_android_jni.cpp –
-// provides the host Application Context as a fallback when KR2Activity is not available.
+// provides the host Application Context as a fallback when KR2Activity is not
+// available.
 extern "C" jobject krkr_GetApplicationContext();
 
 extern unsigned int __page_size = getpagesize();
@@ -93,7 +94,8 @@ tjs_int TVPGetSelfUsedMemory() {
     return usedMemory;
 }
 
-// /proc 内存信息辅助（bionic 提供 /proc/meminfo 与 /proc/self/status，与各平台语义一致，单位 kB）
+// /proc 内存信息辅助（bionic 提供 /proc/meminfo 与
+// /proc/self/status，与各平台语义一致，单位 kB）
 static unsigned long _meminfo_value(const char *key) {
     std::ifstream f("/proc/meminfo");
     std::string line, k;
@@ -142,17 +144,19 @@ void TVPForceSwapBuffer() {
     // no new content was drawn.  In double-buffered mode this causes the
     // front/back buffers to alternate between the current frame and a stale
     // frame, producing visible flicker ("previous image overlaid").
-    auto& egl = krkr::GetEngineEGLContext();
-    if (egl.HasNativeWindow()) {
-        if (!egl.ConsumeFrameDirty()) {
+    auto &egl = krkr::GetEngineEGLContext();
+    if(egl.HasNativeWindow()) {
+        if(!egl.ConsumeFrameDirty()) {
             // No new content — skip swap to avoid double-buffer flicker.
             return;
         }
-        const EGLBoolean ok = eglSwapBuffers(egl.GetDisplay(), egl.GetWindowSurface());
-        if (ok != EGL_TRUE) {
-            __android_log_print(ANDROID_LOG_WARN, "krkr2",
-                                "TVPForceSwapBuffer: eglSwapBuffers failed err=0x%x",
-                                eglGetError());
+        const EGLBoolean ok =
+            eglSwapBuffers(egl.GetDisplay(), egl.GetWindowSurface());
+        if(ok != EGL_TRUE) {
+            __android_log_print(
+                ANDROID_LOG_WARN, "krkr2",
+                "TVPForceSwapBuffer: eglSwapBuffers failed err=0x%x",
+                eglGetError());
         }
     }
     // In Pbuffer mode, swap is a no-op — engine_tick handles readback.
@@ -256,14 +260,15 @@ static jobject GetKR2ActInstance() {
     // use the Application Context stored by the host shell.
     // Create a new local ref so callers can safely DeleteLocalRef on it.
     jobject ctx = krkr_GetApplicationContext();
-    if (ctx) {
-        JNIEnv* env = JniHelper::getEnv();
-        if (env) {
+    if(ctx) {
+        JNIEnv *env = JniHelper::getEnv();
+        if(env) {
             return env->NewLocalRef(ctx);
         }
     }
     __android_log_print(ANDROID_LOG_ERROR, "krkr2",
-        "GetKR2ActInstance: no KR2Activity and no Application Context available");
+                        "GetKR2ActInstance: no KR2Activity and no Application "
+                        "Context available");
     return 0;
 }
 
@@ -511,10 +516,12 @@ std::vector<std::string> TVPGetDriverPath() {
     if(!ret.empty())
         return ret;
 
-    // Host-shell mode fallback: prefer app-scoped directories from Context APIs.
+    // Host-shell mode fallback: prefer app-scoped directories from Context
+    // APIs.
     std::vector<std::string> app_paths = TVPGetAppStoragePath();
     for(const auto &p : app_paths) {
-        if(!p.empty()) ret.emplace_back(p);
+        if(!p.empty())
+            ret.emplace_back(p);
     }
     if(!ret.empty()) {
         return ret;
@@ -645,16 +652,19 @@ int TVPShowSimpleMessageBox(const char *pszText, const char *pszTitle,
 
 #ifdef __ANDROID__
 extern "C" JNIEXPORT void JNICALL
-Java_org_tvp_kirikiri2_KR2Activity_nativeOnMessageBoxResult(
-    JNIEnv* /* env */, jclass /* clazz */, jint result) {
+Java_org_tvp_kirikiri2_KR2Activity_nativeOnMessageBoxResult(JNIEnv * /* env */,
+                                                            jclass /* clazz */,
+                                                            jint result) {
     std::lock_guard<std::mutex> lk(MessageBoxLock);
     MsgBoxRet = static_cast<int>(result);
     MessageBoxCond.notify_all();
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_org_tvp_kirikiri2_KR2Activity_nativeOnInputBoxResult(
-    JNIEnv* /* env */, jclass /* clazz */, jint result, jstring text) {
+Java_org_tvp_kirikiri2_KR2Activity_nativeOnInputBoxResult(JNIEnv * /* env */,
+                                                          jclass /* clazz */,
+                                                          jint result,
+                                                          jstring text) {
     std::lock_guard<std::mutex> lk(MessageBoxLock);
     MsgBoxRet = static_cast<int>(result);
     MessageBoxRetText = JniHelper::jstring2string(text);
@@ -738,8 +748,10 @@ extern ttstr TVPGetLocallyAccessibleName(const ttstr &name);
 
 std::vector<ttstr> Android_GetExternalStoragePath() {
     auto to_file_uri = [](const std::string &path) -> std::string {
-        if(path.empty()) return "file:///";
-        if(path[0] == '/') return "file://" + path;
+        if(path.empty())
+            return "file:///";
+        if(path[0] == '/')
+            return "file://" + path;
         return "file:///" + path;
     };
     static std::vector<ttstr> ret;
@@ -755,8 +767,10 @@ std::vector<ttstr> Android_GetExternalStoragePath() {
 
 ttstr Android_GetInternalStoragePath() {
     auto to_file_uri = [](const std::string &path) -> std::string {
-        if(path.empty()) return "file:///";
-        if(path[0] == '/') return "file://" + path;
+        if(path.empty())
+            return "file:///";
+        if(path[0] == '/')
+            return "file://" + path;
         return "file:///" + path;
     };
     static ttstr strPath;
@@ -768,8 +782,10 @@ ttstr Android_GetInternalStoragePath() {
 
 ttstr Android_GetApkStoragePath() {
     auto to_file_uri = [](const std::string &path) -> std::string {
-        if(path.empty()) return "file:///";
-        if(path[0] == '/') return "file://" + path;
+        if(path.empty())
+            return "file:///";
+        if(path[0] == '/')
+            return "file://" + path;
         return "file:///" + path;
     };
     static ttstr strPath;
@@ -926,10 +942,11 @@ bool TVPCheckStartupPath(const std::string &path) {
 
 // POSIX fallback: recursively create directories
 static bool _posix_mkdirs(const std::string &path) {
-    if (path.empty()) return false;
+    if(path.empty())
+        return false;
     std::string tmp = path;
-    for (size_t i = 1; i < tmp.size(); ++i) {
-        if (tmp[i] == '/') {
+    for(size_t i = 1; i < tmp.size(); ++i) {
+        if(tmp[i] == '/') {
             tmp[i] = '\0';
             mkdir(tmp.c_str(), 0755);
             tmp[i] = '/';

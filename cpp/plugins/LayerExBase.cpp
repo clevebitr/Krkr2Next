@@ -7,8 +7,7 @@ int NI_LayerExBase::classId;
 static tTJSNI_Layer *GetNativeLayer(iTJSDispatch2 *layerobj) {
     tTJSNI_Layer *ni = nullptr;
     tjs_error hr = layerobj->NativeInstanceSupport(
-        TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID,
-        (iTJSNativeInstance **)&ni);
+        TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID, (iTJSNativeInstance **)&ni);
     if(TJS_FAILED(hr) || !ni)
         TVPThrowExceptionMessage(TJS_W("Not Layer"));
     return ni;
@@ -16,10 +15,10 @@ static tTJSNI_Layer *GetNativeLayer(iTJSDispatch2 *layerobj) {
 
 void NI_LayerExBase::reset(iTJSDispatch2 *layerobj) {
     tTJSNI_Layer *ni = GetNativeLayer(layerobj);
-    _width  = (int)ni->GetWidth();
+    _width = (int)ni->GetWidth();
     _height = (int)ni->GetHeight();
     _buffer = (unsigned char *)ni->GetMainImagePixelBufferForWrite();
-    _pitch  = (int)ni->GetMainImagePixelBufferPitch();
+    _pitch = (int)ni->GetMainImagePixelBufferPitch();
 }
 
 void NI_LayerExBase::redraw(iTJSDispatch2 *layerobj) {

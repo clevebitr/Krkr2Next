@@ -9,223 +9,229 @@
 
 namespace {
 
-bool GetMemberVariant(iTJSDispatch2 *obj, const tjs_char *name, tTJSVariant &out) {
-    if(!obj)
-        return false;
-    return TJS_SUCCEEDED(obj->PropGet(TJS_IGNOREPROP, name, nullptr, &out, obj));
-}
+    bool GetMemberVariant(iTJSDispatch2 *obj, const tjs_char *name,
+                          tTJSVariant &out) {
+        if(!obj)
+            return false;
+        return TJS_SUCCEEDED(
+            obj->PropGet(TJS_IGNOREPROP, name, nullptr, &out, obj));
+    }
 
-bool SetMemberVariant(iTJSDispatch2 *obj, const tjs_char *name,
-                      const tTJSVariant &value) {
-    if(!obj)
-        return false;
-    tTJSVariant copy(value);
-    return TJS_SUCCEEDED(
-        obj->PropSet(TJS_MEMBERENSURE, name, nullptr, &copy, obj));
-}
+    bool SetMemberVariant(iTJSDispatch2 *obj, const tjs_char *name,
+                          const tTJSVariant &value) {
+        if(!obj)
+            return false;
+        tTJSVariant copy(value);
+        return TJS_SUCCEEDED(
+            obj->PropSet(TJS_MEMBERENSURE, name, nullptr, &copy, obj));
+    }
 
-bool GetMemberInt(iTJSDispatch2 *obj, const tjs_char *name, tjs_int &out) {
-    tTJSVariant value;
-    if(!GetMemberVariant(obj, name, value))
-        return false;
-    out = static_cast<tjs_int>(value);
-    return true;
-}
-
-bool GetMemberReal(iTJSDispatch2 *obj, const tjs_char *name, tjs_real &out) {
-    tTJSVariant value;
-    if(!GetMemberVariant(obj, name, value))
-        return false;
-    out = static_cast<tjs_real>(value);
-    return true;
-}
-
-bool GetArrayInt(iTJSDispatch2 *obj, tjs_int index, tjs_int &out) {
-    if(!obj)
-        return false;
-    tTJSVariant value;
-    if(TJS_FAILED(obj->PropGetByNum(TJS_IGNOREPROP, index, &value, obj)))
-        return false;
-    out = static_cast<tjs_int>(value);
-    return true;
-}
-
-bool SetArrayInt(iTJSDispatch2 *obj, tjs_int index, tjs_int value) {
-    if(!obj)
-        return false;
-    tTJSVariant var(value);
-    return TJS_SUCCEEDED(obj->PropSetByNum(TJS_MEMBERENSURE, index, &var, obj));
-}
-
-bool IsValidRect(const tTVPRect &rect) {
-    return rect.right > rect.left && rect.bottom > rect.top;
-}
-
-tTVPRect NormalizeRect(const tTVPRect &rect) {
-    tTVPRect normalized = rect;
-    if(normalized.left > normalized.right)
-        std::swap(normalized.left, normalized.right);
-    if(normalized.top > normalized.bottom)
-        std::swap(normalized.top, normalized.bottom);
-    return normalized;
-}
-
-bool ExtractRectFromArrayLike(iTJSDispatch2 *obj, tTVPRect &out) {
-    tjs_int left = 0;
-    tjs_int top = 0;
-    tjs_int right = 0;
-    tjs_int bottom = 0;
-    if(GetArrayInt(obj, 0, left) && GetArrayInt(obj, 1, top) &&
-       GetArrayInt(obj, 2, right) && GetArrayInt(obj, 3, bottom)) {
-        out = NormalizeRect(tTVPRect(left, top, right, bottom));
+    bool GetMemberInt(iTJSDispatch2 *obj, const tjs_char *name, tjs_int &out) {
+        tTJSVariant value;
+        if(!GetMemberVariant(obj, name, value))
+            return false;
+        out = static_cast<tjs_int>(value);
         return true;
     }
-    return false;
-}
 
-bool ExtractRectFromObjectMembers(iTJSDispatch2 *obj, tTVPRect &out) {
-    tjs_int left = 0;
-    tjs_int top = 0;
-    tjs_int right = 0;
-    tjs_int bottom = 0;
-    if(GetMemberInt(obj, TJS_W("left"), left) &&
-       GetMemberInt(obj, TJS_W("top"), top) &&
-       GetMemberInt(obj, TJS_W("right"), right) &&
-       GetMemberInt(obj, TJS_W("bottom"), bottom)) {
-        out = NormalizeRect(tTVPRect(left, top, right, bottom));
+    bool GetMemberReal(iTJSDispatch2 *obj, const tjs_char *name,
+                       tjs_real &out) {
+        tTJSVariant value;
+        if(!GetMemberVariant(obj, name, value))
+            return false;
+        out = static_cast<tjs_real>(value);
         return true;
     }
-    tjs_int x = 0;
-    tjs_int y = 0;
-    tjs_int width = 0;
-    tjs_int height = 0;
-    if(GetMemberInt(obj, TJS_W("x"), x) && GetMemberInt(obj, TJS_W("y"), y) &&
-       GetMemberInt(obj, TJS_W("width"), width) &&
-       GetMemberInt(obj, TJS_W("height"), height)) {
-        out = NormalizeRect(tTVPRect(x, y, x + width, y + height));
+
+    bool GetArrayInt(iTJSDispatch2 *obj, tjs_int index, tjs_int &out) {
+        if(!obj)
+            return false;
+        tTJSVariant value;
+        if(TJS_FAILED(obj->PropGetByNum(TJS_IGNOREPROP, index, &value, obj)))
+            return false;
+        out = static_cast<tjs_int>(value);
         return true;
     }
-    return false;
-}
 
-bool ExtractRectFromVariant(const tTJSVariant &value, tTVPRect &out);
+    bool SetArrayInt(iTJSDispatch2 *obj, tjs_int index, tjs_int value) {
+        if(!obj)
+            return false;
+        tTJSVariant var(value);
+        return TJS_SUCCEEDED(
+            obj->PropSetByNum(TJS_MEMBERENSURE, index, &var, obj));
+    }
 
-bool ExtractRectViaGetRect(iTJSDispatch2 *obj, tTVPRect &out) {
-    tTJSVariant methodVar;
-    if(!GetMemberVariant(obj, TJS_W("getRect"), methodVar) ||
-       methodVar.Type() != tvtObject)
-        return false;
-    tTJSVariant result;
-    tTJSVariantClosure closure = methodVar.AsObjectClosureNoAddRef();
-    if(!closure.Object)
-        return false;
-    if(TJS_FAILED(
-           closure.FuncCall(0, nullptr, nullptr, &result, 0, nullptr, obj)))
-        return false;
-    return ExtractRectFromVariant(result, out);
-}
+    bool IsValidRect(const tTVPRect &rect) {
+        return rect.right > rect.left && rect.bottom > rect.top;
+    }
 
-bool ExtractRectFromVariant(const tTJSVariant &value, tTVPRect &out) {
-    if(value.Type() != tvtObject)
-        return false;
-    iTJSDispatch2 *obj = value.AsObjectNoAddRef();
-    if(!obj)
-        return false;
-    if(ExtractRectViaGetRect(obj, out))
-        return true;
-    if(ExtractRectFromArrayLike(obj, out))
-        return true;
-    return ExtractRectFromObjectMembers(obj, out);
-}
+    tTVPRect NormalizeRect(const tTVPRect &rect) {
+        tTVPRect normalized = rect;
+        if(normalized.left > normalized.right)
+            std::swap(normalized.left, normalized.right);
+        if(normalized.top > normalized.bottom)
+            std::swap(normalized.top, normalized.bottom);
+        return normalized;
+    }
 
-iTJSDispatch2 *CreateRectObject(const tTVPRect &rect) {
-    iTJSDispatch2 *array = TJSCreateArrayObject();
-    if(!array)
-        return nullptr;
-    const tTVPRect normalized = NormalizeRect(rect);
-    SetArrayInt(array, 0, normalized.left);
-    SetArrayInt(array, 1, normalized.top);
-    SetArrayInt(array, 2, normalized.right);
-    SetArrayInt(array, 3, normalized.bottom);
-    SetMemberVariant(array, TJS_W("left"), tTJSVariant(normalized.left));
-    SetMemberVariant(array, TJS_W("top"), tTJSVariant(normalized.top));
-    SetMemberVariant(array, TJS_W("right"), tTJSVariant(normalized.right));
-    SetMemberVariant(array, TJS_W("bottom"), tTJSVariant(normalized.bottom));
-    SetMemberVariant(array, TJS_W("x"), tTJSVariant(normalized.left));
-    SetMemberVariant(array, TJS_W("y"), tTJSVariant(normalized.top));
-    SetMemberVariant(array, TJS_W("width"),
-                     tTJSVariant(normalized.get_width()));
-    SetMemberVariant(array, TJS_W("height"),
-                     tTJSVariant(normalized.get_height()));
-    return array;
-}
+    bool ExtractRectFromArrayLike(iTJSDispatch2 *obj, tTVPRect &out) {
+        tjs_int left = 0;
+        tjs_int top = 0;
+        tjs_int right = 0;
+        tjs_int bottom = 0;
+        if(GetArrayInt(obj, 0, left) && GetArrayInt(obj, 1, top) &&
+           GetArrayInt(obj, 2, right) && GetArrayInt(obj, 3, bottom)) {
+            out = NormalizeRect(tTVPRect(left, top, right, bottom));
+            return true;
+        }
+        return false;
+    }
 
-tTJSVariant CreateD2DViewObject() {
-    auto *klass = ncbClassInfo<class D2DView>::GetClassObject();
-    if(klass) {
-        iTJSDispatch2 *instance = nullptr;
-        if(TJS_SUCCEEDED(
-               klass->CreateNew(0, nullptr, nullptr, &instance, 0, nullptr,
-                                klass)) &&
-           instance) {
-            tTJSVariant result(instance, instance);
-            instance->Release();
+    bool ExtractRectFromObjectMembers(iTJSDispatch2 *obj, tTVPRect &out) {
+        tjs_int left = 0;
+        tjs_int top = 0;
+        tjs_int right = 0;
+        tjs_int bottom = 0;
+        if(GetMemberInt(obj, TJS_W("left"), left) &&
+           GetMemberInt(obj, TJS_W("top"), top) &&
+           GetMemberInt(obj, TJS_W("right"), right) &&
+           GetMemberInt(obj, TJS_W("bottom"), bottom)) {
+            out = NormalizeRect(tTVPRect(left, top, right, bottom));
+            return true;
+        }
+        tjs_int x = 0;
+        tjs_int y = 0;
+        tjs_int width = 0;
+        tjs_int height = 0;
+        if(GetMemberInt(obj, TJS_W("x"), x) &&
+           GetMemberInt(obj, TJS_W("y"), y) &&
+           GetMemberInt(obj, TJS_W("width"), width) &&
+           GetMemberInt(obj, TJS_W("height"), height)) {
+            out = NormalizeRect(tTVPRect(x, y, x + width, y + height));
+            return true;
+        }
+        return false;
+    }
+
+    bool ExtractRectFromVariant(const tTJSVariant &value, tTVPRect &out);
+
+    bool ExtractRectViaGetRect(iTJSDispatch2 *obj, tTVPRect &out) {
+        tTJSVariant methodVar;
+        if(!GetMemberVariant(obj, TJS_W("getRect"), methodVar) ||
+           methodVar.Type() != tvtObject)
+            return false;
+        tTJSVariant result;
+        tTJSVariantClosure closure = methodVar.AsObjectClosureNoAddRef();
+        if(!closure.Object)
+            return false;
+        if(TJS_FAILED(
+               closure.FuncCall(0, nullptr, nullptr, &result, 0, nullptr, obj)))
+            return false;
+        return ExtractRectFromVariant(result, out);
+    }
+
+    bool ExtractRectFromVariant(const tTJSVariant &value, tTVPRect &out) {
+        if(value.Type() != tvtObject)
+            return false;
+        iTJSDispatch2 *obj = value.AsObjectNoAddRef();
+        if(!obj)
+            return false;
+        if(ExtractRectViaGetRect(obj, out))
+            return true;
+        if(ExtractRectFromArrayLike(obj, out))
+            return true;
+        return ExtractRectFromObjectMembers(obj, out);
+    }
+
+    iTJSDispatch2 *CreateRectObject(const tTVPRect &rect) {
+        iTJSDispatch2 *array = TJSCreateArrayObject();
+        if(!array)
+            return nullptr;
+        const tTVPRect normalized = NormalizeRect(rect);
+        SetArrayInt(array, 0, normalized.left);
+        SetArrayInt(array, 1, normalized.top);
+        SetArrayInt(array, 2, normalized.right);
+        SetArrayInt(array, 3, normalized.bottom);
+        SetMemberVariant(array, TJS_W("left"), tTJSVariant(normalized.left));
+        SetMemberVariant(array, TJS_W("top"), tTJSVariant(normalized.top));
+        SetMemberVariant(array, TJS_W("right"), tTJSVariant(normalized.right));
+        SetMemberVariant(array, TJS_W("bottom"),
+                         tTJSVariant(normalized.bottom));
+        SetMemberVariant(array, TJS_W("x"), tTJSVariant(normalized.left));
+        SetMemberVariant(array, TJS_W("y"), tTJSVariant(normalized.top));
+        SetMemberVariant(array, TJS_W("width"),
+                         tTJSVariant(normalized.get_width()));
+        SetMemberVariant(array, TJS_W("height"),
+                         tTJSVariant(normalized.get_height()));
+        return array;
+    }
+
+    tTJSVariant CreateD2DViewObject() {
+        auto *klass = ncbClassInfo<class D2DView>::GetClassObject();
+        if(klass) {
+            iTJSDispatch2 *instance = nullptr;
+            if(TJS_SUCCEEDED(klass->CreateNew(0, nullptr, nullptr, &instance, 0,
+                                              nullptr, klass)) &&
+               instance) {
+                tTJSVariant result(instance, instance);
+                instance->Release();
+                return result;
+            }
+        }
+        if(iTJSDispatch2 *fallback = CreateRectObject(tTVPRect())) {
+            SetMemberVariant(fallback, TJS_W("type"), tTJSVariant(0));
+            SetMemberVariant(fallback, TJS_W("visible"), tTJSVariant(1));
+            SetMemberVariant(fallback, TJS_W("fopacity"), tTJSVariant(1.0));
+            SetMemberVariant(fallback, TJS_W("opacity"), tTJSVariant(255));
+            SetMemberVariant(fallback, TJS_W("order"), tTJSVariant(0));
+            SetMemberVariant(fallback, TJS_W("zinterp"), tTJSVariant(0.0));
+            tTJSVariant result(fallback, fallback);
+            fallback->Release();
             return result;
         }
-    }
-    if(iTJSDispatch2 *fallback = CreateRectObject(tTVPRect())) {
-        SetMemberVariant(fallback, TJS_W("type"), tTJSVariant(0));
-        SetMemberVariant(fallback, TJS_W("visible"), tTJSVariant(1));
-        SetMemberVariant(fallback, TJS_W("fopacity"), tTJSVariant(1.0));
-        SetMemberVariant(fallback, TJS_W("opacity"), tTJSVariant(255));
-        SetMemberVariant(fallback, TJS_W("order"), tTJSVariant(0));
-        SetMemberVariant(fallback, TJS_W("zinterp"), tTJSVariant(0.0));
-        tTJSVariant result(fallback, fallback);
-        fallback->Release();
-        return result;
-    }
-    return tTJSVariant();
-}
-
-tTJSVariant ExtractRootViewVariant(const tTJSVariant &value) {
-    if(value.Type() != tvtObject)
         return tTJSVariant();
-    iTJSDispatch2 *obj = value.AsObjectNoAddRef();
-    if(!obj)
-        return tTJSVariant();
-    tTJSVariant root;
-    if(GetMemberVariant(obj, TJS_W("root"), root))
-        return root;
-    return tTJSVariant();
-}
-
-tTJSVariant CreateD2DViewContainer() {
-    const tTJSVariant root = CreateD2DViewObject();
-    if(root.Type() != tvtObject)
-        return root;
-
-    iTJSDispatch2 *obj = root.AsObjectNoAddRef();
-    if(!obj)
-        return root;
-
-    SetMemberVariant(obj, TJS_W("root"), root);
-    SetMemberVariant(obj, TJS_W("base"), root);
-    SetMemberVariant(obj, TJS_W("main"), root);
-    return root;
-}
-
-bool ResolveRectArguments(tjs_int count, tTJSVariant **params, tTVPRect &out) {
-    if(count >= 4) {
-        out = NormalizeRect(tTVPRect(static_cast<tjs_int>(*params[0]),
-                                     static_cast<tjs_int>(*params[1]),
-                                     static_cast<tjs_int>(*params[2]),
-                                     static_cast<tjs_int>(*params[3])));
-        return true;
     }
-    if(count >= 1)
-        return ExtractRectFromVariant(*params[0], out);
-    return false;
-}
+
+    tTJSVariant ExtractRootViewVariant(const tTJSVariant &value) {
+        if(value.Type() != tvtObject)
+            return tTJSVariant();
+        iTJSDispatch2 *obj = value.AsObjectNoAddRef();
+        if(!obj)
+            return tTJSVariant();
+        tTJSVariant root;
+        if(GetMemberVariant(obj, TJS_W("root"), root))
+            return root;
+        return tTJSVariant();
+    }
+
+    tTJSVariant CreateD2DViewContainer() {
+        const tTJSVariant root = CreateD2DViewObject();
+        if(root.Type() != tvtObject)
+            return root;
+
+        iTJSDispatch2 *obj = root.AsObjectNoAddRef();
+        if(!obj)
+            return root;
+
+        SetMemberVariant(obj, TJS_W("root"), root);
+        SetMemberVariant(obj, TJS_W("base"), root);
+        SetMemberVariant(obj, TJS_W("main"), root);
+        return root;
+    }
+
+    bool ResolveRectArguments(tjs_int count, tTJSVariant **params,
+                              tTVPRect &out) {
+        if(count >= 4) {
+            out = NormalizeRect(tTVPRect(static_cast<tjs_int>(*params[0]),
+                                         static_cast<tjs_int>(*params[1]),
+                                         static_cast<tjs_int>(*params[2]),
+                                         static_cast<tjs_int>(*params[3])));
+            return true;
+        }
+        if(count >= 1)
+            return ExtractRectFromVariant(*params[0], out);
+        return false;
+    }
 
 } // namespace
 
@@ -261,7 +267,8 @@ public:
     static tjs_error setRectCallback(tTJSVariant *, tjs_int count,
                                      tTJSVariant **params,
                                      iTJSDispatch2 *objthis) {
-        auto *self = ncbInstanceAdaptor<D2DView>::GetNativeInstance(objthis, true);
+        auto *self =
+            ncbInstanceAdaptor<D2DView>::GetNativeInstance(objthis, true);
         if(!self)
             return TJS_E_FAIL;
         tTVPRect rect;
@@ -273,7 +280,8 @@ public:
 
     static tjs_error getRectCallback(tTJSVariant *result, tjs_int,
                                      tTJSVariant **, iTJSDispatch2 *objthis) {
-        auto *self = ncbInstanceAdaptor<D2DView>::GetNativeInstance(objthis, true);
+        auto *self =
+            ncbInstanceAdaptor<D2DView>::GetNativeInstance(objthis, true);
         if(!self)
             return TJS_E_FAIL;
         iTJSDispatch2 *rectObj = CreateRectObject(self->getRect());
@@ -333,8 +341,7 @@ public:
     }
 
     tjs_int64 getinterface() const {
-        return reinterpret_cast<tjs_int64>(
-            const_cast<DrawDeviceD2D *>(this));
+        return reinterpret_cast<tjs_int64>(const_cast<DrawDeviceD2D *>(this));
     }
 
     tTJSVariant getviewState() {
@@ -375,8 +382,8 @@ public:
             return 0;
         tTJSVariantClosure closure = value.AsObjectClosureNoAddRef();
         tTJSVariant iface_v;
-        if(TJS_FAILED(
-               closure.PropGet(0, TJS_W("interface"), nullptr, &iface_v, nullptr)))
+        if(TJS_FAILED(closure.PropGet(0, TJS_W("interface"), nullptr, &iface_v,
+                                      nullptr)))
             return 0;
         auto *device = reinterpret_cast<iTVPDrawDevice *>(
             (tjs_intptr_t)(tjs_int64)iface_v);

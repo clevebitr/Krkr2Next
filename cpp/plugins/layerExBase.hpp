@@ -80,11 +80,12 @@ struct layerExBase {
     tTJSNI_Layer *_this;
 
     layerExBase(DispatchT obj) :
-        _obj(obj), _this(nullptr),
-        _width(0), _height(0), _pitch(0), _buffer(nullptr),
-        _clipLeft(0), _clipTop(0), _clipWidth(0), _clipHeight(0) {
-        tjs_error hr = obj->NativeInstanceSupport(TJS_NIS_GETINSTANCE,
-            tTJSNC_Layer::ClassID, (iTJSNativeInstance **)&_this);
+        _obj(obj), _this(nullptr), _width(0), _height(0), _pitch(0),
+        _buffer(nullptr), _clipLeft(0), _clipTop(0), _clipWidth(0),
+        _clipHeight(0) {
+        tjs_error hr = obj->NativeInstanceSupport(
+            TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID,
+            (iTJSNativeInstance **)&_this);
         if(TJS_FAILED(hr))
             TVPThrowExceptionMessage(TJS_W("Not Layer"));
     }
@@ -92,19 +93,19 @@ struct layerExBase {
     virtual ~layerExBase() = default;
 
     virtual void redraw() {
-        tTVPRect rc(_clipLeft, _clipTop,
-                    _clipLeft + _clipWidth, _clipTop + _clipHeight);
+        tTVPRect rc(_clipLeft, _clipTop, _clipLeft + _clipWidth,
+                    _clipTop + _clipHeight);
         _this->Update(rc);
     }
 
     virtual void reset() {
-        _width  = (GeometryT)_this->GetWidth();
+        _width = (GeometryT)_this->GetWidth();
         _height = (GeometryT)_this->GetHeight();
         _buffer = (BufferT)_this->GetMainImagePixelBufferForWrite();
-        _pitch  = (PitchT)_this->GetMainImagePixelBufferPitch();
-        _clipLeft   = (GeometryT)_this->GetClipLeft();
-        _clipTop    = (GeometryT)_this->GetClipTop();
-        _clipWidth  = (GeometryT)_this->GetClipWidth();
+        _pitch = (PitchT)_this->GetMainImagePixelBufferPitch();
+        _clipLeft = (GeometryT)_this->GetClipLeft();
+        _clipTop = (GeometryT)_this->GetClipTop();
+        _clipWidth = (GeometryT)_this->GetClipWidth();
         _clipHeight = (GeometryT)_this->GetClipHeight();
     }
 
