@@ -12,6 +12,7 @@
 #include "tjsCommHead.h"
 
 #include "XP3Archive.h"
+#include "XP3ArchiveCxDecoder.h"
 #include "MsgIntf.h"
 #include "DebugIntf.h"
 #include "EventIntf.h"
@@ -20,6 +21,8 @@
 
 #include <zlib.h>
 #include <algorithm>
+#include <array>
+#include <limits>
 
 #include "TVPMmapAlloc.h"
 
@@ -319,6 +322,57 @@ bool TVPIsXP3Archive(const ttstr &name) {
 }
 
 //---------------------------------------------------------------------------
+// 读一个条目头部的头几个字节（用于判断保护包是否已经解密）。
+// 移植自 AetherKiri 的同名实现：解压路径用 zlib 还原出原始前 8 字节，
+// 未压缩路径直接读。读不到就返回 false，由调用方决定怎么处理。
+//---------------------------------------------------------------------------
+static bool TVPReadXP3ItemHeader(tTJSBinaryStream *stream,
+                                 const tTVPXP3Archive::tArchiveItem &item,
+                                 std::array<tjs_uint8, 8> &header) {
+    if(item.Segments.empty())
+        return false;
+
+    const auto &segment = item.Segments.front();
+    if(segment.Offset != 0 || segment.OrgSize < header.size())
+        return false;
+
+    const tjs_uint64 originalPosition = stream->GetPosition();
+    bool succeeded = false;
+    try {
+        stream->SetPosition(segment.Start);
+        if(segment.IsCompressed) {
+            if(segment.ArcSize <= std::numeric_limits<tjs_uint>::max() &&
+               segment.OrgSize <= std::numeric_limits<tjs_uint>::max()) {
+                std::vector<tjs_uint8> archived(
+                    static_cast<std::size_t>(segment.ArcSize));
+                std::vector<tjs_uint8> original(
+                    static_cast<std::size_t>(segment.OrgSize));
+                stream->ReadBuffer(archived.data(),
+                                   static_cast<tjs_uint>(archived.size()));
+                unsigned long originalSize =
+                    static_cast<unsigned long>(original.size());
+                succeeded =
+                    uncompress(original.data(), &originalSize, archived.data(),
+                               static_cast<unsigned long>(archived.size())) ==
+                        Z_OK &&
+                    originalSize == original.size();
+                if(succeeded)
+                    std::copy_n(original.begin(), header.size(),
+                                header.begin());
+            }
+        } else {
+            stream->ReadBuffer(header.data(),
+                               static_cast<tjs_uint>(header.size()));
+            succeeded = true;
+        }
+    } catch(...) {
+        succeeded = false;
+    }
+    stream->SetPosition(originalPosition);
+    return succeeded;
+}
+
+//---------------------------------------------------------------------------
 void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                           bool normalizeName) {
     tjs_uint64 offset = off;
@@ -431,6 +485,7 @@ void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                 tArchiveItem item;
                 tjs_uint32 flags =
                     ReadI32FromMem(indexdata + ch_info_start + 0);
+                item.Flags = flags;
                 if(!TVPAllowExtractProtectedStorage &&
                    (flags & TVP_XP3_FILE_PROTECTED))
                     TVPThrowExceptionMessage(
@@ -522,6 +577,35 @@ void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
 
             if(!(index_flag & TVP_XP3_INDEX_CONTINUE))
                 break; // continue reading index when the bit sets
+        }
+
+        // —— Cx 保护包探测 ——
+        // 汉化补丁常见的形式是 Cx 加壳的 XP3（实测 nainiuniu5krkr.xp3）。
+        // 单看内容 hash 不足以判定：已经解密过的翻译包也可能保留受保护的
+        // 元数据，照 hash 直接启用会把正常包也解开。所以只对根目录的
+        // startup.tjs 探一次它的载荷头部，再决定是否为这个包启用解码器。
+        // 移植自 AetherKiri 的同名逻辑。
+        for(const auto &item : ItemVector) {
+            if(item.Name != TJS_W("startup.tjs") ||
+               !TVPIsBuiltinXP3CxScheme(item.FileHash))
+                continue;
+
+            std::array<tjs_uint8, 8> header{};
+            const bool headerRead = TVPReadXP3ItemHeader(st, item, header);
+            if(TVPShouldUseBuiltinXP3CxDecoder(
+                   item.FileHash, headerRead ? header.data() : nullptr,
+                   headerRead ? header.size() : 0)) {
+                UseBuiltinCxDecoder =
+                    TVPActivateBuiltinXP3CxDecoder(item.FileHash);
+                if(UseBuiltinCxDecoder)
+                    TVPAddImportantLog(
+                        TJS_W("(info) Activated built-in XP3 Cx decoder"));
+            } else {
+                TVPAddImportantLog(
+                    TJS_W("(info) Protected XP3 payload is already decoded; "
+                          "skipped built-in Cx decoder"));
+            }
+            break;
         }
 
         // sort item vector by its name (required for tTVPArchive
@@ -1078,6 +1162,15 @@ tjs_uint tTVPXP3ArchiveStream::Read(void *buffer, tjs_uint read_size) {
                 Owner->GetFileHash(StorageIndex), Owner->GetName(StorageIndex));
             TVPXP3ArchiveExtractionFilter((tTVPXP3ExtractionFilterInfo *)&info,
                                           &FilterContext);
+        } else if(Owner->IsFileProtected(StorageIndex) &&
+                  TVPIsBuiltinXP3CxDecoderActive()) {
+            // Cx 方案由工程包里受保护的 startup 条目选定，但加密载荷可能分散在
+            // 同级的兄弟包里。这个选择是**进程内全局**的，正是为了让那些兄弟包
+            // 里的受保护条目也走同一个解码器。
+            // 移植自 AetherKiri 的同名逻辑。
+            TVPDecodeBuiltinXP3Cx(Owner->GetFileHash(StorageIndex), CurPos,
+                                  static_cast<tjs_uint8 *>(buffer) + write_size,
+                                  one_size);
         }
 
         // adjust members

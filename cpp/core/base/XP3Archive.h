@@ -98,6 +98,7 @@ public:
     struct tArchiveItem {
         ttstr Name;
         tjs_uint32 FileHash{};
+        tjs_uint32 Flags{};
         tjs_uint64 OrgSize{}; // original ( uncompressed ) size
         tjs_uint64 ArcSize{}; // in-archive size
         std::vector<tTVPXP3ArchiveSegment> Segments;
@@ -110,6 +111,9 @@ public:
     tjs_int Count = 0;
 
     std::vector<tArchiveItem> ItemVector;
+    // Cx 保护包（汉化补丁常见的加壳形式）：由索引解析阶段探测并激活，
+    // 见 XP3ArchiveCxDecoder.h。进程内全局，兄弟包共用同一个选择。
+    bool UseBuiltinCxDecoder = false;
 
     void Init(tTJSBinaryStream *st, tjs_int64 offset,
               bool normalizeName = true);
@@ -134,6 +138,15 @@ public:
 
     [[nodiscard]] tjs_uint32 GetFileHash(tjs_uint idx) const {
         return ItemVector[idx].FileHash;
+    }
+
+    // 该条目在索引里是否被标记为受保护（Cx 加壳的载荷）
+    [[nodiscard]] bool IsFileProtected(tjs_uint idx) const {
+        return (ItemVector[idx].Flags & TVP_XP3_FILE_PROTECTED) != 0;
+    }
+
+    [[nodiscard]] bool UsesBuiltinCxDecoder() const {
+        return UseBuiltinCxDecoder;
     }
 
     ttstr GetName(tjs_uint idx) override { return ItemVector[idx].Name; }

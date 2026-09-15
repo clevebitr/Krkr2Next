@@ -27,6 +27,7 @@
 #include "DebugIntf.h"
 #include "Random.h"
 #include "XP3Archive.h"
+#include "XP3ArchiveCxDecoder.h"
 #include "FileSelector.h"
 
 #include "Application.h"
@@ -1512,6 +1513,11 @@ bool TVPSaveStreamToFile(tTJSBinaryStream *st, tjs_uint64 offset,
 static std::vector<ttstr> TVPAutoMountedPaths;
 
 void TVPAutoMountSiblingXP3Archives() {
+    // 一个进程可能先后开多个标题。绝不能把上一个包选定的 Cx 解码器漏给下一个
+    // 工程，所以每次开始挂载前先复位。**必须放在下面的提前 return 之前**，
+    // 否则用 xp3 当工程目录时这条复位不会执行。
+    TVPResetBuiltinXP3CxDecoder();
+
     if(TVPProjectDir.GetLastChar() != TJS_W('/'))
         return;
 
