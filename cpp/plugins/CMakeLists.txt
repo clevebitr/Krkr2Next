@@ -109,13 +109,18 @@ if(CUBISM_FW_SOURCES AND CUBISM_CORE_LIB AND EXISTS "${CUBISM_CORE_LIB}")
         ${CUBISM_FW_DIR}
         ${CUBISM_CORE_DIR}/include
     )
-    # CSM_TARGET_ANGLE_ES2 是 Cubism 4 时代的渲染器选择宏，**Cubism 5 已经不用它**
-    # （实测 CubismSdkForNative-5-r.5 的 Framework/ 里搜不到任何 CSM_TARGET_* 定义，
-    # 也没有任何源码读它）。r.5 的渲染器改由"编哪些源文件"决定：上面的
-    # GLOB_RECURSE + 排除 D3D9/D3D11/Vulkan/Metal 之后剩下的就是
-    # Rendering/OpenGL/*.cpp，即 GLES2 渲染器，正是 Android 要的那条。
-    # 定义留着是为了兼容仍在读它的旧版 SDK，是**惰性**的，不要当成渲染器开关。
-    target_compile_definitions(CubismFramework PUBLIC CSM_TARGET_ANGLE_ES2)
+    # CSM_TARGET_ANDROID_ES2 是 r.5 的**渲染器平台开关**，必须定义——实测
+    # Framework/ 里有 13 处读它（Rendering/OpenGL/ 下的 Renderer/Shader/
+    # RenderTarget/OffscreenRenderTarget 等），不定义就会：
+    #   1. CubismRenderTarget_OpenGLES2.hpp 的 GLES2 头整段被跳过 → GLint/GLuint
+    #      未声明 → 编译失败（CI 实测 TU 342/815）；
+    #   2. 即便编过，CopyRenderTarget() 会走 #if !ANDROID && !IPHONE 那条**非**
+    #      Android 分支，而该分支用的 _modelRenderTargets[1] 只有在 ANDROID/IPHONE
+    #      下才创建 → 离屏合成路径不可用。
+    # 之前这里定义的是 CSM_TARGET_ANGLE_ES2：那是 Cubism 4 时代的宏，实测 r.5 的
+    # Framework/ 与 Core/ **零处**读它，属于完全惰性、且掩盖了上述两个问题。
+    # 本工程只出 Android（见 app/app/build.gradle.kts 的 abiFilters），故直接定义。
+    target_compile_definitions(CubismFramework PUBLIC CSM_TARGET_ANDROID_ES2)
 
     # EGL/GLES 头与库来自平台自带：Android 由 NDK sysroot 提供 libEGL.so/libGLESv2.so，
     # Linux 由系统 GLVND/Mesa 提供，均无需额外 find_package。
@@ -129,7 +134,8 @@ if(CUBISM_FW_SOURCES AND CUBISM_CORE_LIB AND EXISTS "${CUBISM_CORE_LIB}")
         ${CUBISM_FW_DIR}
         ${CUBISM_CORE_DIR}/include
     )
-    target_compile_definitions(${PROJECT_NAME} PUBLIC CSM_TARGET_ANGLE_ES2)
+    # 与 CubismFramework 用同一个平台宏，原因见上面那段注释。
+    target_compile_definitions(${PROJECT_NAME} PUBLIC CSM_TARGET_ANDROID_ES2)
     # 显式“Live2D 已启用”信号：cubism 缺失时（CI/缺 SDK/被 gitignore）krkrlive2d.cpp
     # 不参与编译，其余引用侧（engine_api / krkrgles）需以此宏保护对
     # TVPRegisterKrkrLive2DPluginAnchor / g_live2dRenderTarget 的引用，避免链接期未定义符号。
