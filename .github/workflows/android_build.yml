@@ -168,13 +168,23 @@ jobs:
       # 分离写法可以在失败时也保存：vcpkg 按包增量写入，已编好的包全都有效。
 
       - name: 恢复 ccache
+        # key 是**内容哈希，故意不带 github.sha / run_id**。
+        #
+        # 带 sha 的后果实测过（2026-09-16）：每次 push 必然 miss 精确 key，于是
+        # 「保存 ccache」每轮都触发，而 ccache 一份就 ~4 GB——两个 commit 就写了
+        # 8 GB，直接把仓库 10 GB 缓存配额吃掉，逼 LRU 淘汰掉 vcpkg 那 404 MB 的包
+        # 缓存，下一轮就得重编 124 个库。**这正是"缓存看着有、其实每轮重来"的来源。**
+        #
+        # 改成内容哈希后语义才对：源码没变 → 精确 key 命中 → 不保存（复用）；
+        # 源码变了 → 新 key → 从 restore-keys 命中的旧条目增量续存，仍然只有一份。
+        # ccache 自身内容寻址，即使命中跨键的旧条目也不会产出错误对象。
         uses: actions/cache/restore@v4
         id: ccache
         with:
           path: ~/.cache/ccache
-          key: ccache-engine-${{ github.ref }}-${{ github.sha }}
+          key: ccache-engine-${{ env.BUILD_TYPE }}-${{ hashFiles('cpp/**', 'CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'vcpkg.json', 'vcpkg-configuration.json', 'vcpkg/**', 'scripts/**') }}
           restore-keys: |
-            ccache-engine-${{ github.ref }}-
+            ccache-engine-${{ env.BUILD_TYPE }}-
             ccache-engine-
 
       - name: 恢复 vcpkg 二进制缓存
@@ -200,12 +210,17 @@ jobs:
       # ---------------------------------------------------------------------
 
       - name: 装依赖（CMake configure，触发 vcpkg）
+        id: configure
         # VCPKG_BINARY_SOURCES 必须在这里 export，不能放进 env: 块——
         # GitHub Actions 的 env: 值是字面量，$HOME 不会被 shell 展开，
         # vcpkg 会因为路径不是绝对路径而直接报错退出。
         run: |
           export VCPKG_BINARY_SOURCES="clear;files,$HOME/.cache/vcpkg,readwrite"
           ./build.sh "$BUILD_TYPE" --engine-only --configure-only
+          # 记下 configure 之后的归档数：构建引擎会再跑一次 configure 补齐剩余
+          # 的包，只有这个数变大时才值得在构建之后再存一次（见「保存 vcpkg 二进制
+          # 缓存（构建之后）」）。放在同一步里，超时/取消时不会少算。
+          echo "archives_before=$(find "$HOME/.cache/vcpkg" -maxdepth 1 -name '*.zip' 2>/dev/null | wc -l)" >> "$GITHUB_OUTPUT"
 
       - name: 保存 vcpkg 二进制缓存
         # 紧跟在依赖装完之后，**在引擎编译之前**。if: always() 让依赖编到一半
@@ -223,6 +238,7 @@ jobs:
           key: vcpkg-android-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg/**') }}-${{ env.BUILD_TYPE }}-${{ github.run_id }}
 
       - name: 构建引擎
+        id: build
         # 上一步已完成 configure，这里会跳过 configure 直接编译。
         #
         # 仍要 export VCPKG_BINARY_SOURCES：`cmake --build` 在检测到 CMakeLists
@@ -235,31 +251,38 @@ jobs:
 
       - name: 诊断：vcpkg 二进制缓存体积与归档数
         # GitHub 每个仓库的 cache 总配额 10 GB，超出按 LRU 淘汰；淘汰掉旧条目会
-        # 让下一轮又从缺包开始编。本轮会写两个 vcpkg 条目（configure 后 / 构建后），
-        # 把体积和归档数打出来，逼近配额时能及早看见，而不是等"又开始重编 ffmpeg"
-        # 这种症状出现再去猜。
+        # 让下一轮又从缺包开始编。把体积和归档数打出来，逼近配额时能及早看见，
+        # 而不是等"又开始重编 ffmpeg"这种症状出现再去猜。
         # 归档数 ≈ 已缓存住的目标数，也是"到底缺多少包"最直接的量化。
+        #
+        # 同时把「configure 之后」的归档数经 $GITHUB_OUTPUT 传给下一步：构建引擎
+        # 若没有新增包，后面那次保存就是纯粹重复上传（实测两边都是 404 MB），
+        # 由它决定要不要存。
+        id: vcpkg_diag
         if: ${{ always() }}
         run: |
           du -sh "$HOME/.cache/vcpkg" 2>/dev/null || echo "(缓存目录不存在)"
-          printf "二进制缓存归档数: %s\n" "$(find "$HOME/.cache/vcpkg" -maxdepth 1 -name '*.zip' 2>/dev/null | wc -l)"
+          COUNT="$(find "$HOME/.cache/vcpkg" -maxdepth 1 -name '*.zip' 2>/dev/null | wc -l)"
+          printf "二进制缓存归档数: %s\n" "$COUNT"
+          echo "archives=$COUNT" >> "$GITHUB_OUTPUT"
 
       - name: 保存 vcpkg 二进制缓存（构建之后）
         # **第二个** vcpkg 保存点，位置在「构建引擎」之后。第一个保存在 configure
         # 之后（见上），只覆盖那一轮 configure 装完的包。
         #
-        # 为什么必须有第二个：vcpkg 是按包增量写缓存的，失败就停在当前进度。
-        # 而构建引擎这一步会再跑一次 configure（环境里有 ENABLE_RENDER_PROBE /
-        # KRKR_LOG_LEVEL，脚本每次都重新 configure），vcpkg 就在**这一步**把上一轮
-        # 没装完的包补齐——那些包正是在这里现编的。如果只有 configure 之后那一个
-        # 保存点，它们永远不会被写进缓存：下一轮恢复出来还是缺它们，于是在构建
-        # 引擎这一步再编一遍。表现就是「每次都要重新编译剩余的库」、ffmpeg 每轮
-        # 重编。
+        # 它只在**确实新增了包**时才存，避免同一份内容上传两遍——实测 configure
+        # 后与构建后都是 404 MB，而仓库缓存配额只有 10 GB，重复条目会挤掉别的缓存
+        # （尤其挤掉 ccache 那 ~4 GB，反而让下一轮重编）。
         #
-        # 放在这里 + if: always() 后，即使这一轮编译仍然失败，本轮编好的包也会
-        # 落进缓存，下一轮少编一批，逐轮收敛。configure 之后那个保存点保留：它
-        # 防的是超时/取消——job 被 timeout 掐掉时，它后面的步骤根本不会执行。
-        if: ${{ always() }}
+        # 三种情况：configure 成功（它已存过当时那份）→ 只有新增了包才值得再存；
+        # configure 失败/被跳过 → 本轮编出的包全在这里，必须存；configure 被
+        # timeout 掐掉 → 后面的步骤根本不会执行，由 configure 之后那个保存点兜底。
+        #
+        # 为什么必须有"构建之后"这个位置：构建引擎这一步会再跑一次 configure，
+        # vcpkg 就在**这一步**把上一轮没装完的包补齐——那些包正是在这里现编的。
+        # 如果只有 configure 之后那一个保存点，它们永远不会被写进缓存，下一轮
+        # 恢复出来还是缺它们，于是在构建引擎这一步再编一遍。
+        if: ${{ always() && (steps.configure.outcome != 'success' || steps.vcpkg_diag.outputs.archives != steps.configure.outputs.archives_before) }}
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/vcpkg
@@ -267,13 +290,15 @@ jobs:
 
       - name: 保存 ccache
         # if: always() —— 编译失败也要存。ccache 内容寻址，已编译对象依然有效。
-        # key 带 run_id 的原因同 vcpkg：固定 key 第二次保存会撞车失败。
-        # 同一提交被重跑时 github.sha 不变，只靠 sha 不足以区分。
+        #
+        # key 必须与「恢复 ccache」**逐字一致**：精确命中时 cache-hit=='true'，
+        # 这里就跳过——这就是"有缓存就不再复存"。key 用内容哈希（不含 sha/run_id），
+        # 所以同一份源码重跑不会每轮再写一个 ~4 GB 的条目。
         if: ${{ always() && steps.ccache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/ccache
-          key: ccache-engine-${{ github.ref }}-${{ github.sha }}-${{ github.run_id }}
+          key: ccache-engine-${{ env.BUILD_TYPE }}-${{ hashFiles('cpp/**', 'CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'vcpkg.json', 'vcpkg-configuration.json', 'vcpkg/**', 'scripts/**') }}
 
       - name: 诊断：GLES3 符号来源（仅构建失败时输出）
         # 用于定位 EGL/GLESv2 链接类问题。两件事必须区分清楚：
