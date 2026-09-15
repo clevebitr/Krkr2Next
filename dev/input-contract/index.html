@@ -1203,6 +1203,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="数据通路">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#engine_create" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⚠️ 线程约束：必须在 engine_create 所在线程调用
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1323,10 +1340,18 @@
 </code></pre></div>
 <p><code>engine_send_input</code> 在 <code>bridge/engine_api/src/engine_api.cpp</code> 中把事件拷入
 <code>EngineInputEvent</code>（bridge → core 结构），再交 <code>EngineLoop::HandleInputEvent</code>
-（<code>cpp/core/environ/EngineLoop.cpp:189</code>）。事件被<strong>排队</strong>，在<strong>下一次 tick</strong> 才派发，
-因此从任意线程调用都是安全的。</p>
+（<code>cpp/core/environ/EngineLoop.cpp:189</code>）。事件被<strong>排队</strong>，在<strong>下一次 tick</strong> 才派发。</p>
 <p><strong>必须设置 <code>struct_size = sizeof(engine_input_event_t)</code>。</strong>
 结构体定义见 <code>bridge/engine_api/include/engine_api.h:127</code>。</p>
+<h3 id="engine_create">⚠️ 线程约束：必须在 engine_create 所在线程调用<a class="headerlink" href="#engine_create" title="Permanent link">&para;</a></h3>
+<p>虽然事件本身是排队的，但 <code>engine_send_input</code>（<code>engine_api.cpp:2205</code>）会先做
+<code>ValidateHandleThreadLocked</code>，要求调用线程等于 <code>owner_thread</code>——即 <code>engine_create</code>
+所在的那条线程（本项目中是 Kotlin 的渲染线程）。</p>
+<p><strong>不满足时返回 <code>ENGINE_RESULT_INVALID_STATE</code>，且事件被直接丢弃、不入队。</strong>
+症状是游戏完全无响应，且只有一条 <code>Log.w</code> 提示，很容易被当成"输入没做"。</p>
+<p>因此壳侧从 UI 线程收到触摸/按键后，<strong>必须切到渲染线程再调用</strong>
+（<code>EngineSession.sendInput</code> 内部用 <code>post{}</code> 完成这一步）。切换不增加可感知延迟——
+事件本来就要等到下一次 tick 才派发。</p>
 <h2 id="_3">事件类型<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
