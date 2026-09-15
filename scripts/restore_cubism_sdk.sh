@@ -150,6 +150,10 @@ echo "  Core/include  -> $CORE_INC_DIR"
 echo "  Core/lib      -> $CORE_LIB_DIR"
 
 # ── 4. 落盘 ────────────────────────────────────────────────────────────────
+# Core/include 也要从 SDK 覆盖一遍：仓库里跟踪的 Core/include/Live2DCubismCore.h 是
+# 早期 SDK 版本的头（实测与 5-r.5 差 1300 多行），而**头必须和静态库同版本**，
+# 否则只是一堆看不懂的链接期/运行期不符。所以这里刻意覆盖它——本步骤跑完后
+# git status 会显示该文件被修改，那是预期的，不要 commit 回去。
 mkdir -p "$DEST/Core/include" "$DEST/Core/lib" "$DEST/Framework"
 rm -rf "$DEST/Framework"/* "$DEST/Core/lib"/*
 cp -a "$CORE_INC_DIR"/. "$DEST/Core/include"/

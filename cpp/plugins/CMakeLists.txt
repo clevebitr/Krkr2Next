@@ -109,11 +109,16 @@ if(CUBISM_FW_SOURCES AND CUBISM_CORE_LIB AND EXISTS "${CUBISM_CORE_LIB}")
         ${CUBISM_FW_DIR}
         ${CUBISM_CORE_DIR}/include
     )
+    # CSM_TARGET_ANGLE_ES2 是 Cubism 4 时代的渲染器选择宏，**Cubism 5 已经不用它**
+    # （实测 CubismSdkForNative-5-r.5 的 Framework/ 里搜不到任何 CSM_TARGET_* 定义，
+    # 也没有任何源码读它）。r.5 的渲染器改由"编哪些源文件"决定：上面的
+    # GLOB_RECURSE + 排除 D3D9/D3D11/Vulkan/Metal 之后剩下的就是
+    # Rendering/OpenGL/*.cpp，即 GLES2 渲染器，正是 Android 要的那条。
+    # 定义留着是为了兼容仍在读它的旧版 SDK，是**惰性**的，不要当成渲染器开关。
     target_compile_definitions(CubismFramework PUBLIC CSM_TARGET_ANGLE_ES2)
 
     # EGL/GLES 头与库来自平台自带：Android 由 NDK sysroot 提供 libEGL.so/libGLESv2.so，
     # Linux 由系统 GLVND/Mesa 提供，均无需额外 find_package。
-    # 注意 CSM_TARGET_ANGLE_ES2 是 Live2D SDK 自己的目标名（指 GLES2 渲染器），不是本项目依赖 ANGLE。
     target_link_libraries(CubismFramework PRIVATE EGL GLESv2)
 
     target_link_libraries(CubismFramework PUBLIC ${CUBISM_CORE_LIB})
