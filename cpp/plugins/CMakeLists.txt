@@ -130,6 +130,49 @@ if(CUBISM_FW_SOURCES AND CUBISM_CORE_LIB AND EXISTS "${CUBISM_CORE_LIB}")
 
     # krkrlive2d.cpp (Live2D TJS plugin) compiles only when the SDK is present
     target_sources(${PROJECT_NAME} PRIVATE krkrlive2d.cpp)
+
+    # ── 嵌 GLES2 着色器 ────────────────────────────────────────────────────
+    # Cubism 的 GLES2 渲染器不内背着色器：GenerateShaders() 通过
+    # CubismFramework::Option::LoadFileFunction 回调向宿主索取
+    # （LoadShaderProgramFromFile("VertShaderSrc.vert", "FragShaderSrc.frag")）。
+    # 本插件此前没设该回调，StartUp() 存下的是未初始化的 Option → 真机一建
+    # 立绘模型就 SIGSEGV。这里把 SDK 的 StandardES/*（_ES2 变体，与
+    # CSM_TARGET_ANDROID_ES2 对应）在 **configure 期**嵌成 C++ 表，
+    # 由 krkrlive2d.cpp 注册的 loader 直接取材，与文件系统解耦。
+    set(CUBISM_SHADER_DIR ${CUBISM_FW_DIR}/Rendering/OpenGL/Shaders/StandardES)
+    if(NOT EXISTS ${CUBISM_SHADER_DIR})
+        message(FATAL_ERROR
+            "Live2D: 找不到着色器目录 ${CUBISM_SHADER_DIR}。\n"
+            "  SDK 需要在位（scripts/restore_cubism_sdk.sh），且该目录下应有 "
+            "VertShaderSrc.vert / FragShaderSrc.frag 等 36 个文件。")
+    endif()
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    set(CUBISM_SHADER_GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
+    set(CUBISM_SHADER_GEN ${CUBISM_SHADER_GEN_DIR}/embedded_shaders.cpp)
+    file(MAKE_DIRECTORY ${CUBISM_SHADER_GEN_DIR})
+    add_custom_command(
+        OUTPUT ${CUBISM_SHADER_GEN}
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/gen_embedded_shaders.py
+                ${CUBISM_SHADER_DIR} ${CUBISM_SHADER_GEN}
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/gen_embedded_shaders.py
+                ${CUBISM_SHADER_DIR}
+        COMMENT "嵌入 Cubism GLES2 着色器 -> embedded_shaders.cpp"
+        VERBATIM
+    )
+    # 首次 configure 后立刻生成一次：否则依赖它的 .o 在首次构建时可能先于
+    # 自定义命令被调度（自定义命令的输出还不是已存在的文件）。
+    execute_process(
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/gen_embedded_shaders.py
+                ${CUBISM_SHADER_DIR} ${CUBISM_SHADER_GEN}
+        RESULT_VARIABLE _shader_gen_rc
+    )
+    if(NOT _shader_gen_rc EQUAL 0)
+        message(FATAL_ERROR "Live2D: 嵌入着色器失败（gen_embedded_shaders.py 退出 ${_shader_gen_rc}）")
+    endif()
+    target_sources(${PROJECT_NAME} PRIVATE ${CUBISM_SHADER_GEN})
+
     target_include_directories(${PROJECT_NAME} PUBLIC
         ${CUBISM_FW_DIR}
         ${CUBISM_CORE_DIR}/include

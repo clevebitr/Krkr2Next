@@ -78,6 +78,11 @@ class CubismLive2DModel; // forward
 static std::vector<CubismLive2DModel *> g_activeModels;
 static void EnsureContinuousHook(); // forward
 
+// configure 期由 scripts/gen_embedded_shaders.py 生成（见
+// cpp/plugins/CMakeLists.txt）： 按文件名返回 SDK 的 GLES2 着色器源码。
+extern "C" const unsigned char *KrkrLive2DEmbeddedShader(const char *path,
+                                                         int *outSize);
+
 // ---------------------------------------------------------------------------
 // Cubism Allocator — uses standard malloc/free
 // ---------------------------------------------------------------------------
@@ -110,14 +115,61 @@ namespace {
     static CubismAllocator s_allocator;
     static bool s_cubismInitialized = false;
 
+    // -----------------------------------------------------------------------
+    // Cubism 的着色器加载回调
+    //
+    // CubismShader_OpenGLES2::GenerateShaders() 会以**裸文件名**调用它们
+    // （"VertShaderSrc.vert" / "FragShaderSrc.frag" …）。渲染器不内背着色器，
+    // 必须由宿主经 Option::LoadFileFunction 提供，否则 StartUp() 存下的
+    // Option 里该字段是未初始化的野指针，一调用就 SIGSEGV。
+    //
+    // 我们只服务内嵌的着色器；查不到就返回 nullptr，让 SDK 走它自己的
+    // "Failed to load vertex/fragment shader" 报错路径，而不是崩掉。
+    // -----------------------------------------------------------------------
+    csmByte *Live2DLoadFile(const std::string filePath, csmSizeInt *outSize) {
+        if(!outSize)
+            return nullptr;
+        int size = 0;
+        const unsigned char *data =
+            KrkrLive2DEmbeddedShader(filePath.c_str(), &size);
+        if(!data || size <= 0) {
+            *outSize = 0;
+            return nullptr;
+        }
+        // 必须由 ReleaseBytesFunction 释放，故统一走 Cubism 自己的分配器
+        // （GetAllocator() 是 SDK 内部的，公开入口是
+        // CubismFramework::Allocate）。
+        csmByte *buf = reinterpret_cast<csmByte *>(
+            CubismFramework::Allocate(static_cast<csmSizeType>(size)));
+        if(!buf) {
+            *outSize = 0;
+            return nullptr;
+        }
+        std::memcpy(buf, data, static_cast<size_t>(size));
+        *outSize = static_cast<csmSizeInt>(size);
+        return buf;
+    }
+
+    void Live2DReleaseBytes(csmByte *byteData) {
+        if(byteData)
+            CubismFramework::Deallocate(byteData);
+    }
+
     void EnsureCubismInitialized() {
         if(s_cubismInitialized)
             return;
-        CubismFramework::Option opt;
+        // 值初始化：CubismFramework::StartUp() 只是 `s_option = option;`，把
+        // **调用方的指针**存下来，而
+        // GetLoadFileFunction()/GetReleaseBytesFunction()
+        // 又是无空值保护地解引用它。Option 里将来若再加字段而这里漏设，写 null
+        // 至少让 SDK 走它自己的报错路径，而不是拿野指针去调用。
+        CubismFramework::Option opt = {};
         opt.LogFunction = [](const char *msg) {
             spdlog::debug("Cubism: {}", msg);
         };
         opt.LoggingLevel = CubismFramework::Option::LogLevel_Warning;
+        opt.LoadFileFunction = &Live2DLoadFile;
+        opt.ReleaseBytesFunction = &Live2DReleaseBytes;
         CubismFramework::StartUp(&s_allocator, &opt);
         CubismFramework::Initialize();
         s_cubismInitialized = true;

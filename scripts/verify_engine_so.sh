@@ -209,6 +209,24 @@ elif (( PAT_OK )); then
     echo "· 二进制不含 Live2D 插件（本机无 Cubism SDK，属预期降级）"
 fi
 
+# ── 6b. 内嵌着色器是否真被编进去 ───────────────────────────────────────────
+# Live2D 一创建立绘模型就走 CubismShader_OpenGLES2::GenerateShaders()，而它靠
+# Option::LoadFileFunction 向宿主索取样板着色器；本插件用内嵌表提供。
+# 少了这张表 = 真机加载 .l2d 时 SIGSEGV（2026-09-16 真机实测栈顶就是
+# LoadShaderProgramFromFile ← GenerateShaders）。这里按**同名标记**断言表已在二进制里。
+SHADER_MARK="VertShaderSrc.vert"
+if (( ! HAVE_L2D )); then
+    : # 没有 Live2D 就不谈着色器
+elif LC_ALL=C grep -aqF "$SHADER_MARK" "$SO"; then
+    echo "✓ 二进制含内嵌 GLES2 着色器（$SHADER_MARK）"
+else
+    echo "✗ libengine_api.so 里没有内嵌着色器（$SHADER_MARK）"
+    echo "  引擎会在真机加载 .l2d 时崩在 CubismShader_OpenGLES2::GenerateShaders()。"
+    echo "  核对 CMake 是否执行了 scripts/gen_embedded_shaders.py 并编入 embedded_shaders.cpp，"
+    echo "  以及 cpp/plugins/cubism/Framework/Rendering/OpenGL/Shaders/StandardES/ 是否在位。"
+    fail=1
+fi
+
 echo
 if (( fail )); then
     echo "校验失败。"
