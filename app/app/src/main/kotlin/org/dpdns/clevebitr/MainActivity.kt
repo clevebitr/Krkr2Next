@@ -103,6 +103,7 @@ class MainActivity : ComponentActivity() {
                         session = activeSession,
                         startupState = startupState,
                         statusText = statusText,
+                        onExit = ::exitToLauncher,
                     )
                 }
 
@@ -160,6 +161,8 @@ class MainActivity : ComponentActivity() {
         // 游戏目录是排障必需信息（哪个游戏、哪份存档），按已确认的边界记录它本身，
         // 不记录游戏内的任何文本
         AppLog.i(TAG, "launchGame path=$path cache=${cacheDir.absolutePath}")
+        // 游戏内「运行时日志」浮层读的是内存环形缓冲；清一次，让它只显示本局的日志
+        AppLog.clearRecent()
 
         val s = EngineSession(
             // 引擎把存档写到 writablePath，缓存写到 cachePath

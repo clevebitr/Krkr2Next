@@ -57,6 +57,22 @@ object AppLog {
     /** 限频表：key → 上次真正记录的时间戳。任意线程可读改写，靠 CAS 保证安全。 */
     private val lastEmit = ConcurrentHashMap<String, Long>()
 
+    /**
+     * 内存里的近期日志环形缓冲，供游戏内「运行时日志」浮层使用。
+     *
+     * 为什么不直接读文件：文件那份要 IO，而且浮层需要的是"屏上立刻能看到的最近若干行"，
+     * 等落盘再读回来既慢又可能读到旧内容。容量固定，长时间运行也不会把内存吃掉。
+     *
+     * 引擎日志也在这里：`MainActivity` 把 `EngineSession.onLog` 转成了 [i] 调用，
+     * 所以引擎 spdlog 的输出与壳侧日志同序进入这一份缓冲。
+     *
+     * 并发：`emit` 来自任意线程（UI、渲染、引擎 worker），因此读写都加锁；日志量是
+     * 每秒几行的量级，锁的代价可以忽略，换来的是环形长度严格有界。
+     */
+    private const val RECENT_CAPACITY = 400
+    private val recentLock = Any()
+    private val recentLines = ArrayDeque<String>()
+
     /** 只在 `applog` 线程上自增（见 [appendRaw]），不需要同步。 */
     private var writesSinceRotateCheck = 0
 
@@ -137,9 +153,27 @@ object AppLog {
             else -> Log.e(tag, msg, t)
         }
         val line = buildLine(level, tag, msg, t)
+        remember(line)
         val h = handler
         if (h == null) return // 未初始化（例如崩溃后重启的 :crash 进程）就只留 logcat
         h.post { appendRaw(line) }
+    }
+
+    /** 记入内存环形缓冲。与文件那份无关，未初始化时也要工作（浮层仍要能看到东西）。 */
+    private fun remember(line: String) {
+        val trimmed = line.trimEnd('\n')
+        synchronized(recentLock) {
+            recentLines.addLast(trimmed)
+            while (recentLines.size > RECENT_CAPACITY) recentLines.removeFirst()
+        }
+    }
+
+    /** 取内存中近期的日志行（旧 → 新）。供游戏内浮层展示。 */
+    fun recent(): List<String> = synchronized(recentLock) { recentLines.toList() }
+
+    /** 清空内存缓冲。开始新一局游戏时调用，避免上一局的日志混进来。 */
+    fun clearRecent() {
+        synchronized(recentLock) { recentLines.clear() }
     }
 
     private fun buildLine(level: String, tag: String, msg: String, t: Throwable?): String {
