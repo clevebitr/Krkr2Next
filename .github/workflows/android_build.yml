@@ -101,8 +101,18 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
           echo "NDK: $ANDROID_HOME/ndk/$NDK_VERSION"
 
+      # 缓存必须用 restore/save 分离 + save 加 if: always()。
+      #
+      # 合并式的 actions/cache@v4 把保存放在 job 末尾的 post 步骤，而那一步只在
+      # **job 成功时**才执行。构建失败（比如链接错误）时缓存不会被保存——
+      # 于是每次重跑都要从零重编全部 vcpkg 依赖（本项目实测 124 个库），
+      # 而失败时恰恰是最需要快速重试的时候。
+      #
+      # 分离写法可以在失败时也保存：vcpkg 按包增量写入，已编好的包全都有效。
+
       - name: 恢复 ccache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
+        id: ccache
         with:
           path: ~/.cache/ccache
           key: ccache-engine-${{ github.ref }}-${{ github.sha }}
@@ -114,12 +124,13 @@ jobs:
         # key 含 manifest / overlay port / triplet / 构建类型，任一变化即失效重建。
         # vcpkg 本体钉在固定 commit（见 scripts/build_engine_android.sh），
         # ABI 稳定缓存才真正复用。
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
+        id: vcpkg
         with:
           path: ~/.cache/vcpkg
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg/**') }}-${{ env.BUILD_TYPE }}
+          key: vcpkg-android-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg/**') }}-${{ env.BUILD_TYPE }}
           restore-keys: |
-            vcpkg-${{ runner.os }}-
+            vcpkg-android-
 
       - name: 构建引擎
         # VCPKG_BINARY_SOURCES 必须在这里 export，不能放进 env: 块——
@@ -128,6 +139,24 @@ jobs:
         run: |
           export VCPKG_BINARY_SOURCES="clear;files,$HOME/.cache/vcpkg,readwrite"
           ./build.sh "$BUILD_TYPE" --engine-only
+
+      - name: 保存 ccache
+        # if: always() —— 构建失败也要存。ccache 内容寻址，已编译对象依然有效，
+        # 下次重试能直接命中。
+        if: ${{ always() && steps.ccache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-engine-${{ github.ref }}-${{ github.sha }}
+
+      - name: 保存 vcpkg 二进制缓存
+        # 同上：vcpkg 按包增量写入，失败时已编好的包仍然有效。这是失败重试能变快的
+        # 关键——本项目有 124 个 vcpkg 依赖，冷启动要很久。
+        if: ${{ always() && steps.vcpkg.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/vcpkg
+          key: vcpkg-android-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg/**') }}-${{ env.BUILD_TYPE }}
 
       - name: 诊断：GLES3 符号来源（仅构建失败时输出）
         # 用于定位 EGL/GLESv2 链接类问题。两件事必须区分清楚：
