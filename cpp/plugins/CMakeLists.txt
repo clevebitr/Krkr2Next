@@ -81,6 +81,26 @@ elseif(APPLE)
     else()
         set(CUBISM_CORE_LIB ${CUBISM_CORE_DIR}/lib/macos/arm64/libLive2DCubismCore.a)
     endif()
+elseif(ANDROID)
+    # Cubism SDK for Native 的 Android 静态库按 ABI 分目录，但不同 SDK 版本的层级
+    # 略有差异（有的是 lib/android/<abi>/，有的是 <abi>/Release/），这里逐个候选路径
+    # 探测，免得因为目录名不同而**静默**跳过 Live2D——那种失败在真机上只表现为
+    # "krkrlive2d.dll Failed"，很难反查到 CMake。
+    # 本项目只出 arm64-v8a（见 app/build.gradle.kts 的 abiFilters）。
+    foreach(_cubism_cand
+            ${CUBISM_CORE_DIR}/lib/android/${ANDROID_ABI}/libLive2DCubismCore.a
+            ${CUBISM_CORE_DIR}/lib/android/${ANDROID_ABI}/Release/libLive2DCubismCore.a
+            ${CUBISM_CORE_DIR}/lib/${ANDROID_ABI}/libLive2DCubismCore.a)
+        if(EXISTS "${_cubism_cand}")
+            set(CUBISM_CORE_LIB "${_cubism_cand}")
+            break()
+        endif()
+    endforeach()
+    if(CUBISM_CORE_LIB)
+        message(STATUS "Live2D: using ${CUBISM_CORE_LIB}")
+    else()
+        message(STATUS "Live2D: Android ${ANDROID_ABI} 下没找到 libLive2DCubismCore.a，跳过 Live2D（krkrlive2d.cpp 不参与编译）")
+    endif()
 endif()
 
 if(CUBISM_FW_SOURCES AND CUBISM_CORE_LIB AND EXISTS "${CUBISM_CORE_LIB}")
