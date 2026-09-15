@@ -69,8 +69,14 @@ if [[ -n "$GH_REPO" ]]; then
     if [[ -n "$TOKEN" ]]; then
         export GH_TOKEN="$TOKEN"
     fi
-    if ! gh release download "$TAG" -R "$GH_REPO" -p "$ASSET" -O "$ZIP" --clobber; then
-        echo "✗ 下载 release asset 失败：$GH_REPO tag=$TAG pattern=$ASSET" >&2
+    # tag 留空或写成 latest 时**不能**把 "latest" 当 tag 传进去——`gh release
+    # download` 只认真实 tag，不带 tag 参数才是"取最新 release"。
+    TAG_ARGS=()
+    if [[ -n "$TAG" && "$TAG" != "latest" ]]; then
+        TAG_ARGS=("$TAG")
+    fi
+    if ! gh release download "${TAG_ARGS[@]}" -R "$GH_REPO" -p "$ASSET" -O "$ZIP" --clobber; then
+        echo "✗ 下载 release asset 失败：$GH_REPO tag=${TAG:-(最新)} pattern=$ASSET" >&2
         echo "  核对：仓库/tag 是否存在、asset 名是否匹配、PAT 是否有该私有仓库的 contents:read。" >&2
         exit 1
     fi
