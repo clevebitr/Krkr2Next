@@ -33,6 +33,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     wfBasicEffectCompat.cpp
     wfTypicalDSPCompat.cpp
     zcompat/zcompat_plugin.cpp
+    compatLegacyPlugins.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
