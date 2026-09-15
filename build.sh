@@ -3,7 +3,11 @@
 # build.sh — KiriNext 构建入口（仅 Android）
 #
 # Usage:
-#   ./build.sh [debug|release] [--engine-only] [--apk-only]
+#   ./build.sh [debug|release] [--engine-only] [--apk-only] [--configure-only]
+#
+#   --configure-only  只跑 CMake configure 就退出。configure 会触发 vcpkg 安装
+#                     全部 manifest 依赖（本项目 124 个库），是最慢的一步；
+#                     拆出来便于在依赖就位后、编译之前先落缓存。
 #
 # 说明：
 #   KiriNext 只面向 Android。引擎共享库经 scripts/build_engine_android.sh 构建
@@ -22,6 +26,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_TYPE="debug"
 ENGINE_ONLY=false
 APK_ONLY=false
+CONFIGURE_ONLY=false
 
 for arg in "$@"; do
     case "$arg" in
@@ -29,8 +34,9 @@ for arg in "$@"; do
             sed -n '3,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
-        --engine-only) ENGINE_ONLY=true ;;
-        --apk-only)    APK_ONLY=true ;;
+        --engine-only)    ENGINE_ONLY=true ;;
+        --apk-only)       APK_ONLY=true ;;
+        --configure-only) CONFIGURE_ONLY=true ;;
         debug|release|Debug|Release)
             BUILD_TYPE="$(echo "$arg" | tr '[:upper:]' '[:lower:]')" ;;
         *)
@@ -41,8 +47,10 @@ for arg in "$@"; do
 done
 
 if [[ "$APK_ONLY" == false ]]; then
-    bash "$SCRIPT_DIR/scripts/build_engine_android.sh" "$BUILD_TYPE"
-    [[ "$ENGINE_ONLY" == true ]] && exit 0
+    ENGINE_ARGS=("$BUILD_TYPE")
+    [[ "$CONFIGURE_ONLY" == true ]] && ENGINE_ARGS+=(--configure-only)
+    bash "$SCRIPT_DIR/scripts/build_engine_android.sh" "${ENGINE_ARGS[@]}"
+    [[ "$ENGINE_ONLY" == true || "$CONFIGURE_ONLY" == true ]] && exit 0
 fi
 
 # ============================================================

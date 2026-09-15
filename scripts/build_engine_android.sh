@@ -3,7 +3,11 @@
 # build_engine_android.sh — 构建 KiriNext 的 C++ 引擎共享库并投放到 Kotlin 壳的 jniLibs
 #
 # Usage:
-#   ./scripts/build_engine_android.sh [debug|release]
+#   ./scripts/build_engine_android.sh [debug|release] [--configure-only]
+#
+#   --configure-only  只跑 CMake configure 就退出。configure 会触发 vcpkg 安装
+#                     全部 manifest 依赖（本项目 124 个库），是最慢的一步；
+#                     拆出来便于调用方在依赖就位后、编译之前先落缓存。
 #
 # Output:
 #   out/android/<type>/bridge/engine_api/libengine_api.so   （构建产物）
@@ -21,8 +25,30 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-BUILD_TYPE="${1:-debug}"
-BUILD_TYPE_LOWER="$(echo "$BUILD_TYPE" | tr '[:upper:]' '[:lower:]')"
+BUILD_TYPE="debug"
+CONFIGURE_ONLY=false
+
+while (( $# > 0 )); do
+    case "$1" in
+        --configure-only)
+            # 只跑 CMake configure 就退出。configure 会触发 vcpkg 安装全部
+            # manifest 依赖（本项目 124 个库），是整条链路里最慢的一步。
+            # 拆出来单独跑，是为了让 CI 能在依赖编完后立刻落缓存，
+            # 而不必等引擎编译结束（引擎若失败或 runner 超时，缓存就白编了）。
+            CONFIGURE_ONLY=true
+            ;;
+        debug|release|Debug|Release)
+            BUILD_TYPE="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
+            ;;
+        *)
+            echo "错误：未知参数 '$1'（可用：debug|release --configure-only）" >&2
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+BUILD_TYPE_LOWER="$BUILD_TYPE"
 
 if [[ "$BUILD_TYPE_LOWER" != "debug" && "$BUILD_TYPE_LOWER" != "release" ]]; then
     echo "错误：无效构建类型 '$BUILD_TYPE'，请用 'debug' 或 'release'。"
@@ -141,9 +167,19 @@ fi
 
 if [[ "$NEED_CFG" == 1 ]]; then
     log_info "CMake configure... (probe='${ENABLE_RENDER_PROBE:-<default>}', log_level='${KRKR_LOG_LEVEL:-<auto>}')"
+    log_info "  ↑ 这一步会触发 vcpkg 安装全部 manifest 依赖，首次执行很慢（分钟级）"
     cmake --preset "$CMAKE_CONFIG_PRESET" ${RENDER_PROBE_OPT} ${LOG_LEVEL_OPT}
 else
     log_info "构建目录已配置，跳过 configure。"
+fi
+
+# --configure-only：依赖装完就退出，让调用方（CI）先落缓存再继续编译。
+# 依赖是整条链路里最慢的一步，尽早固化到缓存，避免引擎编译失败/超时时白编。
+if [[ "$CONFIGURE_ONLY" == true ]]; then
+    log_step "仅配置完成（vcpkg 依赖已就位）"
+    log_info "构建目录：$CMAKE_BUILD_DIR"
+    log_info "下一步编译：$CMAKE_BUILD_PRESET"
+    exit 0
 fi
 
 log_info "编译中（$PARALLEL_JOBS 并行）..."

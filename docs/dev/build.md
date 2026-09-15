@@ -28,6 +28,23 @@ JOBS=16 ./build.sh release           # 并行度
 cmake --preset "Linux Debug Config" && cmake --build --preset "Linux Debug Build"
 ```
 
+### 依赖与引擎编译是两件事
+
+CMake configure 会触发 vcpkg 安装全部 manifest 依赖（本项目 **124 个库**），
+这是整条链路里最慢的一步；引擎自身编译只有几分钟。两者可以分开：
+
+```bash
+./build.sh debug --engine-only --configure-only   # 只装依赖，不编译
+./build.sh debug --engine-only                    # 编译（自动跳过 configure）
+```
+
+`--configure-only` 在 CI 里用来把"装依赖"和"编引擎"切成两步，好处是**依赖一编完
+就落缓存**——不必等引擎编译结束。引擎若失败或 runner 超时，那 124 个库就白编了，
+而它们恰恰是最值钱的部分。同时失败归因也更清晰。
+
+第二次调用之所以能跳过 configure，是因为构建目录里已经有 `build.ninja`
+（脚本与 CMake 都会检查）。
+
 `build.sh` 是薄封装，实际逻辑在 `scripts/build_engine_android.sh`。
 
 ## 前置要求

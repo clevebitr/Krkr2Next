@@ -132,31 +132,44 @@ jobs:
           restore-keys: |
             vcpkg-android-
 
-      - name: 构建引擎
+      # ---------------------------------------------------------------------
+      # 依赖与引擎编译**分开两步**。CMake configure 会触发 vcpkg 安装全部 manifest
+      # 依赖（本项目 124 个库），是整条链路里最慢的一步；引擎自身编译只有几分钟。
+      #
+      # 拆开的收益：
+      #   1. 依赖一编完就落缓存，不必等引擎编译结束——引擎若失败或 runner 超时，
+      #      那 124 个库就白编了（这是之前最大的时间浪费）。
+      #   2. 失败归因清晰：是"装依赖"挂了还是"编引擎"挂了，一眼能看出。
+      # ---------------------------------------------------------------------
+
+      - name: 装依赖（CMake configure，触发 vcpkg）
         # VCPKG_BINARY_SOURCES 必须在这里 export，不能放进 env: 块——
         # GitHub Actions 的 env: 值是字面量，$HOME 不会被 shell 展开，
         # vcpkg 会因为路径不是绝对路径而直接报错退出。
         run: |
           export VCPKG_BINARY_SOURCES="clear;files,$HOME/.cache/vcpkg,readwrite"
-          ./build.sh "$BUILD_TYPE" --engine-only
-
-      - name: 保存 ccache
-        # if: always() —— 构建失败也要存。ccache 内容寻址，已编译对象依然有效，
-        # 下次重试能直接命中。
-        if: ${{ always() && steps.ccache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/ccache
-          key: ccache-engine-${{ github.ref }}-${{ github.sha }}
+          ./build.sh "$BUILD_TYPE" --engine-only --configure-only
 
       - name: 保存 vcpkg 二进制缓存
-        # 同上：vcpkg 按包增量写入，失败时已编好的包仍然有效。这是失败重试能变快的
-        # 关键——本项目有 124 个 vcpkg 依赖，冷启动要很久。
+        # 紧跟在依赖装完之后，**在引擎编译之前**。if: always() 让依赖编到一半
+        # 失败时也能存下已完成的部分——vcpkg 按包增量写入，已好的包全都有效。
         if: ${{ always() && steps.vcpkg.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/vcpkg
           key: vcpkg-android-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg/**') }}-${{ env.BUILD_TYPE }}
+
+      - name: 构建引擎
+        # 上一步已完成 configure，这里会跳过 configure 直接编译。
+        run: ./build.sh "$BUILD_TYPE" --engine-only
+
+      - name: 保存 ccache
+        # if: always() —— 编译失败也要存。ccache 内容寻址，已编译对象依然有效。
+        if: ${{ always() && steps.ccache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-engine-${{ github.ref }}-${{ github.sha }}
 
       - name: 诊断：GLES3 符号来源（仅构建失败时输出）
         # 用于定位 EGL/GLESv2 链接类问题。两件事必须区分清楚：
