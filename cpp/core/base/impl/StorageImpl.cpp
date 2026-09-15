@@ -1777,16 +1777,34 @@ void TVPBoostAutoMountPaths() {
     extern std::vector<ttstr> TVPAutoPathList;
     extern bool AutoPathTableInit;
 
+    // 先摘掉这些路径，再把它们**插到队首**。
+    //
+    // 为什么是插队首而不是 push_back：本仓库的 auto-path 表是"同名 basename
+    // 先注册者 优先"（TVPRebuildAutoPathTable 里先 Find 再
+    // Add，理由见那里的注释），也就是
+    // **列表顺序即优先级、队首最高**。而工程目录自带的 xp3
+    // 是**补丁层**（汉化补丁、 patch_append 之类），必须压过 data.xp3
+    // 里的同名文件，所以它们要排在队首。
+    //
+    // 旧实现是 push_back，那是配合更早的表语义（后注册覆盖先注册 →
+    // 队尾最高）写的；
+    // 那个语义已经改成先到先得，这里必须跟着改，否则补丁层会掉到最低优先级、被原版
+    // 压住——表现就是"打了补丁却取到未打补丁的脚本/素材"。
+    std::vector<ttstr> boosted;
+    boosted.reserve(TVPAutoMountedPaths.size());
     for(const auto &p : TVPAutoMountedPaths) {
         auto it = std::find(TVPAutoPathList.begin(), TVPAutoPathList.end(), p);
         if(it != TVPAutoPathList.end())
             TVPAutoPathList.erase(it);
-        TVPAutoPathList.push_back(p);
+        boosted.push_back(p);
     }
+    TVPAutoPathList.insert(TVPAutoPathList.begin(), boosted.begin(),
+                           boosted.end());
     TVPAutoMountedPaths.clear();
 
     AutoPathTableInit = false;
-    spdlog::info("TVPBoostAutoMountPaths: re-ordered {} patch paths to end of "
-                 "auto path list",
-                 TVPAutoPathList.size());
+    spdlog::info(
+        "TVPBoostAutoMountPaths: moved {} patch path(s) to the front of "
+        "auto path list (total {})",
+        boosted.size(), TVPAutoPathList.size());
 }
