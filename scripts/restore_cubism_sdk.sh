@@ -48,9 +48,26 @@ warn_ci() { # GitHub Actions 的 ::warning:: 注解；非 CI 环境当普通输�
 if [[ -z "$GH_REPO" && -z "$URL" ]]; then
     warn_ci "未配置 CUBISM_SDK_GH / CUBISM_SDK_URL —— 本轮不还原 Live2D SDK，产出的 APK 不含 Live2D（G2 那类全动画作品会黑屏）。"
     echo "  取 SDK：https://www.live2d.com/sdk/download/native/ （需接受其许可）"
-    echo "  放 CI ：建一个私有仓库，把 SDK 压成 zip 传成 release asset，"
-    echo "          然后设置 CUBISM_SDK_GH=owner/repo 与 CUBISM_SDK_TOKEN（只读 contents 的 fine-grained PAT）。"
+    echo "  放 CI ：建一个私有仓库，把 SDK 压成 zip 传成 release asset，然后设置"
+    echo "          CUBISM_SDK_GH=owner/repo 与 CUBISM_SDK_TOKEN（只读 contents 的 fine-grained PAT）。"
+    echo "  放哪 ：Settings -> Secrets and variables -> Actions 里 **Variables 与 Secrets 两个页签都认**，"
+    echo "          但 token 只能放 Secrets（仓库公开时变量是明文）。"
     exit 0
+fi
+
+# 常见配错：把仓库地址当成直链填进 CUBISM_SDK_URL。那种 URL 返回的是 HTML 页面，
+# 后面只会以"解包失败"收场，看不出真正原因，所以在这里直接点破。
+if [[ -z "$GH_REPO" && "$URL" =~ ^https?://(www\.)?github\.com/[^/]+/[^/?#]+/?$ ]]; then
+    echo "✗ CUBISM_SDK_URL 看起来是 GitHub 的**仓库地址**，不是文件直链：$URL" >&2
+    echo "  要走 GitHub release asset，请改用 CUBISM_SDK_GH=owner/repo（+ CUBISM_SDK_TOKEN）；" >&2
+    echo "  或者把 CUBISM_SDK_URL 填成能直接下到 zip 的地址（自建主机 / 对象存储）。" >&2
+    exit 1
+fi
+
+# 两个都配时 GH 优先（gh 处理私有 release asset 的鉴权与 302 最稳），但要说一声，
+# 免得有人以为改 URL 生效了。
+if [[ -n "$GH_REPO" && -n "$URL" ]]; then
+    echo "提示：CUBISM_SDK_GH 与 CUBISM_SDK_URL 都配置了，本次用 GH=$GH_REPO（URL 被忽略）。"
 fi
 
 WORK="$(mktemp -d)"

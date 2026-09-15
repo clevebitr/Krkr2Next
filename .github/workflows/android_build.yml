@@ -62,19 +62,29 @@ jobs:
         # Core/lib} 已 gitignore），所以 CI 机器上默认没有它——而缺了它不会让构建失败，
         # 只会让产出的 APK 没有 Live2D，真机上表现为 krkrlive2d.dll Failed、全动画作品黑屏。
         #
-        # 本步骤把来源收敛成一个入口：配了 secret 就还原并**断言之**，没配就明确警告后继续
-        # （不得阻断核心构建）。三个 secret 都是可选的：
+        # 本步骤把来源收敛成一个入口：配了就还原并**断言之**，没配就明确警告后继续
+        # （不得阻断核心构建）。四个名字都是可选的：
         #   CUBISM_SDK_GH     私有仓库 owner/repo（SDK 以 release asset 存放）
         #   CUBISM_SDK_TOKEN  该私有仓库只读 contents 的 fine-grained PAT
         #   CUBISM_SDK_ASSET  asset 文件匹配，缺省 cubism*.zip
-        # 也可以用 CUBISM_SDK_URL 指向自建主机的直链，见 scripts/restore_cubism_sdk.sh。
+        #   CUBISM_SDK_URL    非 GitHub 托管的直链（可选替代）
+        #
+        # 放 **variables** 还是 **secrets** 两个页签都认——`secrets.*` 上下文看不见
+        # `vars.*`，这里显式做了回退，免得"配了却认不到"。唯一的例外是
+        # CUBISM_SDK_TOKEN：**只从 secrets 读**。本仓库是公开的，变量是明文，token 放
+        # 变量等于公开。
         id: cubism
         env:
-          CUBISM_SDK_GH: ${{ secrets.CUBISM_SDK_GH }}
+          CUBISM_SDK_GH: ${{ vars.CUBISM_SDK_GH || secrets.CUBISM_SDK_GH }}
+          CUBISM_SDK_URL: ${{ vars.CUBISM_SDK_URL || secrets.CUBISM_SDK_URL }}
+          CUBISM_SDK_ASSET: ${{ vars.CUBISM_SDK_ASSET || secrets.CUBISM_SDK_ASSET }}
+          CUBISM_SDK_TAG: ${{ vars.CUBISM_SDK_TAG || secrets.CUBISM_SDK_TAG }}
+          CUBISM_SDK_SHA256: ${{ vars.CUBISM_SDK_SHA256 || secrets.CUBISM_SDK_SHA256 }}
           CUBISM_SDK_TOKEN: ${{ secrets.CUBISM_SDK_TOKEN }}
-          CUBISM_SDK_ASSET: ${{ secrets.CUBISM_SDK_ASSET }}
-          CUBISM_SDK_SHA256: ${{ secrets.CUBISM_SDK_SHA256 }}
         run: |
+          # 先把实际读到的配置打出来：这三个名字是仓库级的、不会泄漏（token 只报有没有）。
+          # 配上却认不到时，这一行就能直接区分"值没进 workflow"与"值进去了但下载失败"。
+          echo "Live2D SDK 配置：GH='${CUBISM_SDK_GH:-}' URL='${CUBISM_SDK_URL:-}' ASSET='${CUBISM_SDK_ASSET:-}' TAG='${CUBISM_SDK_TAG:-}' TOKEN=$([ -n "${CUBISM_SDK_TOKEN:-}" ] && echo '已设置' || echo '未设置')"
           bash scripts/restore_cubism_sdk.sh
           # 输出按**还原后的实际文件**判定，不看脚本退出码：脚本在"未配置来源"时
           # 是成功退出的，那种情况必须让后面的校验知道 Live2D 并不存在。
