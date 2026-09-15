@@ -105,20 +105,23 @@ jobs:
 
       - name: Save ccache
         # build 失败也保存（ccache 内容寻址，已编译对象依然有效）——用官方推荐的显式 save，
-        # 不再依赖已废弃且不可靠的 save-always
+        # 不再依赖已废弃且不可靠的 save-always。
+        # key 带 run_id：actions/cache/save 在 key 已存在时会失败，固定 key 会让
+        # 第一次之后的保存全部落空，缓存永远停在初次内容。
         if: ${{ always() && steps.ccache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/ccache
-          key: ccache-linux-core-${{ github.ref }}
+          key: ccache-linux-core-${{ github.ref }}-${{ github.run_id }}
 
       - name: Save vcpkg binary cache
-        # build 失败也保存（vcpkg 按包增量写入，已编译完的包仍然有效）
+        # build 失败也保存（vcpkg 按包增量写入，已编译完的包仍然有效）。
+        # key 带 run_id 的原因同 ccache：固定 key 会让保存撞车失败。
         if: ${{ always() && steps.vcpkg.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/vcpkg
-          key: vcpkg-linux-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg/ports/**', 'vcpkg/triplets/**') }}
+          key: vcpkg-linux-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg/ports/**', 'vcpkg/triplets/**') }}-${{ github.run_id }}
 
       - name: Run tests (ctest)
         run: |
