@@ -704,17 +704,28 @@ void tTJSNI_VideoOverlay::WndProc(NativeEvent &ev) {
                                 }
                                 tTVPBaseTexture *buff =
                                     VideoOverlay->GetFrontBuffer();
+                                // GetFrontBuffer() 在"这一帧还没解码出来 / 视频
+                                // 缓冲已被 Close 释放"时返回 nullptr。原来的
+                                // else 分支把这种情况也当成"那就是 1 号缓冲"，
+                                // 于是给图层塞了一个**从未被写过**的纹理，画面
+                                // 直接变成噪声或空白。取 AetherKiri 的写法：
+                                // 认不出是哪个缓冲就什么都不做，让图层保持上一
+                                // 帧，同时也别去 FireFrameUpdateEvent —— 帧没更
+                                // 新却发更新事件，脚本会以为画面已经推进了。
+                                if(buff == nullptr)
+                                    return;
                                 if(buff == Bitmap[0]) {
                                     if(l1)
                                         l1->AssignMainImage(Bitmap[0]);
                                     if(l2)
                                         l2->AssignMainImage(Bitmap[0]);
-                                } else // 0じゃなかったら、1とみなす。
-                                {
+                                } else if(buff == Bitmap[1]) {
                                     if(l1)
                                         l1->AssignMainImage(Bitmap[1]);
                                     if(l2)
                                         l2->AssignMainImage(Bitmap[1]);
+                                } else {
+                                    return;
                                 }
                                 if(l1)
                                     l1->Update();
