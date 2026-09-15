@@ -289,7 +289,13 @@ jobs:
           fi
 
       - name: 校验 libengine_api.so
-        run: scripts/verify_engine_so.sh "out/android/$BUILD_TYPE/bridge/engine_api/libengine_api.so" "$ANDROID_NDK_HOME"
+        # 第三个参数传 jniLibs：顺带断言运行时依赖（libomp.so 等）确实和引擎放在
+        # 一起了。少了这一步，问题只会在装机后以"游戏启动即崩溃"暴露。
+        run: |
+          scripts/verify_engine_so.sh \
+            "out/android/$BUILD_TYPE/bridge/engine_api/libengine_api.so" \
+            "$ANDROID_NDK_HOME" \
+            "app/app/src/main/jniLibs/arm64-v8a"
 
       - name: 记录体积
         run: |
@@ -299,10 +305,19 @@ jobs:
         id: size
 
       - name: 上传引擎产物
+        # 上传**整个 jniLibs/arm64-v8a 目录**，不是只传 libengine_api.so。
+        #
+        # build_engine_android.sh 会把 libengine_api.so 的 DT_NEEDED 里那些
+        # 平台不提供的运行时库（典型是 libomp.so，用 c++_shared 时还有
+        # libc++_shared.so）一并拷进这个目录。它们必须跟着引擎一起进 APK，
+        # 否则真机 dlopen 会直接失败：
+        #   dlopen failed: library "libomp.so" not found: needed by libengine_api.so
+        # 而 APK job 是独立 job、全新 checkout，只拿得到这里上传的东西——
+        # 之前只传单个 .so，那些运行时库就永远到不了 APK。
         uses: actions/upload-artifact@v4
         with:
           name: libengine_api-${{ env.BUILD_TYPE }}
-          path: out/android/${{ env.BUILD_TYPE }}/bridge/engine_api/libengine_api.so
+          path: app/app/src/main/jniLibs/arm64-v8a/
           if-no-files-found: error
 
   # ── APK：把引擎产物放进 jniLibs 后由 Gradle 打包 ──────────────────────────
@@ -341,12 +356,30 @@ jobs:
         working-directory: app
         run: gradle --no-daemon ":app:assemble$([ "$BUILD_TYPE" = release ] && echo Release || echo Debug)"
 
-      - name: 校验 APK 内含引擎库
+      - name: 校验 APK 内含引擎库（逐个核对 jniLibs）
+        # 不能只查 libengine_api.so 在不在：它的运行时依赖（libomp.so 等）如果
+        # 没进 APK，真机 dlopen 会在加载引擎时就失败，表现成"游戏启动即崩溃"。
+        # 这里拿 jniLibs 里的**全部** .so 去 APK 里逐个核对，多一个少一个都报出来。
         run: |
           APK="$(find app/app/build/outputs/apk -name '*.apk' | head -n1)"
           [ -n "$APK" ] || { echo "::error::未产出 APK"; exit 1; }
-          unzip -l "$APK" | grep -q 'lib/arm64-v8a/libengine_api.so' || {
-            echo "::error::APK 中缺少 lib/arm64-v8a/libengine_api.so"; exit 1; }
+          UNZIP_LIST="$(unzip -l "$APK")"
+          missing=0
+          while IFS= read -r so; do
+            name="$(basename "$so")"
+            if ! grep -q "lib/arm64-v8a/$name" <<<"$UNZIP_LIST"; then
+              echo "::error::APK 中缺少 lib/arm64-v8a/$name"
+              missing=1
+            fi
+          done < <(find app/app/src/main/jniLibs/arm64-v8a -name '*.so')
+          if (( missing )); then
+            echo "jniLibs 内容："; ls -l app/app/src/main/jniLibs/arm64-v8a/
+            echo "APK 内的 lib/arm64-v8a："
+            grep "lib/arm64-v8a/" <<<"$UNZIP_LIST" || true
+            exit 1
+          fi
+          echo "jniLibs 里的 .so 全部在 APK 中："
+          find app/app/src/main/jniLibs/arm64-v8a -name '*.so' -printf '  %f\n'
           echo "APK: $APK ($(du -h "$APK" | cut -f1))"
 
       - name: 上传 APK

@@ -8,7 +8,10 @@
 #   3. 动态依赖里是平台原生 libEGL/libGLESv2，而不是被静态链进来的 ANGLE
 #   4. 二进制里不含 ANGLE 的平台扩展常量（去 ANGLE 是否彻底）
 #
-# Usage: verify_engine_so.sh <path/to/libengine_api.so> [ndk_root]
+# Usage: verify_engine_so.sh <path/to/libengine_api.so> [ndk_root] [jni_libs_dir]
+#
+#   jni_libs_dir  可选。给了就额外检查"非平台的运行时依赖是否都已和引擎放在
+#                 一起"（libomp.so 这类）。不传则跳过该项。
 #
 set -euo pipefail
 
@@ -113,7 +116,44 @@ for lib in libEGL.so libGLESv2.so; do
     fi
 done
 
-# ── 4. 二进制里不应残留 ANGLE 平台常量 ───────────────────────────────────────
+# ── 4. 非平台的运行时依赖必须随 jniLibs 一起打包 ─────────────────────────────
+# libengine_api.so 的 DT_NEEDED 里，平台不提供的那些（libomp.so、用了
+# c++_shared 时的 libc++_shared.so）必须被拷进 jniLibs，否则真机 dlopen 直接失败：
+#   dlopen failed: library "libomp.so" not found: needed by libengine_api.so
+# 这个错误只在装机后暴露，且表现成"游戏启动即崩溃"，APK 本身照样打得出来——
+# 所以必须在构建期拦住。检查的是「有没有和引擎放在同一目录」，那正是 APK 里
+# lib/<abi>/ 的形态。
+JNI_LIBS_DIR="${3:-}"
+if [[ -n "$JNI_LIBS_DIR" ]]; then
+    PLATFORM_LIBS="libc.so|libm.so|libdl.so|liblog.so|libandroid.so|libEGL.so"
+    PLATFORM_LIBS+="|libGLESv1_CM.so|libGLESv2.so|libOpenSLES.so|libz.so|libatomic.so"
+    PLATFORM_LIBS+="|libjnigraphics.so|libmediandk.so|libnativewindow.so|libsync.so"
+    PLATFORM_LIBS+="|libvulkan.so|libOpenMAXAL.so|libcamera2ndk.so"
+    unbundled=()
+    for lib in $NEEDED; do
+        if grep -qE "^(${PLATFORM_LIBS})$" <<<"$lib"; then
+            continue
+        fi
+        if [[ ! -f "$JNI_LIBS_DIR/$lib" ]]; then
+            unbundled+=("$lib")
+        fi
+    done
+    if (( ${#unbundled[@]} > 0 )); then
+        echo "✗ 以下依赖既非平台提供、也没有和引擎放在一起（真机会 dlopen 失败）："
+        printf '    %s\n' "${unbundled[@]}"
+        echo "  jniLibs 目录：$JNI_LIBS_DIR"
+        echo "  提示：scripts/build_engine_android.sh 的 copy_ndk_runtime_deps 负责把"
+        echo "        它们从 NDK 拷进来；APK job 也必须上传/下载整个 jniLibs 目录，"
+        echo "        只传 libengine_api.so 会让这些库停在构建机上。"
+        fail=1
+    else
+        echo "✓ 非平台运行时依赖都已随引擎放在一起"
+    fi
+else
+    echo "· 跳过运行时依赖打包检查（未提供 jniLibs 目录）"
+fi
+
+# ── 5. 二进制里不应残留 ANGLE 平台常量 ───────────────────────────────────────
 if strings -a "$SO" | grep -q "EGL_PLATFORM_ANGLE_TYPE_ANGLE"; then
     echo "✗ 二进制中仍含 ANGLE 平台常量（EGL_PLATFORM_ANGLE_TYPE_ANGLE）"
     fail=1

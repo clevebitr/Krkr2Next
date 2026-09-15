@@ -238,13 +238,23 @@ copy_ndk_runtime_deps() {
             libomp.so|libc++_shared.so|libgomp.so|libatomic.so)
                 [[ -f "$abi_dir/$dep" ]] && continue
                 local src
-                src="$(find "$NDK_ROOT" -name "$dep" \( -path "*/lib/linux/*" -o -path "*/${ANDROID_ABI}/*" \) 2>/dev/null | head -n1 || true)"
+                # NDK 的安装路径用的是三元组名（aarch64-linux-android）和 clang 自带的
+                # 库目录（lib/linux/aarch64），**都不含 "arm64-v8a"**——按
+                # `*/${ANDROID_ABI}/*` 去找会永远找不到，libc++_shared.so 就是这么被
+                # 漏掉的。这里覆盖 arm64 的两种实际布局。
+                src="$(find "$NDK_ROOT" -name "$dep" \
+                         \( -path "*/aarch64-linux-android/*" -o -path "*/lib/linux/aarch64/*" \) \
+                         2>/dev/null | head -n1 || true)"
                 if [[ -n "$src" ]]; then
                     cp -f "$src" "$abi_dir/$dep"
                     log_info "已拷贝 NDK 运行时 -> $abi_dir/$dep (来自 $src)"
                     copied=1
                 else
-                    log_warn "NDK 下未找到运行时库 '$dep'，可能运行期失败。"
+                    # 硬失败：这个库是 libengine_api.so 的 DT_NEEDED，缺了它真机
+                    # dlopen 直接失败，表现成"游戏启动即崩溃"，而 APK 照样能打出来。
+                    # 与其把问题发到用户手上，不如在构建期就停。
+                    log_error "NDK 下未找到运行时库 '$dep'（libengine_api.so 依赖它，缺了真机无法加载）"
+                    exit 1
                 fi
                 ;;
         esac
