@@ -1013,6 +1013,24 @@ static tjs_uint TVPRebuildAutoPathTable() {
 
     TVPAutoPathTable.Clear();
 
+    // 同名 basename 只认**先出现**的那条 auto-path，后出现的不许覆盖。
+    //
+    // 为什么必须这样：这张表是 basename → 路径的单层映射，而
+    // TVPGetPlacedPath 只按 basename 查它、并不遍历 auto-path 列表，
+    // 所以"哪条路径赢"完全由这里的写入顺序决定。而
+    // tTJSHashTable::Add 对同名键是**覆盖**（tjsHashSearch.h 的
+    // AddWithHash），于是列表里靠后的路径会顶掉靠前的——这与 auto-path
+    // 列表本身的优先级语义（靠前 = 优先）正好相反。
+    //
+    // 实测后果：TVPAutoMountProjectXP3Archives 会把工程 xp3 的每个
+    // 子目录都注册进来。おっぱいスパイ学園 的 data.xp3 根目录有一个
+    // startup.tjs，同名的还有一份藏在混淆目录 iu5tzchi…/ 下（kirikiriz
+    // 系保护壳）。子目录注册在后，覆盖掉根目录那条，于是取到的是保护壳
+    // 脚本——它需要 KiriKiri Z 的 Plugins.linkZ / bres:// 等 API，本引擎
+    // 没有，游戏因此永远起不来。
+    // Kirikiroid2 没有这种自动挂载，auto-path 只有 data.xp3>，
+    // 取到的是根目录那份。
+
     tjs_uint64 tick = TVPGetTickCount();
     TVPAddLog((const tjs_char *)TVPInfoRebuildingAutoPath);
 
@@ -1056,7 +1074,11 @@ static tjs_uint TVPRebuildAutoPathTable() {
                             if(!TJS_strchr(name.c_str() + in_arc_name_len,
                                            TJS_W('/'))) {
                                 ttstr sname = TVPExtractStorageName(name);
-                                TVPAutoPathTable.Add(sname, path);
+                                // 先到先得：见函数开头「同名 basename 只认
+                                // 先出现的那条」
+                                if(!TVPAutoPathTable.Find(sname)) {
+                                    TVPAutoPathTable.Add(sname, path);
+                                }
                                 count++;
                             }
                         } else {
@@ -1080,7 +1102,10 @@ static tjs_uint TVPRebuildAutoPathTable() {
 
             TVPStorageMediaManager.GetListAt(path, &lister);
             for(auto &i : lister.list) {
-                TVPAutoPathTable.Add(i, path);
+                // 先到先得：见函数开头「同名 basename 只认先出现的那条」
+                if(!TVPAutoPathTable.Find(i)) {
+                    TVPAutoPathTable.Add(i, path);
+                }
                 count++;
             }
         }
