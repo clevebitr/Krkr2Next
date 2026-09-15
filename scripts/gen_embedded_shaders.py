@@ -47,12 +47,29 @@ def main() -> int:
         print("✗ 着色器目录是空的：%s" % src, file=sys.stderr)
         return 1
 
-    # \0 结尾：LoadShaderProgramFromFile 后面按 csmString(ptr, size) 用，
-    # 多一个终止字节更稳（也方便调试时当 C 字符串看）。
+    # ⚠️ 绝不能给每个文件追加 \0 结尾（曾经加过，正是真机黑屏的根因）。
+    #
+    # CubismShader_OpenGLES2::LoadShaderProgramFromFile() 会把**多个文件读进同一个
+    # csmString 再拼接**：
+    #     fragString  = <fragShaderPath> 的内容
+    #     fragString += "#define CSM_COLOR_BLEND_MODE n"
+    #     fragString += <FragShaderSrcColorBlend.frag> 的内容   ← 定义转换/混合函数
+    #     fragString += "#define CSM_ALPHA_BLEND_MODE m"
+    #     fragString += <FragShaderSrcAlphaBlend.frag> 的内容
+    # 而 CompileShaderSource() 提交时是 `glShaderSource(s, 1, &src, NULL)`——**NULL 长度
+    # 意味着按 C 字符串解释，遇到第一个 NUL 就截断**。多出的终止字节会让 #define 与
+    # 后拼的两个文件对编译器完全不可见，于是所有混合模式着色器都报
+    #     Shader compile log: 0:29/0:30/0:32/0:36: L0002:
+    #         Function 'ConvertPremultipliedToStraight' not defined
+    # （真机实测 474 次 Fragment shader compile error，顶点着色器 0 次），ShaderProgram
+    # 拿不到就整块立绘不绘制 = 黑屏，而脚本与音频照常 → “有声音没画面”。
+    #
+    # csmString(c, length) 内部自己会补终止符（Copy() 里 `_ptr[length] = 0x0`），所以
+    # 这里只给**文件原始字节**，size 也就是文件的真实长度。
     total = 0
     entries = []
     for p in files:
-        data = p.read_bytes() + b"\0"
+        data = p.read_bytes()
         total += len(data)
         entries.append((p.name, data))
 
