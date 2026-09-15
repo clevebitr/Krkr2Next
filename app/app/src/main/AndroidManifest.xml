@@ -24,7 +24,7 @@
         android:required="true" />
 
     <application
-        android:name=".KiriNextApplication"
+        android:name=".KrKr2NextApplication"
         android:allowBackup="false"
         android:hardwareAccelerated="true"
         android:icon="@drawable/ic_launcher"
@@ -32,7 +32,7 @@
         android:largeHeap="true"
         android:requestLegacyExternalStorage="true"
         android:supportsRtl="true"
-        android:theme="@style/Theme.KiriNext"
+        android:theme="@style/Theme.KrKr2Next"
         tools:targetApi="q">
 
         <activity

@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "KiriNext"
+rootProject.name = "KrKr2-Next-Compose"
 include(":app")

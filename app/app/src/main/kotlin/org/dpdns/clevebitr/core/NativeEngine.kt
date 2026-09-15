@@ -1,4 +1,4 @@
-package dev.kirinext.core
+package org.dpdns.clevebitr.core
 
 import android.content.Context
 import android.view.Surface
@@ -7,7 +7,7 @@ import android.view.Surface
  * `libengine_api.so` 的 JNI 绑定（`engine_api` C ABI）。
  *
  * ⚠️ 每个 external 方法都对应 `bridge/engine_api/src/engine_api_android_jni.cpp`
- * 里的一个 `Java_dev_kirinext_core_NativeEngine_<方法名>` 符号。JNI 符号名编码了
+ * 里的一个 `Java_org_dpdns_clevebitr_core_NativeEngine_<方法名>` 符号。JNI 符号名编码了
  * **包名与类名**（`.` → `_`，`_` → `_1`），所以本文件所在的包、对象名、方法名
  * 都不能单方面修改：不一致只会在运行时以 `UnsatisfiedLinkError` 暴露，编译期
  * 不会报错。CI 有一条符号一致性断言专门拦这个。

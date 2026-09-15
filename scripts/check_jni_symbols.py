@@ -19,13 +19,24 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# Kotlin 侧：包名、类名、源文件
-KOTLIN_PACKAGE = "dev.kirinext.core"
+# Kotlin 侧源文件。**包名不写死常量**——从文件里的 `package` 声明读。
+#
+# 为什么：写成常量的话，重命名 Kotlin 包却忘了改常量，脚本仍会用旧包名去
+# C++ 里找符号并"通过"——检查和被检查的对象一起错了，等于没检查。
+# 从源头读才能保证校验的是真实状态。
 KOTLIN_OBJECT = "NativeEngine"
-KOTLIN_SOURCE = REPO_ROOT / "app/app/src/main/kotlin/dev/kirinext/core/NativeEngine.kt"
+KOTLIN_SOURCE = REPO_ROOT / "app/app/src/main/kotlin/org/dpdns/clevebitr/core/NativeEngine.kt"
 
 # C++ 侧：JNI 实现
 JNI_SOURCE = REPO_ROOT / "bridge/engine_api/src/engine_api_android_jni.cpp"
+
+
+def kotlin_package(path: Path) -> str:
+    """从 Kotlin 源里读 `package` 声明。"""
+    m = re.search(r"^\s*package\s+([\w.]+)\s*$", path.read_text(encoding="utf-8"), re.M)
+    if not m:
+        raise SystemExit(f"错误：{path} 里找不到 package 声明")
+    return m.group(1)
 
 
 def jni_prefix(package: str, klass: str) -> str:
@@ -54,7 +65,8 @@ def main() -> int:
             print(f"错误：找不到 {p}", file=sys.stderr)
             return 1
 
-    prefix = jni_prefix(KOTLIN_PACKAGE, KOTLIN_OBJECT)
+    package = kotlin_package(KOTLIN_SOURCE)
+    prefix = jni_prefix(package, KOTLIN_OBJECT)
     kt = kotlin_externals(KOTLIN_SOURCE)
     cpp = cpp_symbols(JNI_SOURCE, prefix)
 
@@ -63,6 +75,7 @@ def main() -> int:
     missing_in_kt = sorted(cpp - kt)
 
     print(f"Kotlin external 方法: {len(kt)} 个")
+    print(f"Kotlin 包（自源码读取）: {package}")
     print(f"C++ JNI 符号:         {len(cpp)} 个  (前缀 {prefix})")
 
     ok = True

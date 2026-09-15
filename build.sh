@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# build.sh — KiriNext 构建入口（仅 Android）
+# build.sh — KrKr2-Next-Compose 构建入口（仅 Android）
 #
 # Usage:
 #   ./build.sh [debug|release] [--engine-only] [--apk-only] [--configure-only]
@@ -10,7 +10,7 @@
 #                     拆出来便于在依赖就位后、编译之前先落缓存。
 #
 # 说明：
-#   KiriNext 只面向 Android。引擎共享库经 scripts/build_engine_android.sh 构建
+#   KrKr2-Next-Compose 只面向 Android。引擎共享库经 scripts/build_engine_android.sh 构建
 #   并投放到 app/app/src/main/jniLibs/arm64-v8a/，随后由 Gradle 打包进 APK。
 #
 #   Gradle 不使用 externalNativeBuild —— 引擎在 Gradle 之外独立构建。原因是根

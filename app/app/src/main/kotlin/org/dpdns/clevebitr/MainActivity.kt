@@ -1,4 +1,4 @@
-package dev.kirinext
+package org.dpdns.clevebitr
 
 import android.os.Bundle
 import android.util.Log
@@ -13,13 +13,13 @@ import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import dev.kirinext.core.EngineSession
-import dev.kirinext.core.InputEvent
-import dev.kirinext.core.NativeEngine
-import dev.kirinext.core.VkCodes
-import dev.kirinext.ui.GameScreen
-import dev.kirinext.ui.KiriNextTheme
-import dev.kirinext.ui.LauncherScreen
+import org.dpdns.clevebitr.core.EngineSession
+import org.dpdns.clevebitr.core.InputEvent
+import org.dpdns.clevebitr.core.NativeEngine
+import org.dpdns.clevebitr.core.VkCodes
+import org.dpdns.clevebitr.ui.GameScreen
+import org.dpdns.clevebitr.ui.KrKr2NextTheme
+import org.dpdns.clevebitr.ui.LauncherScreen
 
 /**
  * 单 Activity 壳。
@@ -33,7 +33,7 @@ import dev.kirinext.ui.LauncherScreen
 class MainActivity : ComponentActivity() {
 
     companion object {
-        private const val TAG = "KiriNext/Main"
+        private const val TAG = "KrKr2Next/Main"
         private const val DOUBLE_BACK_MS = 2_000L
     }
 
@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         setContent {
-            KiriNextTheme {
+            KrKr2NextTheme {
                 val activeSession = session
                 val path = gamePath
                 if (activeSession == null || path == null) {
@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
             writablePath = path,
             cachePath = cacheDir.absolutePath,
             onLog = { log ->
-                log.lines().forEach { if (it.isNotBlank()) Log.i("KiriNext/Engine", it) }
+                log.lines().forEach { if (it.isNotBlank()) Log.i("KrKr2Next/Engine", it) }
             },
             onStartupStateChanged = { state -> startupState = state },
             onFatal = { msg ->

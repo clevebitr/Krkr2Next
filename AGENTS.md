@@ -1,8 +1,8 @@
-# KiriNext 开发指南
+# KrKr2-Next-Compose 开发指南
 
 这是代理首屏规则。先读本文件；涉及具体模块时，再读 [开发文档索引](docs/dev/README.md)、[开发约定](docs/dev/conventions.md)、[输入契约](docs/dev/input-contract.md) 和 [关键引用](docs/dev/key-references.md)。本文只保存长期有效的事实与约束，不保存个人测试、临时路径、提交编号或历史推理。
 
-KiriNext 是**仅面向 Android** 的 KiriKiri2 运行环境，从 PocketKrKr fork 而来（保留完整历史，
+KrKr2-Next-Compose 是**仅面向 Android** 的 KiriKiri2 运行环境，从 PocketKrKr fork 而来（保留完整历史，
 基线标签 `pocketkrkr-base`）。原 Flutter 壳已移除，改为**原生 Kotlin/Compose 壳**，
 渲染后端为**直连原生 EGL/GLES3**。
 

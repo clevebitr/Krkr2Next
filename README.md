@@ -1,4 +1,4 @@
-# KiriNext
+# KrKr2-Next-Compose
 
 面向 **Android** 的 KiriKiri2（吉里吉里2）运行环境。
 

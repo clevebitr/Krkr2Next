@@ -320,6 +320,6 @@ jobs:
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
-          name: KiriNext-apk-${{ env.BUILD_TYPE }}
+          name: KrKr2Next-apk-${{ env.BUILD_TYPE }}
           path: app/app/build/outputs/apk/**/*.apk
           if-no-files-found: error

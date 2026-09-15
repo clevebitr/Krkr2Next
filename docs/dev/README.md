@@ -1,15 +1,15 @@
 # 开发文档
 
-KiriNext 的架构、构建、源码和兼容性资料。内容以当前代码状态为准，历史排查过程不在这里保存。
+KrKr2-Next-Compose 的架构、构建、源码和兼容性资料。内容以当前代码状态为准，历史排查过程不在这里保存。
 
 > ⚠️ **部分文档仍继承自 PocketKrKr**。本项目从 PocketKrKr fork 而来，改动了壳
 > （Flutter → Kotlin）、渲染后端（ANGLE → 原生 EGL/GLES3）和平台范围（→ 仅 Android）。
-> 下列文档已按 KiriNext 现状更新；**其余（`architecture.md`、`source-map.md`、
+> 下列文档已按 KrKr2-Next-Compose 现状更新；**其余（`architecture.md`、`source-map.md`、
 > `conventions.md`、`tech-stack.md`、`getting-started.md` 等）仍描述 Flutter + ANGLE
 > 时代**，其中的引擎核心部分（`cpp/core`、`cpp/plugins`）依然适用，但凡是提到
 > Flutter 壳、Dart 桥、ANGLE、iOS/macOS 的内容都已过时。阅读时以本页标注为准。
 
-## 已按 KiriNext 现状更新
+## 已按 KrKr2-Next-Compose 现状更新
 
 - **[input-contract.md](input-contract.md)** — 引擎输入接口的唯一权威说明
   （VK 码、坐标空间、返回键序列）。改动输入相关代码前必读。
@@ -60,4 +60,4 @@ iOS/macOS 已从本项目移除。
 
 外部实现、格式资料和行为对照入口统一收录在
 [krkrz-compat.md](krkrz-compat.md)。参考资料只用于理解协议和行为，不代表
-KiriNext 已具备对应能力，也不直接复制外部代码。
+KrKr2Next 已具备对应能力，也不直接复制外部代码。

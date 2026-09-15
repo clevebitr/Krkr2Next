@@ -4,9 +4,9 @@
 # 依赖固定版本（CI 与本地一致）：
 #   pip install mkdocs-material==9.7.1 mkdocs-static-i18n==1.3.1
 
-site_name: Krkr2Next
+site_name: KrKr2-Next-Compose
 site_description: 面向 Android 的 KiriKiri2 视觉小说引擎运行环境（C++ 引擎 + 原生 Kotlin/Compose 壳，直连 EGL/GLES3）
-site_url: https://krkr2next.com/
+site_url: https://krkr.clevebitr.dpdns.org/
 repo_url: https://github.com/clevebitr/Krkr2Next
 repo_name: clevebitr/Krkr2Next
 edit_uri: edit/main/docs/
@@ -76,7 +76,7 @@ plugins:
         - locale: en
           name: English
           build: true
-          site_name: Krkr2Next
+          site_name: KrKr2-Next-Compose
           site_description: Android-oriented KiriKiri2 runtime (native Kotlin shell, EGL/GLES3)
           nav_translations:
             首页: Home

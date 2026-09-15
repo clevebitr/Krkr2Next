@@ -1,4 +1,4 @@
-package dev.kirinext.core
+package org.dpdns.clevebitr.core
 
 import android.view.KeyEvent as AndroidKeyEvent
 

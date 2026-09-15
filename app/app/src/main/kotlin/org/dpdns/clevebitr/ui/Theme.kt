@@ -1,4 +1,4 @@
-package dev.kirinext.ui
+package org.dpdns.clevebitr.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -21,7 +21,7 @@ private val LightScheme = lightColorScheme(
 )
 
 @Composable
-fun KiriNextTheme(
+fun KrKr2NextTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {

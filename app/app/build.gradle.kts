@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "dev.kirinext"
+    namespace = "org.dpdns.clevebitr"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "dev.kirinext"
+        applicationId = "org.dpdns.clevebitr"
         minSdk = 24
         targetSdk = 35
         versionCode = 1

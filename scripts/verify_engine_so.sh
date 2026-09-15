@@ -84,9 +84,9 @@ fi
 
 # ── 2. Kotlin 壳的 JNI 符号 ──────────────────────────────────────────────────
 JNI_SYMBOLS=(
-    Java_dev_kirinext_core_NativeEngine_nativeSetSurface
-    Java_dev_kirinext_core_NativeEngine_nativeDetachSurface
-    Java_dev_kirinext_core_NativeEngine_nativeSetApplicationContext
+    Java_org_dpdns_clevebitr_core_NativeEngine_nativeSetSurface
+    Java_org_dpdns_clevebitr_core_NativeEngine_nativeDetachSurface
+    Java_org_dpdns_clevebitr_core_NativeEngine_nativeSetApplicationContext
 )
 missing_jni=()
 for sym in "${JNI_SYMBOLS[@]}"; do

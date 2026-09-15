@@ -1,4 +1,4 @@
-package dev.kirinext.ui
+package org.dpdns.clevebitr.ui
 
 import android.annotation.SuppressLint
 import android.os.Build
@@ -19,9 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import dev.kirinext.core.EngineSession
-import dev.kirinext.core.InputEvent
-import dev.kirinext.core.NativeEngine
+import org.dpdns.clevebitr.core.EngineSession
+import org.dpdns.clevebitr.core.InputEvent
+import org.dpdns.clevebitr.core.NativeEngine
 
 /**
  * 游戏画面。

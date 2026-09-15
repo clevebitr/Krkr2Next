@@ -1,4 +1,4 @@
-package dev.kirinext.core
+package org.dpdns.clevebitr.core
 
 import android.os.Handler
 import android.os.HandlerThread
@@ -42,7 +42,7 @@ class EngineSession(
     private val onFatal: (String) -> Unit = {},
 ) {
     companion object {
-        private const val TAG = "KiriNext/Engine"
+        private const val TAG = "KrKr2Next/Engine"
         private const val THREAD_NAME = "krkr-render"
         private const val LOG_BUFFER_SIZE = 8 * 1024
 

@@ -190,4 +190,4 @@ cd app && gradle wrapper --gradle-version 8.11.1
 - **运行期 `UnsatisfiedLinkError`**：JNI 符号名与 Kotlin 侧不一致。跑
   `scripts/check_jni_symbols.py` 定位。
 - **启动后一直转圈**：先看 `nativelogger`/`dlopen` 报错（缺 NDK 运行时依赖），
-  再看 `KiriNext/Engine` 标签的日志。
+  再看 `KrKr2Next/Engine` 标签的日志。

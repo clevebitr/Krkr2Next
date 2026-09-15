@@ -19,7 +19,7 @@
  *     engine_api.cpp (Android) for auto-attaching the Surface render target.
  *     krkr_GetNativeWindow returns an ADDITIONAL reference that the caller must
  *     release with ANativeWindow_release().
- *   - JNI entry points called by dev.kirinext.core.NativeEngine (Kotlin):
+ *   - JNI entry points called by org.dpdns.clevebitr.core.NativeEngine (Kotlin):
  *     nativeSetSurface(window, width, height) / nativeDetachSurface() /
  *     nativeSetApplicationContext(context).
  *
@@ -146,12 +146,12 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
 }
 
 /*
- * Java class:  dev.kirinext.core.NativeEngine
- * JNI symbol:  Java_dev_kirinext_core_NativeEngine_nativeSetSurface
+ * Java class:  org.dpdns.clevebitr.core.NativeEngine
+ * JNI symbol:  Java_org_dpdns_clevebitr_core_NativeEngine_nativeSetSurface
  * Pass null surface to detach.
  */
 extern "C" JNIEXPORT void JNICALL
-Java_dev_kirinext_core_NativeEngine_nativeSetSurface(
+Java_org_dpdns_clevebitr_core_NativeEngine_nativeSetSurface(
     JNIEnv* env, jobject /*thiz*/, jobject surface, jint width, jint height) {
   std::lock_guard<std::mutex> lock(g_surface_mutex);
   if (g_native_window) {
@@ -175,7 +175,7 @@ Java_dev_kirinext_core_NativeEngine_nativeSetSurface(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_dev_kirinext_core_NativeEngine_nativeDetachSurface(
+Java_org_dpdns_clevebitr_core_NativeEngine_nativeDetachSurface(
     JNIEnv* /*env*/, jobject /*thiz*/) {
   std::lock_guard<std::mutex> lock(g_surface_mutex);
   if (g_native_window) {
@@ -193,7 +193,7 @@ Java_dev_kirinext_core_NativeEngine_nativeDetachSurface(
  * can call Context methods (getExternalFilesDirs / getFilesDir, ...).
  */
 extern "C" JNIEXPORT void JNICALL
-Java_dev_kirinext_core_NativeEngine_nativeSetApplicationContext(
+Java_org_dpdns_clevebitr_core_NativeEngine_nativeSetApplicationContext(
     JNIEnv* env, jobject /*thiz*/, jobject context) {
   std::lock_guard<std::mutex> lock(g_context_mutex);
   if (g_app_context) {
@@ -237,7 +237,7 @@ std::string ToUtf8(JNIEnv* env, jstring value) {
 }  // namespace
 
 extern "C" JNIEXPORT jint JNICALL
-Java_dev_kirinext_core_NativeEngine_engineGetRuntimeApiVersion(JNIEnv* /*env*/,
+Java_org_dpdns_clevebitr_core_NativeEngine_engineGetRuntimeApiVersion(JNIEnv* /*env*/,
                                                               jobject /*thiz*/) {
   uint32_t version = 0;
   if (engine_get_runtime_api_version(&version) != ENGINE_RESULT_OK) return -1;
@@ -245,7 +245,7 @@ Java_dev_kirinext_core_NativeEngine_engineGetRuntimeApiVersion(JNIEnv* /*env*/,
 }
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_dev_kirinext_core_NativeEngine_engineCreate(JNIEnv* env, jobject /*thiz*/,
+Java_org_dpdns_clevebitr_core_NativeEngine_engineCreate(JNIEnv* env, jobject /*thiz*/,
                                                  jstring writable_path,
                                                  jstring cache_path) {
   const std::string writable = ToUtf8(env, writable_path);
@@ -263,7 +263,7 @@ Java_dev_kirinext_core_NativeEngine_engineCreate(JNIEnv* env, jobject /*thiz*/,
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_dev_kirinext_core_NativeEngine_engineDestroy(JNIEnv* /*env*/,
+Java_org_dpdns_clevebitr_core_NativeEngine_engineDestroy(JNIEnv* /*env*/,
                                                   jobject /*thiz*/,
                                                   jlong handle) {
   return static_cast<jint>(
@@ -271,21 +271,21 @@ Java_dev_kirinext_core_NativeEngine_engineDestroy(JNIEnv* /*env*/,
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_dev_kirinext_core_NativeEngine_engineTick(JNIEnv* /*env*/, jobject /*thiz*/,
+Java_org_dpdns_clevebitr_core_NativeEngine_engineTick(JNIEnv* /*env*/, jobject /*thiz*/,
                                                jlong handle, jint delta_ms) {
   return static_cast<jint>(engine_tick(reinterpret_cast<engine_handle_t>(handle),
                                        static_cast<uint32_t>(delta_ms)));
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_dev_kirinext_core_NativeEngine_enginePause(JNIEnv* /*env*/, jobject /*thiz*/,
+Java_org_dpdns_clevebitr_core_NativeEngine_enginePause(JNIEnv* /*env*/, jobject /*thiz*/,
                                                 jlong handle) {
   return static_cast<jint>(
       engine_pause(reinterpret_cast<engine_handle_t>(handle)));
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_dev_kirinext_core_NativeEngine_engineResume(JNIEnv* /*env*/,
+Java_org_dpdns_clevebitr_core_NativeEngine_engineResume(JNIEnv* /*env*/,
                                                  jobject /*thiz*/,
                                                  jlong handle) {
   return static_cast<jint>(
@@ -293,7 +293,7 @@ Java_dev_kirinext_core_NativeEngine_engineResume(JNIEnv* /*env*/,
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_dev_kirinext_core_NativeEngine_engineOpenGameAsync(
+Java_org_dpdns_clevebitr_core_NativeEngine_engineOpenGameAsync(
     JNIEnv* env, jobject /*thiz*/, jlong handle, jstring game_root_path,
     jstring startup_script) {
   const std::string root = ToUtf8(env, game_root_path);
@@ -305,7 +305,7 @@ Java_dev_kirinext_core_NativeEngine_engineOpenGameAsync(
 
 // 返回 engine_startup_state_t（0=IDLE 1=RUNNING 2=SUCCEEDED 3=FAILED）；失败返回 -1
 extern "C" JNIEXPORT jint JNICALL
-Java_dev_kirinext_core_NativeEngine_engineGetStartupState(JNIEnv* /*env*/,
+Java_org_dpdns_clevebitr_core_NativeEngine_engineGetStartupState(JNIEnv* /*env*/,
                                                           jobject /*thiz*/,
                                                           jlong handle) {
   uint32_t state = 0;
@@ -318,7 +318,7 @@ Java_dev_kirinext_core_NativeEngine_engineGetStartupState(JNIEnv* /*env*/,
 
 // 把启动日志写进调用方提供的 byte[]，返回写入字节数；失败返回 -1
 extern "C" JNIEXPORT jint JNICALL
-Java_dev_kirinext_core_NativeEngine_engineDrainStartupLogs(JNIEnv* env,
+Java_org_dpdns_clevebitr_core_NativeEngine_engineDrainStartupLogs(JNIEnv* env,
                                                            jobject /*thiz*/,
                                                            jlong handle,
                                                            jbyteArray buffer) {
@@ -341,7 +341,7 @@ Java_dev_kirinext_core_NativeEngine_engineDrainStartupLogs(JNIEnv* env,
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_dev_kirinext_core_NativeEngine_engineSetSurfaceSize(JNIEnv* /*env*/,
+Java_org_dpdns_clevebitr_core_NativeEngine_engineSetSurfaceSize(JNIEnv* /*env*/,
                                                          jobject /*thiz*/,
                                                          jlong handle,
                                                          jint width,
@@ -352,7 +352,7 @@ Java_dev_kirinext_core_NativeEngine_engineSetSurfaceSize(JNIEnv* /*env*/,
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_dev_kirinext_core_NativeEngine_engineSetOption(JNIEnv* env, jobject /*thiz*/,
+Java_org_dpdns_clevebitr_core_NativeEngine_engineSetOption(JNIEnv* env, jobject /*thiz*/,
                                                     jlong handle, jstring key,
                                                     jstring value) {
   const std::string k = ToUtf8(env, key);
@@ -366,7 +366,7 @@ Java_dev_kirinext_core_NativeEngine_engineSetOption(JNIEnv* env, jobject /*thiz*
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_dev_kirinext_core_NativeEngine_engineSetLogFilePath(JNIEnv* env,
+Java_org_dpdns_clevebitr_core_NativeEngine_engineSetLogFilePath(JNIEnv* env,
                                                          jobject /*thiz*/,
                                                          jstring path) {
   const std::string p = ToUtf8(env, path);
@@ -376,7 +376,7 @@ Java_dev_kirinext_core_NativeEngine_engineSetLogFilePath(JNIEnv* env,
 // 逐字段传递而不是传结构体，避免 Kotlin 侧做内存布局与对齐匹配。
 // key_code 必须是 Windows VK 码（见 docs/dev/input-contract.md）。
 extern "C" JNIEXPORT jint JNICALL
-Java_dev_kirinext_core_NativeEngine_engineSendInput(
+Java_org_dpdns_clevebitr_core_NativeEngine_engineSendInput(
     JNIEnv* /*env*/, jobject /*thiz*/, jlong handle, jint type, jdouble x,
     jdouble y, jdouble delta_x, jdouble delta_y, jint pointer_id, jint button,
     jint key_code, jint modifiers, jint unicode_codepoint,
@@ -400,7 +400,7 @@ Java_dev_kirinext_core_NativeEngine_engineSendInput(
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_dev_kirinext_core_NativeEngine_engineGetLastError(JNIEnv* env,
+Java_org_dpdns_clevebitr_core_NativeEngine_engineGetLastError(JNIEnv* env,
                                                        jobject /*thiz*/,
                                                        jlong handle) {
   const char* msg =
@@ -410,7 +410,7 @@ Java_dev_kirinext_core_NativeEngine_engineGetLastError(JNIEnv* env,
 
 // 渲染器信息写进调用方提供的 byte[]，返回写入字节数；失败返回 -1
 extern "C" JNIEXPORT jint JNICALL
-Java_dev_kirinext_core_NativeEngine_engineGetRendererInfo(JNIEnv* env,
+Java_org_dpdns_clevebitr_core_NativeEngine_engineGetRendererInfo(JNIEnv* env,
                                                           jobject /*thiz*/,
                                                           jlong handle,
                                                           jbyteArray buffer) {

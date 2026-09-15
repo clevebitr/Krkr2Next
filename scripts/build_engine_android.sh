@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# build_engine_android.sh — 构建 KiriNext 的 C++ 引擎共享库并投放到 Kotlin 壳的 jniLibs
+# build_engine_android.sh — 构建 KrKr2-Next-Compose 的 C++ 引擎共享库并投放到 Kotlin 壳的 jniLibs
 #
 # Usage:
 #   ./scripts/build_engine_android.sh [debug|release] [--configure-only]

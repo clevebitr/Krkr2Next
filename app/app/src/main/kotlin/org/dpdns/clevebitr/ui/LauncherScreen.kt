@@ -1,4 +1,4 @@
-package dev.kirinext.ui
+package org.dpdns.clevebitr.ui
 
 import android.Manifest
 import android.content.Context

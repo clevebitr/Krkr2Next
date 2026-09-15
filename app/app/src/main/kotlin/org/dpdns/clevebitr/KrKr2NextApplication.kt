@@ -1,13 +1,13 @@
-package dev.kirinext
+package org.dpdns.clevebitr
 
 import android.app.Application
 import android.util.Log
-import dev.kirinext.core.NativeEngine
+import org.dpdns.clevebitr.core.NativeEngine
 
-class KiriNextApplication : Application() {
+class KrKr2NextApplication : Application() {
 
     companion object {
-        private const val TAG = "KiriNext/App"
+        private const val TAG = "KrKr2Next/App"
 
         /**
          * 引擎共享库是否加载成功。加载失败时 UI 需要给出明确提示，
