@@ -13,7 +13,9 @@
 
 #include <map>
 #include <cassert>
+#include <cstring>
 #include <fmt/printf.h>
+#include <spdlog/spdlog.h>
 #include "tjs.h"
 #include "tjsScriptBlock.h"
 #include "tjsArray.h"
@@ -531,7 +533,22 @@ namespace TJS {
                 if(tTJSByteCodeLoader::IsTJS2ByteCode(header)) {
                     stream->Seek(0, TJS_BS_SEEK_SET);
                     buff = new tjs_uint8[static_cast<unsigned int>(streamlen)];
-                    stream->Read(buff, static_cast<tjs_uint>(streamlen));
+                    // 读到的字节数必须核对：Read 短读时缓冲尾部是**未初始化的堆
+                    // 内存**，加载器前半段解析正常、后半段解析垃圾——真机表现就是
+                    // 一句"字节码损坏"，完全看不出是读取短了。短读时把尾巴清零，
+                    // 让加载器把它当成截断的文件干净地拒绝，同时把这件事记下来。
+                    const tjs_uint read_bytes =
+                        stream->Read(buff, static_cast<tjs_uint>(streamlen));
+                    if(read_bytes != streamlen) {
+                        spdlog::error(
+                            "TJS bytecode short read [{}]: {} of {} bytes "
+                            "(tail zero-filled)",
+                            name != nullptr ? ttstr(name).AsStdString()
+                                            : std::string("<unnamed>"),
+                            read_bytes, streamlen);
+                        memset(buff + read_bytes, 0,
+                               static_cast<size_t>(streamlen) - read_bytes);
+                    }
                     LoadByteCode(buff, static_cast<size_t>(streamlen), result,
                                  context, name);
                     ret = true;
