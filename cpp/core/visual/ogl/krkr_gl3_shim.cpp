@@ -2,10 +2,15 @@
  * @file krkr_gl3_shim.cpp
  * @brief 运行期解析 Android 上无法链接的 GLES3 入口点。
  *
- * Android NDK 的 libGLESv2.so 存根只导出 **ES 2.0**
- * 入口点。证据是链接期的报错： ld.lld 能在该存根里找到 glGetString（ES2），却把
- * glGetStringi（ES3）报成 undefined symbol。而 glGetStringi / glBlitFramebuffer
- * / glMapBufferRange / glUnmapBuffer 四个都是 ES 3.0 core，代码里在直接调用。
+ * Android NDK 的 libGLESv2.so 存根只导出 **ES 2.0** 入口点。已用 llvm-nm
+ * 直接核对 NDK 27 的 sysroot/usr/lib/aarch64-linux-android/24/libGLESv2.so：
+ *   glGetString            导出
+ *   glGetStringi           **未导出**
+ *   glBlitFramebuffer      **未导出**
+ *   glMapBufferRange       **未导出**
+ *   glUnmapBuffer          **未导出**
+ * 后四个都是 ES 3.0 core，而代码里在直接调用——它们在链接期表现为 undefined
+ * symbol，ld.lld 只能给出毫无用处的 "did you mean: glGetString"。
  *
  * 去 ANGLE 之前不成问题——ANGLE 那份 libGLESv2 把 ES3 入口也导出了，一直替我们
  * 兜着底；换回平台原生 EGL/GLES 后这层兜底消失，链接就断了。这也解释了为什么
