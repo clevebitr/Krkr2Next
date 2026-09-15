@@ -101,9 +101,10 @@ namespace krkr {
             _contentSize = Size(static_cast<float>(pixelsWide),
                                 static_cast<float>(pixelsHigh));
 
+            GLenum glInternal = GL_RGBA;
             GLenum glFormat = GL_RGBA;
             GLenum glType = GL_UNSIGNED_BYTE;
-            resolveGLFormat(format, glFormat, glType);
+            resolveGLFormat(format, glInternal, glFormat, glType);
 
             if(_name == 0) {
                 glGenTextures(1, &_name);
@@ -116,8 +117,9 @@ namespace krkr {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-            glTexImage2D(GL_TEXTURE_2D, 0, glFormat, pixelsWide, pixelsHigh, 0,
-                         glFormat, glType, data);
+            glTexImage2D(GL_TEXTURE_2D, 0, glInternal, pixelsWide, pixelsHigh,
+                         0, glFormat, glType, data);
+            applyLuminanceSwizzle(format);
             return true;
         }
 
@@ -129,9 +131,12 @@ namespace krkr {
             if(_name == 0)
                 return false;
 
+            // glTexSubImage2D 只需要客户格式；纹理的格式与 swizzle 已在
+            // initWithData 时定下，这里改不了也不该改。
+            GLenum glInternalUnused = GL_RGBA;
             GLenum glFormat = GL_RGBA;
             GLenum glType = GL_UNSIGNED_BYTE;
-            resolveGLFormat(_pixelFormat, glFormat, glType);
+            resolveGLFormat(_pixelFormat, glInternalUnused, glFormat, glType);
 
             glBindTexture(GL_TEXTURE_2D, _name);
             glTexSubImage2D(GL_TEXTURE_2D, 0, offsetX, offsetY, width, height,
@@ -163,44 +168,99 @@ namespace krkr {
         bool _ownsTexture = false;
         bool _autoreleased = false;
 
-        static void resolveGLFormat(PixelFormat format, GLenum &glFormat,
-                                    GLenum &glType) {
+        /**
+         * 内部格式与客户格式分开返回。
+         *
+         * GLES 3.0 移除了 GL_LUMINANCE / GL_LUMINANCE_ALPHA /
+         * GL_ALPHA，单/双通道 格式必须写成 R8/RG8 内部格式 + GL_RED/GL_RG
+         * 客户格式。采样语义由 applyLuminanceSwizzle
+         * 在纹理创建后补回，见那边的说明。
+         */
+        static void resolveGLFormat(PixelFormat format, GLenum &glInternal,
+                                    GLenum &glFormat, GLenum &glType) {
             switch(format) {
                 case PixelFormat::RGBA8888:
-                    glFormat = GL_RGBA;
+                    glInternal = glFormat = GL_RGBA;
                     glType = GL_UNSIGNED_BYTE;
                     break;
                 case PixelFormat::RGB888:
-                    glFormat = GL_RGB;
+                    glInternal = glFormat = GL_RGB;
                     glType = GL_UNSIGNED_BYTE;
                     break;
                 case PixelFormat::RGBA4444:
-                    glFormat = GL_RGBA;
+                    glInternal = glFormat = GL_RGBA;
                     glType = GL_UNSIGNED_SHORT_4_4_4_4;
                     break;
                 case PixelFormat::RGB565:
-                    glFormat = GL_RGB;
+                    glInternal = glFormat = GL_RGB;
                     glType = GL_UNSIGNED_SHORT_5_6_5;
                     break;
                 case PixelFormat::A8:
                 case PixelFormat::I8:
-                    glFormat = GL_LUMINANCE;
+                    glInternal = GL_R8;
+                    glFormat = GL_RED;
                     glType = GL_UNSIGNED_BYTE;
                     break;
                 case PixelFormat::AI88:
-                    glFormat = GL_LUMINANCE_ALPHA;
+                    glInternal = GL_RG8;
+                    glFormat = GL_RG;
                     glType = GL_UNSIGNED_BYTE;
                     break;
                 case PixelFormat::BGRA8888:
 #ifdef GL_BGRA
-                    glFormat = GL_BGRA;
+                    glInternal = glFormat = GL_BGRA;
                     glType = GL_UNSIGNED_BYTE;
                     break;
 #else
-                    glFormat = GL_RGBA;
+                    glInternal = glFormat = GL_RGBA;
                     glType = GL_UNSIGNED_BYTE;
                     break;
 #endif
+            }
+        }
+
+        /**
+         * 还原 GL_LUMINANCE / GL_LUMINANCE_ALPHA / GL_ALPHA 的采样语义。
+         *
+         * swizzle 是纹理对象状态，调用前目标纹理必须已绑定。不能省：只换成 R8
+         * 而不设 swizzle，采样结果是
+         * (L,0,0,1)，原本当作灰度使用的地方会整片变红。 调用方需在 glTexImage2D
+         * 之后立即调用一次；glTexSubImage2D 不改纹理格式， 无需重复设置。
+         */
+        static void applyLuminanceSwizzle(PixelFormat format) {
+            switch(format) {
+                case PixelFormat::I8: // 旧 GL_LUMINANCE
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R,
+                                    GL_RED);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G,
+                                    GL_RED);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B,
+                                    GL_RED);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A,
+                                    GL_ONE);
+                    break;
+                case PixelFormat::A8: // 旧 GL_ALPHA
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R,
+                                    GL_ZERO);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G,
+                                    GL_ZERO);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B,
+                                    GL_ZERO);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A,
+                                    GL_RED);
+                    break;
+                case PixelFormat::AI88: // 旧 GL_LUMINANCE_ALPHA
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R,
+                                    GL_RED);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G,
+                                    GL_RED);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B,
+                                    GL_RED);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A,
+                                    GL_GREEN);
+                    break;
+                default:
+                    break;
             }
         }
     };

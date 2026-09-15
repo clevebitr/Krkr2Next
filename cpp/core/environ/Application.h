@@ -4,6 +4,7 @@
 
 #include "tjsVariant.h"
 #include "tjsString.h"
+#include <thread>
 #include <vector>
 #include <functional>
 #include <mutex>
@@ -208,6 +209,12 @@ std::vector<std::string> *LoadLinesFromFile(const ttstr &path);
 // inline HINSTANCE GetHInstance() { return
 // ((HINSTANCE)GetModuleHandle(0)); }
 extern class tTVPApplication *Application;
+
+// 引擎主线程（= 运行 Application->Run() / engine_tick 的那条线程）。
+// 它在 Application.cpp 里以 dlopen 时的线程做初值，但宿主从非 UI 线程驱动引擎
+// 时那个初值就是错的——engine_create 会把它改写为真正持有引擎的线程。
+// movie 子系统的 IsCurrentThread() 与 OOM 回调都依赖它。
+extern std::thread::id TVPMainThreadID;
 
 // 复位应用层状态，使 engine_destroy 后可干净二次启动（runtime-restart）。
 extern void TVPResetApplicationForRestart();

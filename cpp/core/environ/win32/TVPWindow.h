@@ -325,6 +325,11 @@ protected:
     double TouchScaleThreshold = 5, TouchRotateThreshold = 5;
 
 public:
+    // 必须有虚析构：具体实现（HostWindowLayer）持有 GL program/VBO/纹理，
+    // 而 tTJSNI_Window 只以 iWindowLayer* 持有它。缺了它 delete Form 是未定义
+    // 行为，且 ~HostWindowLayer 不会被调用，GL 对象与成员一起泄漏。
+    virtual ~iWindowLayer() = default;
+
     virtual void SetPaintBoxSize(tjs_int w, tjs_int h) = 0;
     virtual bool GetFormEnabled() = 0;
     virtual void SetDefaultMouseCursor() = 0;

@@ -429,23 +429,22 @@ namespace {
     }
 
     void PushRuntimeSpdlogToStartupQueue(const spdlog::details::log_msg &msg) {
-        engine_handle_s *target = nullptr;
-        {
-            std::lock_guard<std::recursive_mutex> registry_guard(
-                g_registry_mutex);
-            if(!g_runtime_startup_active ||
-               g_runtime_startup_owner == nullptr) {
-                return;
-            }
-            if(!IsHandleLiveLocked(g_runtime_startup_owner)) {
-                return;
-            }
-            target =
-                reinterpret_cast<engine_handle_s *>(g_runtime_startup_owner);
-        }
-        if(target == nullptr) {
+        // 锁必须覆盖到 PushStartupLog 为止。engine_destroy 在同一把锁内把
+        // handle 从 g_live_handles 摘除（此后才 delete impl），所以只要持锁
+        // 期间 IsHandleLiveLocked 为真，impl 就不会被释放。反之若先解锁再推送，
+        // 取到 target 到真正写入之间就存在窗口，日志会落在已 delete 的对象上。
+        // 该 sink 挂在 core / tjs2 / plugin 三个 logger 上，任意线程都能触发，
+        // 关停或重开游戏时即为间歇性崩溃。锁是 recursive 的：从已持锁线程
+        // （例如整帧持锁的 engine_tick）重入是安全的。
+        std::lock_guard<std::recursive_mutex> registry_guard(g_registry_mutex);
+        if(!g_runtime_startup_active || g_runtime_startup_owner == nullptr) {
             return;
         }
+        if(!IsHandleLiveLocked(g_runtime_startup_owner)) {
+            return;
+        }
+        engine_handle_s *target =
+            reinterpret_cast<engine_handle_s *>(g_runtime_startup_owner);
 
         const auto level_sv = spdlog::level::to_string_view(msg.level);
         const std::string level(level_sv.data(), level_sv.size());
@@ -853,6 +852,14 @@ engine_result_t engine_create(const engine_create_desc_t *desc,
     impl->state = ToStateValue(EngineState::kCreated);
     impl->owner_thread = std::this_thread::get_id();
     impl->runtime_owner = false;
+
+    // TVPMainThreadID 在 Application.cpp 里以 dlopen 时的线程做初值——在本移植中
+    // 那是宿主 UI 线程，而引擎实际跑在调用 engine_create 的线程（渲染线程）上，
+    // 两者不同。movie 子系统的 IsCurrentThread() 与 OOM 回调都拿它做判断，留在
+    // 错值上会让这些分支永远走错边。engine_create 的调用线程正是后续
+    // engine_tick 所在的线程（ValidateHandleThreadLocked
+    // 强制），在这里改写即为正确值。
+    TVPMainThreadID = impl->owner_thread;
 
     auto handle = reinterpret_cast<engine_handle_t>(impl);
     {

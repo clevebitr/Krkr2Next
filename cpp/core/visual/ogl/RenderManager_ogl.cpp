@@ -890,6 +890,54 @@ static bool TVPCheckSolidPixel(const tjs_uint8 *pixel, tjs_int pitch, tjs_int w,
     return true;
 }
 
+// GLES 3.0 起 GL_LUMINANCE / GL_LUMINANCE_ALPHA / GL_ALPHA 不再是合法的内部与
+// 客户格式：继续使用会让 glTexImage2D 报 GL_INVALID_ENUM 且**不分配存储**，
+// 于是 8bpp（Gray）图层整片采样为黑，也挂不上 FBO。ANGLE 的 GLES2 兼容层曾
+// 容忍这些枚举，去 ANGLE 换原生 ES3 驱动后暴露。
+// 等价替换为 R8/RG8，并用纹理 swizzle 还原原采样语义：
+//   GL_LUMINANCE       → R8  + (R,R,R,1)
+//   GL_LUMINANCE_ALPHA → RG8 + (R,R,R,G)
+//   GL_ALPHA           → R8  + (0,0,0,R)
+// swizzle 不能省：现有 shader 普遍直接 `gl_FragColor = texture2D(tex0, ...)`，
+// 只换格式不设 swizzle 会把 Gray 读成 (L,0,0,1)，即整片纯红。
+// 调用 swizzle 前目标纹理必须已绑定——它是纹理对象状态，不是全局状态。
+enum TVPLuminanceFormat {
+    kTVPLuminanceGray, // 旧 GL_LUMINANCE
+    kTVPLuminanceGrayAlpha, // 旧 GL_LUMINANCE_ALPHA
+    kTVPLuminanceAlpha, // 旧 GL_ALPHA
+};
+
+static GLenum TVPLuminanceInternalFormat(TVPLuminanceFormat format) {
+    return format == kTVPLuminanceGrayAlpha ? GL_RG8 : GL_R8;
+}
+
+static GLenum TVPLuminanceClientFormat(TVPLuminanceFormat format) {
+    return format == kTVPLuminanceGrayAlpha ? GL_RG : GL_RED;
+}
+
+static void TVPApplyLuminanceSwizzle(TVPLuminanceFormat format) {
+    switch(format) {
+        case kTVPLuminanceGray:
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_RED);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_RED);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_ONE);
+            break;
+        case kTVPLuminanceGrayAlpha:
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_RED);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_RED);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_GREEN);
+            break;
+        case kTVPLuminanceAlpha:
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_ZERO);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_ZERO);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_ZERO);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_RED);
+            break;
+    }
+}
+
 class tTVPOGLTexture2D : public iTVPTexture2D {
     friend class TVPRenderManager_OpenGL;
 
@@ -945,10 +993,12 @@ protected:
                       unsigned int pitch) {
         GLenum pixfmt = GL_RGBA;
         GLenum internalfmt = GL_RGBA;
+        bool luminance = false;
         switch(Format) {
             case TVPTextureFormat::Gray:
-                pixfmt = GL_LUMINANCE;
-                internalfmt = GL_LUMINANCE;
+                internalfmt = TVPLuminanceInternalFormat(kTVPLuminanceGray);
+                pixfmt = TVPLuminanceClientFormat(kTVPLuminanceGray);
+                luminance = true;
                 break;
             case TVPTextureFormat::RGB:
                 pixfmt = GL_RGB;
@@ -984,6 +1034,8 @@ protected:
         _glBindTexture2D(texture);
         glTexImage2D(GL_TEXTURE_2D, 0, internalfmt, intw, inth, 0, pixfmt,
                      GL_UNSIGNED_BYTE, pixel);
+        if(luminance)
+            TVPApplyLuminanceSwizzle(kTVPLuminanceGray);
 
         internalW = intw;
         internalH = inth;
@@ -1003,7 +1055,7 @@ protected:
         unsigned int pixsize = Format & 0xF;
         switch(Format) {
             case TVPTextureFormat::Gray:
-                pixfmt = GL_LUMINANCE;
+                pixfmt = TVPLuminanceClientFormat(kTVPLuminanceGray);
                 glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
                 break;
             case TVPTextureFormat::RGB:
@@ -1306,10 +1358,12 @@ public:
         unsigned int pixsize = Format & 0xF;
         GLenum pixfmt = GL_RGBA;
         GLenum internalfmt = GL_RGBA;
+        bool luminance = false;
         switch(Format) {
             case TVPTextureFormat::Gray:
-                pixfmt = GL_LUMINANCE;
-                internalfmt = GL_LUMINANCE;
+                internalfmt = TVPLuminanceInternalFormat(kTVPLuminanceGray);
+                pixfmt = TVPLuminanceClientFormat(kTVPLuminanceGray);
+                luminance = true;
                 break;
             case TVPTextureFormat::RGB:
                 pixfmt = GL_RGB;
@@ -1353,6 +1407,8 @@ public:
             assert(texinfo.Width <= GetMaxTextureWidth());
             glTexImage2D(GL_TEXTURE_2D, 0, internalfmt, texinfo.Width,
                          texinfo.Height, 0, pixfmt, GL_UNSIGNED_BYTE, nullptr);
+            if(luminance)
+                TVPApplyLuminanceSwizzle(kTVPLuminanceGray);
             unsigned char *pix = nullptr;
             if(GL_CHECK_unpack_subimage) {
                 pix = (unsigned char *)Bitmap->GetScanLine(rc.top);
@@ -1382,6 +1438,8 @@ public:
             glTexImage2D(GL_TEXTURE_2D, 0, internalfmt, texinfo.Width,
                          texinfo.Height, 0, pixfmt, GL_UNSIGNED_BYTE,
                          Bitmap->GetScanLine(rc.top));
+            if(luminance)
+                TVPApplyLuminanceSwizzle(kTVPLuminanceGray);
         }
 
         uint64_t newBytes = (uint64_t)texinfo.Width * texinfo.Height * pixsize;
@@ -1417,10 +1475,12 @@ public:
         unsigned int pixsize = Format & 0xF;
         GLenum pixfmt = GL_RGBA;
         GLenum internalfmt = GL_RGBA;
+        bool luminance = false;
         switch(Format) {
             case TVPTextureFormat::Gray:
-                pixfmt = GL_LUMINANCE;
-                internalfmt = GL_LUMINANCE;
+                internalfmt = TVPLuminanceInternalFormat(kTVPLuminanceGray);
+                pixfmt = TVPLuminanceClientFormat(kTVPLuminanceGray);
+                luminance = true;
                 break;
             case TVPTextureFormat::RGB:
                 pixfmt = GL_RGB;
@@ -1448,6 +1508,8 @@ public:
         texture = FetchGLTexture();
         glTexImage2D(GL_TEXTURE_2D, 0, internalfmt, internalW, internalH, 0,
                      pixfmt, GL_UNSIGNED_BYTE, tmp);
+        if(luminance)
+            TVPApplyLuminanceSwizzle(kTVPLuminanceGray);
         _totalVMemSize += (uint64_t)internalW * internalH * getPixelSize();
 
         delete[] tmp;

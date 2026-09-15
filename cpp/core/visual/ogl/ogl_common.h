@@ -16,6 +16,45 @@
 #endif
 
 // ---------------------------------------------------------------------------
+// GLES3 单/双通道格式与纹理 swizzle
+// ---------------------------------------------------------------------------
+// GLES 3.0 移除了 GL_LUMINANCE / GL_LUMINANCE_ALPHA / GL_ALPHA 作为内部与客户
+// 格式，替代方案是 R8/RG8 加纹理 swizzle（见 RenderManager_ogl.cpp 的
+// TVPApplyLuminanceSwizzle）。这些枚举不在 <GLES2/gl2.h> 中，与
+// GL_UNPACK_ROW_LENGTH 一样按需补齐；上下文始终是 ES3
+// （krkr_egl_context.cpp 请求 EGL_CONTEXT_CLIENT_VERSION 3）。
+#ifndef GL_R8
+#define GL_R8 0x8229
+#endif
+#ifndef GL_RG8
+#define GL_RG8 0x822B
+#endif
+#ifndef GL_RED
+#define GL_RED 0x1903
+#endif
+#ifndef GL_RG
+#define GL_RG 0x8227
+#endif
+#ifndef GL_GREEN
+#define GL_GREEN 0x1901
+#endif
+#ifndef GL_BLUE
+#define GL_BLUE 0x1905
+#endif
+#ifndef GL_TEXTURE_SWIZZLE_R
+#define GL_TEXTURE_SWIZZLE_R 0x8E42
+#endif
+#ifndef GL_TEXTURE_SWIZZLE_G
+#define GL_TEXTURE_SWIZZLE_G 0x8E43
+#endif
+#ifndef GL_TEXTURE_SWIZZLE_B
+#define GL_TEXTURE_SWIZZLE_B 0x8E44
+#endif
+#ifndef GL_TEXTURE_SWIZZLE_A
+#define GL_TEXTURE_SWIZZLE_A 0x8E45
+#endif
+
+// ---------------------------------------------------------------------------
 // GLES2 compatibility defines for desktop GL constants
 // ---------------------------------------------------------------------------
 #ifndef GL_DEPTH24_STENCIL8

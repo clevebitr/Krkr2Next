@@ -17,6 +17,7 @@
 #include "krkr_egl_context.h"
 #include "krkr_gl.h"
 #include "ogl_common.h"
+#include "RenderManager.h"
 
 // Forward declaration — defined in stubs/ui_stubs.cpp
 void TVPInitUIExtension();
@@ -83,6 +84,19 @@ void TVPEngineBootstrap::Shutdown() {
     }
 
     spdlog::info("EngineBootstrap: shutting down");
+
+    // 销毁 EGL 上下文前先排空 iTVPTexture2D 的延迟删除队列。
+    //
+    // 队列是**进程级**的、且不带上下文世代标记，而 EngineLoop::Tick 每帧都会
+    // 调 RecycleProcess 排空它，所以正常情况下队列只会在两次 tick 之间非空。
+    // 唯一的缺口在关闭阶段：EngineLoop / TVPMainScene 析构会释放纹理，此时已
+    // 不再有 tick，这些纹理就带着**旧上下文的 GL 名字**活到下一个游戏会话——
+    // 届时 glDeleteTextures 作用在新上下文上，而新上下文很可能已经复用了同一
+    // 批 id，删掉的就是**活**纹理（缺图 / 黑图）。
+    // 在此处排空，glDeleteTextures 仍在原上下文（销毁前仍 current，最后一次
+    // engine_tick 已 MakeCurrent）里执行，名字必定有效。
+    iTVPTexture2D::RecycleProcess();
+
     krkr::GetEngineEGLContext().Destroy();
     s_initialized = false;
 }

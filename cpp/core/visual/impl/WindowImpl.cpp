@@ -1137,8 +1137,13 @@ void tTJSNI_Window::Invalidate() {
 		VSyncTimingThread = nullptr;
 	}
 #endif
+    // Form 由 TVPCreateAndAddWindow 里的 new 创建，本类以 iWindowLayer* 持有、
+    // 且是唯一持有者，所以在这里释放。上游的 TTVPWindowForm 是收到关闭消息后
+    // 自删除的，本移植改成 closing_ 标志后那个惯用法就失效了——只置空会泄漏
+    // 整个 HostWindowLayer（含它的 GL program/VBO/纹理）。
     if(Form) {
         Form->InvalidateClose();
+        delete Form;
         Form = nullptr;
     }
 
