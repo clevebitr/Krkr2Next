@@ -648,10 +648,81 @@ extern void TVPDoSaveSystemVariables() {
 }
 
 //---------------------------------------------------------------------------
+// 启动期兼容全局
+//---------------------------------------------------------------------------
+// 部分老游戏的启动脚本（kirikiriz 系 bootstrap，以及第三方汉化/整合补丁带来的
+// initialize.tjs）会直接读写下列名字：
+//     debugWindowEnabled = true;
+//     System.inform(msg, caption, MB_YESNO | MB_ICONINFORMATION);
+// Windows 版 KiriKiri 由宿主预置它们；本引擎缺任意一项都会以
+// `Member "xxx" does not exist` 中断启动（实测 nainiuniu5krkr 前身
+// おっぱいスパイ学園 就死在 debugWindowEnabled 上）。
+// 取值与 Win32 <winuser.h> 对齐。移植自 AetherKiri 的同名实现。
+//
+// 目前只覆盖**纯标量**部分。mock 对象（kirikiriz / ShortCutInitial*KeyMap /
+// commitSavedata / bootStrap）与 addFont 系列兼容函数依赖额外的 mock dispatch
+// 类和字体兼容层，尚未移植。
+static void TVPRegisterStartupCompatGlobals() {
+    // GetGlobal() 内部 AddRef 过，用完必须 Release。
+    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    if(!global)
+        return;
+
+    auto set_int = [global](const tjs_char *name, tjs_int value) {
+        tTJSVariant val(value);
+        global->PropSet(TJS_MEMBERENSURE | TJS_IGNOREPROP, name, nullptr, &val,
+                        global);
+    };
+    auto set_string = [global](const tjs_char *name, const tjs_char *value) {
+        tTJSVariant val(value);
+        global->PropSet(TJS_MEMBERENSURE | TJS_IGNOREPROP, name, nullptr, &val,
+                        global);
+    };
+
+    set_int(TJS_W("debugWindowEnabled"), 0);
+    set_int(TJS_W("inXP3archivePacked"), 1);
+    set_string(TJS_W("convertMode"), TJS_W(""));
+
+    // 消息框按钮 / 图标 / 返回值常量（winuser.h）
+    set_int(TJS_W("MB_OK"), 0x00000000);
+    set_int(TJS_W("MB_OKCANCEL"), 0x00000001);
+    set_int(TJS_W("MB_ABORTRETRYIGNORE"), 0x00000002);
+    set_int(TJS_W("MB_YESNOCANCEL"), 0x00000003);
+    set_int(TJS_W("MB_YESNO"), 0x00000004);
+    set_int(TJS_W("MB_RETRYCANCEL"), 0x00000005);
+    set_int(TJS_W("MB_CANCELTRYCONTINUE"), 0x00000006);
+    set_int(TJS_W("MB_ICONHAND"), 0x00000010);
+    set_int(TJS_W("MB_ICONSTOP"), 0x00000010);
+    set_int(TJS_W("MB_ICONERROR"), 0x00000010);
+    set_int(TJS_W("MB_ICONQUESTION"), 0x00000020);
+    set_int(TJS_W("MB_ICONEXCLAMATION"), 0x00000030);
+    set_int(TJS_W("MB_ICONWARNING"), 0x00000030);
+    set_int(TJS_W("MB_ICONASTERISK"), 0x00000040);
+    set_int(TJS_W("MB_ICONINFORMATION"), 0x00000040);
+    set_int(TJS_W("MB_DEFBUTTON1"), 0x00000000);
+    set_int(TJS_W("MB_DEFBUTTON2"), 0x00000100);
+    set_int(TJS_W("MB_DEFBUTTON3"), 0x00000200);
+    set_int(TJS_W("MB_DEFBUTTON4"), 0x00000300);
+    set_int(TJS_W("IDOK"), 1);
+    set_int(TJS_W("IDCANCEL"), 2);
+    set_int(TJS_W("IDABORT"), 3);
+    set_int(TJS_W("IDRETRY"), 4);
+    set_int(TJS_W("IDIGNORE"), 5);
+    set_int(TJS_W("IDYES"), 6);
+    set_int(TJS_W("IDNO"), 7);
+    set_int(TJS_W("IDTRYAGAIN"), 10);
+    set_int(TJS_W("IDCONTINUE"), 11);
+
+    global->Release();
+}
+
+//---------------------------------------------------------------------------
 // TVPCreateNativeClass_System
 //---------------------------------------------------------------------------
 tTJSNativeClass *TVPCreateNativeClass_System() {
     tTJSNC_System *cls = new tTJSNC_System();
+
+    TVPRegisterStartupCompatGlobals();
 
     // setup some platform-specific members
     //----------------------------------------------------------------------

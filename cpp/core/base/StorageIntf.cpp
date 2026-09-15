@@ -1362,6 +1362,26 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ removeAutoPath) {
 }
 TJS_END_NATIVE_STATIC_METHOD_DECL(/*func. name*/ removeAutoPath)
 //----------------------------------------------------------------------
+// 老游戏的启动脚本（kirikiriz 系 bootstrap）会调 Storages.setDefaultPath()
+// 来把当前目录和自动搜索路径一起设到自身包上；缺了它会直接抛
+// "Member \"setDefaultPath\" does not exist" 并中断启动。
+// 移植自 AetherKiri 的同名实现。
+TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ setDefaultPath) {
+    if(numparams < 1)
+        return TJS_E_BADPARAMCOUNT;
+
+    ttstr path = *param[0];
+
+    TVPAddAutoPath(path);
+    TVPSetCurrentDirectory(path);
+
+    if(result)
+        result->Clear();
+
+    return TJS_S_OK;
+}
+TJS_END_NATIVE_STATIC_METHOD_DECL(/*func. name*/ setDefaultPath)
+//----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ getFullPath) {
     if(numparams < 1)
         return TJS_E_BADPARAMCOUNT;
