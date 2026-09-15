@@ -648,20 +648,169 @@ extern void TVPDoSaveSystemVariables() {
 }
 
 //---------------------------------------------------------------------------
+// 兼容用的 mock dispatch
+//---------------------------------------------------------------------------
+// kirikiriz 系整合包会把宿主预置的对象当"什么都有、什么都返回真值"的占位符用
+// （kirikiriz.renderer、commitSavedata() 之类）。这里给最小可用的 mock：
+//   GenericMockObjectLocal    —— 属性读取返回自身、调用返回自身，可当对象用
+//   StaticGlobalMockFuncLocal —— 只作可调用的全局函数占位，返回那个 mock 对象
+// 两者移植自 AetherKiri。
+class GenericMockObjectLocal : public tTJSDispatch {
+    tjs_uint RefCount = 1;
+
+public:
+    GenericMockObjectLocal() = default;
+    ~GenericMockObjectLocal() override = default;
+
+    tjs_uint AddRef() override { return ++RefCount; }
+    tjs_uint Release() override {
+        if(--RefCount == 0) {
+            delete this;
+            return 0;
+        }
+        return RefCount;
+    }
+
+    tjs_error FuncCall(tjs_uint32, const tjs_char *, tjs_uint32 *,
+                       tTJSVariant *result, tjs_int, tTJSVariant **,
+                       iTJSDispatch2 *) override {
+        if(result) {
+            AddRef();
+            *result = tTJSVariant(this, this);
+        }
+        return TJS_S_OK;
+    }
+
+    tjs_error PropGet(tjs_uint32, const tjs_char *membername, tjs_uint32 *,
+                      tTJSVariant *result, iTJSDispatch2 *) override {
+        if(result) {
+            // 少数成员会被脚本当数字用，给默认值；其余返回 mock 自身，
+            // 保证链式访问不会中途断掉。
+            if(membername) {
+                if(!TJS_strcmp(membername, TJS_W("count")) ||
+                   !TJS_strcmp(membername, TJS_W("length")) ||
+                   !TJS_strcmp(membername, TJS_W("left")) ||
+                   !TJS_strcmp(membername, TJS_W("top")) ||
+                   !TJS_strcmp(membername, TJS_W("x")) ||
+                   !TJS_strcmp(membername, TJS_W("y")) ||
+                   !TJS_strcmp(membername, TJS_W("opacity")) ||
+                   !TJS_strcmp(membername, TJS_W("visible"))) {
+                    *result = tTJSVariant((tjs_int)0);
+                    return TJS_S_OK;
+                }
+                if(!TJS_strcmp(membername, TJS_W("width")) ||
+                   !TJS_strcmp(membername, TJS_W("height")) ||
+                   !TJS_strcmp(membername, TJS_W("imageWidth")) ||
+                   !TJS_strcmp(membername, TJS_W("imageHeight"))) {
+                    *result = tTJSVariant((tjs_int)100);
+                    return TJS_S_OK;
+                }
+                if(!TJS_strcmp(membername, TJS_W("fps")) ||
+                   !TJS_strcmp(membername, TJS_W("frame")) ||
+                   !TJS_strcmp(membername, TJS_W("totalFrame")) ||
+                   !TJS_strcmp(membername, TJS_W("totalTime")) ||
+                   !TJS_strcmp(membername, TJS_W("rate"))) {
+                    *result = tTJSVariant((tjs_int)30);
+                    return TJS_S_OK;
+                }
+            }
+            AddRef();
+            *result = tTJSVariant(this, this);
+        }
+        return TJS_S_OK;
+    }
+
+    tjs_error PropSet(tjs_uint32, const tjs_char *, tjs_uint32 *,
+                      const tTJSVariant *, iTJSDispatch2 *) override {
+        return TJS_S_OK;
+    }
+
+    tjs_error CreateNew(tjs_uint32, const tjs_char *, tjs_uint32 *,
+                        iTJSDispatch2 **result, tjs_int, tTJSVariant **,
+                        iTJSDispatch2 *) override {
+        if(result) {
+            AddRef();
+            *result = this;
+        }
+        return TJS_S_OK;
+    }
+
+    tjs_error GetCount(tjs_int *result, const tjs_char *, tjs_uint32 *,
+                       iTJSDispatch2 *) override {
+        if(result)
+            *result = 0;
+        return TJS_S_OK;
+    }
+
+    tjs_error EnumMembers(tjs_uint32, tTJSVariantClosure *,
+                          iTJSDispatch2 *) override {
+        return TJS_S_OK;
+    }
+
+    tjs_error DeleteMember(tjs_uint32, const tjs_char *, tjs_uint32 *,
+                           iTJSDispatch2 *) override {
+        return TJS_S_OK;
+    }
+
+    tjs_error Invalidate(tjs_uint32, const tjs_char *, tjs_uint32 *,
+                         iTJSDispatch2 *) override {
+        return TJS_S_OK;
+    }
+
+    tjs_error IsValid(tjs_uint32, const tjs_char *, tjs_uint32 *,
+                      iTJSDispatch2 *) override {
+        return TJS_S_TRUE;
+    }
+
+    tjs_error IsInstanceOf(tjs_uint32, const tjs_char *, tjs_uint32 *,
+                           const tjs_char *, iTJSDispatch2 *) override {
+        return TJS_S_TRUE;
+    }
+
+    tjs_error Operation(tjs_uint32, const tjs_char *, tjs_uint32 *,
+                        tTJSVariant *result, const tTJSVariant *,
+                        iTJSDispatch2 *) override {
+        if(result)
+            *result = tTJSVariant();
+        return TJS_S_OK;
+    }
+};
+
+class StaticGlobalMockFuncLocal : public tTJSDispatch {
+public:
+    StaticGlobalMockFuncLocal() = default;
+    ~StaticGlobalMockFuncLocal() override = default;
+
+    tjs_error FuncCall(tjs_uint32, const tjs_char *, tjs_uint32 *,
+                       tTJSVariant *result, tjs_int, tTJSVariant **,
+                       iTJSDispatch2 *) override {
+        if(result) {
+            // 只构造一次，之后复用；引用数随每次返回值递增，由脚本侧释放
+            static iTJSDispatch2 *dummy = new GenericMockObjectLocal();
+            dummy->AddRef();
+            *result = tTJSVariant(dummy, dummy);
+        }
+        return TJS_S_OK;
+    }
+};
+
+//---------------------------------------------------------------------------
 // 启动期兼容全局
 //---------------------------------------------------------------------------
 // 部分老游戏的启动脚本（kirikiriz 系 bootstrap，以及第三方汉化/整合补丁带来的
 // initialize.tjs）会直接读写下列名字：
 //     debugWindowEnabled = true;
+//     Plugins.linkZ("bres://.../bootstrap");
+//     if(kirikiriz) ...
 //     System.inform(msg, caption, MB_YESNO | MB_ICONINFORMATION);
 // Windows 版 KiriKiri 由宿主预置它们；本引擎缺任意一项都会以
-// `Member "xxx" does not exist` 中断启动（实测 nainiuniu5krkr 前身
-// おっぱいスパイ学園 就死在 debugWindowEnabled 上）。
-// 取值与 Win32 <winuser.h> 对齐。移植自 AetherKiri 的同名实现。
+// `Member "xxx" does not exist` 中断启动（实测：先死在 debugWindowEnabled，
+// 补上后死在 kirikiriz）。取值与 Win32 <winuser.h> 对齐。
+// 移植自 AetherKiri 的 TVPRegisterStartupCompatGlobals()。
 //
-// 目前只覆盖**纯标量**部分。mock 对象（kirikiriz / ShortCutInitial*KeyMap /
-// commitSavedata / bootStrap）与 addFont 系列兼容函数依赖额外的 mock dispatch
-// 类和字体兼容层，尚未移植。
+// 已知未移植：addFont / AddTrueTypeFont / AddAlias / loadResolutionInfo 这几个
+// 全局兼容函数（依赖字体兼容层 tFontCompatFunctionLocal）。这些游戏不引用它们，
+// 且本仓库已有 System.addFont 的插件实现。
 static void TVPRegisterStartupCompatGlobals() {
     // GetGlobal() 内部 AddRef 过，用完必须 Release。
     iTJSDispatch2 *global = TVPGetScriptDispatch();
@@ -712,6 +861,65 @@ static void TVPRegisterStartupCompatGlobals() {
     set_int(TJS_W("IDNO"), 7);
     set_int(TJS_W("IDTRYAGAIN"), 10);
     set_int(TJS_W("IDCONTINUE"), 11);
+
+    // —— mock 对象与占位函数 ——
+    // kirikiriz 系整合包的启动脚本会探测这些名字，缺一个就抛
+    // `Member "xxx" does not exist` 并中断启动。
+    auto set_object = [global](const tjs_char *name, iTJSDispatch2 *obj) {
+        tTJSVariant val(obj, obj);
+        global->PropSet(TJS_MEMBERENSURE | TJS_IGNOREPROP, name, nullptr, &val,
+                        global);
+    };
+    auto set_mock_func = [&set_object](const tjs_char *name) {
+        iTJSDispatch2 *func = new StaticGlobalMockFuncLocal();
+        set_object(name, func);
+        func->Release();
+    };
+
+    // kirikiriz：脚本拿它当"是否具备 Z 扩展"的探测点，并且会链式取成员，
+    // 所以给 mock 对象而不是 false —— 与 AetherKiri 的运行期取值保持一致。
+    {
+        iTJSDispatch2 *kirikiriz = new GenericMockObjectLocal();
+        set_object(TJS_W("kirikiriz"), kirikiriz);
+        kirikiriz->Release();
+    }
+
+    // 手柄初始键位映射：脚本按索引读写，必须是数组对象
+    {
+        iTJSDispatch2 *shortcutMap = TJSCreateArrayObject();
+        if(shortcutMap) {
+            set_object(TJS_W("ShortCutInitialPadKeyMap"), shortcutMap);
+            set_object(TJS_W("ShortCutInitialGamePadKeyMap"), shortcutMap);
+            shortcutMap->Release();
+        }
+    }
+
+    set_mock_func(TJS_W("commitSavedata"));
+    set_mock_func(TJS_W("bootStrap"));
+    set_mock_func(TJS_W("SetSystemConfigDefaults"));
+
+    // 整合包的启动脚本会 new CompoundStorageMedia，给个不报错的空实现；
+    // archiveUniqueKey 带引擎名以免撞车。安装失败不阻断启动。
+    try {
+        TVPExecuteScript(
+            TJS_W("if(typeof CompoundStorageMedia == 'undefined') {\n"
+                  "  class CompoundStorageMedia {\n"
+                  "    function addArchive() { return true; }\n"
+                  "    function addStorage() { return true; }\n"
+                  "    function addAutoToolsPath() { return true; }\n"
+                  "    function setCurrentDirectory() { return true; }\n"
+                  "    function register() { return true; }\n"
+                  "    function unregister() { return true; }\n"
+                  "    function parseArchiveIndex() { return 0; }\n"
+                  "    function getLocallyAccessibleName() { return ''; }\n"
+                  "    property archiveUniqueKey { getter() { return "
+                  "'KrKr2Next.CompoundStorageMedia'; } }\n"
+                  "  }\n"
+                  "}\n"),
+            static_cast<tTJSVariant *>(nullptr));
+    } catch(...) {
+        ;
+    }
 
     global->Release();
 }

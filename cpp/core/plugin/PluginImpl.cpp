@@ -578,6 +578,55 @@ void TVPDoTryBlock(tTVPTryBlockFunction tryblock,
 //---------------------------------------------------------------------------
 // TVPCreateNativeClass_Plugins
 //---------------------------------------------------------------------------
+// Plugins.linkZ 的返回值代理
+//---------------------------------------------------------------------------
+// KiriKiri Z 的 Plugins.linkZ 用于加载 "bres://" 二进制资源模块（kirikiriz 系
+// 整合包的 startup.tjs 走这条路），返回该模块导出的对象。
+// 真正的 BRes 解包语义这里无法还原，因此给调用方一个"总说 OK"的代理：bootstrap
+// 只把它当句柄/真值用，后续真正需要的能力仍由引擎自身提供。
+// 移植自 AetherKiri 的同名类。
+class tTJSNC_BootstrapLinkZResult : public tTJSDispatch {
+    tjs_uint RefCount = 1;
+
+public:
+    tjs_uint AddRef() override { return ++RefCount; }
+    tjs_uint Release() override {
+        if(--RefCount == 0) {
+            delete this;
+            return 0;
+        }
+        return RefCount;
+    }
+
+    tjs_error FuncCall(tjs_uint32, const tjs_char *, tjs_uint32 *,
+                       tTJSVariant *result, tjs_int, tTJSVariant **,
+                       iTJSDispatch2 *) override {
+        if(result)
+            *result = static_cast<tjs_int>(1);
+        return TJS_S_OK;
+    }
+
+    tjs_error PropGet(tjs_uint32, const tjs_char *, tjs_uint32 *,
+                      tTJSVariant *result, iTJSDispatch2 *) override {
+        if(result) {
+            AddRef();
+            *result = tTJSVariant(this, this);
+        }
+        return TJS_S_OK;
+    }
+
+    tjs_error PropSet(tjs_uint32, const tjs_char *, tjs_uint32 *,
+                      const tTJSVariant *, iTJSDispatch2 *) override {
+        return TJS_S_OK;
+    }
+
+    tjs_error IsValid(tjs_uint32, const tjs_char *, tjs_uint32 *,
+                      iTJSDispatch2 *) override {
+        return TJS_S_TRUE;
+    }
+};
+
+//---------------------------------------------------------------------------
 tTJSNativeClass *TVPCreateNativeClass_Plugins() {
     auto *cls = new tTJSNC_Plugins();
 
@@ -601,6 +650,71 @@ tTJSNativeClass *TVPCreateNativeClass_Plugins() {
     TJS_END_NATIVE_STATIC_METHOD_DECL_OUTER(
         /*object to register*/ cls,
         /*func. name*/ link)
+    //----------------------------------------------------------------------
+    // KiriKiri Z 的 Plugins.linkZ。kirikiriz 系整合包的 startup.tjs 用它加载
+    // "bres://" 二进制资源；缺了会直接抛 `Member "linkZ" does not exist` 并中断
+    // 启动（实测おっぱいスパイ学園 的 bootstrap 就死在这一步的下一行）。
+    // 移植自 AetherKiri 的同名实现（其 PluginCallTracer 埋点本仓库没有，略去）。
+    TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ linkZ) {
+        if(numparams < 1)
+            return TJS_E_BADPARAMCOUNT;
+
+        ttstr name = *param[0];
+        const ttstr lower_name = name.AsLowerCase();
+        const bool is_bres_resource = lower_name.StartsWith(TJS_W("bres://"));
+        if(is_bres_resource) {
+            // bres://<host>/<path> → <path>：去掉 scheme，再按有无前导斜杠决定
+            // 是否吃掉 host 段
+            const tjs_char *path = name.c_str() + 7;
+            if(path[0] == TJS_W('/')) {
+                while(path[0] == TJS_W('/'))
+                    ++path;
+            } else {
+                const tjs_char *slash = TJS_strchr(path, TJS_W('/'));
+                path = slash != nullptr ? slash + 1 : path;
+            }
+            name = ttstr(path);
+        }
+
+        const ttstr normalized = TVPExtractStorageName(name);
+        const ttstr lower = normalized.AsLowerCase();
+        const tjs_char *raw = lower.c_str();
+        const tjs_int len = lower.length();
+        bool is_plugin = false;
+        if(len >= 4) {
+            const tjs_char *suffix = raw + len - 4;
+            is_plugin = !TJS_strcmp(suffix, TJS_W(".dll")) ||
+                        !TJS_strcmp(suffix, TJS_W(".tpm"));
+        }
+
+        if(is_plugin) {
+            TVPLoadPlugin(name);
+        } else if(!is_bres_resource) {
+            // 非 bres:// 且非插件：按普通脚本资源执行，与 link 的语义对齐
+            TVPExecuteStorage(name);
+        }
+        // bres:// 资源无法解包，直接返回代理对象，让 bootstrap 继续往下走
+
+        if(result) {
+            iTJSDispatch2 *bootstrap = new tTJSNC_BootstrapLinkZResult();
+            *result = tTJSVariant(bootstrap, bootstrap);
+            bootstrap->Release();
+        }
+
+        return TJS_S_OK;
+    }
+    TJS_END_NATIVE_STATIC_METHOD_DECL_OUTER(
+        /*object to register*/ cls,
+        /*func. name*/ linkZ)
+    //----------------------------------------------------------------------
+    TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ bootStrap) {
+        if(result)
+            *result = static_cast<tjs_int>(1);
+        return TJS_S_OK;
+    }
+    TJS_END_NATIVE_STATIC_METHOD_DECL_OUTER(
+        /*object to register*/ cls,
+        /*func. name*/ bootStrap)
     //----------------------------------------------------------------------
     TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ unlink) {
         if(numparams < 1)
