@@ -926,7 +926,10 @@ void TVPOpenPatchLibUrl();
 //---------------------------------------------------------------------------
 // 根目录的 patch.tjs（汉化补丁、整合补丁）通常假设 KAG 框架已经把这批成员
 // 建好了。缺任何一个，补丁要么直接抛错、要么 hook 不上，表现就是"补丁没
-// 生效"。这里在跑补丁之前按 AetherKiri 的做法把它们补齐。
+// 生效"。这里按 AetherKiri 的做法把它们补齐，分两处：
+//   * global.* 的成员在 startup 脚本之前就位（patch.tjs 与 startup.tjs
+//   都要读）；
+//   * KAGWindow.* 的镜像是框架建好之后再补（之前 KAGWindow 根本不存在）。
 //
 // 只补**缺失**的：`typeof x == "undefined"` 的判断保证不覆盖游戏或补丁
 // 自己设过的值，所以重复安装是安全的（同一进程连续开多个游戏时也会用到）。
@@ -950,25 +953,29 @@ const tjs_char *TVPGetStartupPatchPrerequisitesScript() {
                  "global.kirikiriz_generic = false;\n");
 }
 
+// 这里必须写 `global.KAGWindow` 而不是裸的 `KAGWindow`。TJS2 里
+// `typeof 裸标识符` 在标识符不存在时会**抛** "Member does not exist"，只有
+// `typeof global.x`（成员访问）才会安静地给出 "undefined"。裸写会让每局启动
+// 都多刷一条异常（实测 おっぱいスパイ学園 就是这样）。
 const tjs_char *TVPGetPatchWindowPrerequisitesScript() {
     return TJS_W(
-        "if(typeof KAGWindow != \"undefined\") {\n"
-        "  if(typeof KAGWindow.inSystemMenuStorages == \"undefined\") "
-        "KAGWindow.inSystemMenuStorages = global.inSystemMenuStorages;\n"
-        "  if(typeof KAGWindow.kagHookEntries == \"undefined\") "
-        "KAGWindow.kagHookEntries = global.kagHookEntries;\n"
-        "  if(typeof KAGWindow.afterInitCallback == \"undefined\") "
-        "KAGWindow.afterInitCallback = global.afterInitCallback;\n"
-        "  if(typeof KAGWindow.COMMAND_SYNC == \"undefined\") "
-        "KAGWindow.COMMAND_SYNC = global.COMMAND_SYNC;\n"
-        "  if(typeof KAGWindow.COMMAND_ASYNC == \"undefined\") "
-        "KAGWindow.COMMAND_ASYNC = global.COMMAND_ASYNC;\n"
-        "  if(typeof KAGWindow.COMMAND_WAIT == \"undefined\") "
-        "KAGWindow.COMMAND_WAIT = global.COMMAND_WAIT;\n"
-        "  if(typeof KAGWindow.kirikiriz == \"undefined\") KAGWindow.kirikiriz "
-        "= global.kirikiriz;\n"
-        "  if(typeof KAGWindow.kirikiriz_generic == \"undefined\") "
-        "KAGWindow.kirikiriz_generic = global.kirikiriz_generic;\n"
+        "if(typeof global.KAGWindow != \"undefined\") {\n"
+        "  if(typeof global.KAGWindow.inSystemMenuStorages == \"undefined\") "
+        "global.KAGWindow.inSystemMenuStorages = global.inSystemMenuStorages;\n"
+        "  if(typeof global.KAGWindow.kagHookEntries == \"undefined\") "
+        "global.KAGWindow.kagHookEntries = global.kagHookEntries;\n"
+        "  if(typeof global.KAGWindow.afterInitCallback == \"undefined\") "
+        "global.KAGWindow.afterInitCallback = global.afterInitCallback;\n"
+        "  if(typeof global.KAGWindow.COMMAND_SYNC == \"undefined\") "
+        "global.KAGWindow.COMMAND_SYNC = global.COMMAND_SYNC;\n"
+        "  if(typeof global.KAGWindow.COMMAND_ASYNC == \"undefined\") "
+        "global.KAGWindow.COMMAND_ASYNC = global.COMMAND_ASYNC;\n"
+        "  if(typeof global.KAGWindow.COMMAND_WAIT == \"undefined\") "
+        "global.KAGWindow.COMMAND_WAIT = global.COMMAND_WAIT;\n"
+        "  if(typeof global.KAGWindow.kirikiriz == \"undefined\") "
+        "global.KAGWindow.kirikiriz = global.kirikiriz;\n"
+        "  if(typeof global.KAGWindow.kirikiriz_generic == \"undefined\") "
+        "global.KAGWindow.kirikiriz_generic = global.kirikiriz_generic;\n"
         "}\n");
 }
 
@@ -1039,10 +1046,8 @@ void TVPExecuteStartupScript() {
     ttstr strPatchError;
     try {
         ttstr patch = TVPGetAppPath() + "patch.tjs";
-        if(TVPIsExistentStorageNoSearch(patch)) {
-            TVPInstallPatchWindowPrerequisites();
+        if(TVPIsExistentStorageNoSearch(patch))
             TVPExecuteStorage(patch);
-        }
     } catch(const TJS::eTJSScriptError &e) {
         ttstr &msg = strPatchError;
         msg += e.GetMessage();
@@ -1187,6 +1192,10 @@ void TVPExecuteStartupScript() {
         spdlog::info("Startup script ended.");
         // KAG 已经起来了，补上补丁脚本会读的运行时开关
         TVPInstallKagRuntimeDefaults();
+        // 窗口镜像只能等到框架建好：KiriNext 的 patch.tjs 跑在 startup.tjs
+        // 之前，那时 KAGWindow 还不存在（见
+        // TVPGetPatchWindowPrerequisitesScript）
+        TVPInstallPatchWindowPrerequisites();
 #if defined(KRKR_RENDER_PROBE)
         { // EngineState[exit]: startup.tjs 结束后 dump，对照 entry 看状态变化
             extern bool TVPSystemControlAlive;
