@@ -85,7 +85,7 @@ option(BUILD_ENGINE_API "build engine_api bridge library" ON)
 
 # 统一诊断探针（渲染、字体、PSB 和 MotionPlayer）编译开关。
 # 默认 OFF：release 不含探针、零性能开销与日志刷屏。黑屏/渲染问题排查时
-# cmake -DENABLE_RENDER_PROBE=ON 开启（见 docs/dev/probes.md）。
+# cmake -DENABLE_RENDER_PROBE=ON 开启。
 option(ENABLE_RENDER_PROBE "enable diagnostic probes" OFF)
 if(ENABLE_RENDER_PROBE)
     add_compile_definitions(KRKR_RENDER_PROBE)

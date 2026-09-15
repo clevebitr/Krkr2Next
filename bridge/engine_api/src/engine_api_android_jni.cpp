@@ -383,7 +383,7 @@ Java_org_dpdns_clevebitr_core_NativeEngine_engineSetLogFilePath(
 }
 
 // 逐字段传递而不是传结构体，避免 Kotlin 侧做内存布局与对齐匹配。
-// key_code 必须是 Windows VK 码（见 docs/dev/input-contract.md）。
+// key_code 必须是 Windows VK 码（见 README.md「硬约束」）。
 extern "C" JNIEXPORT jint JNICALL
 Java_org_dpdns_clevebitr_core_NativeEngine_engineSendInput(
     JNIEnv * /*env*/, jobject /*thiz*/, jlong handle, jint type, jdouble x,

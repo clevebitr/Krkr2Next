@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * ## 限频
  *
- * `docs/dev/probes.md` 要求高频日志必须采样/限频/去重/仅边沿。触屏 move、每帧失败
+ * 高频日志必须采样/限频/去重/仅边沿——见 `README.md`「硬约束」。触屏 move、每帧失败
  * 之类的调用点必须走 [wLimited]：限频判定在调用线程做（`ConcurrentHashMap` 的读改写
  * 是无锁 CAS），但**消息字符串只在真正要记时才构造**，被限流掉的那些连字符串都不产生。
  */

@@ -2,7 +2,7 @@
  * @file tvpgl_simd_compare.cpp
  * @brief SIMD (Highway) vs 标量 (`*_c`) 逐像素比对测试
  *
- * 背景（docs/dev/conventions.md §9）：tvpgl 的 SIMD 公式以 cpp/core/visual/tvpgl.cpp
+ * 背景：tvpgl 的 SIMD 公式以 cpp/core/visual/tvpgl.cpp
  * 的 `*_c` 标量为准。SubBlend / ScreenBlend_o / AdditiveAlphaBlend / PS alpha 等公式
  * 缺陷已于 2026-09 修复，但从未做过逐像素验证。本测试在 Linux 宿主上把同一批随机像素
  * 分别用 scalar(`*_c`) 与 SIMD(`_hwy`，经 TVPGL_SIMD_Init 派发)跑一遍，逐像素比对。

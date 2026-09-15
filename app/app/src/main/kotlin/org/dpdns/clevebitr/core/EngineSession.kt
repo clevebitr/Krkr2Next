@@ -336,7 +336,7 @@ class EngineSession(
      *
      * 引擎约定：BACK 事件被当作 Esc 按下处理，但**必须**配合显式的 keyDown/keyUp
      * 三个事件，否则部分游戏收不到普通键事件，或缺 keyUp 导致虚拟 Esc 被当作一直按住。
-     * 见 `docs/dev/input-contract.md`。
+     * 见 `README.md`「硬约束」。
      */
     fun sendBack() {
         sendInput(InputEvent.KEY_DOWN, keyCode = VkCodes.ESCAPE)
@@ -385,8 +385,8 @@ class EngineSession(
      *
      * 日志每轮都要排空（那是引擎启动日志的唯一出口），但**状态只在变化时上报**：
      * 这个方法是按帧轮询的，无条件上报会让宿主每 100ms 收到一次相同状态——真机日志
-     * 里因此出现过连续几十行一模一样的 `startup state -> 2`。`docs/dev/probes.md`
-     * 对高频日志的要求就是去重/仅边沿。
+     * 里因此出现过连续几十行一模一样的 `startup state -> 2`。高频日志的要求就是
+     * 去重/仅边沿。
      */
     private fun pollStartupState() {
         val written = NativeEngine.engineDrainStartupLogs(handle, logBuffer)

@@ -13,7 +13,7 @@ import android.view.KeyEvent as AndroidKeyEvent
  * （Android `KEYCODE_ESCAPE=111` vs `VK_ESCAPE=0x1B=27`；Android `KEYCODE_ENTER=66`
  * vs `VK_RETURN=0x0D=13`）。必须经 [fromAndroid] 显式映射，不能透传。
  *
- * 取值来源：`cpp/core/environ/vkdefine.h`。详见 `docs/dev/input-contract.md`。
+ * 取值来源：`cpp/core/environ/vkdefine.h`。详见 `README.md`「硬约束」。
  */
 object VkCodes {
     const val LBUTTON = 0x01

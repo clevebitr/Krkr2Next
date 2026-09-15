@@ -56,7 +56,7 @@ add_definitions(-D__STDC_CONSTANT_MACROS -DTJS_TEXT_OUT_CRLF)
 # Live2D Cubism SDK
 # ---------------------------------------------------------------------------
 # NOTE: cpp/plugins/cubism/{Framework,Core/lib} are gitignored (proprietary
-# binary SDK, download from live2d.com — see docs/dev/conventions.md §4).
+# binary SDK, download from live2d.com — see README.md「硬约束」).
 # CI machines do not have them, so Live2D support is built ONLY when the SDK
 # is present on disk; otherwise krkrlive2d.cpp is excluded from the plugin
 # and CubismFramework becomes an empty INTERFACE target so downstream

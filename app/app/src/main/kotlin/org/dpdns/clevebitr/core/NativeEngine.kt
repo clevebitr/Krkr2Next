@@ -64,7 +64,7 @@ object NativeEngine {
     // ── 输入 ──────────────────────────────────────────────────────────────
     /**
      * @param keyCode **Windows VK 码**，不是 Android `KEYCODE_*`——
-     *   见 `docs/dev/input-contract.md` 与 [VkCodes]。
+     *   见 `README.md`「硬约束」与 [VkCodes]。
      * @param x,y 视图坐标（物理像素），不要乘 density。
      */
     external fun engineSendInput(

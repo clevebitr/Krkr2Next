@@ -1678,8 +1678,7 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
         // tick：高密度帧间序列可区分「稳定黑屏」与「单帧瞬时闪黑」， 同时对照
         // UI_stubs 的 SourceSample(每5帧) 分辨源纹理 vs IOSurface 落地。
         // 该采样每次 tick 都 glReadPixels + 打一条 info，属诊断探针，仅在
-        // 启用 KRKR_RENDER_PROBE 时才编译/运行（见
-        // docs/dev/rendering-diagnosis.md）。
+        // 启用 KRKR_RENDER_PROBE 时才编译/运行。
 #if defined(KRKR_RENDER_PROBE)
         if(impl->tick_count % 5 == 0) {
             auto &iosurf_egl = krkr::GetEngineEGLContext();

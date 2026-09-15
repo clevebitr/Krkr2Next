@@ -318,8 +318,7 @@ public:
         // 「引擎没建/没东西画」与「画了但没进源纹理」两条线。
         // 诊断插桩：仅当编译期定义 KRKR_RENDER_PROBE 时运行（每 5
         // 帧读像素+打日志， 属黑屏/渲染诊断探针）。默认 release 关闭，避免每帧
-        // glReadPixels 与日志刷屏； 遇到黑屏/渲染问题再打开（见
-        // docs/dev/rendering-diagnosis.md）。
+        // glReadPixels 与日志刷屏； 遇到黑屏/渲染问题再打开。
 #if defined(KRKR_RENDER_PROBE)
         static int s_blitDbg = 0;
         const bool kBlitDump = ((s_blitDbg++) % 5) == 1;
