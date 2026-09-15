@@ -132,10 +132,17 @@ object GameEntry {
             "未在此目录发现 .xp3 或 startup.tjs —— 若游戏在上层目录，请先返回。"
     }
 
-    /** 目录列表中单个条目的短标注；没必要时返回 null。 */
+    /**
+     * 目录列表中单个条目的短标注；没必要时返回 null。
+     *
+     * 只在"被同名补丁归档遮蔽"时标注。非遮蔽的"入口在上层"**不**放到列表行上：
+     * 游戏目录下的 plugin/、savedata/、全CG存档/ 全都不是入口，给每一行都挂一句
+     * "入口在上层"纯属噪音——用户本来也不是要启动它们；真正需要提醒的是那个看起来
+     * 和正常入口一模一样的原版目录。
+     */
     fun badge(verdict: EntryVerdict): String? = when (verdict) {
         EntryVerdict.Entry -> "可能是游戏目录"
-        is EntryVerdict.EntryAbove -> if (verdict.shadowed) "原版目录 · 入口在上层" else "入口在上层"
+        is EntryVerdict.EntryAbove -> if (verdict.shadowed) "原版目录 · 入口在上层" else null
         else -> null
     }
 }
