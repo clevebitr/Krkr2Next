@@ -24,9 +24,13 @@
 #include "tjsGlobalStringMap.h"
 #include <chrono>
 #include <csignal>
+#include <cstdint>
 #include <set>
 #include <mutex>
 #include <unordered_map>
+#if defined(__ANDROID__) || defined(__linux__)
+#include <pthread.h>
+#endif
 
 #include <thread>
 #include <fmt/format.h>
@@ -643,11 +647,71 @@ namespace TJS {
     // tTJSInterCodeContext ( class definitions are in
     // tjsInterCodeGen.h )
     //---------------------------------------------------------------------------
+
+    //---------------------------------------------------------------------------
+    // 脚本调用栈保护
+    //---------------------------------------------------------------------------
+    // TJS2 原本没有任何调用栈保护：脚本里的无限递归会一路顶穿线程栈，最后以
+    // SIGSEGV 收场——真机上表现为"启动闪退"，日志里只剩几百层重复的
+    // ExecuteCode/FuncCall，看不出是谁在递归。实测 nainiuniu5krkr 的中文补丁在
+    // KAG 框架加载完之后就是这样（libsigchain 打出 512 帧仍未见底）。
+    //
+    // 按**栈余量**拦，而不是按调用层数：每层耗多少栈取决于脚本与平台，固定层数
+    // 要么拦不住、要么误伤本来就递归得深的正常脚本；栈余量两者都不怕。线程栈
+    // 边界每线程只取一次（栈大小不会变），所以热路径上只有一次指针比较。
+    //
+    // 不变量：执行 TJS 的线程其栈向下增长，pthread_attr_getstack 返回的低地址端
+    // 就是栈底，再往低就是保护页。
+    namespace {
+        struct tTJSStackBounds {
+            uintptr_t Low = 0; // 栈底（最低地址，其下是保护页）
+            bool Valid = false;
+        };
+
+        tTJSStackBounds &TVPGetTJSStackBounds() {
+            static thread_local tTJSStackBounds bounds;
+            if(!bounds.Valid) {
+                bounds.Valid = true; // 取失败也只试一次
+#if defined(__ANDROID__) || defined(__linux__)
+                pthread_attr_t attr;
+                if(pthread_getattr_np(pthread_self(), &attr) == 0) {
+                    void *base = nullptr;
+                    size_t size = 0;
+                    if(pthread_attr_getstack(&attr, &base, &size) == 0 && base)
+                        bounds.Low = reinterpret_cast<uintptr_t>(base);
+                    pthread_attr_destroy(&attr);
+                }
+#endif
+            }
+            return bounds;
+        }
+
+        // 余量留 256KB：异常构造、脚本栈字符串、日志格式化都还要用栈
+        const uintptr_t TVPTJSStackMargin = 256 * 1024;
+
+        bool TVPIsTJSStackNearlyExhausted() {
+            const tTJSStackBounds &bounds = TVPGetTJSStackBounds();
+            if(!bounds.Valid || !bounds.Low)
+                return false;
+            const uintptr_t here =
+                reinterpret_cast<uintptr_t>(__builtin_frame_address(0));
+            return here > bounds.Low && here - bounds.Low < TVPTJSStackMargin;
+        }
+    } // namespace
+
     void tTJSInterCodeContext::ExecuteAsFunction(iTJSDispatch2 *objthis,
                                                  tTJSVariant **args,
                                                  tjs_int numargs,
                                                  tTJSVariant *result,
                                                  tjs_int start_ip) {
+        // 栈快没了就先抛脚本异常：异常展开时 AddTrace
+        // 会把脚本名、行号与整条调用 链（" <-- "
+        // 那串）带进日志，既不闪退，也直接指出递归点。
+        if(TVPIsTJSStackNearlyExhausted())
+            TJS_eTJSScriptError(
+                TJS_W("Script call stack exhausted (recursive call?)"), this,
+                start_ip);
+
         tjs_int num_alloc =
             MaxVariableCount + VariableReserveCount + 1 + MaxFrameCount;
         TJSVariantArrayStackAddRef();
