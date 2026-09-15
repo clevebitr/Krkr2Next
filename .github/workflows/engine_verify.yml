@@ -58,6 +58,15 @@ jobs:
           ninja --version
           bison --version | head -1
 
+      - name: GL/EGL 符号可用性
+        # 必须在装完依赖之后：本检查要对着平台的 libGLESv2/libEGL 校验代码里
+        # 直接调用的 GL 函数。放在"静态检查"那一步（装依赖之前）会永远跳过，
+        # 而最后还打印"全部通过"——那是假信心。
+        #
+        # 这里校验的是 **Linux 宿主目标**（Mesa 的库）。Android 目标由本机
+        # Termux 直接跑同一脚本校验（那里是真正的 /system/lib64/libGLESv2.so）。
+        run: python3 scripts/check_gl_symbols.py
+
       - name: Restore ccache
         uses: actions/cache/restore@v4
         id: ccache

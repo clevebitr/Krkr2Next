@@ -85,13 +85,31 @@ APK 只需要带这一个原生库。
 bash scripts/check_static.sh
 ```
 
-聚合入口，依次跑三项：
+聚合入口，跑三项**不需要任何依赖**的检查：
 
 | 检查 | 脚本 | 拦什么 |
 |---|---|---|
 | JNI 符号一致性 | `scripts/check_jni_symbols.py` | Kotlin 的 `external` 方法与 C++ JNI 符号一一对应。符号名编码包名与类名，不一致只在运行时抛 `UnsatisfiedLinkError`，编译期不报错 |
 | 移植溯源 | `scripts/check_port_drift.py` | 与 AetherKiri 共享的文件无未经承认的漂移（见 `compat/upstream/aetherkiri_ports.json`） |
 | 本地语法检查 | `scripts/check_syntax.sh` | 对头文件依赖少的源文件跑 `clang -fsyntax-only`（Catch2 用语法垫片替代） |
+
+脚本用退出码区分三态（`0` 通过 / `1` 失败 / `2` 跳过），总结里会显式列出跳过项并
+写明"跳过项不代表通过"——静默跳过会让"全部通过"变成假信心。
+
+**另有一项按平台单独跑**：
+
+```bash
+python3 scripts/check_gl_symbols.py
+```
+
+校验代码里**直接调用**的 GL/EGL 函数在平台库中确实存在。`cpp/` 里有不少桌面 GL /
+Kodi heritage 代码，容易混入 Android 不提供的符号；去掉 ANGLE 之后不再有冗余的
+符号覆盖，这类错误更容易漏到链接期。
+
+它**故意不在** `check_static.sh` 里：需要平台 GL 库，而"哪个平台的库"决定结论。
+在 Android 构建 job 里 runner 只有 Mesa 的 Linux 库，拿它校验会给出误导性信号。
+所以——本机 Termux 直接跑（校验真正的 Android 库），CI 在 `engine_verify.yml`
+装完依赖后跑（校验 Linux 宿主目标）。
 
 **关于本地能做什么**：Termux 里没有 cmake / ninja / NDK / vcpkg，**完整引擎构建
 不可能**。但 Termux 自带 clang，因此**只依赖少量头文件的源文件是可以先编译一遍的**

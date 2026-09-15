@@ -46,15 +46,18 @@ run "JNI 符号一致性" python3 "$SCRIPT_DIR/check_jni_symbols.py"
 # 2. 移植文件无未经承认的漂移（见 compat/upstream/aetherkiri_ports.json）。
 run "移植溯源清单" python3 "$SCRIPT_DIR/check_port_drift.py"
 
-# 3. 直接调用的 GL/EGL 函数在目标平台上存在。
-#    cpp/ 里有不少桌面 GL / Kodi heritage 代码，容易混入 Android 不提供的符号；
-#    去掉 ANGLE 之后不再有冗余的符号覆盖，这类错误更容易漏到链接期。
-#    找不到 GL 库的环境（普通 CI 容器）会自行跳过。
-run "GL/EGL 符号可用性" python3 "$SCRIPT_DIR/check_gl_symbols.py"
-
-# 4. 独立源文件的本地语法检查（Catch2 语法垫片 + clang -fsyntax-only）。
+# 3. 独立源文件的本地语法检查（Catch2 语法垫片 + clang -fsyntax-only）。
 #    无编译器时脚本自行跳过（退出码 2）。
 run "本地语法检查" bash "$SCRIPT_DIR/check_syntax.sh"
+
+# 注意：check_gl_symbols.py **故意不在这里**。
+#
+# 它需要平台 GL 库才能跑，而"哪个平台的库"决定了结论：在 Android 构建 job 里
+# runner 只有 Mesa 的 Linux 库，拿它去校验会给出误导性信号（验的是 Linux 目标，
+# 不是 Android 目标）。因此它按平台单独调用：
+#   - CI：engine_verify.yml（Linux 宿主目标）在装完依赖后显式调用
+#   - 本机 Termux：直接跑，那时校验的是真正的 Android 库
+# 放在这个无依赖的聚合入口里只会永远跳过、制造噪声。
 
 echo "##########################################"
 if (( fail )); then
