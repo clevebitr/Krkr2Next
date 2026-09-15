@@ -170,20 +170,42 @@ fi
 # "krkrlive2d.dll" 这个字面量只在 cpp/plugins/krkrlive2d.cpp 的 NCB_MODULE_NAME 里
 # 出现一次，用它当"Live2D 插件参与了编译"的判据足够唯一。
 #
-# ⚠️ 不能用 `strings -a` 找：`NCB_MODULE_NAME` 是 `TJS_W("krkrlive2d.dll")`，而
-# `TJS_W(X)` = `u##X`、`tjs_char` = `char16_t`，所以它在二进制里是 **UTF-16LE**，
-# 字符间夹着 NUL。`strings` 默认按 ASCII 连续可打印字节切分，**永远匹配不到**——
-# 2026-09-16 那次 CI 就是被这个假阴性卡住的（引擎其实编好了，判据却说没有）。
-# 先 tr 掉 NUL 再 grep，与具体宽窄格式无关，也免得依赖 `strings -el`（GNU 之外的
-# 实现未必有 -e）。
-if tr -d '\0' < "$SO" | grep -aq 'krkrlive2d\.dll'; then
+# ⚠️ 判据的坑（2026-09-16 被它白烧一轮 CI）：
+#   * 不能用 `strings -a`——`NCB_MODULE_NAME` 是 `TJS_W("krkrlive2d.dll")`，而
+#     `TJS_W(X)` = `u##X`、`tjs_char` = `char16_t`（cpp/core/tjs2/tjsTypes.h:44-45，
+#     **不是** wchar_t），所以它在二进制里是 **UTF-16LE**、字符间夹 NUL。
+#     `strings` 默认按 ASCII 连续可打印字节切分，**永远匹配不到**。
+#   * 也不能 `tr -d '\0' < "$SO" | grep -q`——SO 有 100+ MB，`grep -q` 一命中就退出，
+#     `tr` 随即吃到 SIGPIPE 报 "write error: Broken pipe"，而本脚本是
+#     `set -euo pipefail`，于是判据整体变成非确定性失败（实测同一文件可能 0 也可能 1）。
+# 所以下面走**无管道**的路子：把 UTF-16LE 的模式写进临时文件，用 `grep -aF -f` 直接比对。
+# 模式由字符串本身生成，改了 NCB_MODULE_NAME 也不会失配。
+LIVE2D_MODULE="krkrlive2d.dll"
+L2D_PAT="$(mktemp)"
+# printf 的 \0 在 printf 内建里不会吃掉后续数字（"%b" 才会），故可安全逐段拼接。
+printf 'k\0r\0k\0r\0l\0i\0v\0e\0' > "$L2D_PAT"
+printf '2\0d\0.\0d\0l\0l\0' >> "$L2D_PAT"
+PAT_OK=1
+if [[ "$(wc -c < "$L2D_PAT")" -ne $(( ${#LIVE2D_MODULE} * 2 )) ]]; then
+    # 空模式文件会让 grep 匹配一切，宁可直接判失败
+    echo "✗ 内部错误：Live2D 判据的模式文件生成异常（$(wc -c < "$L2D_PAT") 字节，应为 $(( ${#LIVE2D_MODULE} * 2 ))）" >&2
+    PAT_OK=0
+    fail=1
+fi
+HAVE_L2D=0
+if (( PAT_OK )) && LC_ALL=C grep -aqF -f "$L2D_PAT" "$SO"; then
+    HAVE_L2D=1
+fi
+rm -f "$L2D_PAT"
+
+if (( HAVE_L2D )); then
     echo "✓ 二进制含 Live2D 插件（krkrlive2d）"
-elif [[ "${EXPECT_LIVE2D:-0}" == "1" ]]; then
+elif (( PAT_OK )) && [[ "${EXPECT_LIVE2D:-0}" == "1" ]]; then
     echo "✗ 本轮还原了 Cubism SDK，但 libengine_api.so 里没有 Live2D 插件"
     echo "  多半是 CMake 没找到 SDK：核对 cpp/plugins/cubism/Framework/CubismFramework.hpp"
     echo "  与 cpp/plugins/cubism/Core/lib/android/arm64-v8a/libLive2DCubismCore.a 是否在位。"
     fail=1
-else
+elif (( PAT_OK )); then
     echo "· 二进制不含 Live2D 插件（本机无 Cubism SDK，属预期降级）"
 fi
 
