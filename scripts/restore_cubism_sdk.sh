@@ -177,6 +177,16 @@ cp -a "$CORE_INC_DIR"/. "$DEST/Core/include"/
 cp -a "$CORE_LIB_DIR"/. "$DEST/Core/lib"/
 cp -a "$FW_SRC_DIR"/. "$DEST/Framework"/
 
+# ── 4b. 给官方 Framework 补上逐 drawable 强制隐藏的扩展 ─────────────────────
+# 官方 SDK 没有 SetDrawableForceHidden / ClearDrawableForceHiddenFlags，而
+# cpp/plugins/krkrlive2d.cpp 要用它们（Mosaic 源网格的显隐）。这两个方法来自
+# KiriKiri-LauncherC 的修补版 Framework，能用的 fork 都是直接 vendor 那份；
+# 本仓库还原的是官方原版，所以必须在这里补上，否则 krkrlive2d.cpp 编不过。
+# 补丁幂等，锚点对不上会硬失败——不允许放行一个"少扩展"的 SDK。
+# 只能对 $DEST 打：仓库里那份是 gitignore 的，改了既不共享也不进 CI。
+echo "打 Cubism 扩展补丁（SetDrawableForceHidden）"
+python3 "$(dirname "${BASH_SOURCE[0]}")/patch_cubism_sdk.py" "$DEST"
+
 # ── 5. 校验落到"CMake 真能用"的形状 ────────────────────────────────────────
 fail=0
 if [[ ! -f "$DEST/Framework/CubismFramework.hpp" ]]; then
@@ -196,6 +206,14 @@ if [[ -z "$(find "$DEST/Core/lib" -path '*arm64-v8a*' -name 'libLive2DCubismCore
     echo "  现有：" >&2
     find "$DEST/Core/lib" -name 'libLive2DCubismCore.a' >&2
     fail=1
+fi
+# 扩展补丁没打上 = krkrlive2d.cpp 必然编不过（它就是冲着这两个方法写的）。
+# 在这里断言，别让失败推迟到编译 krkrlive2d.cpp 才暴露。
+if ! grep -q 'SetDrawableForceHidden' "$DEST/Framework/Model/CubismModel.hpp" 2>/dev/null; then
+    echo "✗ CubismModel.hpp 缺扩展补丁（SetDrawableForceHidden）—— krkrlive2d.cpp 会编不过" >&2; fail=1
+fi
+if ! grep -q 'CubismModel::SetDrawableForceHidden' "$DEST/Framework/Model/CubismModel.cpp" 2>/dev/null; then
+    echo "✗ CubismModel.cpp 缺扩展补丁实现 —— 会以链接期缺符号收场" >&2; fail=1
 fi
 (( fail == 0 )) || exit 1
 

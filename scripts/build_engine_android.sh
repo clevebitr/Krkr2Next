@@ -170,6 +170,18 @@ if [[ -f "$CMAKE_BUILD_DIR/CMakeCache.txt" ]] && \
     rm -rf "$CMAKE_BUILD_DIR"
 fi
 
+# Live2D：SDK 若在盘上，必须已带"逐 drawable 强制隐藏"扩展，否则 krkrlive2d.cpp
+# 编不过。restore_cubism_sdk.sh 已经在还原时打过补丁，但它在"没配来源"时会**成功
+# 早退**——手上已经有 SDK 的人走的正是这条路，补丁不会被执行。所以在编译前补一道，
+# 保证任何入口进的 SDK 都是补齐的。SDK 不在盘上就跳过（硬约束 6：缺 SDK 不得阻断
+# 核心构建，CMake 会静默关掉 Live2D）。
+CUBISM_DIR="$PROJECT_ROOT/cpp/plugins/cubism"
+if [[ -f "$CUBISM_DIR/Framework/Model/CubismModel.hpp" ]]; then
+    check_command python3
+    log_info "校验/补齐 Cubism 扩展补丁"
+    python3 "$SCRIPT_DIR/patch_cubism_sdk.py" "$CUBISM_DIR"
+fi
+
 NEED_CFG=0
 if [[ ! -f "$CMAKE_BUILD_DIR/build.ninja" ]]; then
     NEED_CFG=1

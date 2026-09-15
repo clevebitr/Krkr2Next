@@ -437,7 +437,18 @@ public:
             textureIds_.push_back(texId);
         }
 
-        CreateRenderer();
+        // SDK 的签名是 CreateRenderer(width, height, maskBufferCount = 1)，
+        // 没有无参重载。尺寸按模型画布像素算——绘制用的 internalFbo_ 就依
+        // GetCanvasWidthPixel/HeightPixel 建（见 ContinuousUpdate），两者一致。
+        csmUint32 renderTargetW =
+            static_cast<csmUint32>(GetModel()->GetCanvasWidthPixel());
+        csmUint32 renderTargetH =
+            static_cast<csmUint32>(GetModel()->GetCanvasHeightPixel());
+        if(renderTargetW == 0)
+            renderTargetW = 1920;
+        if(renderTargetH == 0)
+            renderTargetH = 1080;
+        CreateRenderer(renderTargetW, renderTargetH);
         auto *renderer = GetRenderer<Rendering::CubismRenderer_OpenGLES2>();
         if(!renderer) {
             spdlog::error("krkrlive2d: failed to create renderer");
