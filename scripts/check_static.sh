@@ -16,19 +16,27 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT"
 
 fail=0
+skipped=0
+skipped_names=()
 
+# 退出码约定：0=通过  1=失败  2=跳过（环境不具备）
+# 把"跳过"单独统计并显式报告——否则在缺 GL 库/编译器的环境里会打印"全部通过"，
+# 而实际上有检查根本没跑。假信心比不检查更糟。
 run() {
     local name="$1"; shift
     echo "──────────────────────────────────────────"
     echo "  $name"
     echo "──────────────────────────────────────────"
-    if "$@"; then
-        echo
-    else
-        echo "  ↑ 失败：$name"
-        echo
-        fail=1
-    fi
+    local rc=0
+    "$@" || rc=$?
+    case "$rc" in
+        0) echo ;;
+        2) echo "  ↑ 跳过：$name"
+           skipped=$((skipped + 1)); skipped_names+=("$name"); echo ;;
+        *) echo "  ↑ 失败：$name"
+           fail=1; echo ;;
+    esac
+    return 0
 }
 
 # 1. Kotlin external 方法 ↔ C++ JNI 符号一一对应。
@@ -45,12 +53,28 @@ run "移植溯源清单" python3 "$SCRIPT_DIR/check_port_drift.py"
 run "GL/EGL 符号可用性" python3 "$SCRIPT_DIR/check_gl_symbols.py"
 
 # 4. 独立源文件的本地语法检查（Catch2 语法垫片 + clang -fsyntax-only）。
-#    无编译器时脚本自行跳过并返回 0。
+#    无编译器时脚本自行跳过（退出码 2）。
 run "本地语法检查" bash "$SCRIPT_DIR/check_syntax.sh"
 
 echo "##########################################"
 if (( fail )); then
     echo "# 静态检查有失败项。"
+    if (( skipped )); then
+        echo "# 另有 $((skipped)) 项被跳过：${skipped_names[*]}"
+    fi
     exit 1
 fi
-echo "# 全部静态检查通过。"
+
+if (( skipped )); then
+    # 关键：不能在有跳过项时还打印"全部通过"。跳过往往意味着环境缺东西
+    # （CI 里没装 GL 库、容器里没编译器），而这恰恰是最容易被忽略的情形——
+    # 报"全部通过"会让人以为覆盖是全的。
+    echo "# 静态检查通过，但有 $((skipped)) 项被跳过："
+    for n in "${skipped_names[@]}"; do
+        echo "#   - $n"
+    done
+    echo "# 跳过项不代表通过：请确认本环境是否本该具备相应依赖。"
+    exit 0
+fi
+
+echo "# 全部静态检查通过（无跳过项）。"

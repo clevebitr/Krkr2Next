@@ -129,6 +129,42 @@ jobs:
           export VCPKG_BINARY_SOURCES="clear;files,$HOME/.cache/vcpkg,readwrite"
           ./build.sh "$BUILD_TYPE" --engine-only
 
+      - name: 诊断：GLES3 符号来源（仅构建失败时输出）
+        # 用于定位 EGL/GLESv2 链接类问题。两件事必须区分清楚：
+        #   (a) NDK 的 libGLESv2 stub 里到底有没有这些 ES3 符号
+        #   (b) -lGLESv2 有没有真的出现在最终的链接命令里
+        # 两者对应完全不同的修法，猜错会白烧一轮 CI。
+        if: failure()
+        run: |
+          SYSROOT="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          NM="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+          STUB="$SYSROOT/usr/lib/aarch64-linux-android/24/libGLESv2.so"
+          echo "===== (a) NDK stub: $STUB ====="
+          ls -l "$STUB" 2>/dev/null || echo "  **该路径不存在**"
+          if [ -f "$STUB" ]; then
+            for s in glGetStringi glBlitFramebuffer glMapBufferRange glUnmapBuffer glGetString; do
+              printf "  %-22s " "$s"
+              if "$NM" -D --defined-only "$STUB" 2>/dev/null | grep -q " $s\$"; then
+                echo "导出"
+              else
+                echo "**未导出**"
+              fi
+            done
+          fi
+          echo
+          echo "===== (b) 链接命令行里是否有 -lGLESv2 / -lEGL ====="
+          NINJA="out/android/$BUILD_TYPE/build.ninja"
+          if [ -f "$NINJA" ]; then
+            for l in GLESv2 EGL; do
+              printf "  -l%-10s 出现 %s 次\n" "$l" "$(grep -c -- "-l$l" "$NINJA" || true)"
+            done
+            echo "  --- engine_api 链接行中的库（节选） ---"
+            grep -o -- '-l[A-Za-z0-9_+.-]*' "$NINJA" | sort -u | tr '\n' ' ' | head -c 2000
+            echo
+          else
+            echo "  找不到 $NINJA（configure 未完成？）"
+          fi
+
       - name: 校验 libengine_api.so
         run: scripts/verify_engine_so.sh "out/android/$BUILD_TYPE/bridge/engine_api/libengine_api.so" "$ANDROID_NDK_HOME"
 

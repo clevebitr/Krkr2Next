@@ -43,6 +43,12 @@ if(TARGET krkr2core AND TARGET krkr2plugin)
         target_link_libraries(engine_api PRIVATE krkr2core krkr2plugin)
         # ANativeWindow (libandroid) + __android_log_print (liblog)
         target_link_libraries(engine_api PRIVATE android log)
+        # 原生 EGL + GLES。**必须在最终链接的目标上显式链接**：插件源码
+        # （krkrgles.cpp 等）经 INTERFACE_SOURCES 直接编进本目标，最终链接发生
+        # 在这里；只写在 core/visual 上时不会可靠地传到这条链接命令。
+        # 需要 GLES3 符号（glGetStringi / glBlitFramebuffer / glMapBufferRange /
+        # glUnmapBuffer）——去掉 ANGLE 之前这些由 ANGLE 的 libGLESv2 提供。
+        target_link_libraries(engine_api PRIVATE EGL GLESv2)
         # engine_api_so 既含我们自己的 JNI_OnLoad（存 JavaVM + krkr::JniHelper::setJavaVM，
         # 供 AndroidUtils.cpp 用），又静态链入 SDL2——SDL 的安卓原生 SDL_android.c 也定义
         # JNI_OnLoad，二者强符号重复导致 ld.lld duplicate symbol。用 allow-multiple-definition

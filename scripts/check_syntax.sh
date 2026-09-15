@@ -20,10 +20,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# 退出码约定（check_static.sh 依赖）：0=通过  1=失败  2=跳过（环境不具备）
 CXX="${CXX:-clang++}"
 if ! command -v "$CXX" >/dev/null 2>&1; then
-    echo "跳过：找不到 C++ 编译器 '$CXX'（设 CXX= 指定）" >&2
-    exit 0
+    echo "SKIP 本地语法检查：找不到 C++ 编译器 '$CXX'（设 CXX= 指定）" >&2
+    exit 2
 fi
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/kirinext-syntax.XXXXXX")"

@@ -127,21 +127,29 @@ def direct_calls(prefix: str) -> dict[str, set[str]]:
     return found
 
 
-def check(label: str, prefix: str, candidates: list[str]) -> bool:
+# 退出码约定（check_static.sh 依赖它区分三种状态）：
+#   0 = 通过   1 = 失败   2 = 跳过（环境不具备，不算失败）
+EXIT_PASS, EXIT_FAIL, EXIT_SKIP = 0, 1, 2
+
+
+def check(label: str, prefix: str, candidates: list[str]) -> int:
     lib = next((c for c in candidates if Path(c).exists()), None)
     if lib is None:
-        print(f"跳过 {label}：找不到可用的库（尝试过 {len(candidates)} 个路径）")
-        return True
+        # 明确标记 SKIP，让调用方能统计出来。静默跳过会让"全部通过"变成假信心。
+        print(f"SKIP {label}：找不到可用的库（尝试过 {len(candidates)} 个路径）")
+        print("     （这是本机缺少 GL 库时的正常情况；Android 目标上应有 "
+              "/system/lib64/libGLESv2.so）")
+        return EXIT_SKIP
 
     calls = direct_calls(prefix)
     if not calls:
-        print(f"{label}：没有直接调用，跳过")
-        return True
+        print(f"✓ {label}：代码中没有直接调用")
+        return EXIT_PASS
 
     exported = exported_symbols(lib)
     if not exported:
-        print(f"跳过 {label}：无法读取 {lib} 的导出表（缺 nm？）")
-        return True
+        print(f"SKIP {label}：无法读取 {lib} 的导出表（缺 nm？）")
+        return EXIT_SKIP
 
     missing = sorted(s for s in calls if s not in exported)
     if missing:
@@ -152,16 +160,22 @@ def check(label: str, prefix: str, candidates: list[str]) -> bool:
             for w in where:
                 print(f"        {w}")
         print("    → 若确实需要，改用 eglGetProcAddress 动态加载，或确认平台支持")
-        return False
+        return EXIT_FAIL
 
     print(f"✓ {label}：{len(calls)} 个直接调用全部在 {lib} 中可解析")
-    return True
+    return EXIT_PASS
 
 
 def main() -> int:
-    ok = check("GL 符号", "gl", GL_LIB_CANDIDATES)
-    ok &= check("EGL 符号", "egl", EGL_LIB_CANDIDATES)
-    return 0 if ok else 1
+    results = [
+        check("GL 符号", "gl", GL_LIB_CANDIDATES),
+        check("EGL 符号", "egl", EGL_LIB_CANDIDATES),
+    ]
+    if EXIT_FAIL in results:
+        return EXIT_FAIL
+    if all(r == EXIT_SKIP for r in results):
+        return EXIT_SKIP
+    return EXIT_PASS
 
 
 if __name__ == "__main__":
