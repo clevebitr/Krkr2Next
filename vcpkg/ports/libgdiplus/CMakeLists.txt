@@ -65,7 +65,7 @@ if(WITH_PANGO)
     set(USE_PANGO_RENDERING ON)
     list(APPEND GDIPLUS_LIBS ${PANGO_LIBRARIES})
     list(APPEND GDIPLUS_CFLAGS ${PANGO_CFLAGS})
-    target_include_directories(${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${PANGO_INCLUDE_DIRS}>)
+    target_include_directories(${PROJECT_NAME} PUBLIC ${PANGO_INCLUDE_DIRS})
 endif()
 
 # 图像编解码库
@@ -74,7 +74,7 @@ find_package(JPEG)
 if(JPEG_FOUND)
     set(HAVE_LIBJPEG ON)
     list(APPEND GDIPLUS_LIBS ${JPEG_LIBRARIES})
-    target_include_directories(${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${JPEG_INCLUDE_DIRS}>)
+    target_include_directories(${PROJECT_NAME} PUBLIC ${JPEG_INCLUDE_DIRS})
 else()
     message(WARNING "JPEG support disabled")
 endif()
@@ -84,7 +84,7 @@ find_package(TIFF)
 if(TIFF_FOUND)
     set(HAVE_LIBTIFF ON)
     list(APPEND GDIPLUS_LIBS ${TIFF_LIBRARIES})
-    target_include_directories(${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${TIFF_INCLUDE_DIRS}>)
+    target_include_directories(${PROJECT_NAME} PUBLIC ${TIFF_INCLUDE_DIRS})
 else()
     message(WARNING "TIFF support disabled")
 endif()
@@ -191,22 +191,13 @@ target_sources(${PROJECT_NAME}
         src/wmfcodec.c
 )
 
-# 合并所有依赖。
-#
-# ⚠️ 必须包 $<BUILD_INTERFACE:...>：这些是**构建期的绝对路径**（指向本次构建的
-# vcpkg_installed），写成裸 PUBLIC 会被 `install(EXPORT)` 带进 libgdiplus-config.cmake，
-# 成为消费方的 INTERFACE_INCLUDE_DIRECTORIES。后果实测过（2026-09-16）：
-# debug 轮次编出的包进了 vcpkg 二进制缓存，release 轮次复用同一个包时，配置期直接报
-#   Imported target "libgdiplus::libgdiplus" includes non-existent path
-#     ".../out/android/debug/vcpkg_installed/arm64-android/include"
-# 并导致 release 构建**从来没成功过**。消费方（layerex_draw）本来就自己加
-# vcpkg_installed 下的 glib/pango 头路径，导出接口里不需要它们。
+# 合并所有依赖
 target_include_directories(${PROJECT_NAME} PUBLIC
-    $<BUILD_INTERFACE:${GLIB_INCLUDE_DIRS}>
-    $<BUILD_INTERFACE:${CAIRO_INCLUDE_DIRS}>
-    $<BUILD_INTERFACE:${FONTCONFIG_INCLUDE_DIRS}>
-    $<BUILD_INTERFACE:${FREETYPE_INCLUDE_DIRS}>
-    $<BUILD_INTERFACE:${PNG_INCLUDE_DIRS}>
+    ${GLIB_INCLUDE_DIRS}
+    ${CAIRO_INCLUDE_DIRS}
+    ${FONTCONFIG_INCLUDE_DIRS}
+    ${FREETYPE_INCLUDE_DIRS}
+    ${PNG_INCLUDE_DIRS}
 )
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
