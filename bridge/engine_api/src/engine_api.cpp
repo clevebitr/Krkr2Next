@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstdarg>
+#include <cstdio>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -1353,35 +1354,58 @@ static void DetachFileSinkFromLoggers(
 }
 
 engine_result_t engine_set_log_file_path(const char *path) {
-    if(path == nullptr || path[0] == '\0') {
+    // ⚠️ 本函数是 JNI 入口，**绝不能把 C++ 异常放出去**：spdlog 建文件 sink 会抛
+    // spdlog_ex（目录不存在/不可写等），异常穿过 JNI 边界会直接 std::terminate
+    // 掉整个进程。真机实测：重装后 logs/engine.log 建不出来，每次启动都在
+    // Application.onCreate 里 abort（128 次"无限重启"），界面根本进不去。
+    // 日志落盘失败必须可降级 —— 下面整个函数体自己兜住异常。
+    try {
+        if(path == nullptr || path[0] == '\0') {
+            std::lock_guard<std::mutex> lock(g_logfile_mutex);
+            g_log_file_path.clear();
+            // 清库：通知各 logger 移除旧文件 sink，避免残留
+            DetachFileSinkFromLoggers(EnsureNamedLogger("core"),
+                                      EnsureNamedLogger("tjs2"),
+                                      EnsureNamedLogger("plugin"), g_file_sink);
+            g_file_sink.reset();
+            return ENGINE_RESULT_OK;
+        }
+
+        // Ensure the default loggers exist, then (re)create the rotating file
+        // sink.
+        EnsureRuntimeLoggersInitialized();
+
         std::lock_guard<std::mutex> lock(g_logfile_mutex);
-        g_log_file_path.clear();
-        // 清库：通知各 logger 移除旧文件 sink，避免残留
+        auto old_sink = g_file_sink;
+        // 先造 sink 再改全局状态：构造抛异常时 g_file_sink / g_log_file_path
+        // 都保持原样，旧 sink（若存在）继续可用 —— 这是最安全的降级。
+        auto new_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+            path, 4u * 1024u * 1024u, 3);
+        g_file_sink = new_sink;
+        g_log_file_path = path;
+        // runtime-restart 二次调用时先移除旧 sink，再挂新 sink，防日志每行重复
         DetachFileSinkFromLoggers(EnsureNamedLogger("core"),
                                   EnsureNamedLogger("tjs2"),
-                                  EnsureNamedLogger("plugin"), g_file_sink);
-        g_file_sink.reset();
+                                  EnsureNamedLogger("plugin"), old_sink);
+        AttachFileSinkToLoggers(EnsureNamedLogger("core"),
+                                EnsureNamedLogger("tjs2"),
+                                EnsureNamedLogger("plugin"));
+        spdlog::info("engine_set_log_file_path: engine log -> {}", path);
+        spdlog::default_logger()->flush();
         return ENGINE_RESULT_OK;
+    } catch(const std::exception &e) {
+        // catch 里只做不会抛的事（fprintf/返回码）：再抛一次就是 terminate。
+        std::fprintf(stderr,
+                     "[engine_api] engine_set_log_file_path('%s') failed: %s "
+                     "-- continuing without a file log sink\n",
+                     path ? path : "(null)", e.what());
+        return ENGINE_RESULT_IO_ERROR;
+    } catch(...) {
+        std::fprintf(stderr,
+                     "[engine_api] engine_set_log_file_path failed: unknown "
+                     "exception -- continuing without a file log sink\n");
+        return ENGINE_RESULT_INTERNAL_ERROR;
     }
-
-    // Ensure the default loggers exist, then (re)create the rotating file sink.
-    EnsureRuntimeLoggersInitialized();
-
-    std::lock_guard<std::mutex> lock(g_logfile_mutex);
-    g_log_file_path = path;
-    auto old_sink = g_file_sink;
-    g_file_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-        path, 4u * 1024u * 1024u, 3);
-    // runtime-restart 二次调用时先移除旧 sink，再挂新 sink，防日志每行重复
-    DetachFileSinkFromLoggers(EnsureNamedLogger("core"),
-                              EnsureNamedLogger("tjs2"),
-                              EnsureNamedLogger("plugin"), old_sink);
-    AttachFileSinkToLoggers(EnsureNamedLogger("core"),
-                            EnsureNamedLogger("tjs2"),
-                            EnsureNamedLogger("plugin"));
-    spdlog::info("engine_set_log_file_path: engine log -> {}", path);
-    spdlog::default_logger()->flush();
-    return ENGINE_RESULT_OK;
 }
 
 engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {

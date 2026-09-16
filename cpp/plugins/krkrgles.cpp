@@ -1445,71 +1445,29 @@ static void ConvertRGBA_to_BGRA(const uint8_t *src, GLsizei srcW, GLsizei srcH,
 }
 
 // ---------------------------------------------------------------------------
-// PBO double-buffer state for async glReadPixels.
-// Uses two PBOs: one receives the current frame's async read while the
-// other provides the previous frame's data via glMapBufferRange.
-// Introduces one frame of latency but eliminates GPU pipeline stalls.
-// ---------------------------------------------------------------------------
-struct PBOState {
-    GLuint pbo[2] = {};
-    int idx = 0;
-    GLsizei w = 0, h = 0;
-    bool primed = false;
-    bool disabled = false;
-
-    bool EnsureSize(GLsizei newW, GLsizei newH) {
-        if(disabled)
-            return false;
-        if(newW == w && newH == h && pbo[0])
-            return true;
-        if(pbo[0]) {
-            glDeleteBuffers(2, pbo);
-            pbo[0] = pbo[1] = 0;
-        }
-        while(glGetError() != GL_NO_ERROR) {
-        }
-        glGenBuffers(2, pbo);
-        size_t sz = static_cast<size_t>(newW) * newH * 4;
-        for(int i = 0; i < 2; ++i) {
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo[i]);
-            glBufferData(GL_PIXEL_PACK_BUFFER, static_cast<GLsizeiptr>(sz),
-                         nullptr, GL_STREAM_READ);
-        }
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-        if(glGetError() != GL_NO_ERROR) {
-            if(pbo[0])
-                glDeleteBuffers(2, pbo);
-            pbo[0] = pbo[1] = 0;
-            disabled = true;
-            GLES_LOGW("PBO creation failed, falling back to sync glReadPixels");
-            return false;
-        }
-        w = newW;
-        h = newH;
-        primed = false;
-        return true;
-    }
-};
-
-// ---------------------------------------------------------------------------
 // CPU fallback: read pixels from GL FBO → TJS Layer bitmap.
 // GL outputs RGBA bottom-up; krkr2 Layer CPU buffer uses BGRA top-down.
-// Uses PBO double-buffering when available (GLES 3.0+) to avoid stalls.
+// 同步读回本帧：曾用过 PBO 双缓冲（异步、少一次流水线停顿），但它交付的是
+// 上一帧，真机上还一直带 GL_INVALID_OPERATION(0x0502) —— 画面永远慢一帧且
+// 交付内容不可信。正确性优先，已移除。
 // ---------------------------------------------------------------------------
 static bool CopyFBOToLayerCPU(GLuint fbo, GLsizei srcW, GLsizei srcH,
                               tTJSNI_Layer *layerNI, GLint prevFbo) {
-    tjs_int layerW = static_cast<tjs_int>(layerNI->GetWidth());
-    tjs_int layerH = static_cast<tjs_int>(layerNI->GetHeight());
-    auto *dst =
-        reinterpret_cast<uint8_t *>(layerNI->GetMainImagePixelBufferForWrite());
-    tjs_int pitch = layerNI->GetMainImagePixelBufferPitch();
-    if(!dst || layerW <= 0 || layerH <= 0)
+    if(srcW <= 0 || srcH <= 0)
         return false;
 
-    tjs_int copyW = (layerW < srcW) ? layerW : srcW;
-    tjs_int copyH = (layerH < srcH) ? layerH : srcH;
-
-    static PBOState s_pbo;
+    // ── 顺序：先快照像素，再碰图层 ──────────────────────────────
+    // `layerNI->GetWidth()` / `GetMainImagePixelBufferForWrite()`
+    // 这些图层访问器会让引擎在**当前绑定的 FBO** 上做同步，而调用方此刻绑定的
+    // 正是捕获 FBO；实测它会把已经画好的内容冲成 (255,255,255,0)（同一个
+    // capture 内：capture FBO 读到彩色，26 ms 后 copy pre 读到白+透明）。
+    // 所以先 glReadPixels 进自有缓冲、并把绑定切回调用方原来的 FBO，
+    // 之后才去取图层缓冲。
+    static std::vector<uint8_t> s_rgba;
+    const size_t needed =
+        static_cast<size_t>(srcW) * static_cast<size_t>(srcH) * 4u;
+    if(s_rgba.size() < needed)
+        s_rgba.resize(needed);
 #if defined(KRKR_RENDER_PROBE)
     // readback **之前**的真相 + FBO id：与函数末尾那条（readback 之后）对照，
     // 就能分辨"读回错了"还是"中途被重清 / 换了 FBO"。
@@ -1531,46 +1489,24 @@ static bool CopyFBOToLayerCPU(GLuint fbo, GLsizei srcW, GLsizei srcH,
         }
     }
 #endif
-    const uint8_t *srcPixels = nullptr;
-    bool mapped = false;
+    // 读回本帧（同步）：PBO 双缓冲那条路只会给**上一帧**的内容，并且真机上
+    // 一直带 GL_INVALID_OPERATION(0x0502)，等于交付的是过期像素；正确性优先，
+    // 这里直接用同步读回。
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glReadPixels(0, 0, srcW, srcH, GL_RGBA, GL_UNSIGNED_BYTE, s_rgba.data());
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
+    const uint8_t *srcPixels = s_rgba.data();
 
-    if(s_pbo.EnsureSize(srcW, srcH)) {
-        int readIdx = s_pbo.idx;
-        int mapIdx = 1 - s_pbo.idx;
+    tjs_int layerW = static_cast<tjs_int>(layerNI->GetWidth());
+    tjs_int layerH = static_cast<tjs_int>(layerNI->GetHeight());
+    auto *dst =
+        reinterpret_cast<uint8_t *>(layerNI->GetMainImagePixelBufferForWrite());
+    tjs_int pitch = layerNI->GetMainImagePixelBufferPitch();
+    if(!dst || layerW <= 0 || layerH <= 0)
+        return false;
 
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, s_pbo.pbo[readIdx]);
-        glReadPixels(0, 0, srcW, srcH, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-        glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
-
-        if(s_pbo.primed) {
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, s_pbo.pbo[mapIdx]);
-            srcPixels = static_cast<const uint8_t *>(glMapBufferRange(
-                GL_PIXEL_PACK_BUFFER, 0,
-                static_cast<GLsizeiptr>(srcW) * srcH * 4, GL_MAP_READ_BIT));
-            if(srcPixels) {
-                mapped = true;
-            } else {
-                glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-            }
-        }
-
-        s_pbo.primed = true;
-        s_pbo.idx = 1 - s_pbo.idx;
-    }
-
-    if(!srcPixels) {
-        static std::vector<uint8_t> s_rgba;
-        size_t needed = static_cast<size_t>(srcW) * srcH * 4;
-        if(s_rgba.size() < needed)
-            s_rgba.resize(needed);
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-        glReadPixels(0, 0, srcW, srcH, GL_RGBA, GL_UNSIGNED_BYTE,
-                     s_rgba.data());
-        glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
-        srcPixels = s_rgba.data();
-    }
+    tjs_int copyW = (layerW < srcW) ? layerW : srcW;
+    tjs_int copyH = (layerH < srcH) ? layerH : srcH;
 
     ConvertRGBA_to_BGRA(srcPixels, srcW, srcH, dst, pitch, copyW, copyH);
 
@@ -1598,7 +1534,7 @@ static bool CopyFBOToLayerCPU(GLuint fbo, GLsizei srcW, GLsizei srcH,
             spdlog::info("[probe] krkrgles: copy path={} fbo={} fbo0=({},{},{},{}) "
                          "src=({},{},{},{}) dst=({},{},{},{}) pitch={} "
                          "copy={}x{} err=0x{:04X}",
-                         mapped ? "pbo-async" : "sync-read",
+                         "sync-read",
                          static_cast<unsigned>(fbo), fboCtr[0],
                          fboCtr[1], fboCtr[2], fboCtr[3], srcC[0], srcC[1],
                          srcC[2], srcC[3], dstC[0], dstC[1], dstC[2], dstC[3],
@@ -1608,11 +1544,6 @@ static bool CopyFBOToLayerCPU(GLuint fbo, GLsizei srcW, GLsizei srcH,
         }
     }
 #endif
-
-    if(mapped) {
-        glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-    }
 
     tTVPRect rc(0, 0, copyW, copyH);
     layerNI->Update(rc);

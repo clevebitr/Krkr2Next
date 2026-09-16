@@ -78,6 +78,15 @@ class KrKr2NextApplication : Application() {
             // 目录不存在时 spdlog 抛的异常会直接穿过 JNI 打到 Kotlin 侧。
             val engineLog = LogFiles.engineLog(this)
             engineLog.parentFile?.mkdirs()
+            // 先由 Java 侧把文件建出来：真机上 native 的 fopen 新建文件会间歇性
+            // 返回 ENOENT（同一目录里 Java 写文件却正常），而"打开已存在的文件"
+            // 稳定成功。建不出来也不阻断 —— native 侧现在会返回错误码而不是抛异常
+            // 穿 JNI，日志退化为只进 logcat。
+            try {
+                if (!engineLog.isFile) engineLog.createNewFile()
+            } catch (t: Throwable) {
+                AppLog.w(TAG, "预建 ${engineLog.name} 失败，日志将只进 logcat", t)
+            }
             val rc = NativeEngine.engineSetLogFilePath(engineLog.absolutePath)
             AppLog.i(TAG, "engine log -> ${engineLog.absolutePath} (rc=$rc)")
         } catch (e: UnsatisfiedLinkError) {

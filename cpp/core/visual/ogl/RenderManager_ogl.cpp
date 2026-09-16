@@ -938,6 +938,31 @@ static void TVPApplyLuminanceSwizzle(TVPLuminanceFormat format) {
     }
 }
 
+// 这张纹理到底有没有拿到存储？
+// 驱动不接受某个内部格式/尺寸时 glTexImage2D 会返回错误并且**不分配存储**，
+// 之后纹理挂不上任何 FBO —— 引擎画进去的像素被整帧丢弃。真机症状正是
+// HostWindowLayer::SourceSample 报 `FBO incomplete 0x8CD6`、PostBlit 恒黑，
+// 而 `CHECK_GL_ERROR_DEBUG()` 只把错误吞掉、日志里一条都看不到。
+// 用一个临时 FBO 显式校验一次；校验过程自身的 GL 错误也清干净，不污染调用方。
+static bool TVPTextureHasStorage(GLuint tex) {
+    if(!tex)
+        return false;
+    GLint prevFbo = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+    GLuint dbgFbo = 0;
+    glGenFramebuffers(1, &dbgFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, dbgFbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                           tex, 0);
+    const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
+    if(dbgFbo)
+        glDeleteFramebuffers(1, &dbgFbo);
+    while(glGetError() != GL_NO_ERROR) {
+    }
+    return status == GL_FRAMEBUFFER_COMPLETE;
+}
+
 class tTVPOGLTexture2D : public iTVPTexture2D {
     friend class TVPRenderManager_OpenGL;
 
@@ -1041,6 +1066,30 @@ protected:
         internalH = inth;
         _totalVMemSize += internalW * internalH * getPixelSize();
         CHECK_GL_ERROR_DEBUG();
+
+        // ── 自愈 + 取证 ────────────────────────────────────────────────
+        // 上面那次 glTexImage2D 静默失败时（错误被 CHECK_GL_ERROR_DEBUG 吞掉），
+        // 纹理是没有存储的：挂不上 FBO、引擎画进去的像素被整帧丢弃，真机表现
+        // 就是全黑（SourceSample: FBO incomplete 0x8CD6 / PostBlit 恒黑）。
+        // 这里显式确认一次；失败就打印创建参数并退回 RGBA8 重建，让能画的纹理
+        // 尽量活着，而不是一路黑到底。
+        if(!TVPTextureHasStorage(texture)) {
+            static int s_storageRebuilds = 0;
+            if(s_storageRebuilds < 8) {
+                ++s_storageRebuilds;
+                spdlog::error("krkrgl: texture storage missing ({}x{} "
+                              "internal=0x{:04X} client=0x{:04X} tex={}) -> "
+                              "rebuilding as RGBA8",
+                              intw, inth, static_cast<unsigned>(internalfmt),
+                              static_cast<unsigned>(pixfmt),
+                              static_cast<unsigned>(texture));
+            }
+            _glBindTexture2D(texture);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, intw, inth, 0, GL_RGBA,
+                         GL_UNSIGNED_BYTE, nullptr);
+            while(glGetError() != GL_NO_ERROR) {
+            }
+        }
     }
 
     void InternalUpdate(const void *pixel, int pitch, int x, int y, int w,

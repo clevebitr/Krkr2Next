@@ -1551,6 +1551,89 @@ void TVPInitializeStartupScript() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
+// Scripts 兼容扩展所需的辅助对象：getObjectKeys / foreach
+//
+// 这三个成员（getObjectKeys / getObjectCount / foreach）被 krkr(krkrz) 时代的
+// 游戏脚本广泛使用（实测 G2 的 world.tjs、千恋万花的 action.tjs 都在调）。
+// KiriKiri2 原版 Scripts 没有它们，缺失时脚本抛 "Member ... does not exist" ——
+// 千恋万花在持续事件 onFlipTimerInterval 里抛这个异常后，运行时直接被判定终止
+// （app.log: engineTick failed ... runtime has been terminated），游戏进不去。
+//
+// 实现移植自 AetherKiri 的等价代码（core/base/ScriptMgnIntf.cpp 的
+// tTJSObjectKeysEnumCaller + plugins/scriptsEx.cpp 的 foreach/DictIterateCaller），
+// 语义保持一致：getObjectKeys 收集键名后排序；foreach 回调返回非 void 即中断。
+namespace {
+
+    // getObjectKeys：把对象的成员名逐个 add 进数组
+    class tTJSObjectKeysEnumCaller : public tTJSDispatch {
+    public:
+        explicit tTJSObjectKeysEnumCaller(iTJSDispatch2 *array) :
+            array_(array) {}
+
+        tjs_error FuncCall(tjs_uint32 flag, const tjs_char *membername,
+                           tjs_uint32 *hint, tTJSVariant *result,
+                           tjs_int numparams, tTJSVariant **param,
+                           iTJSDispatch2 *objthis) override {
+            if(numparams > 1) {
+                tTVInteger memberflag = param[1]->AsInteger();
+                if(!(memberflag & TJS_HIDDENMEMBER)) {
+                    static tjs_uint addhint = 0;
+                    array_->FuncCall(0, TJS_W("add"), &addhint, nullptr, 1,
+                                     &param[0], array_);
+                }
+            }
+            if(result)
+                *result = true;
+            return TJS_S_OK;
+        }
+
+    private:
+        iTJSDispatch2 *array_;
+    };
+
+    // foreach：把 (key, value) 依次交给回调，回调返回非 void 即中断
+    class tTJSDictIterateCaller : public tTJSDispatch {
+    public:
+        tTJSDictIterateCaller(iTJSDispatch2 *func, iTJSDispatch2 *functhis,
+                              tTJSVariant **paramList, tjs_int paramCount) :
+            func_(func),
+            functhis_(functhis), paramList_(paramList),
+            paramCount_(paramCount) {}
+
+        tjs_error FuncCall(tjs_uint32 flag, const tjs_char *membername,
+                           tjs_uint32 *hint, tTJSVariant *result,
+                           tjs_int numparams, tTJSVariant **param,
+                           iTJSDispatch2 *objthis) override {
+            breakResult_.Clear();
+            if(numparams > 1) {
+                if(static_cast<int>(*param[1]) != TJS_HIDDENMEMBER) {
+                    paramList_[0] = param[0];
+                    paramList_[1] = param[2];
+                    func_->FuncCall(0, nullptr, nullptr, &breakResult_,
+                                    paramCount_, paramList_, functhis_);
+                }
+            }
+            if(result)
+                *result = breakResult_.Type() == tvtVoid;
+            return TJS_S_OK;
+        }
+
+        /** 回调写入的非 void 返回值：foreach 据此中断并作为整体返回值。 */
+        tTJSVariant breakResult_;
+
+    private:
+        iTJSDispatch2 *func_;
+        iTJSDispatch2 *functhis_;
+        tTJSVariant **paramList_;
+        tjs_int paramCount_;
+    };
+
+    /** PropGet/PropGetByNum 的 hint 缓存（tjs2 的 hint 只是加速用）。 */
+    tjs_uint32 foreachCountHint = 0;
+
+} // namespace
+
+//---------------------------------------------------------------------------
 // tTJSNC_Scripts
 //---------------------------------------------------------------------------
 tjs_uint32 tTJSNC_Scripts::ClassID = -1;
@@ -1806,6 +1889,114 @@ TJS_BEGIN_NATIVE_PROP_SETTER {
 TJS_END_NATIVE_PROP_SETTER
 }
 TJS_END_NATIVE_STATIC_PROP_DECL(textEncoding)
+//----------------------------------------------------------------------
+TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ getObjectKeys) {
+    // 返回对象所有可见成员名组成的数组（已排序）；缺它会让 krkrz 时代脚本抛异常
+    if(numparams < 1)
+        return TJS_E_BADPARAMCOUNT;
+
+    if(result) {
+        iTJSDispatch2 *array = TJSCreateArrayObject();
+        try {
+            tTJSObjectKeysEnumCaller *caller =
+                new tTJSObjectKeysEnumCaller(array);
+            tTJSVariantClosure closure(caller);
+            param[0]->AsObjectClosureNoAddRef().EnumMembers(
+                TJS_IGNOREPROP | TJS_ENUM_NO_VALUE, &closure, nullptr);
+            caller->Release();
+
+            static tjs_uint sorthint = 0;
+            array->FuncCall(0, TJS_W("sort"), &sorthint, nullptr, 0, nullptr,
+                            array);
+            *result = tTJSVariant(array, array);
+        } catch(...) {
+            array->Release();
+            throw;
+        }
+        array->Release();
+    }
+
+    return TJS_S_OK;
+}
+TJS_END_NATIVE_STATIC_METHOD_DECL(/*func. name*/ getObjectKeys)
+//----------------------------------------------------------------------
+TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ getObjectCount) {
+    if(numparams < 1)
+        return TJS_E_BADPARAMCOUNT;
+
+    if(result) {
+        tjs_int count = 0;
+        param[0]->AsObjectClosureNoAddRef().GetCount(&count, nullptr, nullptr,
+                                                     nullptr);
+        *result = count;
+    }
+
+    return TJS_S_OK;
+}
+TJS_END_NATIVE_STATIC_METHOD_DECL(/*func. name*/ getObjectCount)
+//----------------------------------------------------------------------
+TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ foreach) {
+    // foreach(obj, func, ...) —— 数组用下标作 key，字典用成员名作 key；
+    // 回调返回非 void 即中断，并把该值作为整体返回值
+    if(numparams < 2)
+        return TJS_E_BADPARAMCOUNT;
+
+    tTJSVariantClosure &obj = param[0]->AsObjectClosureNoAddRef();
+    tTJSVariantClosure &funcClosure = param[1]->AsObjectClosureNoAddRef();
+
+    // 匿名函数则以调用处的 this 运行
+    iTJSDispatch2 *func = funcClosure.Object;
+    iTJSDispatch2 *functhis = funcClosure.ObjThis;
+    if(functhis == nullptr)
+        functhis = objthis;
+
+    if(obj.IsInstanceOf(0, nullptr, nullptr, TJS_W("Array"), nullptr) ==
+       TJS_S_TRUE) {
+        tTJSVariant key, value;
+        tTJSVariant **paramList = new tTJSVariant *[numparams];
+        paramList[0] = &key;
+        paramList[1] = &value;
+        for(tjs_int i = 2; i < numparams; i++)
+            paramList[i] = param[i];
+
+        tTJSVariant arrayCount;
+        obj.PropGet(0, TJS_W("count"), &foreachCountHint, &arrayCount,
+                    nullptr);
+        tjs_int count = arrayCount;
+
+        tTJSVariant breakResult;
+        for(tjs_int i = 0; i < count; i++) {
+            key = i;
+            breakResult.Clear();
+
+            obj.PropGetByNum(TJS_IGNOREPROP, i, &value, nullptr);
+            func->FuncCall(0, nullptr, nullptr, &breakResult, numparams,
+                           paramList, functhis);
+            if(breakResult.Type() != tvtVoid)
+                break;
+        }
+        if(result)
+            *result = breakResult;
+
+        delete[] paramList;
+    } else {
+        tTJSVariant **paramList = new tTJSVariant *[numparams];
+        for(tjs_int i = 2; i < numparams; i++)
+            paramList[i] = param[i];
+
+        tTJSDictIterateCaller *caller =
+            new tTJSDictIterateCaller(func, functhis, paramList, numparams);
+        tTJSVariantClosure closure(caller);
+        obj.EnumMembers(TJS_IGNOREPROP, &closure, nullptr);
+        if(result)
+            *result = caller->breakResult_;
+        caller->Release();
+
+        delete[] paramList;
+    }
+    return TJS_S_OK;
+}
+TJS_END_NATIVE_STATIC_METHOD_DECL(/*func. name*/ foreach)
 //----------------------------------------------------------------------
 
 TJS_END_NATIVE_MEMBERS

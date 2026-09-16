@@ -336,10 +336,14 @@ public:
             }
             spdlog::info(
                 "HostWindowLayer::UpdateDrawBuffer: path={} nativeTex={} "
-                "srcTex={} blitTex={} {}x{} layers={} draw={}",
+                "srcTex={} blitTex={} {}x{} texInternal={}x{} layers={} "
+                "draw={}",
                 nativeGLTex ? "GPU" : "CPU", nativeGLTex, blitSrcTexture,
                 blit_texture_, static_cast<unsigned>(tw),
-                static_cast<unsigned>(th), TVPGetLayerCount(), engDraw);
+                static_cast<unsigned>(th),
+                static_cast<unsigned>(tex->GetInternalWidth()),
+                static_cast<unsigned>(tex->GetInternalHeight()),
+                TVPGetLayerCount(), engDraw);
             if(blitSrcTexture != 0) {
                 GLint prevFbo = 0;
                 glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
