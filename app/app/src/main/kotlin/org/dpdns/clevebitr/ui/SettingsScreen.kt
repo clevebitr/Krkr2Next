@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.dpdns.clevebitr.core.AppLog
+import org.dpdns.clevebitr.core.OverlayConfig
 import org.dpdns.clevebitr.core.AppPrefs
 import org.dpdns.clevebitr.core.BuildInfo
 import org.dpdns.clevebitr.core.LogFiles
@@ -44,12 +45,6 @@ import org.dpdns.clevebitr.core.LogFiles
 private const val TAG = "KrKr2Next/Settings"
 
 /** 叠加层三档的用户可见名字；值与 AetherKiri 的 off/summary/detail 一致。 */
-private val PERF_OVERLAY_CHOICES = listOf(
-    "off" to "关闭",
-    "summary" to "简要",
-    "detail" to "详细",
-)
-
 /** 主题三档。值即 `AppPrefs.THEME_MODES`。 */
 private val THEME_CHOICES = listOf(
     "system" to "跟随系统",
@@ -103,11 +98,13 @@ fun SettingsScreen(
     logDirPath: String,
     onBack: () -> Unit,
     onShareLogs: () -> Unit,
+    /** 当前**全局默认**叠加层配置（每游戏覆盖在各自的 `krkr2next.json` 里）。 */
+    overlayConfig: OverlayConfig = OverlayConfig.default(),
     /**
-     * 叠加层档位变化时回调。壳层据此立刻切换档位——设置页现在也能在游戏里打开
+     * 叠加层配置变化时回调。壳层据此立刻应用——设置页也能在游戏里打开
      * （悬浮菜单 -> 设置），光写偏好设置要退出重进才看得到，那就等于没生效。
      */
-    onPerfOverlayModeChanged: (String) -> Unit = {},
+    onOverlayConfigChanged: (OverlayConfig) -> Unit = {},
     /** 主题档位；改完立刻换肤，所以要回调给壳层（与叠加层同理）。 */
     themeMode: String = "system",
     onThemeModeChanged: (String) -> Unit = {},
@@ -129,7 +126,7 @@ fun SettingsScreen(
 
     // 首帧从 SharedPreferences 读一次，之后以本地状态为准（写入是 apply()，异步落盘）
     var logcatCapture by remember { mutableStateOf(AppPrefs.logcatCapture(context)) }
-    var perfMode by remember { mutableStateOf(AppPrefs.perfOverlayMode(context)) }
+    var overlay by remember { mutableStateOf(overlayConfig) }
     var fpsLimit by remember { mutableStateOf(AppPrefs.fpsLimit(context)) }
     var fontMode by remember { mutableStateOf(fontFallbackMode) }
     var oglCompatMode by remember { mutableStateOf(oglDrawDeviceCompat) }
@@ -246,41 +243,29 @@ fun SettingsScreen(
                 },
             )
 
-            // 三档而不是开关：与 AetherKiri 的 off/summary/detail 对齐（detail 只多第三行）
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            ) {
-                Text("性能叠加层", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    text = "游戏画面左上角叠加实时性能摘要：简要档给帧率、帧时间、内存与缓存" +
-                        "账目，详细档再加 tick 耗时与 1 秒窗分位数。下次启动游戏时生效。",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                // 单选的 SegmentedButton 而不是 MD3E 的 ToggleButton：后者在稳定的
-                // material3 里不存在（只有 1.5.0-alpha 有），而 alpha 版本的 AGP 门槛
-                // 是 9.1.0，见 app/build.gradle.kts 的版本说明。两者观感与语义一致。
-                SingleChoiceSegmentedButtonRow(
-                    modifier = Modifier.padding(top = 8.dp),
-                ) {
-                    PERF_OVERLAY_CHOICES.forEachIndexed { index, (value, label) ->
-                        SegmentedButton(
-                            selected = perfMode == value,
-                            onClick = {
-                                perfMode = value
-                                AppPrefs.setPerfOverlayMode(context, value)
-                                onPerfOverlayModeChanged(value)
-                                AppLog.i(TAG, "perf overlay = $value")
-                            },
-                            shape = SegmentedButtonDefaults.itemShape(
-                                index = index,
-                                count = PERF_OVERLAY_CHOICES.size,
-                            ),
-                        ) {
-                            Text(label)
-                        }
-                    }
-                }
-            }
+            // 旧版是三档（off/summary/detail），新版是"字段集合 + 外观"：档位永远少一项，
+            // 而用户要的是"这个游戏我想看 tick，那个游戏只想看 FPS"。旧档位仍然可读
+            // （AppPrefs 负责翻译），但设置页只写新配置。
+            Text(
+                text = "性能叠加层（全局默认）",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(start = 16.dp, top = 16.dp),
+            )
+            Text(
+                text = "这里改的是**默认值**；某个游戏想单独一套，去它的详情页打开" +
+                    "「使用独立配置」。",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+            OverlayConfigEditor(
+                config = overlay,
+                onConfigChange = {
+                    overlay = it
+                    AppPrefs.setOverlayConfig(context, it)
+                    onOverlayConfigChanged(it)
+                    AppLog.i(TAG, "overlay: enabled=${it.enabled} fields=${it.orderedFields.map { f -> f.key }}")
+                },
+            )
 
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text("引擎帧率上限", style = MaterialTheme.typography.bodyLarge)
@@ -413,33 +398,3 @@ private fun SwitchRow(
  * 标题 + 说明 + 一排单选按钮。三档以上的枚举用它，比 SegmentedButton 好放长中文标签
  * （后者等宽分格，长标签会被挤成两行）。
  */
-@Composable
-private fun ChoiceRow(
-    title: String,
-    subtitle: String,
-    choices: List<Pair<String, String>>,
-    selected: String,
-    onSelected: (String) -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-    ) {
-        Text(title, style = MaterialTheme.typography.bodyLarge)
-        Text(text = subtitle, style = MaterialTheme.typography.bodySmall)
-        choices.forEach { (value, label) ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .selectable(
-                        selected = value == selected,
-                        onClick = { onSelected(value) },
-                    )
-                    .padding(vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RadioButton(selected = value == selected, onClick = { onSelected(value) })
-                Text(text = label, modifier = Modifier.padding(start = 8.dp))
-            }
-        }
-    }
-}

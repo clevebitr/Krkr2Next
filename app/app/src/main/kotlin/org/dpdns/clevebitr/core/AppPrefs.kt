@@ -2,6 +2,7 @@ package org.dpdns.clevebitr.core
 
 import android.content.Context
 import android.content.SharedPreferences
+import org.json.JSONObject
 
 /**
  * 壳侧设置。用 `SharedPreferences` 存：这些值要在**两个进程**（主进程与 `:crash`）
@@ -187,4 +188,56 @@ object AppPrefs {
         val normalized = if (profile in GAME_COMPAT_PROFILES) profile else "auto"
         prefs(context).edit().putString(KEY_GAME_COMPAT_PROFILE, normalized).apply()
     }
+
+    // ── 性能叠加层（可自定义） ────────────────────────────────────────────
+
+    /** 叠加层配置的 JSON 字符串，见 [OverlayConfig]。 */
+    private const val KEY_OVERLAY_CONFIG = "debug.overlay_config"
+
+    /**
+     * **全局默认**叠加层配置。每游戏覆盖存在各自的 `krkr2next.json` 里。
+     *
+     * 升级路径：老用户只存过 `off`/`summary`/`detail` 档位，没有 JSON。这时用
+     * [OverlayConfig.fromLegacyMode] 把档位翻译成字段集合，但**不写回**——只有用户
+     * 真的在设置页动了开关才落新键，这样回退到旧版本时档位键仍然有效。
+     */
+    fun overlayConfig(context: Context): OverlayConfig {
+        val p = prefs(context)
+        if (p.contains(KEY_OVERLAY_CONFIG)) {
+            val raw = p.getString(KEY_OVERLAY_CONFIG, null)
+            if (!raw.isNullOrBlank()) {
+                try {
+                    OverlayConfig.fromJson(JSONObject(raw))?.let { return it }
+                } catch (t: Throwable) {
+                    AppLog.w(TAG, "叠加层配置解析失败，回退到档位键：$t")
+                }
+            }
+        }
+        return OverlayConfig.fromLegacyMode(perfOverlayMode(context))
+    }
+
+    fun setOverlayConfig(context: Context, config: OverlayConfig) {
+        prefs(context).edit()
+            .putString(KEY_OVERLAY_CONFIG, config.toJson().toString())
+            .apply()
+    }
+
+    // ── 游戏库 ────────────────────────────────────────────────────────────
+
+    /** 库列表排序（`lastPlayed` / `title` / `added`）。 */
+    private const val KEY_LIBRARY_SORT = "ui.library_sort"
+
+    val LIBRARY_SORTS = listOf("lastPlayed", "title", "added")
+
+    fun librarySort(context: Context): String {
+        val stored = prefs(context).getString(KEY_LIBRARY_SORT, null)
+        return if (stored != null && stored in LIBRARY_SORTS) stored else "lastPlayed"
+    }
+
+    fun setLibrarySort(context: Context, sort: String) {
+        val normalized = if (sort in LIBRARY_SORTS) sort else "lastPlayed"
+        prefs(context).edit().putString(KEY_LIBRARY_SORT, normalized).apply()
+    }
+
+    private const val TAG = "KrKr2Next/Prefs"
 }

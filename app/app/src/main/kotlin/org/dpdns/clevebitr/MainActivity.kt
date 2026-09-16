@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -22,28 +23,50 @@ import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.navigation.compose.rememberNavController
+import java.io.File
+import kotlinx.coroutines.launch
 import org.dpdns.clevebitr.core.AppLog
 import org.dpdns.clevebitr.core.AppPrefs
 import org.dpdns.clevebitr.core.CrashTracker
 import org.dpdns.clevebitr.core.EngineSession
+import org.dpdns.clevebitr.core.GameConfig
+import org.dpdns.clevebitr.core.GameConfigStore
+import org.dpdns.clevebitr.core.GameLibrary
+import org.dpdns.clevebitr.core.GlobalDefaults
 import org.dpdns.clevebitr.core.InputEvent
+import org.dpdns.clevebitr.core.LibraryGame
 import org.dpdns.clevebitr.core.LogFiles
 import org.dpdns.clevebitr.core.NativeEngine
+import org.dpdns.clevebitr.core.OverlayConfig
 import org.dpdns.clevebitr.core.VkCodes
+import org.dpdns.clevebitr.core.scrape.CoverStore
+import org.dpdns.clevebitr.core.scrape.ScoredCandidate
+import org.dpdns.clevebitr.core.scrape.ScrapeService
+import org.dpdns.clevebitr.core.resolve
 import org.dpdns.clevebitr.ui.GameScreen
 import org.dpdns.clevebitr.ui.KrKr2NextTheme
-import org.dpdns.clevebitr.ui.LauncherScreen
 import org.dpdns.clevebitr.ui.SettingsScreen
+import org.dpdns.clevebitr.ui.ShellNavHost
+import org.dpdns.clevebitr.ui.ShellNavParams
 import org.dpdns.clevebitr.ui.resolveDarkTheme
 
 /**
  * 单 Activity 壳。
  *
- * 持有 [EngineSession]（引擎生命周期 + 渲染线程），并把按键、前台/后台事件转发给它。
- * Compose 只负责界面；引擎相关调用都不在 Compose 重组路径上。
+ * 三块职责，顺序就是它们的依赖关系：
+ * 1. **引擎会话**（[EngineSession]）：生命周期 + 渲染线程 + 输入转发。
+ * 2. **游戏库**（[GameLibrary]）：列表、每游戏配置、刮削结果的宿主。
+ * 3. **导航**（[ShellNavHost]）：库 / 添加游戏 / 详情 / 刮削 / 设置。
  *
- * 界面状态提在 Activity 层（而不是 `setContent` 内部），因为 `launchGame` /
- * `onFatal` 等回调需要写它们。
+ * 界面状态一律提在 Activity 层（而不是 `setContent` 内部）：导航回调、引擎回调
+ * （`onFatal`、`onStartupStateChanged`）都要写它们，而 Compose 的 `remember`
+ * 在这些回调里够不着。
+ *
+ * **游戏画面不在导航图里**：它是一层覆盖在导航图之上的会话界面。放进去的话，
+ * 游戏内打开设置页会销毁那个目的地的 `SurfaceView`，引擎 surface 被 detach →
+ * 引擎重启。见 [ShellNavHost] 的注释。
  */
 class MainActivity : ComponentActivity() {
 
@@ -56,7 +79,7 @@ class MainActivity : ComponentActivity() {
     private var session: EngineSession? = null
     private var lastBackAt = 0L
 
-    // Compose 可观察的界面状态
+    // ── 引擎会话状态 ──
     private var gamePath by mutableStateOf<String?>(null)
     private var startupState by mutableStateOf(NativeEngine.STARTUP_IDLE)
     private var statusText by mutableStateOf("正在打开游戏…")
@@ -64,31 +87,28 @@ class MainActivity : ComponentActivity() {
     /** 上次异常退出的提示文本；null 表示这次不需要提示。 */
     private var recoveryNotice by mutableStateOf<String?>(null)
 
-    /** 启动器或游戏内是否停在设置页。 */
-    private var showSettings by mutableStateOf(false)
+    /** 游戏内悬浮菜单打开的设置页（覆盖在游戏画面之上）。 */
+    private var inGameSettings by mutableStateOf(false)
 
     /**
-     * 性能叠加层档位。**放在 Activity 而不是 GameScreen 里**：设置页现在也能从游戏内
-     * 悬浮菜单打开，改完必须立刻生效；`remember { AppPrefs... }` 只在首次组合时读一次，
-     * 那样改了得退出重进才看得到。初值在 onCreate 里读（字段初始化时 Context 还没 attach）。
+     * 本次会话生效的叠加层配置：启动时把"全局默认 + 该游戏覆盖"合并好。
+     * 全局设置在游戏内被改动时，只有**没有独立配置**的游戏才跟着变。
      */
-    private var perfOverlayMode by mutableStateOf("")
+    private var sessionOverlay by mutableStateOf(OverlayConfig.default())
+    private var sessionOverlayIsPerGame = false
 
-    /**
-     * 主题档位（`system` / `light` / `dark`）。与 [perfOverlayMode] 同理提到 Activity：
-     * 设置页改完要**立刻**换肤，不能退出重进。初值在 onCreate 里读。
-     */
+    // ── 游戏库与设置状态 ──
+    private lateinit var library: GameLibrary
+    private var games by mutableStateOf<List<LibraryGame>>(emptyList())
+    private var librarySort by mutableStateOf("lastPlayed")
+    private var overlayConfig by mutableStateOf(OverlayConfig.default())
+
     private var themeMode by mutableStateOf("system")
-
-    /** 引擎字体回退策略（`auto` / `legacy` / `chain`）；改完下次开游戏生效。 */
     private var fontFallbackMode by mutableStateOf("auto")
-
-    /** krkrz 的 OGLDrawDevice 兼容档位（`off` / `alias` / `kag`）；改完下次开游戏生效。 */
     private var oglDrawDeviceCompat by mutableStateOf("off")
-
-    /** 游戏兼容档（`auto` / `kirikiri2-classic` / `krkrz-gpu` / `krkrz-kag` / `krkrz-ogl`）。 */
     private var gameCompatProfile by mutableStateOf("auto")
 
+    private val coversDir: File by lazy { CoverStore.dir(this) }
     private val logDirPath: String by lazy { LogFiles.logsDir(this).absolutePath }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,83 +120,61 @@ class MainActivity : ComponentActivity() {
         CrashTracker.beginSession(this)
         if (previous.kind != CrashTracker.ExitKind.CLEAN) {
             AppLog.w(TAG, "上次未正常退出：${previous.kind} / ${previous.detail}")
-            // Java 崩溃当时已经把崩溃界面给用户看过了，这里不再重复打扰；
-            // 其余几种（原生崩溃 / ANR / 被系统结束）用户什么都没看到，需要补一次说明。
             if (previous.kind != CrashTracker.ExitKind.JAVA_CRASH) {
                 recoveryNotice = previous.detail ?: "上次未正常退出"
             }
         }
         AppLog.i(TAG, "onCreate (recovery=$previous)")
 
-        perfOverlayMode = AppPrefs.perfOverlayMode(this)
+        library = GameLibrary(this)
+        // 先读一次全局设置，再读库：库排序要用到 librarySort
+        librarySort = AppPrefs.librarySort(this)
+        overlayConfig = AppPrefs.overlayConfig(this)
         themeMode = AppPrefs.themeMode(this)
         fontFallbackMode = AppPrefs.fontFallbackMode(this)
         oglDrawDeviceCompat = AppPrefs.oglDrawDeviceCompat(this)
         gameCompatProfile = AppPrefs.gameCompatProfile(this)
+        refreshLibrary()
 
         setContent {
             KrKr2NextTheme(darkTheme = resolveDarkTheme(themeMode)) {
-                // 根 Surface 不能省。`themes.xml` 的 windowBackground 是黑的，而 Compose
-                // 只画自己覆盖到的像素——**没有 Surface 的区域会直接露出窗口底色**。
-                // 启动页/设置页此前正是这样：浅色方案下发黑字、窗口又是黑的，于是设置页
-                // 黑字黑底看不见、启动页右上角齿轮（取 onSurfaceVariant）也被吞掉。
-                // 这里铺一层 colorScheme.background，把所有分支都盖住。
+                // 根 Surface 不能省：`themes.xml` 的 windowBackground 是黑的，而 Compose
+                // 只画自己覆盖到的像素——没有 Surface 的区域会直接露出窗口底色。
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                val activeSession = session
-                val path = gamePath
-                if (activeSession == null || path == null) {
-                    if (showSettings) {
-                        SettingsScreen(
-                            logDirPath = logDirPath,
-                            onBack = { showSettings = false },
-                            onShareLogs = ::shareLogs,
-                            onPerfOverlayModeChanged = { perfOverlayMode = it },
-                            themeMode = themeMode,
-                            onThemeModeChanged = { themeMode = it },
-                            fontFallbackMode = fontFallbackMode,
-                            onFontFallbackModeChanged = { fontFallbackMode = it },
-                            oglDrawDeviceCompat = oglDrawDeviceCompat,
-                            onOglDrawDeviceCompatChanged = { oglDrawDeviceCompat = it },
-                            gameCompatProfile = gameCompatProfile,
-                            onGameCompatProfileChanged = { gameCompatProfile = it },
+                    val activeSession = session
+                    val path = gamePath
+                    if (activeSession == null || path == null) {
+                        val navController = rememberNavController()
+                        ShellNavHost(
+                            navController = navController,
+                            params = navParams(
+                                // 启动器里的设置页：返回就是弹栈
+                                settingsContent = { SettingsContent(onBack = { navController.popBackStack() }) },
+                            ),
                         )
                     } else {
-                        LauncherScreen(
-                            onLaunchGame = ::launchGame,
-                            onOpenSettings = { showSettings = true },
-                        )
-                    }
-                } else {
-                    // 设置页盖在游戏**之上**而不是替换它：替换会让 SurfaceView 被销毁，
-                    // 引擎的 surface 得重新 attach。浮层画在窗口里、SurfaceView 的 surface
-                    // 在窗口之下，所以盖上去是安全的（游戏内悬浮菜单本来就是这个道理）。
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        GameScreen(
-                            session = activeSession,
-                            startupState = startupState,
-                            statusText = statusText,
-                            perfMode = perfOverlayMode,
-                            onOpenSettings = { showSettings = true },
-                            onExit = ::exitToLauncher,
-                        )
-                        if (showSettings) {
-                            Surface(
-                                modifier = Modifier.fillMaxSize(),
-                                color = MaterialTheme.colorScheme.background,
-                            ) {
-                                SettingsScreen(
-                                    logDirPath = logDirPath,
-                                    onBack = { showSettings = false },
-                                    onShareLogs = ::shareLogs,
-                                    onPerfOverlayModeChanged = { perfOverlayMode = it },
-                                )
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            GameScreen(
+                                session = activeSession,
+                                startupState = startupState,
+                                statusText = statusText,
+                                overlayConfig = sessionOverlay,
+                                onOpenSettings = { inGameSettings = true },
+                                onExit = ::exitToLauncher,
+                            )
+                            if (inGameSettings) {
+                                Surface(
+                                    modifier = Modifier.fillMaxSize(),
+                                    color = MaterialTheme.colorScheme.background,
+                                ) {
+                                    SettingsContent(onBack = { inGameSettings = false })
+                                }
                             }
                         }
                     }
-                }
 
                     recoveryNotice?.let { notice ->
                         AlertDialog(
@@ -207,6 +205,65 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** 导航图需要的状态与回调。每次重组都会新建，成本只是几个引用。 */
+    private fun navParams(settingsContent: @Composable () -> Unit): ShellNavParams =
+        ShellNavParams(
+            games = games,
+            coversDir = coversDir,
+            librarySort = librarySort,
+            globalDefaults = globalDefaults(),
+            onLibrarySortChange = { sort ->
+                librarySort = sort
+                AppPrefs.setLibrarySort(this, sort)
+                refreshLibrary()
+            },
+            onLaunchGame = ::launchGame,
+            onLaunchPath = { dir -> launchPath(dir.absolutePath) },
+            onAddToLibrary = ::addToLibrary,
+            onScanFinished = { added, skipped ->
+                val text = if (added == 0 && skipped == 0) {
+                    "没有找到新的游戏入口"
+                } else {
+                    "新增 $added 个，已在库中 $skipped 个"
+                }
+                Toast.makeText(this, text, Toast.LENGTH_LONG).show()
+            },
+            onRemoveFromLibrary = ::removeFromLibrary,
+            onSaveGame = ::saveGame,
+            onApplyScrape = ::applyScrape,
+            loadGameConfig = { game ->
+                val config = GameConfigStore.load(this, game.dir)
+                val inGameDir = GameConfigStore.hasGameDirFile(game.dir) ||
+                    GameConfigStore.isWritable(game.dir)
+                config to inGameDir
+            },
+            settingsContent = settingsContent,
+        )
+
+    /** 设置页内容。启动器与游戏内共用同一个 Composable，行为不会分叉。 */
+    @Composable
+    private fun SettingsContent(onBack: () -> Unit) {
+        SettingsScreen(
+            logDirPath = logDirPath,
+            onBack = onBack,
+            onShareLogs = ::shareLogs,
+            overlayConfig = overlayConfig,
+            onOverlayConfigChanged = { updated ->
+                overlayConfig = updated
+                // 该游戏没有独立配置时跟随全局；有独立配置就不动它
+                if (!sessionOverlayIsPerGame) sessionOverlay = updated
+            },
+            themeMode = themeMode,
+            onThemeModeChanged = { themeMode = it },
+            fontFallbackMode = fontFallbackMode,
+            onFontFallbackModeChanged = { fontFallbackMode = it },
+            oglDrawDeviceCompat = oglDrawDeviceCompat,
+            onOglDrawDeviceCompatChanged = { oglDrawDeviceCompat = it },
+            gameCompatProfile = gameCompatProfile,
+            onGameCompatProfileChanged = { gameCompatProfile = it },
+        )
+    }
+
     private fun shareLogs() {
         val intent = LogFiles.buildShareIntent(this, LogFiles.collectForSharing(this))
         if (intent == null) {
@@ -220,34 +277,124 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** 选定游戏目录后创建引擎会话。 */
-    private fun launchGame(path: String) {
+    // ── 游戏库 ──────────────────────────────────────────────────────────────
+
+    private fun refreshLibrary() {
+        val all = library.games()
+        games = when (librarySort) {
+            "title" -> all.sortedBy { it.title.lowercase() }
+            "added" -> all.sortedByDescending { it.addedAt }
+            else -> all.sortedByDescending { it.lastPlayedAt }
+        }
+    }
+
+    /** @return 是否真的新增（调用方据此统计批量扫描的结果）。 */
+    private fun addToLibrary(dir: File): Boolean {
+        val result = library.add(dir)
+        if (result.added) {
+            AppLog.i(TAG, "加入游戏库：${dir.absolutePath}")
+            refreshLibrary()
+        }
+        return result.added
+    }
+
+    private fun removeFromLibrary(game: LibraryGame) {
+        if (library.remove(game.id)) {
+            AppLog.i(TAG, "移出游戏库：${game.path}")
+            refreshLibrary()
+        }
+    }
+
+    private fun saveGame(game: LibraryGame, config: GameConfig) {
+        library.update(game.id) { game }
+        // 配置写进游戏目录（不可写则回退应用私有），并把元数据/备注一起同步过去
+        val target = ScrapeService.syncRecordToGameDir(this, game, config)
+        AppLog.i(TAG, "保存游戏配置：${game.title} -> ${target?.target} ${target?.file?.absolutePath}")
+        refreshLibrary()
+        Toast.makeText(
+            this,
+            if (target?.target == GameConfigStore.Target.GAME_DIR) {
+                "已保存到游戏目录 krkr2next.json"
+            } else {
+                "已保存（游戏目录不可写，存在应用私有目录）"
+            },
+            Toast.LENGTH_SHORT,
+        ).show()
+    }
+
+    private fun applyScrape(gameId: String, candidate: ScoredCandidate) {
+        lifecycleScope.launch {
+            try {
+                val updated = ScrapeService.apply(this@MainActivity, library, gameId, candidate)
+                if (updated != null) {
+                    refreshLibrary()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "已应用：${updated.title}",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            } catch (t: Throwable) {
+                AppLog.e(TAG, "刮削落库失败", t)
+                Toast.makeText(
+                    this@MainActivity,
+                    "刮削失败：${t.message ?: t.javaClass.simpleName}",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    /** 全局默认：每游戏配置里没写的项都用它。 */
+    private fun globalDefaults(): GlobalDefaults = GlobalDefaults(
+        compatProfile = gameCompatProfile,
+        oglDrawDeviceCompat = oglDrawDeviceCompat,
+        fpsLimit = AppPrefs.fpsLimit(this),
+        fontFallbackMode = fontFallbackMode,
+        overlay = overlayConfig,
+    )
+
+    // ── 引擎会话 ────────────────────────────────────────────────────────────
+
+    private fun launchGame(game: LibraryGame) {
+        library.touch(game.id)
+        refreshLibrary()
+        launchPath(game.path)
+    }
+
+    /** 选定目录后创建引擎会话。库记录可选：目录页的"直接启动"走的就是这条路。 */
+    private fun launchPath(path: String) {
         closeSession()
-        showSettings = false
+        inGameSettings = false
 
         // 必须先落这个状态：GameScreen（内含 SurfaceView）只在 gamePath 非空时才被
         // 组合，而 SurfaceView 的 surfaceChanged 是引擎拿到渲染目标的**唯一**途径。
-        // 少了这一行，引擎照样能启动到 SUCCEEDED，但永远等不到 attachSurface——
-        // 表现就是"日志说启动成功、屏幕却停在启动器上不动，也没有任何状态提示"。
         gamePath = path
-        // 游戏目录是排障必需信息（哪个游戏、哪份存档），按已确认的边界记录它本身，
-        // 不记录游戏内的任何文本
-        AppLog.i(TAG, "launchGame path=$path cache=${cacheDir.absolutePath}")
-        // 游戏内「运行时日志」浮层读的是内存环形缓冲；清一次，让它只显示本局的日志
+
+        // 每游戏配置：读游戏目录里的 krkr2next.json（不可写则读私有回退），
+        // 没写的项继承全局默认。**合并结果在启动时算好**，游戏内改全局不影响本局。
+        val dir = File(path)
+        val config = GameConfigStore.load(this, dir)
+        val resolved = config.resolve(globalDefaults())
+        sessionOverlay = resolved.overlay
+        sessionOverlayIsPerGame = config.overlay != null
+
+        AppLog.i(
+            TAG,
+            "launchGame path=$path cache=${cacheDir.absolutePath} " +
+                "compat=${resolved.compatProfile} ogl=${resolved.oglDrawDeviceCompat} " +
+                "fps=${resolved.fpsLimit} overlay=${resolved.overlay.enabled}",
+        )
         AppLog.clearRecent()
 
         val s = EngineSession(
-            // 引擎把存档写到 writablePath，缓存写到 cachePath
             writablePath = path,
             cachePath = cacheDir.absolutePath,
-            // 0 = 不限速，由 Choreographer 的 vsync 决定节拍（默认）
-            fpsLimit = AppPrefs.fpsLimit(this),
-            fontFallbackMode = AppPrefs.fontFallbackMode(this),
-            oglDrawDeviceCompat = AppPrefs.oglDrawDeviceCompat(this),
-            gameCompatProfile = AppPrefs.gameCompatProfile(this),
+            fpsLimit = resolved.fpsLimit,
+            fontFallbackMode = resolved.fontFallbackMode,
+            oglDrawDeviceCompat = resolved.oglDrawDeviceCompat,
+            gameCompatProfile = resolved.compatProfile,
             onLog = { log ->
-                // 引擎启动日志已经在 engine.log 里了，这里只做一次转发，
-                // 顺带让连着 adb 的人也能看到
                 log.lines().forEach { if (it.isNotBlank()) AppLog.i(ENGINE_LOG_TAG, it) }
             },
             onStartupStateChanged = { state ->
@@ -281,9 +428,7 @@ class MainActivity : ComponentActivity() {
         closeSession()
         gamePath = null
         startupState = NativeEngine.STARTUP_IDLE
-        // 设置页现在也能从游戏内打开。退出游戏后必须复位，否则（比如从崩溃恢复路径回来）
-        // 会落在设置页而不是启动器上。
-        showSettings = false
+        inGameSettings = false
         AppLog.i(TAG, "exitToLauncher")
     }
 
@@ -292,13 +437,7 @@ class MainActivity : ComponentActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val s = session
         if (s == null) {
-            // 没有引擎会话时返回键交还给系统，除了"设置页 → 启动器"这一层自己处理
-            if (event.keyCode == KeyEvent.KEYCODE_BACK &&
-                event.action == KeyEvent.ACTION_DOWN && showSettings
-            ) {
-                showSettings = false
-                return true
-            }
+            // 没有引擎会话时返回键交还给系统（导航栈自己处理返回）
             return super.dispatchKeyEvent(event)
         }
 
@@ -306,6 +445,11 @@ class MainActivity : ComponentActivity() {
         // 直接吞掉返回键会让玩家无法开菜单；直接退出又会丢失游戏内菜单入口。
         if (event.keyCode == KeyEvent.KEYCODE_BACK) {
             if (event.action == KeyEvent.ACTION_DOWN) {
+                if (inGameSettings) {
+                    // 设置页盖在游戏上时，返回键先关它——否则玩家一按就直接退出游戏
+                    inGameSettings = false
+                    return true
+                }
                 val now = System.currentTimeMillis()
                 if (now - lastBackAt < DOUBLE_BACK_MS) {
                     lastBackAt = 0L
@@ -327,7 +471,6 @@ class MainActivity : ComponentActivity() {
             KeyEvent.ACTION_UP -> InputEvent.KEY_UP
             else -> return super.dispatchKeyEvent(event)
         }
-        // 只记按下：抬起与按下成对出现，记两份没有额外信息，却会把日志量翻倍
         if (type == InputEvent.KEY_DOWN) {
             AppLog.i(TAG, "key down vk=0x${vk.toString(16)} modifiers=${event.metaState}")
         }

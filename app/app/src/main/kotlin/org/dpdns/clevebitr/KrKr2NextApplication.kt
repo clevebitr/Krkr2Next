@@ -5,6 +5,10 @@ import android.app.Application
 import android.os.Build
 import android.os.Process
 import android.util.Log
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import org.dpdns.clevebitr.core.AppLog
 import org.dpdns.clevebitr.core.AppPrefs
 import org.dpdns.clevebitr.core.CrashTracker
@@ -17,7 +21,7 @@ import org.dpdns.clevebitr.core.NativeEngine
  * 按进程名分流——`:crash` 只负责把界面画出来，绝不能顺带加载引擎、装异常处理器、
  * 初始化日志：那等于把主进程崩溃时的处境重演一遍，还可能再崩一次把界面一起带走。
  */
-class KrKr2NextApplication : Application() {
+class KrKr2NextApplication : Application(), SingletonImageLoader.Factory {
 
     companion object {
         private const val TAG = "KrKr2Next/App"
@@ -33,6 +37,18 @@ class KrKr2NextApplication : Application() {
         var engineLibraryLoaded: Boolean = false
             private set
     }
+
+    /**
+     * Coil 的 ImageLoader 工厂（Coil 3 的接入点）。
+     *
+     * 之所以显式给网络 fetcher：Coil 3 把网络支持拆成了独立 artifact
+     * （`coil-network-okhttp`），只把它放在 classpath 上要靠 ServiceLoader 自动发现，
+     * 一旦被裁剪或混淆就退化成"图片永远加载不出来"。这里写死，行为可预期。
+     */
+    override fun newImageLoader(context: PlatformContext): ImageLoader =
+        ImageLoader.Builder(context)
+            .components { add(OkHttpNetworkFetcherFactory()) }
+            .build()
 
     override fun onCreate() {
         super.onCreate()

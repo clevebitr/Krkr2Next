@@ -47,6 +47,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import org.dpdns.clevebitr.core.AppLog
 import org.dpdns.clevebitr.core.EngineSession
+import org.dpdns.clevebitr.core.OverlayConfig
 import org.dpdns.clevebitr.core.InputEvent
 import org.dpdns.clevebitr.core.NativeEngine
 
@@ -78,11 +79,12 @@ fun GameScreen(
     startupState: Int,
     statusText: String,
     /**
-     * 性能叠加层档位。**由 MainActivity 持有并传进来**，不在本文件里读偏好设置：
-     * 游戏内菜单能直接打开设置页，改完要立刻生效，而 `remember { AppPrefs... }`
-     * 只在首次组合时读一次，改了要退出重进才看得到。
+     * 本次会话生效的叠加层配置（全局默认与每游戏覆盖**已在启动时合并**）。
+     * **由 MainActivity 持有并传进来**，不在本文件里读偏好设置：游戏内菜单能直接打开
+     * 设置页，改完要立刻生效，而 `remember { AppPrefs... }` 只在首次组合时读一次，
+     * 改了要退出重进才看得到。
      */
-    perfMode: String,
+    overlayConfig: OverlayConfig,
     /** 打开设置页。设置页会盖在游戏之上，引擎与 SurfaceView 不被销毁。 */
     onOpenSettings: () -> Unit,
     onExit: () -> Unit,
@@ -93,8 +95,10 @@ fun GameScreen(
     // 性能叠加层：4Hz 采样，与 AetherKiri 的 PERF_UPDATE_INTERVAL = 0.25s 对齐。
     // 关档时不启动这个循环——不采样，也不调那两次 JNI。
     var perf by remember { mutableStateOf(PerfSnapshot()) }
-    if (perfMode != PerfOverlayMode.OFF) {
-        LaunchedEffect(session, perfMode) {
+    // 只勾了"错误数"时也要采样，所以判据是 visible（enabled + 至少一个字段），
+    // 不是旧版的 mode != off
+    if (overlayConfig.visible) {
+        LaunchedEffect(session, overlayConfig) {
             while (true) {
                 perf = PerfSnapshot(
                     fps = session.measuredFps,
@@ -165,11 +169,11 @@ fun GameScreen(
         // 性能叠加层：左上角 (16,12)，与 AetherKiri 的 _layout_perf_overlay 同位。
         // 不设 clickable，触摸照常穿透给引擎。
         PerformanceOverlay(
-            mode = perfMode,
+            config = overlayConfig,
             snapshot = perf,
             modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 16.dp, top = 12.dp),
+                .align(overlayConfig.corner.toAlignment())
+                .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 12.dp),
         )
 
         // 引擎出第一帧前的进度覆盖层

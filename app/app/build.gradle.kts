@@ -97,5 +97,22 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
+    // ── 导航 ────────────────────────────────────────────────────────────────
+    // 2.10.x 起 minCompileSdk=37 / minAgp=9.1（本工程是 36 / 8.13.2），跨过去
+    // Gradle 的 AAR 元数据检查会直接失败。2.9.8 是能用的最后一档：
+    // minCompileSdk=35 / minAgp=8.6.0，它带进来的 navigation-* 也都在 34/35。
+    implementation("androidx.navigation:navigation-compose:2.9.8")
+
+    // ── 图片加载（封面）与网络 ──────────────────────────────────────────────
+    // Coil 3.6.x 同样要 compileSdk 37；3.5.0 是 minCompileSdk=36 的最后一档。
+    // 网络栈用 OkHttp（coil-network-okhttp 也会带一个），VNDB 的 JSON 请求共用
+    // 同一个 client：一套连接池、一套超时设置。
+    implementation("io.coil-kt.coil3:coil-compose:3.5.0")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.5.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Dispatchers.IO 来自 coroutines-core，Android 主线程调度器来自 -android；
+    // compose/lifecycle 会间接带进来，但刮削直接用它，显式声明免得靠传递依赖。
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
