@@ -74,6 +74,8 @@ class EngineSession(
 
         /** 单帧最大 tick 步长，避免切回前台时 delta 过大导致脚本时间跳变 */
         private const val MAX_DELTA_MS = 100L
+        /** 性能采样日志间隔。 */
+        private const val PERF_LOG_INTERVAL_NANOS = 5_000_000_000L
 
         /**
          * `engineTick` 失败日志的最小间隔。tick 是每帧调用的，失败时逐帧记录会刷爆日志；
@@ -153,6 +155,16 @@ class EngineSession(
     var tickMs: Float = 0f
         private set
 
+    /**
+     * 性能采样日志的下一次到期时刻（纳秒）。
+     *
+     * 为什么要有它：release 构建里引擎的渲染探针全部关着，`engine.log` 里**没有任何
+     * 帧率信息**，于是"这个游戏卡"只能靠人肉盯叠加层。这条日志让壳每 5 秒把同一组
+     * 数字写进 `app.log`，事后翻日志就能定位是哪一段慢（帧时 / tick / 宿主）。
+     * 5 秒一条，量级可忽略。
+     */
+    private var nextPerfLogNanos = 0L
+
     /** 单位时间窗口内的帧时间分位数（毫秒）。对应 AetherKiri detail 档的 P50/P95/P99/Max。 */
     @Volatile
     var frameP50Ms: Float = 0f
@@ -226,6 +238,7 @@ class EngineSession(
                 val tickStartNanos = System.nanoTime()
                 val rc = NativeEngine.engineTick(handle, deltaMs.toInt())
                 tickMs = (System.nanoTime() - tickStartNanos) / 1_000_000f
+                logPerfIfDue(tickStartNanos)
                 if (rc != NativeEngine.RESULT_OK) {
                     // 每帧都能失败，逐帧记录会把日志刷爆（60 行/秒）。限频到 5 秒一条，
                     // 并把次数带上——次数本身是判断"偶发一次"还是"彻底坏了"的关键。
@@ -253,6 +266,28 @@ class EngineSession(
 
             choreographer?.postFrameCallback(this)
         }
+    }
+
+    /**
+     * 每 [PERF_LOG_INTERVAL_NANOS] 打一条性能采样。
+     *
+     * 字段口径与叠加层一致（见 [PerfSnapshot]）：`frame` 是原始帧间隔，`tick` 是
+     * `engineTick` 的耗时，两者相减就是宿主自己的开销。`fps` 是 1 秒窗的均值。
+     * 只在引擎真的在跑的时候打——暂停时打出来全是 0，只会干扰判断。
+     */
+    private fun logPerfIfDue(nowNanos: Long) {
+        if (nextPerfLogNanos == 0L) {
+            nextPerfLogNanos = nowNanos + PERF_LOG_INTERVAL_NANOS
+            return
+        }
+        if (nowNanos < nextPerfLogNanos) return
+        nextPerfLogNanos = nowNanos + PERF_LOG_INTERVAL_NANOS
+        AppLog.i(
+            TAG,
+            "perf: fps=${"%.1f".format(measuredFps)} frame=${"%.2f".format(frameMs)}ms " +
+                "tick=${"%.2f".format(tickMs)}ms update=${"%.2f".format(frameMs - tickMs)}ms " +
+                "p95=${"%.2f".format(frameP95Ms)}ms errors=$tickFailures",
+        )
     }
 
     // ── 生命周期 ──────────────────────────────────────────────────────────

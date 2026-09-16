@@ -1451,6 +1451,24 @@ static void ConvertRGBA_to_BGRA(const uint8_t *src, GLsizei srcW, GLsizei srcH,
 // 上一帧，真机上还一直带 GL_INVALID_OPERATION(0x0502) —— 画面永远慢一帧且
 // 交付内容不可信。正确性优先，已移除。
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// GL_EXT_read_format_bgra：允许 glReadPixels 直接给出 BGRA。
+//
+// 为什么值得单独判一次：krkr 图层的 CPU 缓冲是 BGRA，而 GL 只保证 RGBA 可读。
+// 没有这条扩展时每一帧都要做一次整帧 R/B 交换（1080p = 2M 像素），实测是
+// capture 路径里纯 CPU 的那部分开销。有它就把"逐像素转换"降级成"按行 memcpy"。
+//
+// `TVPCheckGLExtension` 在 core/visual/ogl/ogl_common.h 里声明；插件与核心同处
+// 一个共享库，这里直接声明以免为了一个符号引入 core 的私有 include 路径。
+// ---------------------------------------------------------------------------
+bool TVPCheckGLExtension(const std::string &extname);
+
+static bool HasReadFormatBgra() {
+    static const bool s_supported =
+        TVPCheckGLExtension("GL_EXT_read_format_bgra");
+    return s_supported;
+}
+
 static bool CopyFBOToLayerCPU(GLuint fbo, GLsizei srcW, GLsizei srcH,
                               tTJSNI_Layer *layerNI, GLint prevFbo) {
     if(srcW <= 0 || srcH <= 0)
@@ -1492,8 +1510,10 @@ static bool CopyFBOToLayerCPU(GLuint fbo, GLsizei srcW, GLsizei srcH,
     // 读回本帧（同步）：PBO 双缓冲那条路只会给**上一帧**的内容，并且真机上
     // 一直带 GL_INVALID_OPERATION(0x0502)，等于交付的是过期像素；正确性优先，
     // 这里直接用同步读回。
+    const bool bgraRead = HasReadFormatBgra();
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glReadPixels(0, 0, srcW, srcH, GL_RGBA, GL_UNSIGNED_BYTE, s_rgba.data());
+    glReadPixels(0, 0, srcW, srcH, bgraRead ? GL_BGRA_EXT : GL_RGBA,
+                 GL_UNSIGNED_BYTE, s_rgba.data());
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
     const uint8_t *srcPixels = s_rgba.data();
 
@@ -1508,7 +1528,18 @@ static bool CopyFBOToLayerCPU(GLuint fbo, GLsizei srcW, GLsizei srcH,
     tjs_int copyW = (layerW < srcW) ? layerW : srcW;
     tjs_int copyH = (layerH < srcH) ? layerH : srcH;
 
-    ConvertRGBA_to_BGRA(srcPixels, srcW, srcH, dst, pitch, copyW, copyH);
+    if(bgraRead) {
+        // 已经是图层要的字节序，按行搬即可。方向与 ConvertRGBA_to_BGRA 一致
+        // （Android 上 GL 读回的第一行就是图层的首行，不做 Y 翻转）。
+        const size_t rowBytes = static_cast<size_t>(copyW) * 4u;
+        for(tjs_int y = 0; y < copyH; ++y) {
+            std::memcpy(dst + static_cast<size_t>(y) * pitch,
+                        srcPixels + static_cast<size_t>(y) * srcW * 4u,
+                        rowBytes);
+        }
+    } else {
+        ConvertRGBA_to_BGRA(srcPixels, srcW, srcH, dst, pitch, copyW, copyH);
+    }
 
 #if defined(KRKR_RENDER_PROBE)
     // 三个中心像素一起看，直接判定是哪一段错：
@@ -1534,7 +1565,7 @@ static bool CopyFBOToLayerCPU(GLuint fbo, GLsizei srcW, GLsizei srcH,
             spdlog::info("[probe] krkrgles: copy path={} fbo={} fbo0=({},{},{},{}) "
                          "src=({},{},{},{}) dst=({},{},{},{}) pitch={} "
                          "copy={}x{} err=0x{:04X}",
-                         "sync-read",
+                         bgraRead ? "sync-read(bgra)" : "sync-read(rgba)",
                          static_cast<unsigned>(fbo), fboCtr[0],
                          fboCtr[1], fboCtr[2], fboCtr[3], srcC[0], srcC[1],
                          srcC[2], srcC[3], dstC[0], dstC[1], dstC[2], dstC[3],

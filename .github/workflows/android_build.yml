@@ -196,8 +196,16 @@ jobs:
         with:
           path: ~/.cache/vcpkg
           key: vcpkg-android-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg/**') }}-${{ env.BUILD_TYPE }}
+          # ⚠️ restore-keys **必须**带上 BUILD_TYPE，不能只用 `vcpkg-android-`。
+          #
+          # 原因（2026-09-16 实测）：vcpkg 的二进制缓存里存的是**那一轮装出来的**文件，
+          # 其中的 pkg-config / CMake config 会把当时的安装前缀写死。debug 轮的包被
+          # release 轮复用时，那些路径全指向 out/android/debug/...，于是
+          #   - 消费方配置期报 "includes non-existent path .../debug/vcpkg_installed/..."
+          #   - 端口自身编译期报 "fatal error: 'glib.h' file not found"
+          # 两个症状都见过，release 构建因此从来没成功过。
           restore-keys: |
-            vcpkg-android-
+            vcpkg-android-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg/**') }}-${{ env.BUILD_TYPE }}-
 
       # ---------------------------------------------------------------------
       # 依赖与引擎编译**分开两步**。CMake configure 会触发 vcpkg 安装全部 manifest
