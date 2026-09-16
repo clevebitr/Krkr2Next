@@ -40,6 +40,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // 自用工程：release 也用 debug 签名。不加这一行 `assembleRelease` 出的是
+            // **未签名** APK，装不上——而"引擎性能"这类问题必须在 release 引擎上量：
+            // debug 构建的 -O0 与渲染探针会把数字带偏几倍。真要对外发布时换成自己的
+            // keystore。
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
