@@ -849,29 +849,27 @@ public:
                      static_cast<int>(internalFbo_), px[0], px[1], px[2], px[3]);
     }
 
-    // 绘制前一刻的 GL 状态。重点是 0 号纹理单元上那张纹理**有没有 level-0 图像**：
-    // GLES 里采样一张不完整的纹理会恒返回 (0,0,0,1)，正好就是观测到的
-    // "整块不透明纯黑"。width==0 就是铁证。
+    // 绘制前一刻的 GL 状态：染色器程序、0 号纹理单元绑的是谁、那张纹理名是否有效、
+    // blend 与 glGetError。**只用 ES2 入口点** —— 本文件只有 gl2.h/gl2ext.h，
+    // ES3 的 glGetTexLevelParameteriv 连声明都没有（`GL_TEXTURE_WIDTH` 在 NDK 头里
+    // 也不存在，CI 实测过）。所以要判"纹理有没有 level-0 图像"，靠的是 krkrgles
+    // 那边纹理加载期的日志（`texId=` / `用 1x1 白色占位纹理`）与这里的 `unit0Tex`
+    // 对账：两者不一致就是绑错了纹理，占位纹理则会在那边明确打出来。
     void ProbeDrawState() {
         static int s_stateSamples = 0;
         if(s_stateSamples >= 2)
             return;
         ++s_stateSamples;
-        GLint prog = 0, tex = 0, tw = 0, th = 0, unit = 0, bsrcA = 0, bdstA = 0;
+        GLint prog = 0, tex = 0, unit = 0, bsrcA = 0, bdstA = 0;
         glGetIntegerv(GL_ACTIVE_TEXTURE, &unit);
         glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
         glGetIntegerv(GL_TEXTURE_BINDING_2D, &tex);
-        if(tex) {
-            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &tw);
-            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &th);
-        }
         glGetIntegerv(GL_BLEND_SRC_ALPHA, &bsrcA);
         glGetIntegerv(GL_BLEND_DST_ALPHA, &bdstA);
         spdlog::info("[probe] krkrlive2d: draw state program={} unit=0x{:04X} "
-                     "unit0Tex={} level0={}x{} imgOK={} isTex={} err=0x{:04X}",
+                     "unit0Tex={} isTex={} err=0x{:04X}",
                      static_cast<int>(prog), static_cast<unsigned>(unit),
-                     static_cast<int>(tex), static_cast<int>(tw),
-                     static_cast<int>(th), (tw > 0 && th > 0) ? 1 : 0,
+                     static_cast<int>(tex),
                      tex ? static_cast<int>(glIsTexture(tex)) : 0,
                      static_cast<unsigned>(glGetError()));
         spdlog::info("[probe] krkrlive2d: draw blend enabled={} srcA=0x{:04X} "

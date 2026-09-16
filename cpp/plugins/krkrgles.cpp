@@ -18,6 +18,16 @@
 #include <GLES2/gl2ext.h>
 #include <GLES3/gl3.h>
 
+// NDK 的 GLES 头声明了 ES3 的 glGetTexLevelParameteriv，却**没有**定义它要用的两个
+// pname（实测 NDK 27：krkrgles.cpp 用 gl3.h 仍报 use of undeclared identifier
+// 'GL_TEXTURE_WIDTH'）。这里按 Khronos 的数值补上，供 KTX level-0 完整性校验使用。
+#ifndef GL_TEXTURE_WIDTH
+#define GL_TEXTURE_WIDTH 0x1000
+#endif
+#ifndef GL_TEXTURE_HEIGHT
+#define GL_TEXTURE_HEIGHT 0x1001
+#endif
+
 #if defined(__ARM_NEON) || defined(__ARM_NEON__)
 #include <arm_neon.h>
 #elif defined(__SSSE3__)
