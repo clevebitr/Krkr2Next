@@ -2152,6 +2152,52 @@ namespace { // reopen anonymous namespace
                 g_captureActive = true;
                 InvokeCaptureCallback("GLESAdaptor.capture", w, h, n, p);
                 g_captureActive = false;
+#if defined(KRKR_RENDER_PROBE)
+                // 探针：回调结束后、拷贝之前，捕获 FBO 里到底有什么。
+                // 与下面"图层 CPU 缓冲"那处配套：前者判"模型有没有进捕获 FBO"，
+                // 后者判"内容有没有落进图层"。5 个点、仅首次，够分辨且不改结果。
+                {
+                    static bool s_fboSampled = false;
+                    if(!s_fboSampled) {
+                        s_fboSampled = true;
+                        GLint keepFbo = 0;
+                        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &keepFbo);
+                        const GLsizei sx = static_cast<GLsizei>(w);
+                        const GLsizei sy = static_cast<GLsizei>(h);
+                        const GLsizei xs[5] = { sx / 2, sx / 8, sx * 7 / 8,
+                                                sx / 8, sx * 7 / 8 };
+                        const GLsizei ys[5] = { sy / 2, sy / 8, sy / 8,
+                                                sy * 7 / 8, sy * 7 / 8 };
+                        int aNonZero = 0, whiteZero = 0;
+                        unsigned char ctr[4] = { 0, 0, 0, 0 };
+                        glBindFramebuffer(GL_FRAMEBUFFER, s->fbo_.GetFBO());
+                        for(int i = 0; i < 5; ++i) {
+                            unsigned char px[4] = { 0, 0, 0, 0 };
+                            glReadPixels(xs[i], ys[i], 1, 1, GL_RGBA,
+                                         GL_UNSIGNED_BYTE, px);
+                            if(px[3] > 0)
+                                ++aNonZero;
+                            if(px[3] == 0 && px[0] == 255 && px[1] == 255 &&
+                               px[2] == 255)
+                                ++whiteZero;
+                            if(i == 0) {
+                                ctr[0] = px[0];
+                                ctr[1] = px[1];
+                                ctr[2] = px[2];
+                                ctr[3] = px[3];
+                            }
+                        }
+                        glBindFramebuffer(GL_FRAMEBUFFER,
+                                          static_cast<GLuint>(keepFbo));
+                        spdlog::info("[probe] krkrgles: capture FBO {}x{} "
+                                     "samples=5 a>0={} white+transparent={} "
+                                     "center=({},{},{},{})",
+                                     static_cast<int>(sx), static_cast<int>(sy),
+                                     aNonZero, whiteZero, ctr[0], ctr[1],
+                                     ctr[2], ctr[3]);
+                    }
+                }
+#endif
                 // 结果交给图层。官方参考实现的落点是图层的 **CPU 像素缓冲**
                 // （setSize + mainImageBufferForWrite），而不是只写 GL 纹理：
                 // 引擎随后按 CPU 位图重传纹理会把"只写在纹理上"的内容覆盖回去。
@@ -2187,14 +2233,39 @@ namespace { // reopen anonymous namespace
                         const tjs_int lw = layerNI->GetWidth();
                         const tjs_int lh = layerNI->GetHeight();
                         if(buf && pitch > 0 && lw > 2 && lh > 2) {
-                            const unsigned char *c =
-                                buf + static_cast<size_t>(pitch) * (lh / 2) +
-                                static_cast<size_t>(lw / 2) * 4u;
-                            spdlog::info("[probe] krkrgles: layer CPU buffer "
-                                         "center=({},{},{},{}) {}x{}",
-                                         c[0], c[1], c[2], c[3],
-                                         static_cast<int>(lw),
-                                         static_cast<int>(lh));
+                            // 3x3 采样：只看中心会误判——中心可能正好落在模型的
+                            // 透明区，而别处有内容。同时统计"白而透明"
+                            // (255,255,255,0)，它在预乘口径下是非法像素，
+                            // 能区分"空"与"被写坏"。copied 用来确认走了哪条路径。
+                            int aNonZero = 0, whiteZero = 0, sampled = 0;
+                            unsigned char ctr[4] = { 0, 0, 0, 0 };
+                            for(int gy = 1; gy <= 3; ++gy) {
+                                for(int gx = 1; gx <= 3; ++gx) {
+                                    const unsigned char *c =
+                                        buf + static_cast<size_t>(pitch) *
+                                                  (lh * gy / 4) +
+                                        static_cast<size_t>(lw * gx / 4) * 4u;
+                                    ++sampled;
+                                    if(c[3] > 0)
+                                        ++aNonZero;
+                                    if(c[3] == 0 && c[0] == 255 && c[1] == 255 &&
+                                       c[2] == 255)
+                                        ++whiteZero;
+                                    if(gx == 2 && gy == 2) {
+                                        ctr[0] = c[0];
+                                        ctr[1] = c[1];
+                                        ctr[2] = c[2];
+                                        ctr[3] = c[3];
+                                    }
+                                }
+                            }
+                            spdlog::info(
+                                "[probe] krkrgles: layer CPU buffer copied={} "
+                                "{}x{} samples={} a>0={} white+transparent={} "
+                                "center=({},{},{},{})",
+                                copied ? 1 : 0, static_cast<int>(lw),
+                                static_cast<int>(lh), sampled, aNonZero, whiteZero,
+                                ctr[0], ctr[1], ctr[2], ctr[3]);
                         }
                     }
                 }

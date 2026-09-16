@@ -746,28 +746,42 @@ public:
         ApplyMosaicPostEffect();
 
 #if defined(KRKR_RENDER_PROBE)
-        // 一次性采样内部 FBO：区分「模型根本没画进去」与「画进去了但没呈现出去」。
-        // 只取 9 个点、每个模型只做两次，避免每帧 glReadPixels（README 硬约束 4）。
+        // 采样内部 FBO。旧指标 nonZero/maxA **证明不了"立绘渲染出来了"**：
+        // 一整块 (255,255,255,0) 同样得 nonZero=9/9，而 maxA=255 只要 9 个点里
+        // 有 1 个不透明就成立。所以改按 **alpha>0 的点数** 统计，并额外报中心像素
+        // 与"白而透明"计数（预乘口径下 RGB>0 而 A=0 是非法像素）。
+        // 4x4 网格 + 中心共 17 次读取，每个模型仍只做两次（README 硬约束 4）。
         {
             static int s_samples = 0;
             if(s_samples < 2) {
                 ++s_samples;
-                int nonZero = 0, maxA = 0;
-                for(int gy = 1; gy <= 3; ++gy) {
-                    for(int gx = 1; gx <= 3; ++gx) {
+                int aNonZero = 0, rgbNonZero = 0, whiteZero = 0, maxA = 0;
+                unsigned char ctr[4] = { 0, 0, 0, 0 };
+                glReadPixels(fboW_ / 2, fboH_ / 2, 1, 1, GL_RGBA,
+                             GL_UNSIGNED_BYTE, ctr);
+                for(int gy = 0; gy < 4; ++gy) {
+                    for(int gx = 0; gx < 4; ++gx) {
                         unsigned char px[4] = { 0, 0, 0, 0 };
-                        glReadPixels(fboW_ * gx / 4, fboH_ * gy / 4, 1, 1,
-                                     GL_RGBA, GL_UNSIGNED_BYTE, px);
-                        if(px[0] || px[1] || px[2] || px[3])
-                            ++nonZero;
+                        glReadPixels(fboW_ * (2 * gx + 1) / 8,
+                                     fboH_ * (2 * gy + 1) / 8, 1, 1, GL_RGBA,
+                                     GL_UNSIGNED_BYTE, px);
+                        if(px[3] > 0)
+                            ++aNonZero;
+                        if(px[0] || px[1] || px[2])
+                            ++rgbNonZero;
+                        if(px[3] == 0 && px[0] == 255 && px[1] == 255 &&
+                           px[2] == 255)
+                            ++whiteZero;
                         if(px[3] > maxA)
                             maxA = px[3];
                     }
                 }
-                spdlog::info("[probe] krkrlive2d: internal FBO {}x{} sample "
-                             "nonZero={}/9 maxA={}",
+                spdlog::info("[probe] krkrlive2d: internal FBO {}x{} "
+                             "a>0={}/16 maxA={} rgbNonZero={}/16 "
+                             "white+transparent={}/16 center=({},{},{},{})",
                              static_cast<int>(fboW_), static_cast<int>(fboH_),
-                             nonZero, maxA);
+                             aNonZero, maxA, rgbNonZero, whiteZero, ctr[0],
+                             ctr[1], ctr[2], ctr[3]);
             }
         }
 #endif
