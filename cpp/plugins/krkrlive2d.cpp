@@ -74,6 +74,10 @@ extern iTJSDispatch2 *KrkrGLES_GetRegisteredLayer();
 extern bool CopyFBOToLayer(GLuint fbo, GLsizei srcW, GLsizei srcH,
                            iTJSDispatch2 *layer, GLint prevFbo = -1);
 
+// 是否正处在 krkrgles 的 capture() 回调里（见 krkrgles.cpp）。为真时，
+// 脚本调 model.render() 的语义是"画进调用方当前绑定的目标"，而不只是更新内部 FBO。
+extern "C" bool KrkrGLES_IsCaptureActive();
+
 class CubismLive2DModel; // forward
 static std::vector<CubismLive2DModel *> g_activeModels;
 static void EnsureContinuousHook(); // forward
@@ -740,6 +744,33 @@ public:
             renderer->DrawModel();
         }
         ApplyMosaicPostEffect();
+
+#if defined(KRKR_RENDER_PROBE)
+        // 一次性采样内部 FBO：区分「模型根本没画进去」与「画进去了但没呈现出去」。
+        // 只取 9 个点、每个模型只做两次，避免每帧 glReadPixels（README 硬约束 4）。
+        {
+            static int s_samples = 0;
+            if(s_samples < 2) {
+                ++s_samples;
+                int nonZero = 0, maxA = 0;
+                for(int gy = 1; gy <= 3; ++gy) {
+                    for(int gx = 1; gx <= 3; ++gx) {
+                        unsigned char px[4] = { 0, 0, 0, 0 };
+                        glReadPixels(fboW_ * gx / 4, fboH_ * gy / 4, 1, 1,
+                                     GL_RGBA, GL_UNSIGNED_BYTE, px);
+                        if(px[0] || px[1] || px[2] || px[3])
+                            ++nonZero;
+                        if(px[3] > maxA)
+                            maxA = px[3];
+                    }
+                }
+                spdlog::info("[probe] krkrlive2d: internal FBO {}x{} sample "
+                             "nonZero={}/9 maxA={}",
+                             static_cast<int>(fboW_), static_cast<int>(fboH_),
+                             nonZero, maxA);
+            }
+        }
+#endif
 
         g_live2dRenderTarget = { internalFbo_, fboW_, fboH_ };
 
@@ -1779,6 +1810,12 @@ public:
             GLint savedVP[4];
             glGetIntegerv(GL_VIEWPORT, savedVP);
             s->cubismModel_->UpdateAndDraw(savedFBO, savedVP);
+            // capture 回调里脚本调 render() 时，调用方已经把捕获目标绑好了；
+            // 官方插件的语义是"画在当前 FBO"，G2 的全动画正是靠这一步把立绘
+            // 合成进 capture 的目标图层。UpdateAndDraw 已把 FBO 还原成 savedFBO，
+            // 所以这里直接把它当目标 blit。非 capture 场景保持原行为（叠加钩子负责呈现）。
+            if(KrkrGLES_IsCaptureActive())
+                s->cubismModel_->BlitOverlay(savedFBO, savedVP);
         }
         if(s)
             s->progress_ = 1.0;

@@ -1498,6 +1498,16 @@ static bool CopyFBOToLayerCPU(GLuint fbo, GLsizei srcW, GLsizei srcH,
 // Copy FBO → Layer with automatic GPU/CPU path selection.
 // Resolves native Layer instance once and passes to GPU/CPU paths.
 // ---------------------------------------------------------------------------
+
+// capture() 回调是否正在执行。Live2D 插件据此决定要不要把模型额外画到
+// "调用方当前绑定的目标"上：官方插件是"画在当前 FBO"，而 G2 的全动画正是在
+// capture 回调里调 model.render()，靠这一步把立绘合成进捕获目标。
+static bool g_captureActive = false;
+
+extern "C" bool KrkrGLES_IsCaptureActive() {
+    return g_captureActive;
+}
+
 bool CopyFBOToLayer(GLuint fbo, GLsizei srcW, GLsizei srcH,
                     iTJSDispatch2 *layer, GLint prevFbo) {
     if(!fbo || srcW <= 0 || srcH <= 0 || !layer)
@@ -2105,7 +2115,10 @@ namespace { // reopen anonymous namespace
                                  ((color >> 24) & 0xff) / 255.0f);
                     glClear(GL_COLOR_BUFFER_BIT);
                 }
+                // 回调期间置位：Live2D 的 render() 据此把模型也画进这个捕获 FBO
+                g_captureActive = true;
                 InvokeCaptureCallback("GLESAdaptor.capture", w, h, n, p);
+                g_captureActive = false;
                 // 结果交给图层；GPU blit 失败会自动退 CPU（见 CopyFBOToLayer）
                 CopyFBOToLayer(s->fbo_.GetFBO(), static_cast<GLsizei>(w),
                                static_cast<GLsizei>(h), layer,
