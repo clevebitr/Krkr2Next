@@ -250,6 +250,33 @@ namespace {
 
     // 调用方必须持有 g_compat_mutex。
     void ApplyCompatProfileLocked() {
+        // ── `auto` 档必须等 game_root 到齐，否则**不要写任何值** ───────────────
+        //
+        // 壳是分两条选项下发的（`game_compat_profile` 与 `game_compat_game_root`），
+        // 而 `auto` 判档只能靠 game_root 里的插件标记。若在 game_root 还没到的第一
+        // 条就解析，就会得到默认档（kirikiri2-classic → off）并把 off 写进命令行。
+        //
+        // 致命之处在于 `TVPSetCommandLine` 是**先写先赢**（同名的后一条不生效；
+        // 真机日志里那句 "earlier item has more priority" 就是它）：等 game_root
+        // 到了再写 `kag`，插件读到的仍然是那个更早的 `off`。真机症状正是如此——
+        // 兼容档日志明明判成 `krkrz-kag v1 -> ogldrawdevice_compat=kag (auto)`，
+        // 却完全没有 `krkrgles: ogldrawdevice_compat=kag 已启用` 那一行，于是
+        // GPU 闸门从未打开、千恋万花(默认 auto 档)黑屏进不去；而 G1 恰好被判成
+        // classic/off，掩盖了这个 bug。
+        //
+        // 所以：`auto` 且 game_root 为空时直接返回，等第二条选项到了再一次性解析。
+        // 显式具名档不依赖 game_root，可以立即生效。
+        if(g_compat_request == ENGINE_GAME_COMPAT_PROFILE_AUTO &&
+           g_compat_game_root.empty()) {
+            static bool s_defer_logged = false;
+            if(!s_defer_logged) {
+                s_defer_logged = true;
+                spdlog::info("compat profile: auto 档等待 game_root（不写 "
+                             "ogldrawdevice_compat，避免先写先赢把档位锁死）");
+            }
+            return;
+        }
+
         const CompatProfile *prof = nullptr;
         const char *source = nullptr;
         if(g_compat_request != ENGINE_GAME_COMPAT_PROFILE_AUTO) {
