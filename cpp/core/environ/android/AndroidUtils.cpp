@@ -13,6 +13,7 @@
 #include "KrkrJniHelper.h"
 #include <set>
 #include <sstream>
+#include <spdlog/spdlog.h>
 #include "SysInitIntf.h"
 #include "ConfigManager/LocaleConfigManager.h"
 #include "Platform.h"
@@ -665,6 +666,11 @@ int TVPShowSimpleMessageBox(const char *pszText, const char *pszTitle,
         }
         return MsgBoxRet;
     }
+    // 壳没提供 org/tvp/kirikiri2/KR2Activity（KiriNext 的落点是同名 Kotlin
+    // object，见 KR2Activity.kt）：静默返回 -1 会让"消息框不弹"无迹可循。
+    spdlog::warn(
+        "TVPShowSimpleMessageBox: KR2Activity 不可用，按 -1 返回 text={}",
+        pszText ? pszText : "");
     return -1;
 }
 
@@ -753,6 +759,7 @@ int TVPShowSimpleInputBox(ttstr &text, const ttstr &caption,
         text = MessageBoxRetText;
         return MsgBoxRet;
     }
+    spdlog::warn("TVPShowSimpleInputBox: KR2Activity 不可用，按 -1 返回");
     return -1;
 }
 

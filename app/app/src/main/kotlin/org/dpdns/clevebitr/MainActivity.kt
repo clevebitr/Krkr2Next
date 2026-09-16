@@ -16,8 +16,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
@@ -26,6 +28,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import java.io.File
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.dpdns.clevebitr.core.AppLog
 import org.dpdns.clevebitr.core.AppPrefs
@@ -38,6 +41,7 @@ import org.dpdns.clevebitr.core.GlobalDefaults
 import org.dpdns.clevebitr.core.InputEvent
 import org.dpdns.clevebitr.core.LibraryGame
 import org.dpdns.clevebitr.core.LogFiles
+import org.dpdns.clevebitr.core.MessageBoxHost
 import org.dpdns.clevebitr.core.NativeEngine
 import org.dpdns.clevebitr.core.OverlayConfig
 import org.dpdns.clevebitr.core.VkCodes
@@ -47,6 +51,7 @@ import org.dpdns.clevebitr.core.scrape.ScrapeService
 import org.dpdns.clevebitr.core.resolve
 import org.dpdns.clevebitr.ui.GameScreen
 import org.dpdns.clevebitr.ui.KrKr2NextTheme
+import org.dpdns.clevebitr.ui.MessageBoxDialog
 import org.dpdns.clevebitr.ui.SettingsScreen
 import org.dpdns.clevebitr.ui.ShellNavHost
 import org.dpdns.clevebitr.ui.ShellNavParams
@@ -118,6 +123,9 @@ class MainActivity : ComponentActivity() {
         // 顺序不能反：inspectPrevious 读的正是上次留下的标记文件，beginSession 会覆盖它
         val previous = CrashTracker.inspectPrevious(this)
         CrashTracker.beginSession(this)
+        // 接管引擎消息框：从这一刻起 System.inform / 致命错误框会走本 Activity 的
+        // 对话框（引擎线程在弹出期间阻塞等回复）。onDestroy 里交还。
+        MessageBoxHost.attachUi()
         if (previous.kind != CrashTracker.ExitKind.CLEAN) {
             AppLog.w(TAG, "上次未正常退出：${previous.kind} / ${previous.detail}")
             if (previous.kind != CrashTracker.ExitKind.JAVA_CRASH) {
@@ -174,6 +182,27 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
+                    }
+
+                    // 宿主机消息框：引擎线程正阻塞等待，必须经 MessageBoxHost.reply
+                    // 回传下标（内部走 JNI 回调唤醒引擎）。用轮询而不是回调，是因为
+                    // 引擎→壳没有反向通道，入队发生在引擎线程，这里只读队列。
+                    var messageBox by remember { mutableStateOf<MessageBoxHost.Request?>(null) }
+                    LaunchedEffect(Unit) {
+                        while (true) {
+                            val head = MessageBoxHost.peek()
+                            if (head !== messageBox) messageBox = head
+                            delay(200)
+                        }
+                    }
+                    messageBox?.let { request ->
+                        MessageBoxDialog(
+                            request = request,
+                            onReply = { index, text ->
+                                MessageBoxHost.reply(request, index, text)
+                                messageBox = null
+                            },
+                        )
                     }
 
                     recoveryNotice?.let { notice ->
@@ -517,6 +546,9 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         val finishing = isFinishing
         AppLog.i(TAG, "onDestroy finishing=$finishing")
+        // 交还消息框接管权（仅真正退出时）：未回复的请求按取消回掉，不让引擎卡在
+        // 等待里。配置变更重建不交还——新实例会重新接管，队列里待回复的请求不丢。
+        if (finishing) MessageBoxHost.detachUi()
         closeSession()
         if (finishing) {
             // 走到这里才算"正常退出"。没走到的话会话标记会停在 running，
