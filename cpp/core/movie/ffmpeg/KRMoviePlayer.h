@@ -4,6 +4,7 @@
 #include "VideoPlayer.h"
 #include "krmovie.h"
 #include "ComplexRect.h"
+#include "EventIntf.h"
 
 struct SwsContext;
 
@@ -205,7 +206,12 @@ protected:
                 data[i] = nullptr;
         }
 
+        BitmapPicture(const BitmapPicture &) = delete;
+        BitmapPicture &operator=(const BitmapPicture &) = delete;
+
         ~BitmapPicture() { Clear(); }
+
+        void MoveFrom(BitmapPicture &source);
 
         void swap(BitmapPicture &r);
 
@@ -220,8 +226,10 @@ protected:
     double m_curpts = 0;
 };
 
-class VideoPresentOverlay : public TVPMoviePlayer // video display overlay
-{
+// 视频呈现 overlay（overlay 模式电影）：连续事件钩子驱动呈现，帧经宿主纹理
+// 共享叠画在场景之上。
+class VideoPresentOverlay : public TVPMoviePlayer,
+                            public tTVPContinuousEventCallbackIntf {
 protected:
     OverlayNode *m_pRootNode = nullptr;
     TVPYUVSprite *m_pSprite = nullptr;
@@ -232,6 +240,8 @@ protected:
 
 public:
     void PresentPicture(float dt);
+
+    void OnContinuousCallback(tjs_uint64 tick) override;
 
     void Stop() override;
 

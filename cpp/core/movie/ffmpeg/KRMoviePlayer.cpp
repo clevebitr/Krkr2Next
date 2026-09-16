@@ -15,6 +15,16 @@ extern "C" {
 
 extern std::thread::id TVPMainThreadID;
 
+// 宿主视频 overlay 提交接口 —— 实现落在 cpp/core/environ/stubs/ui_stubs.cpp 的
+// HostWindowLayer（与 TVPSetPostDrawHook 同一种做法：本地 extern 声明，不新增
+// 头文件）。引擎把解码出的 RGBA 帧拷给宿主层，宿主层在本帧场景 blit 之后把它
+// 当作一张纹理叠画到宿主 render target 上（overlay 模式下视频盖在画面之上）。
+extern bool TVPHostSubmitVideoOverlayFrame(const void *rgba, int width,
+                                           int height, int stride_bytes,
+                                           int left, int top, int right,
+                                           int bottom);
+extern void TVPHostClearVideoOverlayFrame();
+
 NS_KRMOVIE_BEGIN
 
 TVPMoviePlayer::TVPMoviePlayer() { m_pPlayer = new BasePlayer(this); }
@@ -226,7 +236,11 @@ int TVPMoviePlayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
     // this, std::placeholders::_1), 0, sckey);
 }
 
-VideoPresentOverlay::~VideoPresentOverlay() { ClearNode(); }
+VideoPresentOverlay::~VideoPresentOverlay() {
+    TVPRemoveContinuousEventHook(this);
+    TVPHostClearVideoOverlayFrame();
+    ClearNode();
+}
 
 void VideoPresentOverlay::ClearNode() {
     // Overlay lifecycle is managed by the host shell.
@@ -234,15 +248,15 @@ void VideoPresentOverlay::ClearNode() {
     m_pSprite = nullptr;
 }
 
-// Replace VideoPresentOverlay::PresentPicture with stub
 void VideoPresentOverlay::PresentPicture(float dt) {
     BitmapPicture pic;
+    m_curpts = m_pPlayer->GetClock() / DVD_TIME_BASE;
     {
         std::unique_lock<std::mutex> lk(m_mtxPicture);
         if(m_usedPicture <= 0)
             return;
         do {
-            m_picture[m_curPicture].swap(pic);
+            m_picture[m_curPicture].MoveFrom(pic);
             --m_usedPicture;
             if(++m_curPicture >= MAX_BUFFER_COUNT)
                 m_curPicture = 0;
@@ -251,16 +265,46 @@ void VideoPresentOverlay::PresentPicture(float dt) {
         m_condPicture.notify_all();
     }
     FrameMove();
-    if(!pic.rgba) {
+    if(!pic.rgba)
+        return;
+    if(!Visible) {
+        TVPHostClearVideoOverlayFrame();
         return;
     }
-    // Video frames are decoded but display overlay is not rendered.
-    // This will be re-implemented via host texture sharing.
+
+    tTVPRect dest = GetBounds();
+    if(dest.get_width() <= 0 || dest.get_height() <= 0)
+        dest = tTVPRect(0, 0, pic.width, pic.height);
+    TVPHostSubmitVideoOverlayFrame(pic.rgba, pic.width, pic.height,
+                                   pic.width * 4, dest.left, dest.top,
+                                   dest.right, dest.bottom);
 }
 
-void KRMovie::VideoPresentOverlay::Play() { TVPMoviePlayer::Play(); }
+// 呈现由两条路驱动：解码回调（OnPlayEvent Update，主线程时立即呈现）与连续
+// 事件钩子（每 tick 兜底，并负责把落后于时钟的帧补上）。钩子只做判空与 pts
+// 门控，实际上传频率 = 视频帧率。
+void VideoPresentOverlay::OnContinuousCallback(tjs_uint64 tick) {
+    if(!m_usedPicture)
+        return;
+    const double curpts = m_pPlayer->GetClock() / DVD_TIME_BASE;
+    {
+        std::lock_guard<std::mutex> lk(m_mtxPicture);
+        if(m_picture[m_curPicture].pts > curpts)
+            return;
+    }
+    PresentPicture(0.0f);
+}
 
-void KRMovie::VideoPresentOverlay::Stop() { TVPMoviePlayer::Stop(); }
+void KRMovie::VideoPresentOverlay::Play() {
+    TVPMoviePlayer::Play();
+    TVPAddContinuousEventHook(this);
+}
+
+void KRMovie::VideoPresentOverlay::Stop() {
+    TVPRemoveContinuousEventHook(this);
+    TVPHostClearVideoOverlayFrame();
+    TVPMoviePlayer::Stop();
+}
 
 MoviePlayerOverlay::~MoviePlayerOverlay() {
     assert(std::this_thread::get_id() == TVPMainThreadID);
@@ -268,13 +312,9 @@ MoviePlayerOverlay::~MoviePlayerOverlay() {
     m_pPlayer = nullptr;
 }
 
-// Replace MoviePlayerOverlay::SetWindow with stub
 void MoviePlayerOverlay::SetWindow(tTJSNI_Window *window) {
     ClearNode();
     m_pOwnerWindow = window;
-    // Video overlay will be connected via the host rendering path.
-    spdlog::warn("MoviePlayerOverlay::SetWindow: video overlay display is "
-                 "currently disabled (scene tree removed)");
 }
 
 void MoviePlayerOverlay::BuildGraph(tTJSNI_VideoOverlay *callbackwin,
@@ -294,10 +334,25 @@ const tTVPRect &MoviePlayerOverlay::GetBounds() {
 
 void KRMovie::MoviePlayerOverlay::SetVisible(bool b) {
     VideoPresentOverlay::SetVisible(b);
+    if(!b)
+        TVPHostClearVideoOverlayFrame();
 }
 
 void MoviePlayerOverlay::OnPlayEvent(KRMovieEvent msg, void *p) {
-    if(msg == KRMovieEvent::Ended) {
+    if(msg == KRMovieEvent::Update) {
+        // 呈现必须落在引擎主线程（宿主 GL 调用与场景 blit 同线程）。回调不在
+        // 主线程时跳过，连续事件钩子会在下个 tick 补上。
+        if(std::this_thread::get_id() == TVPMainThreadID)
+            PresentPicture(0.0f);
+        if(m_pCallbackWin) {
+            int frame;
+            GetFrame(&frame);
+            NativeEvent ev(WM_GRAPHNOTIFY);
+            ev.WParam = EC_UPDATE;
+            ev.LParam = frame;
+            m_pCallbackWin->PostEvent(ev);
+        }
+    } else if(msg == KRMovieEvent::Ended) {
         NativeEvent ev(WM_GRAPHNOTIFY);
         ev.WParam = EC_COMPLETE;
         ev.LParam = 0;
@@ -305,16 +360,39 @@ void MoviePlayerOverlay::OnPlayEvent(KRMovieEvent msg, void *p) {
     }
 }
 
+// 层路径（KRMovieLayer）在用：交换两块缓冲（fmt/pts 不参与交换，保持原行为）。
 void VideoPresentOverlay::BitmapPicture::swap(BitmapPicture &r) {
     std::swap(data, r.data);
     std::swap(width, r.width);
     std::swap(height, r.height);
 }
 
+void TVPMoviePlayer::BitmapPicture::MoveFrom(BitmapPicture &source) {
+    if(this == &source)
+        return;
+    Clear();
+    fmt = source.fmt;
+    width = source.width;
+    height = source.height;
+    pts = source.pts;
+    for(int i = 0; i < sizeof(data) / sizeof(data[0]); ++i) {
+        data[i] = source.data[i];
+        source.data[i] = nullptr;
+    }
+    source.fmt = RENDER_FMT_NONE;
+    source.width = 0;
+    source.height = 0;
+    source.pts = 0.0;
+}
+
 void TVPMoviePlayer::BitmapPicture::Clear() {
     for(int i = 0; i < sizeof(data) / sizeof(data[0]); ++i)
         if(data[i])
             TJSAlignedDealloc(data[i]), data[i] = nullptr;
+    fmt = RENDER_FMT_NONE;
+    width = 0;
+    height = 0;
+    pts = 0.0;
 }
 
 void VideoPresentOverlay2::SetRootNode(OverlayNode *node) {

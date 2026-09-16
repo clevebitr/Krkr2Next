@@ -16,6 +16,8 @@
 #include <vector>
 #include <filesystem>
 #include <fstream>
+#include <cstring>
+#include <mutex>
 
 #include "tjsCommHead.h"
 #include "tjsConfig.h"
@@ -51,6 +53,113 @@ static bool s_blackReported = false; // 本段黑屏是否已上报
 static const int kBlackReportThreshold = 3;
 
 // ---------------------------------------------------------------------------
+// 视频 overlay 帧（krmovie 的 overlay 模式电影）—— 引擎侧
+// （KRMoviePlayer.cpp 的 VideoPresentOverlay::PresentPicture）把解码出的 RGBA
+// 帧拷进这里，宿主层在场景 blit 之后把它作为一张纹理叠画到宿主 render target。
+// overlay 模式的语义就是视频盖在画面上（KiriKiri 在 Win32 上用的是独立 overlay
+// 子窗口，这里等价地画在最终合成之上）。
+// 帧数据自上而下（row 0 = 图像顶行），dest 为游戏坐标矩形（含 Zoom 偏移）。
+// ---------------------------------------------------------------------------
+static std::mutex s_videoOverlayMtx;
+static std::vector<uint8_t> s_videoOverlayRgba;
+static int s_videoOverlayWidth = 0;
+static int s_videoOverlayHeight = 0;
+static tTVPRect s_videoOverlayDest;
+static uint64_t s_videoOverlaySerial = 0; // 0 = 无帧（不画）
+
+static bool VideoOverlayFrameActive() {
+    std::lock_guard<std::mutex> lk(s_videoOverlayMtx);
+    return s_videoOverlaySerial != 0;
+}
+
+// 由 KRMoviePlayer.cpp 调用（本地 extern 声明，不新增头文件）。
+bool TVPHostSubmitVideoOverlayFrame(const void *rgba, int width, int height,
+                                    int stride_bytes, int left, int top,
+                                    int right, int bottom) {
+    if(!rgba || width <= 0 || height <= 0 || stride_bytes < width * 4)
+        return false;
+    const size_t rowBytes = static_cast<size_t>(width) * 4;
+    std::lock_guard<std::mutex> lk(s_videoOverlayMtx);
+    s_videoOverlayRgba.resize(rowBytes * static_cast<size_t>(height));
+    const uint8_t *src = static_cast<const uint8_t *>(rgba);
+    for(int y = 0; y < height; ++y) {
+        std::memcpy(s_videoOverlayRgba.data() +
+                        static_cast<size_t>(y) * rowBytes,
+                    src + static_cast<size_t>(y) * stride_bytes, rowBytes);
+    }
+    s_videoOverlayWidth = width;
+    s_videoOverlayHeight = height;
+    s_videoOverlayDest = tTVPRect(left, top, right, bottom);
+    ++s_videoOverlaySerial;
+    return true;
+}
+
+void TVPHostClearVideoOverlayFrame() {
+    std::lock_guard<std::mutex> lk(s_videoOverlayMtx);
+    s_videoOverlaySerial = 0;
+    s_videoOverlayWidth = s_videoOverlayHeight = 0;
+    std::vector<uint8_t>().swap(s_videoOverlayRgba);
+}
+
+// ---------------------------------------------------------------------------
+// 视频 overlay 用的小程序：单位四边形 + 一个 NDC 目标矩形，UV 从顶点位置直推
+// （约定：图像顶行 = 纹理 v0，画面上方 = NDC +1，与 scene blit / Live2D
+// post-draw 相同）。
+// ---------------------------------------------------------------------------
+static GLuint kBuildVideoOverlayProgram() {
+    const char *vs_src = R"(#version 300 es
+        layout(location = 0) in vec2 aPos;
+        uniform vec4 uRect; // xmin, ymin, xmax, ymax (NDC)
+        out vec2 vUV;
+        void main() {
+            vec2 t = aPos * 0.5 + 0.5;
+            gl_Position = vec4(mix(uRect.xy, uRect.zw, t), 0.0, 1.0);
+            vUV = vec2(t.x, 1.0 - t.y);
+        }
+    )";
+    const char *fs_src = R"(#version 300 es
+        precision mediump float;
+        in vec2 vUV;
+        out vec4 fragColor;
+        uniform sampler2D uTex;
+        void main() {
+            fragColor = texture(uTex, vUV);
+        }
+    )";
+    auto compileShader = [](GLenum type, const char *src) -> GLuint {
+        GLuint s = glCreateShader(type);
+        glShaderSource(s, 1, &src, nullptr);
+        glCompileShader(s);
+        GLint ok = 0;
+        glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
+        if(!ok) {
+            char log[512];
+            glGetShaderInfoLog(s, sizeof(log), nullptr, log);
+            spdlog::error("Video overlay shader compile error: {}", log);
+        }
+        return s;
+    };
+    GLuint vs = compileShader(GL_VERTEX_SHADER, vs_src);
+    GLuint fs = compileShader(GL_FRAGMENT_SHADER, fs_src);
+    GLuint prog = glCreateProgram();
+    glAttachShader(prog, vs);
+    glAttachShader(prog, fs);
+    glLinkProgram(prog);
+    GLint ok = 0;
+    glGetProgramiv(prog, GL_LINK_STATUS, &ok);
+    if(!ok) {
+        char log[512];
+        glGetProgramInfoLog(prog, sizeof(log), nullptr, log);
+        spdlog::error("Video overlay program link error: {}", log);
+        glDeleteProgram(prog);
+        prog = 0;
+    }
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+    return prog;
+}
+
+// ---------------------------------------------------------------------------
 // HostWindowLayer — concrete iWindowLayer for the Android host shell.
 // Provides a logical window backed by the native EGL surface (ANativeWindow
 // when a SurfaceTexture is attached, Pbuffer otherwise).
@@ -84,6 +193,14 @@ public:
         if(blit_texture_) {
             glDeleteTextures(1, &blit_texture_);
             blit_texture_ = 0;
+        }
+        if(video_overlay_program_) {
+            glDeleteProgram(video_overlay_program_);
+            video_overlay_program_ = 0;
+        }
+        if(video_overlay_texture_) {
+            glDeleteTextures(1, &video_overlay_texture_);
+            video_overlay_texture_ = 0;
         }
         spdlog::debug("HostWindowLayer destroyed");
     }
@@ -424,7 +541,9 @@ public:
                 //   1) 视频 overlay 是否在播（验证 krmovie Present stub
                 //   阻塞假设）； 2)
                 //   引擎当前绘制计数与图层数，供定位脚本/调度问题。
-                if(engDraw > 0 && nonBlack == 0) {
+                // 视频 overlay 播放期间场景本身就可能是黑的（KAG 把图层清掉、
+                // 画面全靠 overlay），此时黑屏不是异常，不计数。
+                if(engDraw > 0 && nonBlack == 0 && !VideoOverlayFrameActive()) {
                     ++s_blackSampleCount;
                     if(s_blackSampleCount >= kBlackReportThreshold &&
                        !s_blackReported) {
@@ -574,6 +693,10 @@ public:
                          dbgPx[0], dbgPx[1], dbgPx[2], dbgPx[3]);
         }
 
+        // overlay 模式电影：视频帧叠画在场景之上；Live2D 等 postDrawHook 内容
+        // 仍可再压一层。
+        DrawVideoOverlay(tw, th);
+
         if(g_postDrawHook)
             g_postDrawHook();
 
@@ -594,6 +717,106 @@ public:
         // double-buffer flicker (alternating between current and stale
         // back-buffer contents).
         egl.MarkFrameDirty();
+    }
+
+    // ── 视频 overlay（overlay 模式电影）─────────────────────────────
+    // 纹理与程序属于当前 EGL 上下文；上下文重建后纹理名可能被新上下文复用或
+    // 失效，靠 glIsTexture 校验（与 blit 源纹理同一种防旧上下文残留做法）。
+    void EnsureVideoOverlayResources() {
+        if(video_overlay_texture_ == 0) {
+            glGenTextures(1, &video_overlay_texture_);
+            glBindTexture(GL_TEXTURE_2D, video_overlay_texture_);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            video_tex_w_ = video_tex_h_ = 0;
+            video_overlay_serial_ = 0;
+        }
+        if(video_overlay_program_ == 0) {
+            video_overlay_program_ = kBuildVideoOverlayProgram();
+            if(video_overlay_program_ != 0) {
+                video_tex_uniform_ =
+                    glGetUniformLocation(video_overlay_program_, "uTex");
+                video_rect_uniform_ =
+                    glGetUniformLocation(video_overlay_program_, "uRect");
+                spdlog::info("HostWindowLayer: video overlay resources "
+                             "initialized (program={})",
+                             video_overlay_program_);
+            }
+        }
+    }
+
+    // 调用点：场景 blit 之后、postDrawHook 之前；viewport 已是 letterbox 区域，
+    // FBO 是宿主 render target。仅在新帧（serial 变化）时上传纹理。
+    void DrawVideoOverlay(tjs_uint sceneW, tjs_uint sceneH) {
+        tTVPRect dest;
+        {
+            std::lock_guard<std::mutex> lk(s_videoOverlayMtx);
+            if(s_videoOverlaySerial == 0 || s_videoOverlayWidth <= 0 ||
+               s_videoOverlayHeight <= 0)
+                return;
+            EnsureVideoOverlayResources();
+            if(video_overlay_texture_ == 0)
+                return;
+            if(glIsTexture(video_overlay_texture_) == 0) {
+                // 旧 EGL 上下文残留的纹理名：重建并重传本帧
+                video_overlay_texture_ = 0;
+                video_overlay_serial_ = 0;
+                EnsureVideoOverlayResources();
+                if(video_overlay_texture_ == 0)
+                    return;
+            }
+            if(video_overlay_serial_ != s_videoOverlaySerial) {
+                glBindTexture(GL_TEXTURE_2D, video_overlay_texture_);
+                if(video_tex_w_ != static_cast<tjs_uint>(s_videoOverlayWidth) ||
+                   video_tex_h_ !=
+                       static_cast<tjs_uint>(s_videoOverlayHeight)) {
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, s_videoOverlayWidth,
+                                 s_videoOverlayHeight, 0, GL_RGBA,
+                                 GL_UNSIGNED_BYTE, s_videoOverlayRgba.data());
+                    video_tex_w_ = s_videoOverlayWidth;
+                    video_tex_h_ = s_videoOverlayHeight;
+                } else {
+                    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, s_videoOverlayWidth,
+                                    s_videoOverlayHeight, GL_RGBA,
+                                    GL_UNSIGNED_BYTE,
+                                    s_videoOverlayRgba.data());
+                }
+                video_overlay_serial_ = s_videoOverlaySerial;
+            }
+            dest = s_videoOverlayDest;
+        }
+
+        if(dest.get_width() <= 0 || dest.get_height() <= 0) {
+            dest = tTVPRect(0, 0, static_cast<tjs_int>(sceneW),
+                            static_cast<tjs_int>(sceneH));
+        }
+        const float sw = sceneW ? static_cast<float>(sceneW) : 1.0f;
+        const float sh = sceneH ? static_cast<float>(sceneH) : 1.0f;
+        // 游戏坐标（自上而下）→ NDC：画面上方 = NDC +1，故顶边映射到 ymax。
+        const float x0 = 2.0f * static_cast<float>(dest.left) / sw - 1.0f;
+        const float x1 = 2.0f * static_cast<float>(dest.right) / sw - 1.0f;
+        const float yTop = 1.0f - 2.0f * static_cast<float>(dest.top) / sh;
+        const float yBot = 1.0f - 2.0f * static_cast<float>(dest.bottom) / sh;
+
+        glUseProgram(video_overlay_program_);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, video_overlay_texture_);
+        glUniform1i(video_tex_uniform_, 0);
+        glUniform4f(video_rect_uniform_, x0, yBot, x1, yTop);
+        glDisable(GL_BLEND);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_SCISSOR_TEST);
+        static const float kUnitQuad[] = { -1.f, -1.f, 1.f, -1.f,
+                                           -1.f, 1.f,  1.f, 1.f };
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, kUnitQuad);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        glDisableVertexAttribArray(0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glUseProgram(0);
     }
 
     void InvalidateClose() override { closing_ = true; }
@@ -771,6 +994,15 @@ private:
     GLint blit_flipy_uniform_ = -1;
     GLint blit_uvscale_uniform_ = -1;
     std::vector<uint8_t> blit_pixel_buf_;
+
+    // 视频 overlay 资源（overlay 模式电影）
+    GLuint video_overlay_program_ = 0;
+    GLint video_tex_uniform_ = -1;
+    GLint video_rect_uniform_ = -1;
+    GLuint video_overlay_texture_ = 0;
+    tjs_uint video_tex_w_ = 0;
+    tjs_uint video_tex_h_ = 0;
+    uint64_t video_overlay_serial_ = 0; // 已上传帧的提交序号
 };
 
 // ---------------------------------------------------------------------------
