@@ -1486,6 +1486,40 @@ static bool CopyFBOToLayerCPU(GLuint fbo, GLsizei srcW, GLsizei srcH,
 
     ConvertRGBA_to_BGRA(srcPixels, srcW, srcH, dst, pitch, copyW, copyH);
 
+#if defined(KRKR_RENDER_PROBE)
+    // 三个中心像素一起看，直接判定是哪一段错：
+    //   fbo  —— 现读一次 FBO（真相）
+    //   src  —— 读回通道产出的（PBO 异步路径会给上一帧的内容）
+    //   dst  —— 转换后真正写进图层缓冲的
+    // 只在头两次拷贝打，避免每帧 glReadPixels（README 硬约束 4）。
+    {
+        static int s_copySamples = 0;
+        if(s_copySamples < 2) {
+            ++s_copySamples;
+            unsigned char fboCtr[4] = { 0, 0, 0, 0 };
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glReadPixels(srcW / 2, srcH / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE,
+                         fboCtr);
+            glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
+            const unsigned char *srcC =
+                srcPixels + static_cast<size_t>(srcW) * (srcH / 2) * 4u +
+                static_cast<size_t>(srcW / 2) * 4u;
+            const unsigned char *dstC =
+                dst + static_cast<size_t>(pitch) * (layerH / 2) +
+                static_cast<size_t>(layerW / 2) * 4u;
+            spdlog::info("[probe] krkrgles: copy path={} fbo0=({},{},{},{}) "
+                         "src=({},{},{},{}) dst=({},{},{},{}) pitch={} "
+                         "copy={}x{} err=0x{:04X}",
+                         mapped ? "pbo-async" : "sync-read", fboCtr[0],
+                         fboCtr[1], fboCtr[2], fboCtr[3], srcC[0], srcC[1],
+                         srcC[2], srcC[3], dstC[0], dstC[1], dstC[2], dstC[3],
+                         static_cast<int>(pitch), static_cast<int>(copyW),
+                         static_cast<int>(copyH),
+                         static_cast<unsigned>(glGetError()));
+        }
+    }
+#endif
+
     if(mapped) {
         glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -2422,8 +2456,10 @@ namespace { // reopen anonymous namespace
     //
     // 本类不需要自己实现 GL：它不是新的渲染实现，而是 GLESAdaptor 的**同源别名**，
     // 内部持有一个 GLESAdaptor 逐个转调，因此复用已经验证过的 capture 交付路径。
-    // 是否挂到 Window 上、以及要不要连 KAGWindow_createDrawDevice 一起接管，由
-    // ogldrawdevice_compat 选项决定（见 KrkrGlesPostRegist）。
+    // 是否挂到 Window 上由 ogldrawdevice_compat 选项决定（见 KrkrGlesPostRegist）。
+    // 注意它只负责"让游戏的 GPU 判断成立"，并不等于 GPU 层真能跑——真机实测
+    // GPU 层脚本初始化时仍会抛 `mixinclass.tjs(1) [(function) missing]`，
+    // 因为 krkrz 的 Canvas / Texture / ShaderProgram 那一套本引擎没有实现。
     // -----------------------------------------------------------------------
 #define KRKR_OGL_FORWARD(cb)                                                   \
     static tjs_error cb(tTJSVariant *r, tjs_int n, tTJSVariant **p,            \
@@ -2480,20 +2516,24 @@ namespace { // reopen anonymous namespace
 // krkrz 兼容层：按 ogldrawdevice_compat 选项决定把 OGLDrawDevice 暴露到什么程度。
 //
 //   off   —— 什么都不做（默认，保持原行为）
-//   alias —— Window.OGLDrawDevice / Window.GLESAdaptor（方案 A）
-//   kag   —— 方案 A + 接管 KAGWindow_createDrawDevice（方案 B）
+//   alias —— 把 Window.OGLDrawDevice / Window.GLESAdaptor 挂上
+//   kag   —— 在 alias 之上再接管 KAGWindow_createDrawDevice
 //
-// 为什么 kag 那一档必须**延迟**安装：`KAGWindow_createDrawDevice` 是游戏自己的
-// `system\mainwindow.tjs` 定义的，那份脚本在插件注册（post-regist）之后才 exec
-// （真机实测：插件 10:40:25.228 注册，MainWindow.tjs 在 exec#67）。在 post-regist
-// 里覆盖它一定会被游戏覆盖回去，那一档就成了"看着有、其实没用"的假开关。所以这里
-// 挂一个**一次性**连续事件钩子，等脚本都加载完后的第一帧再装，装完立刻摘钩。
+// 两档都实测有效，但**作用不同、按游戏二选一**：
 //
-// 为什么需要 kag 这一档：`tTJSNI_BaseWindow::SetDrawDeviceObject()` 在对象拿不到
-// `interface` 时**直接抛异常**（`WindowIntf.cpp:270`，不会温和回退）。游戏若把
-// OGLDrawDevice 当成真正的 draw device 返回就会踩到这一点。AetherKiri 的解法是用
-// 伴随脚本把这个函数整个换掉：OGL 设备只塞进 `gpuDrawDevice`（够脚本判断 GPU 可用），
-// 真正返回的仍是 BasicDrawDevice。此处照搬同一套逻辑。
+//   * `alias` 解决"闸门"：游戏的 Initialize.tjs 先看 `Window.OGLDrawDevice` 在不在，
+//     缺了就静默跳过 GPULayer.tjs / GPUAffineLayer.tjs。挂上别名后两者都会加载
+//     （真机实测：会话 11:22 首次出现在 StorageExec 里）。
+//   * `kag` 解决"窗口绘制设备工厂"：`KAGWindow_createDrawDevice` 由游戏自己的
+//     `system\mainwindow.tjs` 定义、在插件注册之后才 exec，所以覆盖必须**延迟**到
+//     脚本加载完（这里用一次性连续事件钩子，装完立即摘钩）。
+//     实测收益：**千恋万花**在 kag 档下能正常加载立绘与背景动态。
+//
+// ⚠️ 但 `kag` 对 G2（nainiuniu5krkr）**有害**：主机侧
+//   `HostWindowLayer::SourceSample` 报 52 次 `FBO incomplete 0x8CD6`
+//   （GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT），画面直接采不到；draw 从 20/layers 143
+//   变成 345/layers 465。且它对 G2 的 CG 黑屏没有帮助（Live2D 内部 FBO 仍是
+//   `rgbNonZero=0/16 center=(0,0,0,255)`）。⇒ 属于**逐游戏**行为，不要默认开。
 // ---------------------------------------------------------------------------
 // 与 bridge/engine_api/include/engine_options.h 的 ENGINE_OPTION_OGLDRAWDEVICE_COMPAT
 // 保持一致。引擎核心不依赖 bridge 的头，按既有惯例用字面量键名
@@ -2555,6 +2595,8 @@ static const tjs_char *KrkrOglKagScript() {
         TJS_W("}\n")
         TJS_W("try { KAGWindow.KAGWindow_createDrawDevice ="
               " KAGWindow_createDrawDevice; } catch(e) { }\n")
+        // KAGWindow 上没有 prototype，这句在真机会抛 `Member "prototype" does
+        // not exist`（被 try 吞掉）。留着是为了兼容"把它当构造函数"的写法。
         TJS_W("try { KAGWindow.prototype.KAGWindow_createDrawDevice ="
               " KAGWindow_createDrawDevice; } catch(e) { }\n")
         TJS_W("try { KAGWindow_createDrawDevice = KAGWindow_createDrawDevice; }"
@@ -2590,13 +2632,15 @@ static void KrkrGlesPostRegist() {
     if(mode != kAlias && mode != kKag)
         return; // off 或未知取值：保持原行为
 
-    // 方案 A：把 GL 设备名字挂到 Window 上。它不改变任何既有渲染实现，只是让游戏的
-    // "有没有 GPU 绘制设备"判断成立，从而去加载 GPULayer.tjs / GPUAffineLayer.tjs。
+    // 把 GL 设备名字挂到 Window 上。它不改变任何既有渲染实现，只是让游戏的
+    // "有没有 GPU 绘制设备"判断成立，从而去加载 GPULayer.tjs / GPUAffineLayer.tjs
+    // （真机实测：会话 11:22 两脚本首次出现在 StorageExec 里）。
     KrkrOglAliasOntoWindow(TJS_W("OGLDrawDevice"));
     KrkrOglAliasOntoWindow(TJS_W("GLESAdaptor"));
     spdlog::info("krkrgles: ogldrawdevice_compat 已启用"
                  "（Window.OGLDrawDevice / Window.GLESAdaptor 已挂上）");
 
+    // kag 档：额外接管窗口的绘制设备工厂。必须延迟安装，见本段开头说明。
     if(mode == kKag) {
         TVPAddContinuousEventHook(&g_krkrOglKagInstallHook);
         spdlog::info("krkrgles: kag 档就绪，KAGWindow_createDrawDevice 将在"

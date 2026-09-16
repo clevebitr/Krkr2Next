@@ -37,8 +37,15 @@
  *
  * 取值：
  *  - `off`  ：不提供（默认，保持既有行为）
- *  - `alias`：只把 `Window.OGLDrawDevice` / `Window.GLESAdaptor` 别名出去（方案 A）
- *  - `kag`  ：在 `alias` 之外再接管 `KAGWindow_createDrawDevice`（方案 B，对齐 AetherKiri）
+ *  - `alias`：把 `Window.OGLDrawDevice` / `Window.GLESAdaptor` 挂上
+ *  - `kag`  ：在 `alias` 之上再接管 `KAGWindow_createDrawDevice`
+ *
+ * 两档都实测有效，但**按游戏二选一**：
+ *  - `alias` 打开"闸门"：游戏 Initialize.tjs 探测到该名字后才会加载
+ *    `GPULayer.tjs` / `GPUAffineLayer.tjs`（实测会话 11:22 首次出现）。
+ *  - `kag` 解决窗口绘制设备工厂：**千恋万花**在此档下能正常加载立绘与背景动态；
+ *    但对 G2（nainiuniu5krkr）会把主机 FBO 弄成 `INCOMPLETE 0x8CD6`（52 次），
+ *    画面直接采不到，所以不要默认开。
  *
  * 由 krkrgles 插件在注册完成时（post-regist）读一次，所以"下次开游戏生效"。
  */

@@ -544,6 +544,10 @@ public:
 
             L2D_LOGI("tex #%d: texPath='%s' ktxPath='%s'", i, texPath.c_str(),
                      ktxPath.c_str());
+            // L2D_LOGI 在 Android 上只进 logcat，而真机取证只能靠 engine.log，
+            // 所以纹理分支的关键结论必须同时走 spdlog。
+            spdlog::info("krkrlive2d: tex #{}: texPath='{}' ktxPath='{}'", i,
+                         texPath, ktxPath);
 
             GLuint texId = 0;
 
@@ -557,8 +561,15 @@ public:
                     L2D_LOGI("tex #%d: KTX loaded OK (texId=%u)", i, texId);
                 else
                     L2D_LOGW("tex #%d: KTX load FAILED", i);
+                spdlog::info("krkrlive2d: tex #{}: KTX found ({} bytes) -> "
+                             "texId={}",
+                             i, ktxIt->second.size(),
+                             static_cast<unsigned>(texId));
             } else {
                 L2D_LOGI("tex #%d: KTX not found in archive", i);
+                spdlog::warn("krkrlive2d: tex #{}: KTX 不在包里（key='{}'，"
+                             "包里共 {} 项）",
+                             i, ktxPath, archive.size());
             }
 
             if(!texId) {
@@ -574,6 +585,9 @@ public:
                         L2D_LOGW("tex #%d: PNG decode FAILED", i);
                 } else {
                     L2D_LOGW("tex #%d: PNG not found in archive either", i);
+                    spdlog::warn("krkrlive2d: tex #{}: PNG 也不在包里"
+                                 "（key='{}'）",
+                                 i, texPath);
                 }
             }
 
@@ -589,9 +603,21 @@ public:
                                 GL_LINEAR);
                 glBindTexture(GL_TEXTURE_2D, 0);
                 L2D_LOGW("tex #%d: using 1x1 white placeholder", i);
+                spdlog::warn("krkrlive2d: tex #{}: 用 1x1 白色占位纹理"
+                             "（纹理没加载到，模型会变成纯色）",
+                             i);
             }
 
             textureIds_.push_back(texId);
+        }
+
+        {
+            // "模型纹理槽 -> GL 纹理 id" 的对应关系，只在加载期打一次。
+            std::string ids;
+            for(auto id : textureIds_)
+                ids += std::to_string(static_cast<unsigned>(id)) + " ";
+            spdlog::info("krkrlive2d: 纹理槽 {} 个，GL id = [{}]",
+                         textureIds_.size(), ids);
         }
 
         // SDK 的签名是 CreateRenderer(width, height, maskBufferCount = 1)，
@@ -736,14 +762,26 @@ public:
         glViewport(0, 0, fboW_, fboH_);
         glClearColor(0.f, 0.f, 0.f, 0.f);
         glClear(GL_COLOR_BUFFER_BIT);
+#if defined(KRKR_RENDER_PROBE)
+        ProbeFboStage("after-clear");
+#endif
 
         auto *renderer = GetRenderer<Rendering::CubismRenderer_OpenGLES2>();
         if(renderer) {
             UpdateProjection();
             renderer->SetMvpMatrix(&projMatrix_);
+#if defined(KRKR_RENDER_PROBE)
+            ProbeDrawState();
+#endif
             renderer->DrawModel();
         }
+#if defined(KRKR_RENDER_PROBE)
+        ProbeFboStage("after-draw");
+#endif
         ApplyMosaicPostEffect();
+#if defined(KRKR_RENDER_PROBE)
+        ProbeFboStage("after-posteffect");
+#endif
 
 #if defined(KRKR_RENDER_PROBE)
         // 采样内部 FBO。旧指标 nonZero/maxA **证明不了"立绘渲染出来了"**：
@@ -791,6 +829,57 @@ public:
         glBindFramebuffer(GL_FRAMEBUFFER, savedFBO);
         glViewport(savedVP[0], savedVP[1], savedVP[2], savedVP[3]);
     }
+
+#if defined(KRKR_RENDER_PROBE)
+    // 采 internalFbo_ 中心像素，分三个时机调用，用来区分：
+    //   after-clear 就已经是不透明黑 ⇒ 清屏色/绑定被外面污染了；
+    //   after-draw 才变黑          ⇒ 是模型自己画黑的。
+    void ProbeFboStage(const char *stage) {
+        static int s_stageSamples = 0;
+        if(s_stageSamples >= 6) // 3 个时机 × 每个模型 2 次
+            return;
+        ++s_stageSamples;
+        GLint fbo = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
+        unsigned char px[4] = { 0, 0, 0, 0 };
+        glReadPixels(fboW_ / 2, fboH_ / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+        spdlog::info("[probe] krkrlive2d: {} fbo={} internal={} "
+                     "center=({},{},{},{})",
+                     stage, static_cast<int>(fbo),
+                     static_cast<int>(internalFbo_), px[0], px[1], px[2], px[3]);
+    }
+
+    // 绘制前一刻的 GL 状态。重点是 0 号纹理单元上那张纹理**有没有 level-0 图像**：
+    // GLES 里采样一张不完整的纹理会恒返回 (0,0,0,1)，正好就是观测到的
+    // "整块不透明纯黑"。width==0 就是铁证。
+    void ProbeDrawState() {
+        static int s_stateSamples = 0;
+        if(s_stateSamples >= 2)
+            return;
+        ++s_stateSamples;
+        GLint prog = 0, tex = 0, tw = 0, th = 0, unit = 0, bsrcA = 0, bdstA = 0;
+        glGetIntegerv(GL_ACTIVE_TEXTURE, &unit);
+        glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &tex);
+        if(tex) {
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &tw);
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &th);
+        }
+        glGetIntegerv(GL_BLEND_SRC_ALPHA, &bsrcA);
+        glGetIntegerv(GL_BLEND_DST_ALPHA, &bdstA);
+        spdlog::info("[probe] krkrlive2d: draw state program={} unit=0x{:04X} "
+                     "unit0Tex={} level0={}x{} imgOK={} isTex={} err=0x{:04X}",
+                     static_cast<int>(prog), static_cast<unsigned>(unit),
+                     static_cast<int>(tex), static_cast<int>(tw),
+                     static_cast<int>(th), (tw > 0 && th > 0) ? 1 : 0,
+                     tex ? static_cast<int>(glIsTexture(tex)) : 0,
+                     static_cast<unsigned>(glGetError()));
+        spdlog::info("[probe] krkrlive2d: draw blend enabled={} srcA=0x{:04X} "
+                     "dstA=0x{:04X}",
+                     glIsEnabled(GL_BLEND) ? 1 : 0, static_cast<unsigned>(bsrcA),
+                     static_cast<unsigned>(bdstA));
+    }
+#endif
 
     void BlitOverlay(GLint curFBO, const GLint vp[4]) {
         if(!loaded_ || !internalFbo_ || !fboTex_)

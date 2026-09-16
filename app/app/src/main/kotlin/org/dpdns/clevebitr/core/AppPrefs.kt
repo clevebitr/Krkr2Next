@@ -40,7 +40,7 @@ object AppPrefs {
     private const val KEY_FONT_FALLBACK = "engine.font_fallback"
 
     /**
-     * krkrz 的 OGLDrawDevice 兼容档位（`off` / `alias` / `kag`）。
+     * krkrz 的 OGLDrawDevice 兼容档位（`off` / `alias`）。
      * 见 [OGLDRAWDEVICE_COMPAT_MODES]。
      */
     private const val KEY_OGLDRAWDEVICE_COMPAT = "engine.ogldrawdevice_compat"
@@ -137,8 +137,12 @@ object AppPrefs {
      * 缺了它游戏**不报错**，只是静静降级，表现出来是"有声音、画面黑"。
      *
      *  - `off`  ：不提供（默认，保持既有行为）
-     *  - `alias`：只把 `Window.OGLDrawDevice` / `Window.GLESAdaptor` 挂上（方案 A）
-     *  - `kag`  ：在 `alias` 之外再接管 `KAGWindow_createDrawDevice`（方案 B）
+     *  - `alias`：把 `Window.OGLDrawDevice` / `Window.GLESAdaptor` 挂上
+     *  - `kag`  ：在 `alias` 之上再接管 `KAGWindow_createDrawDevice`
+     *
+     * 两档都实测有效，按游戏二选一：`alias` 足以让游戏加载
+     * `GPULayer.tjs` / `GPUAffineLayer.tjs`；`kag` 能让**千恋万花**正常加载立绘与
+     * 背景动态，但对 G2 会把主机 FBO 弄成 INCOMPLETE、画面直接采不到。
      *
      * 引擎在插件注册时读一次，所以"下次开游戏生效"。
      */
