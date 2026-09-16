@@ -36,6 +36,12 @@ class EngineSession(
      */
     private val fontFallbackMode: String = "auto",
     /**
+     * krkrz 的 OGLDrawDevice 兼容档位（`off` / `alias` / `kag`，
+     * 见 [AppPrefs.OGLDRAWDEVICE_COMPAT_MODES]）。引擎侧在插件注册时读一次，
+     * 所以是"下次开游戏生效"。
+     */
+    private val oglDrawDeviceCompat: String = "off",
+    /**
      * 引擎日志。**在渲染线程回调**——只做日志落盘/打印，不要在这里碰 UI 状态。
      */
     private val onLog: (String) -> Unit = {},
@@ -264,6 +270,7 @@ class EngineSession(
 
             applyOption("fps_limit", fpsLimit.toString())
             applyOption("font_fallback_mode", fontFallbackMode)
+            applyOption("ogldrawdevice_compat", oglDrawDeviceCompat)
 
             running = true
             choreographer?.postFrameCallback(frameCallback)

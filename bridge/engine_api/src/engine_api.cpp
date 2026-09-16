@@ -1892,6 +1892,18 @@ engine_result_t engine_set_option(engine_handle_t handle,
                      option->value_utf8);
     }
 
+    // krkrz 的 OGLDrawDevice 兼容层：真正生效在 krkrgles 插件的 post-regist 里
+    // （见 cpp/plugins/krkrgles.cpp）。这里只校验收到的取值并打一行日志；取值非法
+    // 时按 `off` 处理而不报错——旧设置文件里带个没见过的值不该让开游戏失败。
+    if(key == ENGINE_OPTION_OGLDRAWDEVICE_COMPAT) {
+        const std::string mode(option->value_utf8);
+        const bool known = mode == ENGINE_OGLDRAWDEVICE_COMPAT_OFF ||
+                           mode == ENGINE_OGLDRAWDEVICE_COMPAT_ALIAS ||
+                           mode == ENGINE_OGLDRAWDEVICE_COMPAT_KAG;
+        spdlog::info("engine_set_option: ogldrawdevice_compat={}{}", mode,
+                     known ? "" : " (unknown, treated as off)");
+    }
+
     TVPSetCommandLine(ttstr(option->key_utf8).c_str(),
                       ttstr(option->value_utf8));
 

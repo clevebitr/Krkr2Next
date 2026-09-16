@@ -28,6 +28,26 @@
  */
 #define ENGINE_OPTION_FONT_FALLBACK_MODE "font_fallback_mode"
 
+/**
+ * krkrz（吉里吉里Z）的 OGLDrawDevice 兼容层，见 cpp/plugins/krkrgles.cpp。
+ *
+ * krkrgles 系游戏的 Initialize.tjs 会先看 `Window.OGLDrawDevice` 存不存在，
+ * 再决定要不要加载 GPU 层脚本（`GPULayer.tjs` / `GPUAffineLayer.tjs`）。缺了它，
+ * 游戏不报错、只是静静降级，表现出来就是"有声音、画面黑"。
+ *
+ * 取值：
+ *  - `off`  ：不提供（默认，保持既有行为）
+ *  - `alias`：只把 `Window.OGLDrawDevice` / `Window.GLESAdaptor` 别名出去（方案 A）
+ *  - `kag`  ：在 `alias` 之外再接管 `KAGWindow_createDrawDevice`（方案 B，对齐 AetherKiri）
+ *
+ * 由 krkrgles 插件在注册完成时（post-regist）读一次，所以"下次开游戏生效"。
+ */
+#define ENGINE_OPTION_OGLDRAWDEVICE_COMPAT "ogldrawdevice_compat"
+
+#define ENGINE_OGLDRAWDEVICE_COMPAT_OFF "off"
+#define ENGINE_OGLDRAWDEVICE_COMPAT_ALIAS "alias"
+#define ENGINE_OGLDRAWDEVICE_COMPAT_KAG "kag"
+
 /** Render pipeline selection ("opengl" or "software"). */
 #define ENGINE_OPTION_RENDERER "renderer"
 

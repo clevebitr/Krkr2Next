@@ -83,6 +83,9 @@ class MainActivity : ComponentActivity() {
     /** 引擎字体回退策略（`auto` / `legacy` / `chain`）；改完下次开游戏生效。 */
     private var fontFallbackMode by mutableStateOf("auto")
 
+    /** krkrz 的 OGLDrawDevice 兼容档位（`off` / `alias` / `kag`）；改完下次开游戏生效。 */
+    private var oglDrawDeviceCompat by mutableStateOf("off")
+
     private val logDirPath: String by lazy { LogFiles.logsDir(this).absolutePath }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -105,6 +108,7 @@ class MainActivity : ComponentActivity() {
         perfOverlayMode = AppPrefs.perfOverlayMode(this)
         themeMode = AppPrefs.themeMode(this)
         fontFallbackMode = AppPrefs.fontFallbackMode(this)
+        oglDrawDeviceCompat = AppPrefs.oglDrawDeviceCompat(this)
 
         setContent {
             KrKr2NextTheme(darkTheme = resolveDarkTheme(themeMode)) {
@@ -130,6 +134,8 @@ class MainActivity : ComponentActivity() {
                             onThemeModeChanged = { themeMode = it },
                             fontFallbackMode = fontFallbackMode,
                             onFontFallbackModeChanged = { fontFallbackMode = it },
+                            oglDrawDeviceCompat = oglDrawDeviceCompat,
+                            onOglDrawDeviceCompatChanged = { oglDrawDeviceCompat = it },
                         )
                     } else {
                         LauncherScreen(
@@ -231,6 +237,7 @@ class MainActivity : ComponentActivity() {
             // 0 = 不限速，由 Choreographer 的 vsync 决定节拍（默认）
             fpsLimit = AppPrefs.fpsLimit(this),
             fontFallbackMode = AppPrefs.fontFallbackMode(this),
+            oglDrawDeviceCompat = AppPrefs.oglDrawDeviceCompat(this),
             onLog = { log ->
                 // 引擎启动日志已经在 engine.log 里了，这里只做一次转发，
                 // 顺带让连着 adb 的人也能看到

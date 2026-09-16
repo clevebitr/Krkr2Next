@@ -1,6 +1,8 @@
 #include "tjs.h"
 #include "ncbind.hpp"
 #include "ScriptMgnIntf.h"
+#include "SysInitIntf.h"
+#include "EventIntf.h"
 #include "LayerImpl.h"
 #include "RenderManager.h"
 #include <spdlog/spdlog.h>
@@ -2409,13 +2411,198 @@ namespace { // reopen anonymous namespace
         OffscreenFBO fbo_;
     };
 
+    // -----------------------------------------------------------------------
+    // krkrz 的 OGLDrawDevice 兼容层。
+    //
+    // krkrz（吉里吉里Z）把 OGLDrawDevice 作为 GL 绘制设备对外暴露，krkrgles 系
+    // 游戏的 Initialize.tjs 会先看 `Window.OGLDrawDevice` 在不在，再决定要不要走
+    // GPU 路径。缺了它游戏**不报错**，只是静静跳过 `GPULayer.tjs` /
+    // `GPUAffineLayer.tjs`（真机实测：这两个脚本一条 exec 都没有），于是为 GL 管线
+    // 写的 CG 就没地方画——表现就是"有声音、整屏黑"。
+    //
+    // 本类不需要自己实现 GL：它不是新的渲染实现，而是 GLESAdaptor 的**同源别名**，
+    // 内部持有一个 GLESAdaptor 逐个转调，因此复用已经验证过的 capture 交付路径。
+    // 是否挂到 Window 上、以及要不要连 KAGWindow_createDrawDevice 一起接管，由
+    // ogldrawdevice_compat 选项决定（见 KrkrGlesPostRegist）。
+    // -----------------------------------------------------------------------
+#define KRKR_OGL_FORWARD(cb)                                                   \
+    static tjs_error cb(tTJSVariant *r, tjs_int n, tTJSVariant **p,            \
+                        OGLDrawDevice *s) {                                    \
+        return GLESAdaptor::cb(r, n, p, s ? &s->adaptor_ : nullptr);           \
+    }
+
+    class OGLDrawDevice {
+    public:
+        OGLDrawDevice() = default;
+
+        tjs_int getScreenWidth() const { return adaptor_.getScreenWidth(); }
+        void setScreenWidth(tjs_int v) { adaptor_.setScreenWidth(v); }
+        tjs_int getScreenHeight() const { return adaptor_.getScreenHeight(); }
+        void setScreenHeight(tjs_int v) { adaptor_.setScreenHeight(v); }
+
+        KRKR_OGL_FORWARD(getModuleCb)
+        KRKR_OGL_FORWARD(setScreenSizeCb)
+        KRKR_OGL_FORWARD(makeCurrentCb)
+        KRKR_OGL_FORWARD(beginSceneCb)
+        KRKR_OGL_FORWARD(endSceneCb)
+        KRKR_OGL_FORWARD(entryUpdateObjectCb)
+        KRKR_OGL_FORWARD(captureCb)
+        KRKR_OGL_FORWARD(glesCaptureCb)
+        KRKR_OGL_FORWARD(captureScreenCb)
+        KRKR_OGL_FORWARD(glesCaptureScreenCb)
+        KRKR_OGL_FORWARD(copyLayerCb)
+        KRKR_OGL_FORWARD(glesCopyLayerCb)
+        KRKR_OGL_FORWARD(drawLayerCb)
+        KRKR_OGL_FORWARD(glesDrawLayerCb)
+        KRKR_OGL_FORWARD(drawAffineCb)
+        KRKR_OGL_FORWARD(drawAffineGLESCb)
+        KRKR_OGL_FORWARD(renderCb)
+        KRKR_OGL_FORWARD(setMatrixCb)
+        KRKR_OGL_FORWARD(createModelCb)
+        KRKR_OGL_FORWARD(createMatrixCb)
+        KRKR_OGL_FORWARD(createDeviceCb)
+        KRKR_OGL_FORWARD(glesEntryCb)
+        KRKR_OGL_FORWARD(glesRemoveCb)
+        KRKR_OGL_FORWARD(finalizeCb)
+
+    private:
+        GLESAdaptor adaptor_;
+    };
+
+#undef KRKR_OGL_FORWARD
+
 } // namespace
 
 // ---------------------------------------------------------------------------
 // NCB Registration
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// krkrz 兼容层：按 ogldrawdevice_compat 选项决定把 OGLDrawDevice 暴露到什么程度。
+//
+//   off   —— 什么都不做（默认，保持原行为）
+//   alias —— Window.OGLDrawDevice / Window.GLESAdaptor（方案 A）
+//   kag   —— 方案 A + 接管 KAGWindow_createDrawDevice（方案 B）
+//
+// 为什么 kag 那一档必须**延迟**安装：`KAGWindow_createDrawDevice` 是游戏自己的
+// `system\mainwindow.tjs` 定义的，那份脚本在插件注册（post-regist）之后才 exec
+// （真机实测：插件 10:40:25.228 注册，MainWindow.tjs 在 exec#67）。在 post-regist
+// 里覆盖它一定会被游戏覆盖回去，那一档就成了"看着有、其实没用"的假开关。所以这里
+// 挂一个**一次性**连续事件钩子，等脚本都加载完后的第一帧再装，装完立刻摘钩。
+//
+// 为什么需要 kag 这一档：`tTJSNI_BaseWindow::SetDrawDeviceObject()` 在对象拿不到
+// `interface` 时**直接抛异常**（`WindowIntf.cpp:270`，不会温和回退）。游戏若把
+// OGLDrawDevice 当成真正的 draw device 返回就会踩到这一点。AetherKiri 的解法是用
+// 伴随脚本把这个函数整个换掉：OGL 设备只塞进 `gpuDrawDevice`（够脚本判断 GPU 可用），
+// 真正返回的仍是 BasicDrawDevice。此处照搬同一套逻辑。
+// ---------------------------------------------------------------------------
+// 与 bridge/engine_api/include/engine_options.h 的 ENGINE_OPTION_OGLDRAWDEVICE_COMPAT
+// 保持一致。引擎核心不依赖 bridge 的头，按既有惯例用字面量键名
+// （同理见 FreeTypeFontRasterizer.cpp 里的 "font_fallback_mode"）。
+static const tjs_char *KrkrOglCompatOption = TJS_W("ogldrawdevice_compat");
+static const tjs_char *KrkrOglCompatAlias = TJS_W("alias");
+static const tjs_char *KrkrOglCompatKag = TJS_W("kag");
+
+// 把 ncbind 注册的全局类 `name` 挂到 Window 类对象上（即 `Window.<name>`）。
+//
+// 这里必须从 **C++** 侧写、不能改成 TJS 的 `Window.X = X`：TJS 对 Window 这种原生
+// 对象的成员写入本来会以 ACCESSDENYED / MEMBERNOTFOUND 失败，AetherKiri 是给 tjs2 的
+// `tTJSExtendableObject::PropSet` 加了一张"启动期可写名"白名单（含 OGLDrawDevice /
+// GLESAdaptor / gpuDrawDevice）才放行的，见
+// AetherKiri/cpp/core/tjs2/tjsObjectExtendable.cpp:9。KiriNext 没有那张白名单，
+// 从 TJS 写会被 try/catch 静静吞掉、功能等于没做（那就是个"看着有、其实没用"的假开关）。
+// 改用本仓库既有手法：ScriptMgnIntf.cpp 注册 Window.BasicDrawDevice 时就是这么写的。
+static void KrkrOglAliasOntoWindow(const tjs_char *name) {
+    // TVPGetScriptDispatch() 内部 AddRef 过，用完必须 Release。
+    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    if(!global)
+        return;
+
+    tTJSVariant windowVal;
+    if(TJS_SUCCEEDED(
+           global->PropGet(0, TJS_W("Window"), nullptr, &windowVal, global))) {
+        iTJSDispatch2 *windowClass = windowVal.AsObjectNoAddRef();
+        tTJSVariant classVal;
+        if(windowClass &&
+           TJS_SUCCEEDED(
+               global->PropGet(0, name, nullptr, &classVal, global)) &&
+           classVal.Type() == tvtObject && classVal.AsObjectNoAddRef()) {
+            windowClass->PropSet(
+                TJS_MEMBERENSURE | TJS_IGNOREPROP | TJS_STATICMEMBER, name,
+                nullptr, &classVal, windowClass);
+        }
+    }
+
+    global->Release();
+}
+
+static const tjs_char *KrkrOglKagScript() {
+    return TJS_W("function KAGWindow_createDrawDevice() {\n")
+        TJS_W("    var dd = null;\n")
+        TJS_W("    try { dd = new global.OGLDrawDevice(); } catch(e) { try {"
+              " dd = new global.GLESAdaptor(); } catch(e2) { dd = null; } }\n")
+        TJS_W("    try { if(dd !== null) dd.setScreenSize(this.width,"
+              " this.height); } catch(e) { }\n")
+        TJS_W("    try { this.gpuDrawDevice = dd; } catch(e) { }\n")
+        TJS_W("    try { this.OGLDrawDevice = global.OGLDrawDevice; }"
+              " catch(e) { }\n")
+        TJS_W("    try { this.GLESAdaptor = global.GLESAdaptor; }"
+              " catch(e) { }\n")
+        TJS_W("    try { return new global.Window.BasicDrawDevice(); }"
+              " catch(e) { }\n")
+        TJS_W("    try { return new global.Window.PassThroughDrawDevice(); }"
+              " catch(e) { }\n")
+        TJS_W("    return null;\n")
+        TJS_W("}\n")
+        TJS_W("try { KAGWindow.KAGWindow_createDrawDevice ="
+              " KAGWindow_createDrawDevice; } catch(e) { }\n")
+        TJS_W("try { KAGWindow.prototype.KAGWindow_createDrawDevice ="
+              " KAGWindow_createDrawDevice; } catch(e) { }\n")
+        TJS_W("try { KAGWindow_createDrawDevice = KAGWindow_createDrawDevice; }"
+              " catch(e) { }\n");
+}
+
+// 一次性安装器：脚本加载完之后的第一帧才轮到它，装完立即摘钩。
+class KrkrOglKagInstallHook : public tTVPContinuousEventCallbackIntf {
+public:
+    void OnContinuousCallback(tjs_uint64 /*tick*/) override {
+        TVPRemoveContinuousEventHook(this);
+        try {
+            TVPExecuteExpression(ttstr(KrkrOglKagScript()));
+            spdlog::info("krkrgles: kag 档已接管 KAGWindow_createDrawDevice"
+                         "（GL 设备进 gpuDrawDevice，真设备仍是 BasicDrawDevice）");
+        } catch(...) {
+            spdlog::warn("krkrgles: kag 档接管 KAGWindow_createDrawDevice 失败");
+        }
+    }
+};
+
+static KrkrOglKagInstallHook g_krkrOglKagInstallHook;
+
 static void KrkrGlesPreRegist() {}
-static void KrkrGlesPostRegist() {}
+
+static void KrkrGlesPostRegist() {
+    tTJSVariant modeVal;
+    if(!TVPGetCommandLine(KrkrOglCompatOption, &modeVal))
+        return;
+    const ttstr mode(modeVal);
+    const ttstr kAlias(KrkrOglCompatAlias);
+    const ttstr kKag(KrkrOglCompatKag);
+    if(mode != kAlias && mode != kKag)
+        return; // off 或未知取值：保持原行为
+
+    // 方案 A：把 GL 设备名字挂到 Window 上。它不改变任何既有渲染实现，只是让游戏的
+    // "有没有 GPU 绘制设备"判断成立，从而去加载 GPULayer.tjs / GPUAffineLayer.tjs。
+    KrkrOglAliasOntoWindow(TJS_W("OGLDrawDevice"));
+    KrkrOglAliasOntoWindow(TJS_W("GLESAdaptor"));
+    spdlog::info("krkrgles: ogldrawdevice_compat 已启用"
+                 "（Window.OGLDrawDevice / Window.GLESAdaptor 已挂上）");
+
+    if(mode == kKag) {
+        TVPAddContinuousEventHook(&g_krkrOglKagInstallHook);
+        spdlog::info("krkrgles: kag 档就绪，KAGWindow_createDrawDevice 将在"
+                     "脚本加载完成后的首个连续事件里接管");
+    }
+}
 NCB_PRE_REGIST_CALLBACK(KrkrGlesPreRegist);
 NCB_POST_REGIST_CALLBACK(KrkrGlesPostRegist);
 
@@ -2478,6 +2665,40 @@ NCB_REGISTER_CLASS(GLESAdaptor) {
     NCB_METHOD_RAW_CALLBACK(glesEntry, &GLESAdaptor::glesEntryCb, 0);
     NCB_METHOD_RAW_CALLBACK(glesRemove, &GLESAdaptor::glesRemoveCb, 0);
     NCB_METHOD_RAW_CALLBACK(finalize, &GLESAdaptor::finalizeCb, 0);
+}
+
+// 名字面与 GLESAdaptor 保持一致：krkrz 的游戏会把 GL 设备当成 draw device 用，
+// 调到的就是这一套接口。
+NCB_REGISTER_CLASS(OGLDrawDevice) {
+    Constructor();
+    NCB_PROPERTY(screenWidth, getScreenWidth, setScreenWidth);
+    NCB_PROPERTY(screenHeight, getScreenHeight, setScreenHeight);
+    NCB_METHOD_RAW_CALLBACK(getModule, &OGLDrawDevice::getModuleCb, 0);
+    NCB_METHOD_RAW_CALLBACK(setScreenSize, &OGLDrawDevice::setScreenSizeCb, 0);
+    NCB_METHOD_RAW_CALLBACK(makeCurrent, &OGLDrawDevice::makeCurrentCb, 0);
+    NCB_METHOD_RAW_CALLBACK(beginScene, &OGLDrawDevice::beginSceneCb, 0);
+    NCB_METHOD_RAW_CALLBACK(endScene, &OGLDrawDevice::endSceneCb, 0);
+    NCB_METHOD_RAW_CALLBACK(entryUpdateObject,
+                            &OGLDrawDevice::entryUpdateObjectCb, 0);
+    NCB_METHOD_RAW_CALLBACK(capture, &OGLDrawDevice::captureCb, 0);
+    NCB_METHOD_RAW_CALLBACK(glesCapture, &OGLDrawDevice::glesCaptureCb, 0);
+    NCB_METHOD_RAW_CALLBACK(captureScreen, &OGLDrawDevice::captureScreenCb, 0);
+    NCB_METHOD_RAW_CALLBACK(glesCaptureScreen,
+                            &OGLDrawDevice::glesCaptureScreenCb, 0);
+    NCB_METHOD_RAW_CALLBACK(copyLayer, &OGLDrawDevice::copyLayerCb, 0);
+    NCB_METHOD_RAW_CALLBACK(glesCopyLayer, &OGLDrawDevice::glesCopyLayerCb, 0);
+    NCB_METHOD_RAW_CALLBACK(drawLayer, &OGLDrawDevice::drawLayerCb, 0);
+    NCB_METHOD_RAW_CALLBACK(glesDrawLayer, &OGLDrawDevice::glesDrawLayerCb, 0);
+    NCB_METHOD_RAW_CALLBACK(drawAffine, &OGLDrawDevice::drawAffineCb, 0);
+    NCB_METHOD_RAW_CALLBACK(drawAffineGLES, &OGLDrawDevice::drawAffineGLESCb, 0);
+    NCB_METHOD_RAW_CALLBACK(render, &OGLDrawDevice::renderCb, 0);
+    NCB_METHOD_RAW_CALLBACK(setMatrix, &OGLDrawDevice::setMatrixCb, 0);
+    NCB_METHOD_RAW_CALLBACK(createModel, &OGLDrawDevice::createModelCb, 0);
+    NCB_METHOD_RAW_CALLBACK(createMatrix, &OGLDrawDevice::createMatrixCb, 0);
+    NCB_METHOD_RAW_CALLBACK(createDevice, &OGLDrawDevice::createDeviceCb, 0);
+    NCB_METHOD_RAW_CALLBACK(glesEntry, &OGLDrawDevice::glesEntryCb, 0);
+    NCB_METHOD_RAW_CALLBACK(glesRemove, &OGLDrawDevice::glesRemoveCb, 0);
+    NCB_METHOD_RAW_CALLBACK(finalize, &OGLDrawDevice::finalizeCb, 0);
 }
 
 NCB_ATTACH_FUNCTION_WITHTAG(getModule, WindowPassThroughDrawDevice,

@@ -70,6 +70,20 @@ private val FONT_FALLBACK_CHOICES = listOf(
 )
 
 /**
+ * krkrz 的 OGLDrawDevice 兼容档位。krkrgles 系游戏（吉里吉里Z）会先看
+ * `Window.OGLDrawDevice` 在不在，再决定要不要加载 GPU 层脚本；缺了它游戏不报错、
+ * 只是静静降级，表现为"有声音、画面黑"：
+ *  - 关闭：不提供（保持既有行为）
+ *  - 别名：只挂 Window.OGLDrawDevice / Window.GLESAdaptor（方案 A）
+ *  - 接管：再接管 KAGWindow_createDrawDevice（方案 B，对齐 AetherKiri）
+ */
+private val OGLDRAWDEVICE_COMPAT_CHOICES = listOf(
+    "off" to "关闭",
+    "alias" to "别名（A）",
+    "kag" to "接管（B）",
+)
+
+/**
  * 设置页。目前只有调试相关的东西——这是给排障用的壳，设置项也都服务于
  * "把问题现场原样带出来"：日志怎么收、怎么导出、引擎跑多快、画面上叠什么。
  */
@@ -89,6 +103,9 @@ fun SettingsScreen(
     /** 引擎字体回退策略；改完**下次开游戏**生效（引擎侧只在初始化时读一次）。 */
     fontFallbackMode: String = "auto",
     onFontFallbackModeChanged: (String) -> Unit = {},
+    /** krkrz 的 OGLDrawDevice 兼容档位；同样**下次开游戏**生效。 */
+    oglDrawDeviceCompat: String = "off",
+    onOglDrawDeviceCompatChanged: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -98,6 +115,7 @@ fun SettingsScreen(
     var perfMode by remember { mutableStateOf(AppPrefs.perfOverlayMode(context)) }
     var fpsLimit by remember { mutableStateOf(AppPrefs.fpsLimit(context)) }
     var fontMode by remember { mutableStateOf(fontFallbackMode) }
+    var oglCompatMode by remember { mutableStateOf(oglDrawDeviceCompat) }
 
     Column(modifier = modifier.fillMaxSize()) {
         Row(
@@ -147,6 +165,29 @@ fun SettingsScreen(
                     AppPrefs.setFontFallbackMode(context, mode)
                     onFontFallbackModeChanged(mode)
                     AppLog.i(TAG, "font fallback = $mode（下次开游戏生效）")
+                },
+            )
+
+            SectionTitle("渲染兼容（krkrz）")
+
+            // krkrgles 系（吉里吉里Z）游戏的 CG 走的是 krkrz 的 GL 绘制设备。
+            // 本引擎没有原生的 OGLDrawDevice，游戏探测不到就会安静地跳过 GPU 层脚本，
+            // 于是"有声音、画面黑"。这里提供两档兼容，逐档往上试即可。
+            ChoiceRow(
+                title = "OGLDrawDevice 兼容",
+                subtitle = "吉里吉里Z 的游戏会先看 Window.OGLDrawDevice 在不在，" +
+                    "再决定要不要加载 GPU 层脚本（GPULayer.tjs / GPUAffineLayer.tjs）。" +
+                    "缺了它游戏不报错、只是静静降级：有声音但画面黑。" +
+                    "别名档只把该名字挂上；接管档还会把窗口的绘制设备工厂换成" +
+                    "能安全接住它的版本（对齐 AetherKiri 的做法）。" +
+                    "改完下次开游戏生效；若某游戏画面反而异常，切回关闭即可。",
+                choices = OGLDRAWDEVICE_COMPAT_CHOICES,
+                selected = oglCompatMode,
+                onSelected = { mode ->
+                    oglCompatMode = mode
+                    AppPrefs.setOglDrawDeviceCompat(context, mode)
+                    onOglDrawDeviceCompatChanged(mode)
+                    AppLog.i(TAG, "ogldrawdevice compat = $mode（下次开游戏生效）")
                 },
             )
 

@@ -39,6 +39,12 @@ object AppPrefs {
     /** 引擎字体回退策略（`auto` / `legacy` / `chain`）。见 [FONT_FALLBACK_MODES]。 */
     private const val KEY_FONT_FALLBACK = "engine.font_fallback"
 
+    /**
+     * krkrz 的 OGLDrawDevice 兼容档位（`off` / `alias` / `kag`）。
+     * 见 [OGLDRAWDEVICE_COMPAT_MODES]。
+     */
+    private const val KEY_OGLDRAWDEVICE_COMPAT = "engine.ogldrawdevice_compat"
+
     const val FPS_LIMIT_UNLIMITED = 0
 
     private fun prefs(context: Context): SharedPreferences =
@@ -121,5 +127,30 @@ object AppPrefs {
     fun setFontFallbackMode(context: Context, mode: String) {
         val normalized = if (mode in FONT_FALLBACK_MODES) mode else "auto"
         prefs(context).edit().putString(KEY_FONT_FALLBACK, normalized).apply()
+    }
+
+    // ── krkrz 的 OGLDrawDevice 兼容层 ──────────────────────────────────────
+
+    /**
+     * krkrz（吉里吉里Z）系游戏在 `Initialize.tjs` 里会先看 `Window.OGLDrawDevice`
+     * 在不在，再决定要不要加载 GPU 层脚本（`GPULayer.tjs` / `GPUAffineLayer.tjs`）。
+     * 缺了它游戏**不报错**，只是静静降级，表现出来是"有声音、画面黑"。
+     *
+     *  - `off`  ：不提供（默认，保持既有行为）
+     *  - `alias`：只把 `Window.OGLDrawDevice` / `Window.GLESAdaptor` 挂上（方案 A）
+     *  - `kag`  ：在 `alias` 之外再接管 `KAGWindow_createDrawDevice`（方案 B）
+     *
+     * 引擎在插件注册时读一次，所以"下次开游戏生效"。
+     */
+    val OGLDRAWDEVICE_COMPAT_MODES = listOf("off", "alias", "kag")
+
+    fun oglDrawDeviceCompat(context: Context): String {
+        val stored = prefs(context).getString(KEY_OGLDRAWDEVICE_COMPAT, null)
+        return if (stored != null && stored in OGLDRAWDEVICE_COMPAT_MODES) stored else "off"
+    }
+
+    fun setOglDrawDeviceCompat(context: Context, mode: String) {
+        val normalized = if (mode in OGLDRAWDEVICE_COMPAT_MODES) mode else "off"
+        prefs(context).edit().putString(KEY_OGLDRAWDEVICE_COMPAT, normalized).apply()
     }
 }
