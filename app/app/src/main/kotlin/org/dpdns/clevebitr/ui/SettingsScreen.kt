@@ -74,11 +74,13 @@ private val FONT_FALLBACK_CHOICES = listOf(
  * `Window.OGLDrawDevice` 在不在，再决定要不要加载 GPU 层脚本；缺了它游戏不报错、
  * 只是静静降级：
  *  - 关闭：不提供（保持既有行为）
- *  - 别名：挂上 Window.OGLDrawDevice / Window.GLESAdaptor
+ *  - 仅 OGL：只挂 Window.OGLDrawDevice（避开 GLESAdaptor 带来的 captureCanvas 切换）
+ *  - 别名：挂 Window.OGLDrawDevice + Window.GLESAdaptor
  *  - 接管：再接管 KAGWindow_createDrawDevice（千恋万花实测可加载立绘/背景动态）
  */
 private val OGLDRAWDEVICE_COMPAT_CHOICES = listOf(
     "off" to "关闭",
+    "ogl" to "仅 OGL",
     "alias" to "别名",
     "kag" to "接管",
 )
@@ -178,9 +180,10 @@ fun SettingsScreen(
                 subtitle = "吉里吉里Z 的游戏会先看 Window.OGLDrawDevice 在不在，" +
                     "再决定要不要加载 GPU 层脚本（GPULayer.tjs / GPUAffineLayer.tjs）。" +
                     "缺了它游戏不报错、只是静静降级。" +
-                    "别名档把该名字挂上；接管档再接管窗口的绘制设备工厂" +
-                    "（千恋万花实测可正常加载立绘与背景动态）。" +
-                    "两档逐游戏试：G2 上接管档会把主机 FBO 弄成 INCOMPLETE。" +
+                    "「仅 OGL」只挂这个名字；「别名」连 Window.GLESAdaptor 一起挂，" +
+                    "会把千恋万花切进 captureCanvas 路径而 UI 出问题；" +
+                    "「接管」再接管窗口的绘制设备工厂（千恋万花实测正常，但 G2 上会把" +
+                    "主机 FBO 弄成 INCOMPLETE、连回想页都黑）。请逐游戏试。" +
                     "改完下次开游戏生效。",
                 choices = OGLDRAWDEVICE_COMPAT_CHOICES,
                 selected = oglCompatMode,

@@ -137,16 +137,18 @@ object AppPrefs {
      * 缺了它游戏**不报错**，只是静静降级，表现出来是"有声音、画面黑"。
      *
      *  - `off`  ：不提供（默认，保持既有行为）
-     *  - `alias`：把 `Window.OGLDrawDevice` / `Window.GLESAdaptor` 挂上
+     *  - `ogl`  ：只挂 `Window.OGLDrawDevice`
+     *  - `alias`：挂 `Window.OGLDrawDevice` + `Window.GLESAdaptor`
      *  - `kag`  ：在 `alias` 之上再接管 `KAGWindow_createDrawDevice`
      *
-     * 两档都实测有效，按游戏二选一：`alias` 足以让游戏加载
-     * `GPULayer.tjs` / `GPUAffineLayer.tjs`；`kag` 能让**千恋万花**正常加载立绘与
-     * 背景动态，但对 G2 会把主机 FBO 弄成 INCOMPLETE、画面直接采不到。
+     * 各档必须逐游戏试：`Window.OGLDrawDevice` 是闸门（挂上才会加载
+     * `GPULayer.tjs` / `GPUAffineLayer.tjs`）；`Window.GLESAdaptor` 会把一部分游戏
+     * （千恋万花）切进 motionplayer 的 `captureCanvas` 路径而 UI 出问题（用 `ogl` 避开）；
+     * `kag` 能让千恋万花正常，但对 G2 会把主机 FBO 弄成 INCOMPLETE、连回想页都黑。
      *
      * 引擎在插件注册时读一次，所以"下次开游戏生效"。
      */
-    val OGLDRAWDEVICE_COMPAT_MODES = listOf("off", "alias", "kag")
+    val OGLDRAWDEVICE_COMPAT_MODES = listOf("off", "ogl", "alias", "kag")
 
     fun oglDrawDeviceCompat(context: Context): String {
         val stored = prefs(context).getString(KEY_OGLDRAWDEVICE_COMPAT, null)

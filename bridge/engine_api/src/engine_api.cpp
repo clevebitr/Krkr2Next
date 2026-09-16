@@ -1898,6 +1898,7 @@ engine_result_t engine_set_option(engine_handle_t handle,
     if(key == ENGINE_OPTION_OGLDRAWDEVICE_COMPAT) {
         const std::string mode(option->value_utf8);
         const bool known = mode == ENGINE_OGLDRAWDEVICE_COMPAT_OFF ||
+                           mode == ENGINE_OGLDRAWDEVICE_COMPAT_OGL ||
                            mode == ENGINE_OGLDRAWDEVICE_COMPAT_ALIAS ||
                            mode == ENGINE_OGLDRAWDEVICE_COMPAT_KAG;
         spdlog::info("engine_set_option: ogldrawdevice_compat={}{}", mode,

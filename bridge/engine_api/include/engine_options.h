@@ -37,21 +37,26 @@
  *
  * 取值：
  *  - `off`  ：不提供（默认，保持既有行为）
- *  - `alias`：把 `Window.OGLDrawDevice` / `Window.GLESAdaptor` 挂上
+ *  - `ogl`  ：只挂 `Window.OGLDrawDevice`
+ *  - `alias`：挂 `Window.OGLDrawDevice` + `Window.GLESAdaptor`
  *  - `kag`  ：在 `alias` 之上再接管 `KAGWindow_createDrawDevice`
  *
- * 两档都实测有效，但**按游戏二选一**：
- *  - `alias` 打开"闸门"：游戏 Initialize.tjs 探测到该名字后才会加载
+ * 各档作用不同，**必须逐游戏试**：
+ *  - `Window.OGLDrawDevice` 是闸门：游戏 Initialize.tjs 探测到它才会加载
  *    `GPULayer.tjs` / `GPUAffineLayer.tjs`（实测会话 11:22 首次出现）。
- *  - `kag` 解决窗口绘制设备工厂：**千恋万花**在此档下能正常加载立绘与背景动态；
- *    但对 G2（nainiuniu5krkr）会把主机 FBO 弄成 `INCOMPLETE 0x8CD6`（52 次），
- *    画面直接采不到，所以不要默认开。
+ *  - `Window.GLESAdaptor` 会改变部分游戏行为：千恋万花在 `alias` 档下被切进
+ *    motionplayer 的 `captureCanvas` 路径，而 `Player::draw` 从此让路、UI 图全靠
+ *    那条交付——实测不完整、UI 出问题。`ogl` 就是给这种游戏的。
+ *  - `kag` 解决窗口绘制设备工厂：**千恋万花**在此档下立绘与背景动态正常；
+ *    但对 G2（nainiuniu5krkr）会把主机 FBO 弄成 `INCOMPLETE 0x8CD6`（53 次），
+ *    画面直接采不到（连回想页都黑），所以不要默认开。
  *
  * 由 krkrgles 插件在注册完成时（post-regist）读一次，所以"下次开游戏生效"。
  */
 #define ENGINE_OPTION_OGLDRAWDEVICE_COMPAT "ogldrawdevice_compat"
 
 #define ENGINE_OGLDRAWDEVICE_COMPAT_OFF "off"
+#define ENGINE_OGLDRAWDEVICE_COMPAT_OGL "ogl"
 #define ENGINE_OGLDRAWDEVICE_COMPAT_ALIAS "alias"
 #define ENGINE_OGLDRAWDEVICE_COMPAT_KAG "kag"
 

@@ -864,6 +864,15 @@ extern "C" GLuint LoadKtxTexture(const uint8_t *data, size_t dataSize) {
     if(std::memcmp(hdr->identifier, KTX_MAGIC, 12) != 0)
         return 0;
 
+    // glGetError() 返回的是"自上次查询以来的**第一个**错误"。进入本函数之前，系统里
+    // 可能还压着别处（GPU 层脚本经 GLESAdaptor 的那批调用）产生的旧错误；不先清掉，
+    // 下面按"有没有错误"判成败就会把它算到本次上传头上。
+    // 真机实测（2026-09-16，G2+kag）：每个模型**第一次**加载都报
+    // `KTX upload GL error 0x0501`、同一份数据**第二次**加载却成功 —— 于是纹理被
+    // 误删，krkrlive2d 只能用 1x1 白色占位，立绘退化成黑白多边形方块、没有纹理。
+    while(glGetError() != GL_NO_ERROR) {
+    }
+
     GLuint tex = 0;
     glGenTextures(1, &tex);
     if(!tex)
@@ -949,6 +958,14 @@ extern "C" GLuint LoadKtxTexture(const uint8_t *data, size_t dataSize) {
                 GLES_LOGI("  level %u: %ux%u decoded OK (dataSize=%u "
                           "decodedSize=%zu)",
                           level, mw, mh, imageSize, decoded.size());
+                // 逐级归因：出问题时报出是哪一级，而不是最后一把抓。
+                const GLenum lvlErr = glGetError();
+                if(lvlErr != GL_NO_ERROR) {
+                    GLES_LOGW("  level %u: %ux%u upload GL error 0x%04X", level,
+                              mw, mh, lvlErr);
+                    spdlog::warn("krkrgles: KTX level {} ({}x{}) 上传错误 0x{:04X}",
+                                 level, mw, mh, static_cast<unsigned>(lvlErr));
+                }
             } else {
                 GLES_LOGW("  level %u: %ux%u decode FAILED (dataSize=%u)",
                           level, mw, mh, imageSize);
@@ -981,16 +998,31 @@ extern "C" GLuint LoadKtxTexture(const uint8_t *data, size_t dataSize) {
                              0, hdr->glFormat, hdr->glType, ptr);
             }
             ptr += (imageSize + 3) & ~3u;
+            const GLenum lvlErr = glGetError();
+            if(lvlErr != GL_NO_ERROR) {
+                GLES_LOGW("  level %u: %ux%u upload GL error 0x%04X", level, mw,
+                          mh, lvlErr);
+                spdlog::warn("krkrgles: KTX level {} ({}x{}) 上传错误 0x{:04X}",
+                             level, mw, mh, static_cast<unsigned>(lvlErr));
+            }
             mw = (mw > 1) ? mw / 2 : 1;
             mh = (mh > 1) ? mh / 2 : 1;
         }
     }
 
-    GLenum err = glGetError();
-    if(err != GL_NO_ERROR) {
-        GLES_LOGW("KTX upload GL error 0x%04X, deleting texture", err);
-        spdlog::warn("krkrgles: KTX upload GL error 0x{:04X}", err);
+    // 成功判据是"level 0 确实上去了"，**不是**"没有任何 GL 错误"：后者会把别处残留
+    // 的错误算进来，把一张已经上传成功的纹理删掉（真机实测：同一份数据第一次加载
+    // 报 0x0501 被删、第二次却成功）。这里直接向 GL 问 level-0 的实际尺寸。
+    GLint baseW = 0, baseH = 0;
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &baseW);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &baseH);
+    if(baseW <= 0 || baseH <= 0) {
+        GLES_LOGW("KTX base level missing (%dx%d), deleting texture", baseW,
+                  baseH);
+        spdlog::warn("krkrgles: KTX level 0 缺失（{}x{}），纹理作废", baseW,
+                     baseH);
         glDeleteTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, 0);
         return 0;
     }
 
@@ -1543,6 +1575,31 @@ static bool g_captureActive = false;
 extern "C" bool KrkrGLES_IsCaptureActive() {
     return g_captureActive;
 }
+
+// capture 回调期间置位。**必须异常安全**：回调是 TJS，一旦它抛异常，
+// 原先"置位 → 调用 → 复位"的写法会漏掉复位，标志永久卡在 true，此后每一帧
+// `krkrlive2d` 的 render() 都会多 blit 一层到调用方目标（花屏/错层的来源）。
+// 用 RAII 保证任何退出路径（含异常）都复位。
+namespace {
+    class CaptureScope {
+    public:
+        CaptureScope() {
+            if(g_captureActive) {
+                // 正常不该发生：说明上一次没复位（旧版本的泄漏）或 capture 被重入。
+                static bool s_reported = false;
+                if(!s_reported) {
+                    s_reported = true;
+                    spdlog::warn("[probe] krkrgles: capture 进入时标志已置位"
+                                 "（重入或上一次未复位）");
+                }
+            }
+            g_captureActive = true;
+        }
+        ~CaptureScope() { g_captureActive = false; }
+        CaptureScope(const CaptureScope &) = delete;
+        CaptureScope &operator=(const CaptureScope &) = delete;
+    };
+} // namespace
 
 bool CopyFBOToLayer(GLuint fbo, GLsizei srcW, GLsizei srcH,
                     iTJSDispatch2 *layer, GLint prevFbo) {
@@ -2184,10 +2241,12 @@ namespace { // reopen anonymous namespace
                                  ((color >> 24) & 0xff) / 255.0f);
                     glClear(GL_COLOR_BUFFER_BIT);
                 }
-                // 回调期间置位：Live2D 的 render() 据此把模型也画进这个捕获 FBO
-                g_captureActive = true;
-                InvokeCaptureCallback("GLESAdaptor.capture", w, h, n, p);
-                g_captureActive = false;
+                // 回调期间置位：Live2D 的 render() 据此把模型也画进这个捕获 FBO。
+                // RAII 保证回调抛异常时也会复位（否则标志会永久卡在 true）。
+                {
+                    CaptureScope captureScope;
+                    InvokeCaptureCallback("GLESAdaptor.capture", w, h, n, p);
+                }
 #if defined(KRKR_RENDER_PROBE)
                 // 探针：回调结束后、拷贝之前，捕获 FBO 里到底有什么。
                 // 与下面"图层 CPU 缓冲"那处配套：前者判"模型有没有进捕获 FBO"，
@@ -2516,29 +2575,37 @@ namespace { // reopen anonymous namespace
 // krkrz 兼容层：按 ogldrawdevice_compat 选项决定把 OGLDrawDevice 暴露到什么程度。
 //
 //   off   —— 什么都不做（默认，保持原行为）
-//   alias —— 把 Window.OGLDrawDevice / Window.GLESAdaptor 挂上
+//   ogl   —— 只挂 Window.OGLDrawDevice
+//   alias —— 挂 Window.OGLDrawDevice + Window.GLESAdaptor
 //   kag   —— 在 alias 之上再接管 KAGWindow_createDrawDevice
 //
-// 两档都实测有效，但**作用不同、按游戏二选一**：
+// 各档的实测作用：
 //
-//   * `alias` 解决"闸门"：游戏的 Initialize.tjs 先看 `Window.OGLDrawDevice` 在不在，
-//     缺了就静默跳过 GPULayer.tjs / GPUAffineLayer.tjs。挂上别名后两者都会加载
-//     （真机实测：会话 11:22 首次出现在 StorageExec 里）。
+//   * `Window.OGLDrawDevice` 是**闸门**：游戏的 Initialize.tjs 先看它在不在，缺了就
+//     静默跳过 GPULayer.tjs / GPUAffineLayer.tjs。挂上后两者都会加载
+//     （会话 11:22 首次出现在 StorageExec 里）。所有非 off 档都会挂它。
+//   * `Window.GLESAdaptor` **会改变部分游戏的行为**：千恋万花在 alias 档下被切进
+//     motionplayer 的 `captureCanvas` 路径（`D3DAdaptor.captureCanvas` 211 次、
+//     `drawOnto` 107 次、`drawPSBImages: captureCanvas active, skip draw` 104 次），
+//     而 `Player::draw` 从此让路、UI 图全压在 `drawOnto` 这一条交付上——实测那条交付
+//     不完整，UI 就出问题。`ogl` 档就是给这种"只要闸门、不要 canvas 捕获"的游戏用的。
 //   * `kag` 解决"窗口绘制设备工厂"：`KAGWindow_createDrawDevice` 由游戏自己的
 //     `system\mainwindow.tjs` 定义、在插件注册之后才 exec，所以覆盖必须**延迟**到
-//     脚本加载完（这里用一次性连续事件钩子，装完立即摘钩）。
+//     脚本加载完（用一次性连续事件钩子，装完立即摘钩）。
 //     实测收益：**千恋万花**在 kag 档下能正常加载立绘与背景动态。
 //
-// ⚠️ 但 `kag` 对 G2（nainiuniu5krkr）**有害**：主机侧
-//   `HostWindowLayer::SourceSample` 报 52 次 `FBO incomplete 0x8CD6`
-//   （GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT），画面直接采不到；draw 从 20/layers 143
-//   变成 345/layers 465。且它对 G2 的 CG 黑屏没有帮助（Live2D 内部 FBO 仍是
-//   `rgbNonZero=0/16 center=(0,0,0,255)`）。⇒ 属于**逐游戏**行为，不要默认开。
+// ⚠️ 各档都不是万能的，**必须逐游戏试**：
+//   - `kag` 对 G2（nainiuniu5krkr）有害：主机侧 `HostWindowLayer::SourceSample`
+//     报 53 次 `FBO incomplete 0x8CD6`（GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT），
+//     画面直接采不到（连回想页都黑）；draw 从 20/layers 143 变成 345/layers 465。
+//   - `alias` 对千恋万花有害（见上）。
+//   ⇒ 都不该做全局默认。
 // ---------------------------------------------------------------------------
 // 与 bridge/engine_api/include/engine_options.h 的 ENGINE_OPTION_OGLDRAWDEVICE_COMPAT
 // 保持一致。引擎核心不依赖 bridge 的头，按既有惯例用字面量键名
 // （同理见 FreeTypeFontRasterizer.cpp 里的 "font_fallback_mode"）。
 static const tjs_char *KrkrOglCompatOption = TJS_W("ogldrawdevice_compat");
+static const tjs_char *KrkrOglCompatOgl = TJS_W("ogl");
 static const tjs_char *KrkrOglCompatAlias = TJS_W("alias");
 static const tjs_char *KrkrOglCompatKag = TJS_W("kag");
 
@@ -2627,18 +2694,25 @@ static void KrkrGlesPostRegist() {
     if(!TVPGetCommandLine(KrkrOglCompatOption, &modeVal))
         return;
     const ttstr mode(modeVal);
+    const ttstr kOgl(KrkrOglCompatOgl);
     const ttstr kAlias(KrkrOglCompatAlias);
     const ttstr kKag(KrkrOglCompatKag);
-    if(mode != kAlias && mode != kKag)
+    if(mode != kOgl && mode != kAlias && mode != kKag)
         return; // off 或未知取值：保持原行为
 
-    // 把 GL 设备名字挂到 Window 上。它不改变任何既有渲染实现，只是让游戏的
-    // "有没有 GPU 绘制设备"判断成立，从而去加载 GPULayer.tjs / GPUAffineLayer.tjs
-    // （真机实测：会话 11:22 两脚本首次出现在 StorageExec 里）。
+    // Window.OGLDrawDevice 是"闸门"：所有非 off 档都挂，游戏才会去加载
+    // GPULayer.tjs / GPUAffineLayer.tjs（真机实测：会话 11:22 首次出现在
+    // StorageExec 里）。
     KrkrOglAliasOntoWindow(TJS_W("OGLDrawDevice"));
-    KrkrOglAliasOntoWindow(TJS_W("GLESAdaptor"));
-    spdlog::info("krkrgles: ogldrawdevice_compat 已启用"
-                 "（Window.OGLDrawDevice / Window.GLESAdaptor 已挂上）");
+    // Window.GLESAdaptor 只给 alias / kag。实测它会把一部分游戏（千恋万花）切进
+    // motionplayer 的 captureCanvas 路径，而那条交付目前不完整 ⇒ `ogl` 档专门
+    // 留给"只要闸门、不要 canvas 捕获"的游戏。
+    if(mode != kOgl)
+        KrkrOglAliasOntoWindow(TJS_W("GLESAdaptor"));
+    spdlog::info("krkrgles: ogldrawdevice_compat={} 已启用（挂了 {}）",
+                 mode == kOgl ? "ogl" : (mode == kKag ? "kag" : "alias"),
+                 mode == kOgl ? "Window.OGLDrawDevice"
+                              : "Window.OGLDrawDevice / Window.GLESAdaptor");
 
     // kag 档：额外接管窗口的绘制设备工厂。必须延迟安装，见本段开头说明。
     if(mode == kKag) {
