@@ -2100,6 +2100,39 @@ namespace { // reopen anonymous namespace
             // 有声音、且日志零报错的直接原因（宿主探针实测：引擎画了 140 个图层，
             // 合成结果 nonBlack=0/25、全黑不透明）。
             iTJSDispatch2 *layer = FindLayerInParams(n, p);
+#if defined(KRKR_RENDER_PROBE)
+            // 探针：捕获目标到底是谁——是不是一个真正的 Layer、多大、透明度多少。
+            // 全动画黑屏的最后一段就卡在"内容写进了哪一层、那一层有没有上屏"。
+            {
+                static std::unordered_map<void *, bool> s_seen;
+                if(layer && s_seen.size() < 8 &&
+                   s_seen.find(static_cast<void *>(layer)) == s_seen.end()) {
+                    s_seen[static_cast<void *>(layer)] = true;
+                    tTJSVariant wv, hv, ov;
+                    layer->PropGet(0, TJS_W("imageWidth"), nullptr, &wv, layer);
+                    layer->PropGet(0, TJS_W("imageHeight"), nullptr, &hv, layer);
+                    layer->PropGet(0, TJS_W("opacity"), nullptr, &ov, layer);
+                    const bool isLayer =
+                        layer->IsInstanceOf(0, nullptr, nullptr, TJS_W("Layer"),
+                                            nullptr) == TJS_S_TRUE;
+                    spdlog::info("[probe] krkrgles: capture target #{} ptr={} "
+                                 "isLayer={} image={}x{} opacity={}",
+                                 static_cast<int>(s_seen.size()),
+                                 static_cast<const void *>(layer), isLayer,
+                                 static_cast<int>(ToInt(wv, 0)),
+                                 static_cast<int>(ToInt(hv, 0)),
+                                 static_cast<int>(ToInt(ov, 255)));
+                } else if(!layer) {
+                    static bool s_reported = false;
+                    if(!s_reported) {
+                        s_reported = true;
+                        spdlog::warn("[probe] krkrgles: capture 参数里没找到图层"
+                                     "（p0 类型={}）——结果无处可放",
+                                     ProbeTypeName(n > 0 ? p[0] : nullptr));
+                    }
+                }
+            }
+#endif
             if(s && layer && s->fbo_.EnsureSize(static_cast<GLsizei>(w),
                                                 static_cast<GLsizei>(h))) {
                 // Bind() 自带"绑定 + 设视口 + 清成透明"；游戏传的 color=0 正是这个值，
@@ -2119,10 +2152,53 @@ namespace { // reopen anonymous namespace
                 g_captureActive = true;
                 InvokeCaptureCallback("GLESAdaptor.capture", w, h, n, p);
                 g_captureActive = false;
-                // 结果交给图层；GPU blit 失败会自动退 CPU（见 CopyFBOToLayer）
-                CopyFBOToLayer(s->fbo_.GetFBO(), static_cast<GLsizei>(w),
-                               static_cast<GLsizei>(h), layer,
-                               s->fbo_.GetPrevFbo());
+                // 结果交给图层。官方参考实现的落点是图层的 **CPU 像素缓冲**
+                // （setSize + mainImageBufferForWrite），而不是只写 GL 纹理：
+                // 引擎随后按 CPU 位图重传纹理会把"只写在纹理上"的内容覆盖回去。
+                // 所以 capture 优先走 CPU 路径，失败再退 GPU blit。
+                tTJSNI_Layer *layerNI = nullptr;
+                if(TJS_FAILED(layer->NativeInstanceSupport(
+                       TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID,
+                       reinterpret_cast<iTJSNativeInstance **>(&layerNI))) ||
+                   !layerNI) {
+                    layerNI = nullptr;
+                }
+                bool copied = false;
+                if(layerNI) {
+                    copied = CopyFBOToLayerCPU(s->fbo_.GetFBO(),
+                                               static_cast<GLsizei>(w),
+                                               static_cast<GLsizei>(h), layerNI,
+                                               s->fbo_.GetPrevFbo());
+                }
+                if(!copied) {
+                    CopyFBOToLayer(s->fbo_.GetFBO(), static_cast<GLsizei>(w),
+                                   static_cast<GLsizei>(h), layer,
+                                   s->fbo_.GetPrevFbo());
+                }
+#if defined(KRKR_RENDER_PROBE)
+                if(layerNI) {
+                    static bool s_sampled = false;
+                    if(!s_sampled) {
+                        s_sampled = true;
+                        const auto *buf = reinterpret_cast<const unsigned char *>(
+                            layerNI->GetMainImagePixelBufferForWrite());
+                        const tjs_int pitch =
+                            layerNI->GetMainImagePixelBufferPitch();
+                        const tjs_int lw = layerNI->GetWidth();
+                        const tjs_int lh = layerNI->GetHeight();
+                        if(buf && pitch > 0 && lw > 2 && lh > 2) {
+                            const unsigned char *c =
+                                buf + static_cast<size_t>(pitch) * (lh / 2) +
+                                static_cast<size_t>(lw / 2) * 4u;
+                            spdlog::info("[probe] krkrgles: layer CPU buffer "
+                                         "center=({},{},{},{}) {}x{}",
+                                         c[0], c[1], c[2], c[3],
+                                         static_cast<int>(lw),
+                                         static_cast<int>(lh));
+                        }
+                    }
+                }
+#endif
                 s->fbo_.Unbind();
             } else {
                 InvokeCaptureCallback("GLESAdaptor.capture", w, h, n, p);
