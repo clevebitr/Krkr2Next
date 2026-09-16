@@ -4,8 +4,13 @@
 #include "SysInitIntf.h"
 #include "EventIntf.h"
 #include "LayerImpl.h"
+#include "BitmapIntf.h"
 #include "RenderManager.h"
+// Motion.Player 的自动渲染要判断原生实例（见 YuzuMotion 段）：直接包含
+// motionplayer 的 Player 头，与 AetherKiri 同一种做法。
+#include "motionplayer/Player.h"
 #include <spdlog/spdlog.h>
+#include <algorithm>
 #include <unordered_map>
 #include <vector>
 #include <cstring>
@@ -1644,6 +1649,511 @@ bool CopyFBOToLayer(GLuint fbo, GLsizei srcW, GLsizei srcH,
 static iTJSDispatch2 *g_registeredLayer = nullptr;
 iTJSDispatch2 *KrkrGLES_GetRegisteredLayer() { return g_registeredLayer; }
 
+// ---------------------------------------------------------------------------
+// Motion.Player 自动渲染（自 AetherKiri 移植）
+//
+// 背景：Yuzusoft 系（千恋万花等）把 PSB 动画交给 GLESAdaptor 这类入口对象，
+// 而"游戏自己每帧调 Player::draw"那条交付实测不完整（画面停在占位图上，见
+// motionplayer 的 captureCanvas 空壳注释）。AetherKiri 的做法：在这些入口里把
+// (Motion.Player, 目标 Layer) 登记下来，由连续事件钩子每帧调一次
+// player.draw(layer) 合成到目标层。
+// 只有真正走过这些入口的游戏才会被登记，登记表空了就摘钩，其余游戏不受影响。
+// ---------------------------------------------------------------------------
+static bool MotionIsLayerObject(iTJSDispatch2 *obj) {
+    if(!obj)
+        return false;
+    tTJSNI_BaseLayer *layer = nullptr;
+    return TJS_SUCCEEDED(obj->NativeInstanceSupport(
+               TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID,
+               reinterpret_cast<iTJSNativeInstance **>(&layer))) &&
+        layer != nullptr;
+}
+
+static bool MotionGetDispatchProperty(iTJSDispatch2 *obj, const tjs_char *name,
+                                      tTJSVariant &result) {
+    result.Clear();
+    if(!obj)
+        return false;
+    return TJS_SUCCEEDED(
+        obj->PropGet(TJS_IGNOREPROP, name, nullptr, &result, obj));
+}
+
+// 从脚本对象解析出 Layer：先看对象本身与它的闭包，再按一组属性名递归找。
+// 深度封顶 4，避免属性互相引用的环。
+static iTJSDispatch2 *MotionResolveLayerFromVariant(const tTJSVariant &value,
+                                                    int depth = 0) {
+    if(depth > 4 || value.Type() != tvtObject || !value.AsObjectNoAddRef())
+        return nullptr;
+
+    iTJSDispatch2 *base = value.AsObjectNoAddRef();
+    const auto closure = value.AsObjectClosureNoAddRef();
+    iTJSDispatch2 *candidates[] = {
+        base,
+        closure.ObjThis,
+        closure.Object,
+        nullptr,
+    };
+
+    for(auto *candidate : candidates) {
+        if(MotionIsLayerObject(candidate))
+            return candidate;
+    }
+
+    static const tjs_char *kExplicitLayerProps[] = {
+        TJS_W("targetLayer"),
+        TJS_W("_targetLayer"),
+        TJS_W("renderTarget"),
+        TJS_W("_renderTarget"),
+        TJS_W("layer"),
+        TJS_W("_layer"),
+        TJS_W("baseLayer"),
+        TJS_W("_base"),
+        TJS_W("base"),
+        TJS_W("fore"),
+        TJS_W("back"),
+        TJS_W("primaryLayer"),
+        nullptr,
+    };
+    static const tjs_char *kOwnerLayerProps[] = {
+        TJS_W("owner"),
+        TJS_W("_owner"),
+        TJS_W("parent"),
+        nullptr,
+    };
+
+    auto tryProps = [&](const tjs_char *const *props) -> iTJSDispatch2 * {
+        for(auto *candidate : candidates) {
+            if(!candidate)
+                continue;
+            for(int i = 0; props[i]; ++i) {
+                tTJSVariant prop;
+                if(!MotionGetDispatchProperty(candidate, props[i], prop) ||
+                   prop.Type() != tvtObject || !prop.AsObjectNoAddRef() ||
+                   prop.AsObjectNoAddRef() == candidate ||
+                   prop.AsObjectNoAddRef() == base) {
+                    continue;
+                }
+                if(auto *resolved =
+                       MotionResolveLayerFromVariant(prop, depth + 1)) {
+                    return resolved;
+                }
+            }
+        }
+        return nullptr;
+    };
+
+    if(auto *resolved = tryProps(kExplicitLayerProps))
+        return resolved;
+    if(auto *resolved = tryProps(kOwnerLayerProps))
+        return resolved;
+    return nullptr;
+}
+
+static iTJSDispatch2 *MotionFindLayerInParams(tjs_int n, tTJSVariant **p) {
+    if(!p)
+        return nullptr;
+    for(tjs_int i = 0; i < n; ++i) {
+        if(!p[i])
+            continue;
+        if(auto *layer = MotionResolveLayerFromVariant(*p[i]))
+            return layer;
+    }
+    return nullptr;
+}
+
+namespace {
+    struct YuzuMotionRenderable {
+        tTJSVariant player;
+        tTJSVariant layer;
+        uintptr_t ownerKey = 0;
+    };
+
+    std::mutex &YuzuMotionRenderMutex() {
+        static std::mutex mutex;
+        return mutex;
+    }
+
+    std::vector<YuzuMotionRenderable> &YuzuMotionRenderables() {
+        static std::vector<YuzuMotionRenderable> renderables;
+        return renderables;
+    }
+
+    class YuzuMotionRenderHook final : public tTVPContinuousEventCallbackIntf {
+    public:
+        void Start();
+        void Stop();
+        void OnContinuousCallback(tjs_uint64) override;
+
+    private:
+        bool registered_ = false;
+    };
+
+    YuzuMotionRenderHook &GetYuzuMotionRenderHook() {
+        static YuzuMotionRenderHook hook;
+        return hook;
+    }
+} // namespace
+
+static motion::Player *NativeMotionPlayerFromObject(iTJSDispatch2 *obj) {
+    if(!obj)
+        return nullptr;
+    return ncbInstanceAdaptor<motion::Player>::GetNativeInstance(obj, false);
+}
+
+static iTJSDispatch2 *FindMotionPlayerInParams(tjs_int n, tTJSVariant **p) {
+    if(!p)
+        return nullptr;
+    for(tjs_int i = 0; i < n; ++i) {
+        if(!p[i] || p[i]->Type() != tvtObject)
+            continue;
+        iTJSDispatch2 *obj = p[i]->AsObjectNoAddRef();
+        if(NativeMotionPlayerFromObject(obj))
+            return obj;
+    }
+    return nullptr;
+}
+
+// 调 Player 的 TJS 方法 draw(layer)：真正把 PSB 合成到目标层的是它
+// （motionplayer 的 Player::draw，见 Player.h 的 drawPSBImages）。
+static bool InvokeMotionPlayerDraw(iTJSDispatch2 *player,
+                                   iTJSDispatch2 *targetLayer,
+                                   const char *tag) {
+    if(!player || !targetLayer)
+        return false;
+    if(!NativeMotionPlayerFromObject(player))
+        return false;
+
+    tTJSVariant result;
+    tTJSVariant layerVar(targetLayer, targetLayer);
+    tTJSVariant *args[] = { &layerVar };
+    tjs_uint hint = 0;
+    try {
+        const tjs_error er =
+            player->FuncCall(0, TJS_W("draw"), &hint, &result, 1, args, player);
+        if(TJS_SUCCEEDED(er))
+            return true;
+        spdlog::debug("krkrgles: {} Motion.Player.draw failed er={}",
+                      tag ? tag : "render", er);
+    } catch(const eTJS &e) {
+        spdlog::warn("krkrgles: {} Motion.Player.draw threw {}",
+                     tag ? tag : "render", ttstr(e.GetMessage()).AsStdString());
+    } catch(...) {
+        spdlog::warn("krkrgles: {} Motion.Player.draw threw unknown exception",
+                     tag ? tag : "render");
+    }
+    return false;
+}
+
+static void RegisterYuzuMotionRenderable(tjs_int n, tTJSVariant **p,
+                                         uintptr_t ownerKey, const char *tag) {
+    iTJSDispatch2 *player = FindMotionPlayerInParams(n, p);
+    iTJSDispatch2 *layer = MotionFindLayerInParams(n, p);
+    if(layer)
+        g_registeredLayer = layer;
+    if(!player)
+        return;
+    if(!layer) {
+        tTJSVariant playerVar(player, player);
+        layer = MotionResolveLayerFromVariant(playerVar);
+    }
+    if(!layer) {
+        spdlog::debug(
+            "krkrgles: skipped Motion.Player auto-render via {} without layer",
+            tag ? tag : "entry");
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(YuzuMotionRenderMutex());
+    auto &items = YuzuMotionRenderables();
+    auto samePlayer = [player](const YuzuMotionRenderable &item) {
+        return item.player.Type() == tvtObject &&
+            item.player.AsObjectNoAddRef() == player;
+    };
+    auto it = std::find_if(items.begin(), items.end(), samePlayer);
+    if(it == items.end()) {
+        if(items.size() >= 64)
+            items.erase(items.begin());
+        YuzuMotionRenderable item;
+        item.player = tTJSVariant(player, player);
+        item.layer = tTJSVariant(layer, layer);
+        item.ownerKey = ownerKey;
+        items.push_back(item);
+        spdlog::info(
+            "krkrgles: registered Motion.Player auto-render via {} layer={}",
+            tag ? tag : "entry", static_cast<const void *>(layer));
+    } else {
+        it->layer = tTJSVariant(layer, layer);
+        it->ownerKey = ownerKey;
+    }
+    GetYuzuMotionRenderHook().Start();
+}
+
+static void RemoveYuzuMotionRenderable(tjs_int n, tTJSVariant **p,
+                                       uintptr_t ownerKey) {
+    iTJSDispatch2 *player = FindMotionPlayerInParams(n, p);
+    std::lock_guard<std::mutex> lock(YuzuMotionRenderMutex());
+    auto &items = YuzuMotionRenderables();
+    items.erase(
+        std::remove_if(items.begin(), items.end(),
+                       [player, ownerKey](const YuzuMotionRenderable &item) {
+                           const bool playerMatches = player &&
+                               item.player.Type() == tvtObject &&
+                               item.player.AsObjectNoAddRef() == player;
+                           const bool ownerMatches =
+                               ownerKey != 0 && item.ownerKey == ownerKey;
+                           return playerMatches || (!player && ownerMatches);
+                       }),
+        items.end());
+    if(items.empty())
+        GetYuzuMotionRenderHook().Stop();
+}
+
+static tjs_int RenderYuzuMotionRenderables(const char *tag) {
+    std::vector<YuzuMotionRenderable> snapshot;
+    {
+        std::lock_guard<std::mutex> lock(YuzuMotionRenderMutex());
+        snapshot = YuzuMotionRenderables();
+    }
+
+    tjs_int rendered = 0;
+    for(const auto &item : snapshot) {
+        iTJSDispatch2 *player = item.player.Type() == tvtObject
+            ? item.player.AsObjectNoAddRef()
+            : nullptr;
+        iTJSDispatch2 *layer = item.layer.Type() == tvtObject
+            ? item.layer.AsObjectNoAddRef()
+            : nullptr;
+        if(!layer && item.player.Type() == tvtObject) {
+            layer = MotionResolveLayerFromVariant(item.player);
+        }
+        if(!layer)
+            continue;
+        if(InvokeMotionPlayerDraw(player, layer, tag))
+            ++rendered;
+    }
+    return rendered;
+}
+
+void YuzuMotionRenderHook::Start() {
+    if(registered_)
+        return;
+    TVPAddContinuousEventHook(this);
+    registered_ = true;
+}
+
+void YuzuMotionRenderHook::Stop() {
+    if(!registered_)
+        return;
+    TVPRemoveContinuousEventHook(this);
+    registered_ = false;
+}
+
+void YuzuMotionRenderHook::OnContinuousCallback(tjs_uint64) {
+    RenderYuzuMotionRenderables("continuous");
+}
+
+// ---------------------------------------------------------------------------
+// Layer 直绘（drawLayer / drawAffine 的真实现，自 AetherKiri 移植）。
+// 上游这两个入口原本恒返回 true 不绘制：一旦 GPU 层脚本真调它们，
+// 效果就是"调用成功但没画"。这里按参数把它们落到 Layer 的
+// StretchCopy / OperateAffine 上。
+// ---------------------------------------------------------------------------
+static bool IsNumericVariant(const tTJSVariant &value) {
+    tTJSVariantType type = value.Type();
+    return type != tvtVoid && type != tvtString && type != tvtObject;
+}
+
+static tTJSNI_BaseLayer *GetNativeLayerObject(iTJSDispatch2 *obj) {
+    if(!obj)
+        return nullptr;
+    tTJSNI_BaseLayer *layer = nullptr;
+    if(TJS_SUCCEEDED(obj->NativeInstanceSupport(
+           TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID,
+           reinterpret_cast<iTJSNativeInstance **>(&layer)))) {
+        return layer;
+    }
+    return nullptr;
+}
+
+static bool GetBitmapFromObject(iTJSDispatch2 *obj, iTVPBaseBitmap **bitmap,
+                                tTVPBlendOperationMode *mode) {
+    if(!obj || !bitmap)
+        return false;
+    if(tTJSNI_BaseLayer *layer = GetNativeLayerObject(obj)) {
+        *bitmap = layer->GetMainImage();
+        if(mode)
+            *mode = layer->GetOperationModeFromType();
+        return *bitmap != nullptr;
+    }
+    tTJSNI_Bitmap *srcbmp = nullptr;
+    if(TJS_SUCCEEDED(obj->NativeInstanceSupport(
+           TJS_NIS_GETINSTANCE, tTJSNC_Bitmap::ClassID,
+           reinterpret_cast<iTJSNativeInstance **>(&srcbmp)))) {
+        *bitmap = srcbmp->GetBitmap();
+        if(mode)
+            *mode = omAlpha;
+        return *bitmap != nullptr;
+    }
+    return false;
+}
+
+// 参数里挑出"目标 Layer"与"源 Bitmap/Layer"：两个都是对象，按能不能解释成
+// Layer / 有主位图来分角色，顺序与脚本给的一致。
+static bool GetLayerAndObjectArgs(tjs_int n, tTJSVariant **p,
+                                  tTJSNI_BaseLayer **dstLayer,
+                                  iTJSDispatch2 **srcObject, tjs_int *dstIndex,
+                                  tjs_int *srcIndex) {
+    if(!p || !dstLayer || !srcObject)
+        return false;
+    *dstLayer = nullptr;
+    *srcObject = nullptr;
+    if(dstIndex)
+        *dstIndex = -1;
+    if(srcIndex)
+        *srcIndex = -1;
+    for(tjs_int i = 0; i < n; ++i) {
+        if(!p[i] || p[i]->Type() != tvtObject)
+            continue;
+        iTJSDispatch2 *obj = p[i]->AsObjectNoAddRef();
+        if(!obj)
+            continue;
+        if(!*dstLayer) {
+            if(tTJSNI_BaseLayer *layer = GetNativeLayerObject(obj)) {
+                *dstLayer = layer;
+                if(dstIndex)
+                    *dstIndex = i;
+                continue;
+            }
+        }
+        if(!*srcObject) {
+            iTVPBaseBitmap *bitmap = nullptr;
+            if(GetBitmapFromObject(obj, &bitmap, nullptr)) {
+                *srcObject = obj;
+                if(srcIndex)
+                    *srcIndex = i;
+            }
+        }
+    }
+    return *dstLayer && *srcObject;
+}
+
+static bool GetNumericArgs(tjs_int n, tTJSVariant **p, tjs_int start,
+                           std::vector<tjs_real> &out) {
+    out.clear();
+    for(tjs_int i = start; i < n; ++i) {
+        if(!p[i] || !IsNumericVariant(*p[i]))
+            continue;
+        out.push_back(static_cast<tjs_real>(*p[i]));
+    }
+    return !out.empty();
+}
+
+static bool DrawLayerNative(tjs_int n, tTJSVariant **p) {
+    tTJSNI_BaseLayer *dstLayer = nullptr;
+    iTJSDispatch2 *srcObject = nullptr;
+    tjs_int dstIndex = -1;
+    tjs_int srcIndex = -1;
+    if(!GetLayerAndObjectArgs(n, p, &dstLayer, &srcObject, &dstIndex,
+                              &srcIndex)) {
+        return false;
+    }
+
+    iTVPBaseBitmap *src = nullptr;
+    tTVPBlendOperationMode automode = omAlpha;
+    if(!GetBitmapFromObject(srcObject, &src, &automode))
+        return false;
+    const tjs_int firstNumeric =
+        srcIndex > dstIndex ? dstIndex + 1 : srcIndex + 1;
+    std::vector<tjs_real> nums;
+    GetNumericArgs(n, p, firstNumeric, nums);
+
+    tjs_int dx = nums.size() > 0 ? static_cast<tjs_int>(nums[0]) : 0;
+    tjs_int dy = nums.size() > 1 ? static_cast<tjs_int>(nums[1]) : 0;
+    tjs_int dw =
+        nums.size() > 2 ? static_cast<tjs_int>(nums[2]) : dstLayer->GetWidth();
+    tjs_int dh =
+        nums.size() > 3 ? static_cast<tjs_int>(nums[3]) : dstLayer->GetHeight();
+    tjs_int sx = nums.size() > 4 ? static_cast<tjs_int>(nums[4]) : 0;
+    tjs_int sy = nums.size() > 5 ? static_cast<tjs_int>(nums[5]) : 0;
+    tjs_int sw =
+        nums.size() > 6 ? static_cast<tjs_int>(nums[6]) : src->GetWidth();
+    tjs_int sh =
+        nums.size() > 7 ? static_cast<tjs_int>(nums[7]) : src->GetHeight();
+
+    if(dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0)
+        return false;
+
+    tTVPRect dest(dx, dy, dx + dw, dy + dh);
+    tTVPRect srcrect(sx, sy, sx + sw, sy + sh);
+    try {
+        dstLayer->StretchCopy(dest, src, srcrect, stNearest, 0.0);
+        return true;
+    } catch(...) {
+        return false;
+    }
+}
+
+static bool DrawAffineNative(tjs_int n, tTJSVariant **p) {
+    tTJSNI_BaseLayer *dstLayer = nullptr;
+    iTJSDispatch2 *srcObject = nullptr;
+    tjs_int dstIndex = -1;
+    tjs_int srcIndex = -1;
+    if(!GetLayerAndObjectArgs(n, p, &dstLayer, &srcObject, &dstIndex,
+                              &srcIndex)) {
+        return false;
+    }
+
+    iTVPBaseBitmap *src = nullptr;
+    tTVPBlendOperationMode automode = omAlpha;
+    if(!GetBitmapFromObject(srcObject, &src, &automode))
+        return false;
+    const tjs_int firstNumeric =
+        srcIndex > dstIndex ? dstIndex + 1 : srcIndex + 1;
+    std::vector<tjs_real> nums;
+    GetNumericArgs(n, p, firstNumeric, nums);
+    if(nums.size() < 12)
+        return false;
+
+    tTVPRect srcrect(static_cast<tjs_int>(nums[0]),
+                     static_cast<tjs_int>(nums[1]),
+                     static_cast<tjs_int>(nums[0] + nums[2]),
+                     static_cast<tjs_int>(nums[1] + nums[3]));
+    if(srcrect.get_width() <= 0 || srcrect.get_height() <= 0)
+        return false;
+
+    tTVPBlendOperationMode mode = automode == omAuto ? omAlpha : automode;
+    tjs_int opa = nums.size() > 13 ? static_cast<tjs_int>(nums[13]) : 255;
+    tTVPBBStretchType type = nums.size() > 14
+        ? static_cast<tTVPBBStretchType>(static_cast<tjs_int>(nums[14]))
+        : stNearest;
+
+    try {
+        const bool matrixMode = static_cast<tjs_int>(nums[4]) != 0;
+        if(matrixMode) {
+            t2DAffineMatrix mat;
+            mat.a = nums[5];
+            mat.b = nums[6];
+            mat.c = nums[7];
+            mat.d = nums[8];
+            mat.tx = nums[9];
+            mat.ty = nums[10];
+            dstLayer->OperateAffine(mat, src, srcrect, mode, opa, type);
+        } else {
+            tTVPPointD points[3];
+            points[0].x = nums[5];
+            points[0].y = nums[6];
+            points[1].x = nums[7];
+            points[1].y = nums[8];
+            points[2].x = nums[9];
+            points[2].y = nums[10];
+            dstLayer->OperateAffine(points, src, srcrect, mode, opa, type);
+        }
+        return true;
+    } catch(...) {
+        return false;
+    }
+}
+
 namespace { // reopen anonymous namespace
 
     // ---------------------------------------------------------------------------
@@ -1765,12 +2275,15 @@ namespace { // reopen anonymous namespace
     }
 
     static tjs_error DictEntryUpdateObjectCb(tTJSVariant *r, tjs_int n,
-                                             tTJSVariant **p, iTJSDispatch2 *) {
+                                             tTJSVariant **p,
+                                             iTJSDispatch2 *obj) {
         if(n > 0 && p) {
             iTJSDispatch2 *layer = FindLayerInParams(n, p);
             if(layer)
                 g_registeredLayer = layer;
         }
+        RegisterYuzuMotionRenderable(n, p, reinterpret_cast<uintptr_t>(obj),
+                                     "Fallback.entryUpdateObject");
         if(r)
             *r = true;
         return TJS_S_OK;
@@ -1833,6 +2346,9 @@ namespace { // reopen anonymous namespace
                     g_registeredLayer = layer;
                 }
             }
+            RegisterYuzuMotionRenderable(
+                n, p, reinterpret_cast<uintptr_t>(s),
+                "GLESModule.entryUpdateObject");
             if(r)
                 *r = true;
             return TJS_S_OK;
@@ -1886,8 +2402,11 @@ namespace { // reopen anonymous namespace
 
         static tjs_error finalizeCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
             KRKR_PROBE_TJS("GLESModule", "finalize", n, p);
-            if(s)
+            if(s) {
+                RemoveYuzuMotionRenderable(0, nullptr,
+                                           reinterpret_cast<uintptr_t>(s));
                 s->fbo_.Destroy();
+            }
             if(r)
                 *r = true;
             return TJS_S_OK;
@@ -1947,8 +2466,9 @@ namespace { // reopen anonymous namespace
 
         static tjs_error drawLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
             KRKR_PROBE_TJS("GLESModule", "drawLayer", n, p);
+            const bool drawn = DrawLayerNative(n, p);
             if(r)
-                *r = true;
+                *r = drawn;
             return TJS_S_OK;
         }
 
@@ -1959,8 +2479,9 @@ namespace { // reopen anonymous namespace
 
         static tjs_error drawAffineCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
             KRKR_PROBE_TJS("GLESModule", "drawAffine", n, p);
+            const bool drawn = DrawAffineNative(n, p);
             if(r)
-                *r = true;
+                *r = drawn;
             return TJS_S_OK;
         }
 
@@ -1971,6 +2492,7 @@ namespace { // reopen anonymous namespace
 
         static tjs_error renderCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
             KRKR_PROBE_TJS("GLESModule", "render", n, p);
+            RenderYuzuMotionRenderables("GLESModule.render");
             if(r)
                 *r = true;
             return TJS_S_OK;
@@ -2191,6 +2713,9 @@ namespace { // reopen anonymous namespace
                 if(layer)
                     g_registeredLayer = layer;
             }
+            RegisterYuzuMotionRenderable(
+                n, p, reinterpret_cast<uintptr_t>(s),
+                "GLESAdaptor.entryUpdateObject");
             if(r)
                 *r = true;
             return TJS_S_OK;
@@ -2440,8 +2965,9 @@ namespace { // reopen anonymous namespace
 
         static tjs_error drawLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
             KRKR_PROBE_TJS("GLESAdaptor", "drawLayer", n, p);
+            const bool drawn = DrawLayerNative(n, p);
             if(r)
-                *r = true;
+                *r = drawn;
             return TJS_S_OK;
         }
 
@@ -2452,8 +2978,9 @@ namespace { // reopen anonymous namespace
 
         static tjs_error drawAffineCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
             KRKR_PROBE_TJS("GLESAdaptor", "drawAffine", n, p);
+            const bool drawn = DrawAffineNative(n, p);
             if(r)
-                *r = true;
+                *r = drawn;
             return TJS_S_OK;
         }
 
@@ -2464,6 +2991,7 @@ namespace { // reopen anonymous namespace
 
         static tjs_error renderCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
             KRKR_PROBE_TJS("GLESAdaptor", "render", n, p);
+            RenderYuzuMotionRenderables("GLESAdaptor.render");
             if(r)
                 *r = true;
             return TJS_S_OK;
@@ -2506,6 +3034,8 @@ namespace { // reopen anonymous namespace
 
         static tjs_error finalizeCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
             KRKR_PROBE_TJS("GLESAdaptor", "finalize", n, p);
+            RemoveYuzuMotionRenderable(0, nullptr,
+                                       reinterpret_cast<uintptr_t>(s));
             if(r)
                 *r = true;
             return TJS_S_OK;
@@ -2513,6 +3043,8 @@ namespace { // reopen anonymous namespace
 
         static tjs_error glesEntryCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
             KRKR_PROBE_TJS("GLESAdaptor", "glesEntry", n, p);
+            RegisterYuzuMotionRenderable(n, p, reinterpret_cast<uintptr_t>(s),
+                                         "GLESAdaptor.glesEntry");
             if(r)
                 *r = true;
             return TJS_S_OK;
@@ -2520,6 +3052,7 @@ namespace { // reopen anonymous namespace
 
         static tjs_error glesRemoveCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
             KRKR_PROBE_TJS("GLESAdaptor", "glesRemove", n, p);
+            RemoveYuzuMotionRenderable(n, p, reinterpret_cast<uintptr_t>(s));
             if(r)
                 *r = true;
             return TJS_S_OK;
