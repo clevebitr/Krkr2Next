@@ -1663,8 +1663,9 @@ public:
         endScene();
     }
 
-    static tjs_error renderCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DDevice *s) {
-            KRKR_PROBE_TJS("Live2DDevice", "render", n, p);
+    static tjs_error renderCb(tTJSVariant *r, tjs_int numparams,
+                              tTJSVariant **param, Live2DDevice *) {
+        KRKR_PROBE_TJS("Live2DDevice", "render", numparams, param);
         if(numparams > 0 && param && param[0] &&
            param[0]->Type() == tvtObject) {
             iTJSDispatch2 *obj = param[0]->AsObjectNoAddRef();
