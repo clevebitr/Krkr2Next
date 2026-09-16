@@ -196,8 +196,18 @@ jobs:
         with:
           path: ~/.cache/vcpkg
           key: vcpkg-android-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg/**') }}-${{ env.BUILD_TYPE }}
+          # restore-keys **必须**带 BUILD_TYPE。原因（实测）：vcpkg 的二进制缓存里是
+          # 那一轮**装出来**的文件，pkg-config / CMake config 把当时的安装前缀写死。
+          # debug 轮的包被 release 轮复用后，路径全指向 out/android/debug/...，于是
+          #   - 消费方 configure 报 "includes non-existent path .../debug/vcpkg_installed/..."
+          #   - 端口自身编译报 "fatal error: 'glib.h' file not found"
+          # release 构建因此从来没成功过。
+          #
+          # 代价：加了这个前缀之后，**两种类型各自第一次都会冷编 124 个依赖**（各约
+          # 30-60 分钟），之后各自命中自己的缓存。这一次性成本在 main 上会拖慢正常
+          # 迭代，所以先在分支上把两边的缓存养出来，再合并回 main。
           restore-keys: |
-            vcpkg-android-
+            vcpkg-android-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg/**') }}-${{ env.BUILD_TYPE }}-
 
       # ---------------------------------------------------------------------
       # 依赖与引擎编译**分开两步**。CMake configure 会触发 vcpkg 安装全部 manifest
