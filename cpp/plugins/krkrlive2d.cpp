@@ -770,10 +770,12 @@ public:
         if(renderer) {
             UpdateProjection();
             renderer->SetMvpMatrix(&projMatrix_);
+            renderer->DrawModel();
 #if defined(KRKR_RENDER_PROBE)
+            // 必须打在 DrawModel() **之后**：绘制前 SDK 还没绑 program 和纹理，
+            // 那时读到的 program=0/unit0Tex=0 是正常状态，判不了"绑了哪张纹理"。
             ProbeDrawState();
 #endif
-            renderer->DrawModel();
         }
 #if defined(KRKR_RENDER_PROBE)
         ProbeFboStage("after-draw");
@@ -860,17 +862,21 @@ public:
         if(s_stateSamples >= 2)
             return;
         ++s_stateSamples;
-        GLint prog = 0, tex = 0, unit = 0, bsrcA = 0, bdstA = 0;
-        glGetIntegerv(GL_ACTIVE_TEXTURE, &unit);
+        GLint prog = 0, activeUnit = 0, tex0 = 0, bsrcA = 0, bdstA = 0;
+        glGetIntegerv(GL_ACTIVE_TEXTURE, &activeUnit);
         glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &tex);
+        // 显式切到 0 号单元再读绑定：绘制结束后活动单元可能是 1/2（遮罩/混合），
+        // 直接读 GL_TEXTURE_BINDING_2D 拿到的不一定是模型纹理那一张。
+        glActiveTexture(GL_TEXTURE0);
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &tex0);
+        glActiveTexture(static_cast<GLenum>(activeUnit));
         glGetIntegerv(GL_BLEND_SRC_ALPHA, &bsrcA);
         glGetIntegerv(GL_BLEND_DST_ALPHA, &bdstA);
-        spdlog::info("[probe] krkrlive2d: draw state program={} unit=0x{:04X} "
-                     "unit0Tex={} isTex={} err=0x{:04X}",
-                     static_cast<int>(prog), static_cast<unsigned>(unit),
-                     static_cast<int>(tex),
-                     tex ? static_cast<int>(glIsTexture(tex)) : 0,
+        spdlog::info("[probe] krkrlive2d: draw state program={} activeUnit=0x{:04X} "
+                     "unit0Tex={} isTex0={} err=0x{:04X}",
+                     static_cast<int>(prog), static_cast<unsigned>(activeUnit),
+                     static_cast<int>(tex0),
+                     tex0 ? static_cast<int>(glIsTexture(tex0)) : 0,
                      static_cast<unsigned>(glGetError()));
         spdlog::info("[probe] krkrlive2d: draw blend enabled={} srcA=0x{:04X} "
                      "dstA=0x{:04X}",

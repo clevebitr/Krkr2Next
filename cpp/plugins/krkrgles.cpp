@@ -1038,6 +1038,25 @@ extern "C" GLuint LoadKtxTexture(const uint8_t *data, size_t dataSize) {
         return 0;
     }
 
+    // 补齐 mip 链。Cubism 的 CubismShader_OpenGLES2::SetupTexture 在**每次绘制**
+    // 时把 MIN_FILTER 设成 GL_LINEAR_MIPMAP_LINEAR（覆盖本函数开头的 GL_LINEAR），
+    // 而 KTX 里通常只有 1-2 级；mip 链不完整时 GLES 按规范采到 (0,0,0,1)，
+    // 立绘整块变不透明黑（真机实测 a>0=16/16、rgbNonZero=0/16、center 全黑）。
+    // glGenerateMipmap 是 GLES2 核心入口，不要换成 ES3.1 的东西。
+    glGenerateMipmap(GL_TEXTURE_2D);
+    {
+        const GLenum mipErr = glGetError();
+        if(mipErr != GL_NO_ERROR) {
+            GLES_LOGW("glGenerateMipmap GL error 0x%04X", mipErr);
+            spdlog::warn("krkrgles: glGenerateMipmap 失败 0x{:04X}；SDK 按 "
+                         "LINEAR_MIPMAP_LINEAR 采样，该纹理仍会整块变黑",
+                         static_cast<unsigned>(mipErr));
+        } else {
+            spdlog::info("krkrgles: mip 链已补齐 texId={} ({}x{}, KTX levels={})",
+                         static_cast<unsigned>(tex), w, h, levels);
+        }
+    }
+
     GLES_LOGI("KTX texture loaded OK: texId=%u", tex);
     glBindTexture(GL_TEXTURE_2D, 0);
     return tex;
@@ -1131,6 +1150,10 @@ extern "C" GLuint LoadPngTexture(const uint8_t *data, size_t dataSize) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, static_cast<GLsizei>(w),
                  static_cast<GLsizei>(h), 0, GL_RGBA, GL_UNSIGNED_BYTE,
                  pixels.data());
+
+    // 同 KTX：SDK 绘制期把 MIN_FILTER 改成 GL_LINEAR_MIPMAP_LINEAR，
+    // 只传 level 0 会被判成不完整纹理，采样按规范返回 (0,0,0,1)（整块黑）。
+    glGenerateMipmap(GL_TEXTURE_2D);
 
     GLenum err = glGetError();
     if(err != GL_NO_ERROR) {
@@ -1487,6 +1510,27 @@ static bool CopyFBOToLayerCPU(GLuint fbo, GLsizei srcW, GLsizei srcH,
     tjs_int copyH = (layerH < srcH) ? layerH : srcH;
 
     static PBOState s_pbo;
+#if defined(KRKR_RENDER_PROBE)
+    // readback **之前**的真相 + FBO id：与函数末尾那条（readback 之后）对照，
+    // 就能分辨"读回错了"还是"中途被重清 / 换了 FBO"。
+    // 只做两次，避免每帧多一次同步读回（README 硬约束 4）。
+    {
+        static int s_preSamples = 0;
+        if(s_preSamples < 2) {
+            ++s_preSamples;
+            unsigned char pre[4] = { 0, 0, 0, 0 };
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glReadPixels(srcW / 2, srcH / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE,
+                         pre);
+            glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
+            spdlog::info("[probe] krkrgles: copy pre fbo={} {}x{} "
+                         "center=({},{},{},{})",
+                         static_cast<unsigned>(fbo), static_cast<int>(srcW),
+                         static_cast<int>(srcH), pre[0], pre[1], pre[2],
+                         pre[3]);
+        }
+    }
+#endif
     const uint8_t *srcPixels = nullptr;
     bool mapped = false;
 
@@ -1551,10 +1595,11 @@ static bool CopyFBOToLayerCPU(GLuint fbo, GLsizei srcW, GLsizei srcH,
             const unsigned char *dstC =
                 dst + static_cast<size_t>(pitch) * (layerH / 2) +
                 static_cast<size_t>(layerW / 2) * 4u;
-            spdlog::info("[probe] krkrgles: copy path={} fbo0=({},{},{},{}) "
+            spdlog::info("[probe] krkrgles: copy path={} fbo={} fbo0=({},{},{},{}) "
                          "src=({},{},{},{}) dst=({},{},{},{}) pitch={} "
                          "copy={}x{} err=0x{:04X}",
-                         mapped ? "pbo-async" : "sync-read", fboCtr[0],
+                         mapped ? "pbo-async" : "sync-read",
+                         static_cast<unsigned>(fbo), fboCtr[0],
                          fboCtr[1], fboCtr[2], fboCtr[3], srcC[0], srcC[1],
                          srcC[2], srcC[3], dstC[0], dstC[1], dstC[2], dstC[3],
                          static_cast<int>(pitch), static_cast<int>(copyW),
@@ -2253,6 +2298,21 @@ namespace { // reopen anonymous namespace
                                  ((color >> 24) & 0xff) / 255.0f);
                     glClear(GL_COLOR_BUFFER_BIT);
                 }
+#if defined(KRKR_RENDER_PROBE)
+                // 交付出 (255,255,255,0) 时先排除"清屏色"这个因：color 若是
+                // 0x00FFFFFF，清屏结果正好是白 + 透明。只打前 4 次。
+                {
+                    static int s_colorSamples = 0;
+                    if(s_colorSamples < 4) {
+                        ++s_colorSamples;
+                        spdlog::info("[probe] krkrgles: capture color=0x{:08X} "
+                                     "fbo={} {}x{}",
+                                     static_cast<unsigned>(color),
+                                     static_cast<unsigned>(s->fbo_.GetFBO()),
+                                     static_cast<int>(w), static_cast<int>(h));
+                    }
+                }
+#endif
                 // 回调期间置位：Live2D 的 render() 据此把模型也画进这个捕获 FBO。
                 // RAII 保证回调抛异常时也会复位（否则标志会永久卡在 true）。
                 {
