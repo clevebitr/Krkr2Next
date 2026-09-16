@@ -2078,7 +2078,42 @@ namespace { // reopen anonymous namespace
             KRKR_PROBE_TJS("GLESAdaptor", "capture", n, p);
             tjs_int w = NormalizeExtent(s ? s->screenWidth_ : 0, 1920);
             tjs_int h = NormalizeExtent(s ? s->screenHeight_ : 0, 1080);
-            InvokeCaptureCallback("GLESAdaptor.capture", w, h, n, p);
+
+            // 官方契约（krkrgles 手册 / wamsoft 参考实现）：
+            //   capture(layer, callback, param, color)
+            //     1) 绑定自己的离屏 FBO，并按 color 清屏
+            //     2) 以 (width, height, param) 调用回调——回调里的绘制落在该 FBO 上
+            //     3) 把 FBO 的内容交给 layer（「結果格納先レイヤ」）
+            //
+            // 此前这里**只做了第 2 步**：既没有离屏渲染目标，也从没把结果交给图层。
+            // 于是那个目标图层一直是新建时的全黑，盖住整屏——G2「全动画」整屏全黑、
+            // 有声音、且日志零报错的直接原因（宿主探针实测：引擎画了 140 个图层，
+            // 合成结果 nonBlack=0/25、全黑不透明）。
+            iTJSDispatch2 *layer = FindLayerInParams(n, p);
+            if(s && layer && s->fbo_.EnsureSize(static_cast<GLsizei>(w),
+                                                static_cast<GLsizei>(h))) {
+                // Bind() 自带"绑定 + 设视口 + 清成透明"；游戏传的 color=0 正是这个值，
+                // 非 0 时再按 ARGB 覆盖一次（与参考实现的清屏口径一致）。
+                s->fbo_.Bind();
+                const tjs_uint32 color =
+                    (n > 3 && p && p[3]) ? static_cast<tjs_uint32>(ToInt(*p[3], 0))
+                                         : 0u;
+                if(color) {
+                    glClearColor(((color >> 16) & 0xff) / 255.0f,
+                                 ((color >> 8) & 0xff) / 255.0f,
+                                 (color & 0xff) / 255.0f,
+                                 ((color >> 24) & 0xff) / 255.0f);
+                    glClear(GL_COLOR_BUFFER_BIT);
+                }
+                InvokeCaptureCallback("GLESAdaptor.capture", w, h, n, p);
+                // 结果交给图层；GPU blit 失败会自动退 CPU（见 CopyFBOToLayer）
+                CopyFBOToLayer(s->fbo_.GetFBO(), static_cast<GLsizei>(w),
+                               static_cast<GLsizei>(h), layer,
+                               s->fbo_.GetPrevFbo());
+                s->fbo_.Unbind();
+            } else {
+                InvokeCaptureCallback("GLESAdaptor.capture", w, h, n, p);
+            }
             if(r)
                 *r = (n > 0 && p) ? *p[0] : tTJSVariant(true);
             return TJS_S_OK;
@@ -2210,6 +2245,8 @@ namespace { // reopen anonymous namespace
         tjs_int screenWidth_ = 0;
         tjs_int screenHeight_ = 0;
         GLESModule *cachedModule_ = nullptr;
+        // capture() 的离屏渲染目标：回调内的绘制落在它上面，回调结束后整块交给目标图层。
+        OffscreenFBO fbo_;
     };
 
 } // namespace
