@@ -18,15 +18,9 @@
 #include <GLES2/gl2ext.h>
 #include <GLES3/gl3.h>
 
-// NDK 的 GLES 头声明了 ES3 的 glGetTexLevelParameteriv，却**没有**定义它要用的两个
-// pname（实测 NDK 27：krkrgles.cpp 用 gl3.h 仍报 use of undeclared identifier
-// 'GL_TEXTURE_WIDTH'）。这里按 Khronos 的数值补上，供 KTX level-0 完整性校验使用。
-#ifndef GL_TEXTURE_WIDTH
-#define GL_TEXTURE_WIDTH 0x1000
-#endif
-#ifndef GL_TEXTURE_HEIGHT
-#define GL_TEXTURE_HEIGHT 0x1001
-#endif
+// ⚠️ 不要在这里用 glGetTexLevelParameteriv：它属于 **OpenGL ES 3.1**，NDK 的
+// gl2.h / gl2ext.h / gl3.h（ES3.0）**都不声明它**（CI 实测连栽两轮）。要判
+// "纹理有没有 level-0 图像"，用自己在加载循环里记的账（见 LoadKtxTexture）。
 
 #if defined(__ARM_NEON) || defined(__ARM_NEON__)
 #include <arm_neon.h>
@@ -912,6 +906,11 @@ extern "C" GLuint LoadKtxTexture(const uint8_t *data, size_t dataSize) {
     enum DecodeMethod { DECODE_NONE, DECODE_ETC2, DECODE_BPTC };
     DecodeMethod decodeMeth = DECODE_NONE;
 
+    // level-0 的记账：有没有真的上传过、上传后紧接着的 GL 错误是什么。
+    // 用它替代 glGetTexLevelParameteriv（那是 ES3.1 入口，NDK 的 ES2/ES3.0 头不声明）。
+    bool baseLevelUploaded = false;
+    GLenum baseLevelErr = GL_NO_ERROR;
+
     if(compressed && IsBPTCFormat(hdr->glInternalFormat) &&
        !IsCompressedFormatSupported(hdr->glInternalFormat)) {
         GLES_LOGI(
@@ -976,6 +975,10 @@ extern "C" GLuint LoadKtxTexture(const uint8_t *data, size_t dataSize) {
                     spdlog::warn("krkrgles: KTX level {} ({}x{}) 上传错误 0x{:04X}",
                                  level, mw, mh, static_cast<unsigned>(lvlErr));
                 }
+                if(level == 0) {
+                    baseLevelUploaded = true;
+                    baseLevelErr = lvlErr;
+                }
             } else {
                 GLES_LOGW("  level %u: %ux%u decode FAILED (dataSize=%u)",
                           level, mw, mh, imageSize);
@@ -1022,15 +1025,14 @@ extern "C" GLuint LoadKtxTexture(const uint8_t *data, size_t dataSize) {
 
     // 成功判据是"level 0 确实上去了"，**不是**"没有任何 GL 错误"：后者会把别处残留
     // 的错误算进来，把一张已经上传成功的纹理删掉（真机实测：同一份数据第一次加载
-    // 报 0x0501 被删、第二次却成功）。这里直接向 GL 问 level-0 的实际尺寸。
-    GLint baseW = 0, baseH = 0;
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &baseW);
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &baseH);
-    if(baseW <= 0 || baseH <= 0) {
-        GLES_LOGW("KTX base level missing (%dx%d), deleting texture", baseW,
-                  baseH);
-        spdlog::warn("krkrgles: KTX level 0 缺失（{}x{}），纹理作废", baseW,
-                     baseH);
+    // 报 0x0501 被删、第二次却成功）。这里只看 level-0 自己的记账。
+    if(!baseLevelUploaded || baseLevelErr != GL_NO_ERROR) {
+        GLES_LOGW("KTX base level not usable (uploaded=%d err=0x%04X), deleting",
+                  baseLevelUploaded ? 1 : 0, baseLevelErr);
+        spdlog::warn("krkrgles: KTX level 0 未能上传（uploaded={} err=0x{:04X}），"
+                     "纹理作废",
+                     baseLevelUploaded ? 1 : 0,
+                     static_cast<unsigned>(baseLevelErr));
         glDeleteTextures(1, &tex);
         glBindTexture(GL_TEXTURE_2D, 0);
         return 0;
