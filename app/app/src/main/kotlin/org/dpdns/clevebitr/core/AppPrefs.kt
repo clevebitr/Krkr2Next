@@ -49,6 +49,9 @@ object AppPrefs {
     /** 游戏兼容档（`auto` / `kirikiri2-classic` / `krkrz-gpu` / `krkrz-kag` / `krkrz-ogl`）。 */
     private const val KEY_GAME_COMPAT_PROFILE = "engine.game_compat_profile"
 
+    /** 全局默认运行模式（兼容层 + 渲染器的固定组合），见 [RunMode]。 */
+    private const val KEY_RUN_MODE = "engine.run_mode"
+
     const val FPS_LIMIT_UNLIMITED = 0
 
     private fun prefs(context: Context): SharedPreferences =
@@ -187,6 +190,36 @@ object AppPrefs {
     fun setGameCompatProfile(context: Context, profile: String) {
         val normalized = if (profile in GAME_COMPAT_PROFILES) profile else "auto"
         prefs(context).edit().putString(KEY_GAME_COMPAT_PROFILE, normalized).apply()
+    }
+
+    // ── 运行模式（壳只暴露固定组合） ───────────────────────────────────────
+
+    /**
+     * 全局默认运行模式。
+     *
+     * 迁移：本键之前，等价信息分散在 `game.compat_profile` 与
+     * `engine.ogldrawdevice_compat` 两个键里；旧安装没有 [KEY_RUN_MODE] 时按这两个值反推
+     * （见 [RunMode.fromConfig]），**不写回**——用户真的在设置页选一次才落新键。
+     */
+    fun runMode(context: Context): RunMode {
+        val stored = prefs(context).getString(KEY_RUN_MODE, null)
+        if (stored != null) return RunMode.fromKey(stored)
+        return RunMode.fromConfig(
+            gameCompatProfile(context),
+            oglDrawDeviceCompat(context),
+        )
+    }
+
+    /**
+     * 写运行模式：**同时**写回两个旧键。旧键仍被壳与诊断脚本读取（日志、
+     * `krkr2next.json` 的对照），只写新模式会让它们读到过期值。
+     */
+    fun setRunMode(context: Context, mode: RunMode) {
+        prefs(context).edit()
+            .putString(KEY_RUN_MODE, mode.key)
+            .putString(KEY_GAME_COMPAT_PROFILE, mode.compatProfile)
+            .putString(KEY_OGLDRAWDEVICE_COMPAT, mode.oglDrawDeviceCompat)
+            .apply()
     }
 
     // ── 性能叠加层（可自定义） ────────────────────────────────────────────

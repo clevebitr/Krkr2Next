@@ -12,6 +12,11 @@ import org.json.JSONObject
  * 也不会在全局设置改变后留下一个悄悄生效的旧值。
  */
 data class EngineOverride(
+    /**
+     * 运行模式（兼容层 + 渲染器的固定组合）。**这是界面唯一暴露的旋钮**；下面两个
+     * 原始值是它的展开，写盘时一起写，读盘时优先信 [runMode]。
+     */
+    val runMode: String? = null,
     /** 游戏兼容档（`auto` / `kirikiri2-classic` / `krkrz-gpu` / `krkrz-kag` / `krkrz-ogl`）。 */
     val compatProfile: String? = null,
     /** krkrz OGLDrawDevice 兼容档（`off` / `ogl` / `alias` / `kag`）。 */
@@ -22,10 +27,15 @@ data class EngineOverride(
     val fontFallbackMode: String? = null,
 ) {
     val isEmpty: Boolean
-        get() = compatProfile == null && oglDrawDeviceCompat == null &&
-            fpsLimit == null && fontFallbackMode == null
+        get() = runMode == null && compatProfile == null &&
+            oglDrawDeviceCompat == null && fpsLimit == null && fontFallbackMode == null
+
+    /** 生效的运行模式：优先 [runMode]，没有就从两个原始值反推（旧配置迁移路径）。 */
+    fun resolvedRunMode(): RunMode = runMode?.let { RunMode.fromKey(it) }
+        ?: RunMode.fromConfig(compatProfile, oglDrawDeviceCompat)
 
     fun toJson(): JSONObject = JSONObject().apply {
+        runMode?.let { put(KEY_RUN_MODE, it) }
         compatProfile?.let { put(KEY_COMPAT_PROFILE, it) }
         oglDrawDeviceCompat?.let { put(KEY_OGLDRAWDEVICE, it) }
         fpsLimit?.let { put(KEY_FPS_LIMIT, it) }
@@ -33,6 +43,7 @@ data class EngineOverride(
     }
 
     companion object {
+        const val KEY_RUN_MODE = "runMode"
         const val KEY_COMPAT_PROFILE = "compatProfile"
         const val KEY_OGLDRAWDEVICE = "oglDrawDeviceCompat"
         const val KEY_FPS_LIMIT = "fpsLimit"
@@ -40,11 +51,20 @@ data class EngineOverride(
 
         fun fromJson(json: JSONObject?): EngineOverride {
             if (json == null) return EngineOverride()
+            // 旧配置只有成对值：反推成模式后**把成对值一并归一化**，避免出现
+            // "模式是 A、成对值是 B" 的自相矛盾状态（引擎按成对值跑，界面按模式显示）。
+            val mode = if (json.has(KEY_RUN_MODE)) {
+                RunMode.fromKey(json.optString(KEY_RUN_MODE, ""))
+            } else {
+                RunMode.fromConfig(
+                    json.optString(KEY_COMPAT_PROFILE, "").takeIf { it.isNotEmpty() },
+                    json.optString(KEY_OGLDRAWDEVICE, "").takeIf { it.isNotEmpty() },
+                )
+            }
             return EngineOverride(
-                compatProfile = json.optString(KEY_COMPAT_PROFILE, "")
-                    .takeIf { it in AppPrefs.GAME_COMPAT_PROFILES },
-                oglDrawDeviceCompat = json.optString(KEY_OGLDRAWDEVICE, "")
-                    .takeIf { it in AppPrefs.OGLDRAWDEVICE_COMPAT_MODES },
+                runMode = mode.key,
+                compatProfile = mode.compatProfile,
+                oglDrawDeviceCompat = mode.oglDrawDeviceCompat,
                 // has() 判断不能省：`optInt` 在键缺失时返回 0，而 0 是合法值（不限速），
                 // 直接读会把"没写"当成"设为不限速"。
                 fpsLimit = if (json.has(KEY_FPS_LIMIT)) json.optInt(KEY_FPS_LIMIT, 0)

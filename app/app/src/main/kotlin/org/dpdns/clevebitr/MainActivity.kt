@@ -243,6 +243,7 @@ class MainActivity : ComponentActivity() {
     /** 设置页内容。启动器与游戏内共用同一个 Composable，行为不会分叉。 */
     @Composable
     private fun SettingsContent(onBack: () -> Unit) {
+        val activePath = gamePath
         SettingsScreen(
             logDirPath = logDirPath,
             onBack = onBack,
@@ -261,7 +262,22 @@ class MainActivity : ComponentActivity() {
             onOglDrawDeviceCompatChanged = { oglDrawDeviceCompat = it },
             gameCompatProfile = gameCompatProfile,
             onGameCompatProfileChanged = { gameCompatProfile = it },
+            // 「可靠 + 看得见」：档位改完不重启就不生效，所以这里直接给一键重启
+            runningGame = activePath != null,
+            onRestartGame = activePath?.let { path -> { restartGame(path) } },
         )
+    }
+
+    /**
+     * 用**当前游戏目录**重开一局。
+     *
+     * 引擎在插件注册时读运行模式，所以换档必须重开会话；而让用户自己"退出→再点进来"
+     * 既慢又容易点错游戏。这里复用同一条启动路径（[launchPath]），
+     * 顺带把库里的 lastPlayed/playCount 也正常记一次。
+     */
+    private fun restartGame(path: String) {
+        AppLog.i(TAG, "restartGame path=$path（运行模式改动需要重开会话）")
+        launchPath(path)
     }
 
     private fun shareLogs() {

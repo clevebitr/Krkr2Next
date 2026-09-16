@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.dpdns.clevebitr.core.AppLog
+import org.dpdns.clevebitr.core.RunMode
 import org.dpdns.clevebitr.core.OverlayConfig
 import org.dpdns.clevebitr.core.AppPrefs
 import org.dpdns.clevebitr.core.BuildInfo
@@ -73,22 +74,7 @@ private val FONT_FALLBACK_CHOICES = listOf(
  *  - 别名：挂 Window.OGLDrawDevice + Window.GLESAdaptor
  *  - 接管：再接管 KAGWindow_createDrawDevice（千恋万花实测可加载立绘/背景动态）
  */
-private val OGLDRAWDEVICE_COMPAT_CHOICES = listOf(
-    "off" to "关闭",
-    "ogl" to "仅 OGL",
-    "alias" to "别名",
-    "kag" to "接管",
-)
-
 /** 游戏兼容档：`auto` 之外都是直接指定（见 `engine_options.h`）。 */
-private val GAME_COMPAT_PROFILE_CHOICES = listOf(
-    "auto" to "自动判档",
-    "kirikiri2-classic" to "老 KiriKiri2",
-    "krkrz-gpu" to "krkrz GPU",
-    "krkrz-kag" to "krkrz KAG",
-    "krkrz-ogl" to "krkrz 仅 OGL",
-)
-
 /**
  * 设置页。目前只有调试相关的东西——这是给排障用的壳，设置项也都服务于
  * "把问题现场原样带出来"：日志怎么收、怎么导出、引擎跑多快、画面上叠什么。
@@ -120,6 +106,9 @@ fun SettingsScreen(
      */
     gameCompatProfile: String = "auto",
     onGameCompatProfileChanged: (String) -> Unit = {},
+    /** 当前有游戏在跑：引擎档位改动要重启游戏才生效，界面上要说清并给出重启入口。 */
+    runningGame: Boolean = false,
+    onRestartGame: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -129,7 +118,7 @@ fun SettingsScreen(
     var overlay by remember { mutableStateOf(overlayConfig) }
     var fpsLimit by remember { mutableStateOf(AppPrefs.fpsLimit(context)) }
     var fontMode by remember { mutableStateOf(fontFallbackMode) }
-    var oglCompatMode by remember { mutableStateOf(oglDrawDeviceCompat) }
+    var runMode by remember { mutableStateOf(AppPrefs.runMode(context)) }
     var compatProfile by remember { mutableStateOf(gameCompatProfile) }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -188,44 +177,30 @@ fun SettingsScreen(
             // 两条血脉（老 KiriKiri2 / krkrz-AetherKiri）的差异收敛在这里：档位由引擎
             // 按**血脉标记**判定（只看游戏目录里有没有 krkrgles/krkrlive2d/motionplayer，
             // 不看游戏名字），再映射到下面的 OGLDrawDevice 档；手动档位仍然优先。
+            // 兼容层与渲染器**合成一个旋钮**：两个独立下拉能选出一堆纸面组合，
+            // 实测选出来的效果既不是 A 也不是 B（引擎里"显式选项优先"会让档位失效）。
+            // 这里只给固定组合，见 RunMode。
             ChoiceRow(
-                title = "游戏兼容档",
-                subtitle = "按游戏目录里的插件标记自动判档：带 krkrgles/Live2D 的按" +
-                    "「krkrz-gpu」（GPU 层闸门 + GLESAdaptor）、带 motionplayer 的按" +
-                    "「krkrz-kag」（窗口绘制设备工厂走 KAGWindow）、其余按" +
-                    "「kirikiri2-classic」。选具名档即固定该档；下面的 OGLDrawDevice " +
-                    "手动档位若非「关闭」，仍以手动值为准。改完下次开游戏生效。",
-                choices = GAME_COMPAT_PROFILE_CHOICES,
-                selected = compatProfile,
-                onSelected = { profile ->
-                    compatProfile = profile
-                    AppPrefs.setGameCompatProfile(context, profile)
-                    onGameCompatProfileChanged(profile)
-                    AppLog.i(TAG, "game compat profile = $profile（下次开游戏生效）")
+                title = "运行模式",
+                subtitle = "兼容层与渲染器设置的固定组合。「逐游戏自动」按目录里的插件标记判档；" +
+                    "其余四条是试过的组合，按不下去就换一条试。" +
+                    "**改完要重启游戏才生效**（引擎在插件注册时读一次）。",
+                choices = RunMode.entries.map { it.key to it.label },
+                selected = runMode.key,
+                onSelected = { key ->
+                    val mode = RunMode.fromKey(key)
+                    runMode = mode
+                    AppPrefs.setRunMode(context, mode)
+                    onGameCompatProfileChanged(mode.compatProfile)
+                    onOglDrawDeviceCompatChanged(mode.oglDrawDeviceCompat)
+                    AppLog.i(TAG, "run mode = ${mode.key}（${mode.compatProfile}/${mode.oglDrawDeviceCompat}，需重启游戏）")
                 },
             )
-
-            // krkrgles 系（吉里吉里Z）游戏的 Initialize.tjs 会先看 Window.OGLDrawDevice
-            // 在不在，再决定要不要加载 GPU 层脚本。实测缺了它就静默跳过
-            // GPULayer.tjs / GPUAffineLayer.tjs，而挂上别名后两者都会加载。
-            ChoiceRow(
-                title = "OGLDrawDevice 兼容",
-                subtitle = "吉里吉里Z 的游戏会先看 Window.OGLDrawDevice 在不在，" +
-                    "再决定要不要加载 GPU 层脚本（GPULayer.tjs / GPUAffineLayer.tjs）。" +
-                    "缺了它游戏不报错、只是静静降级。" +
-                    "「仅 OGL」只挂这个名字；「别名」连 Window.GLESAdaptor 一起挂，" +
-                    "会把千恋万花切进 captureCanvas 路径而 UI 出问题；" +
-                    "「接管」再接管窗口的绘制设备工厂（千恋万花实测正常，但 G2 上会把" +
-                    "主机 FBO 弄成 INCOMPLETE、连回想页都黑）。请逐游戏试。" +
-                    "改完下次开游戏生效。",
-                choices = OGLDRAWDEVICE_COMPAT_CHOICES,
-                selected = oglCompatMode,
-                onSelected = { mode ->
-                    oglCompatMode = mode
-                    AppPrefs.setOglDrawDeviceCompat(context, mode)
-                    onOglDrawDeviceCompatChanged(mode)
-                    AppLog.i(TAG, "ogldrawdevice compat = $mode（下次开游戏生效）")
-                },
+            Text(
+                text = runMode.summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp),
             )
 
             SectionTitle("调试")

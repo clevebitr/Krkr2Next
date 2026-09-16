@@ -45,6 +45,8 @@ import org.dpdns.clevebitr.core.GameConfig
 import org.dpdns.clevebitr.core.GameMetadata
 import org.dpdns.clevebitr.core.GlobalDefaults
 import org.dpdns.clevebitr.core.LibraryGame
+import org.dpdns.clevebitr.core.RunMode
+import org.dpdns.clevebitr.core.asEngineOverride
 import org.dpdns.clevebitr.core.OverlayConfig
 
 /**
@@ -79,9 +81,9 @@ fun GameDetailScreen(
     var notes by remember(game.id) { mutableStateOf(game.notes) }
     var descriptionExpanded by remember(game.id) { mutableStateOf(false) }
 
-    var compatProfile by remember(game.id) { mutableStateOf(config.engine.compatProfile ?: INHERIT) }
-    var oglCompat by remember(game.id) {
-        mutableStateOf(config.engine.oglDrawDeviceCompat ?: INHERIT)
+    // 界面只给"运行模式"一个旋钮（固定组合），两个原始值由模式展开——见 RunMode。
+    var runMode by remember(game.id) {
+        mutableStateOf(if (config.engine.isEmpty) INHERIT else config.engine.resolvedRunMode().key)
     }
     var fpsLimit by remember(game.id) {
         mutableStateOf(config.engine.fpsLimit?.toString() ?: INHERIT)
@@ -206,28 +208,27 @@ fun GameDetailScreen(
             )
 
             ChoiceRow(
-                title = "游戏兼容档",
-                subtitle = "决定按哪条血脉跑（krkiri2 经典 / krkrz GPU / KAG 接管）。",
-                choices = listOf(INHERIT to inheritLabel("兼容档", globalDefaults.compatProfile)) +
-                    AppPrefs.GAME_COMPAT_PROFILES.filter { it != "auto" }
-                        .map { it to profileLabel(it) },
-                selected = compatProfile,
+                title = "运行模式",
+                subtitle = "兼容层与渲染器设置的固定组合。留「继承全局」就用设置页里的默认值。" +
+                    "改完**下次启动这个游戏**生效。",
+                choices = listOf(INHERIT to inheritLabel("模式", RunMode.fromConfig(globalDefaults.compatProfile, globalDefaults.oglDrawDeviceCompat).label)) +
+                    RunMode.entries.map { it.key to it.label },
+                selected = runMode,
                 onSelected = {
-                    compatProfile = it
+                    runMode = it
                     savedHint = null
                 },
             )
-            ChoiceRow(
-                title = "OGLDrawDevice 兼容层",
-                subtitle = "挂上 Window.OGLDrawDevice 后游戏才加载 GPU 层脚本；逐游戏试。",
-                choices = listOf(INHERIT to inheritLabel("档位", globalDefaults.oglDrawDeviceCompat)) +
-                    AppPrefs.OGLDRAWDEVICE_COMPAT_MODES.map { it to it },
-                selected = oglCompat,
-                onSelected = {
-                    oglCompat = it
-                    savedHint = null
-                },
-            )
+            RunMode.fromKey(runMode.takeIf { it.isNotEmpty() }).let { mode ->
+                if (runMode != INHERIT) {
+                    Text(
+                        text = mode.summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
+            }
             ChoiceRow(
                 title = "帧率上限",
                 subtitle = "0 = 不限速，跟随 vsync。",
@@ -334,9 +335,12 @@ fun GameDetailScreen(
                         notes = notes.trim(),
                     )
                     val updatedConfig = GameConfig(
-                        engine = EngineOverride(
-                            compatProfile = compatProfile.nullIfInherit(),
-                            oglDrawDeviceCompat = oglCompat.nullIfInherit(),
+                        engine = runMode.nullIfInherit()?.let { key ->
+                            RunMode.fromKey(key).asEngineOverride().copy(
+                                fpsLimit = fpsLimit.nullIfInherit()?.toIntOrNull(),
+                                fontFallbackMode = fontFallback.nullIfInherit(),
+                            )
+                        } ?: EngineOverride(
                             fpsLimit = fpsLimit.nullIfInherit()?.toIntOrNull(),
                             fontFallbackMode = fontFallback.nullIfInherit(),
                         ),

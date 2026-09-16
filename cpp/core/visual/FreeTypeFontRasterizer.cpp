@@ -1,5 +1,7 @@
 
 #include "FreeTypeFontRasterizer.h"
+#include <vector>
+#include <algorithm>
 #include "LayerBitmapIntf.h"
 #include "FreeType.h"
 #include "FontBaseline.h"
@@ -480,6 +482,34 @@ FreeTypeFontRasterizer::GetBitmap(const tTVPFontAndCharacterData &font,
         }
     }
     if(data == nullptr) {
+#if defined(KRKR_RENDER_PROBE)
+        // 缺字诊断（探针构建才编）：走到这里说明主字面、回退字面（legacy）或整条
+        // 回退链（chain）都没有这个字形，最终会用 GetDefaultChar() 画出来——真机上
+        // 看到的"豆腐块"就是它。
+        //
+        // 为什么值得记：千恋万花显示方块时，日志里只有一条
+        // `GetBeingFont: mono/fullwidth fallback -> Noto Sans CJK HK`，看不出**哪些
+        // 字符**没找到、也看不出是回退面选错还是链里根本没有。这里把码点、当前模式与
+        // 回退面一起打出来，最多 16 个不同码点，避免刷屏。
+        if(!isUnicodeSpace(font.Character)) {
+            static std::mutex s_missing_mtx;
+            static std::vector<char16_t> s_missing_seen;
+            std::lock_guard<std::mutex> lk(s_missing_mtx);
+            if(s_missing_seen.size() < 16 &&
+               std::find(s_missing_seen.begin(), s_missing_seen.end(),
+                         font.Character) == s_missing_seen.end()) {
+                s_missing_seen.push_back(font.Character);
+                // 只记模式与"有没有回退面"：字面名字要额外 API（Face 没暴露），
+                // 而定位问题真正需要的是"哪些码点缺 + 当时用哪条回退路径"。
+                spdlog::warn(
+                    "font: 缺字 U+{:04X}（mode={} hasFallbackFace={}）"
+                    "-> 用默认字形（方块的来源）",
+                    static_cast<unsigned>(font.Character),
+                    static_cast<int>(ResolveMode()),
+                    FaceFallback ? "yes" : "no");
+            }
+        }
+#endif
         data = Face->GetGlyphFromCharcode(Face->GetDefaultChar());
     }
     if(data == nullptr) {
