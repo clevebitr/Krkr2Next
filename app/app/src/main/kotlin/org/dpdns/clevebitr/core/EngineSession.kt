@@ -296,6 +296,8 @@ class EngineSession(
         post {
             lastFrameNanos = 0L
             tickFailures = 0L
+            // 换了游戏（或改了档位）：让叠加层下次采样重新从引擎取解析结果
+            compatProfileCache = ""
             // 兼容档必须在开游戏**之前**下发：krkrgles 是在 StartApplication
             // （插件 post-regist）里读 ogldrawdevice_compat 的，而 auto 判档要
             // 游戏根目录才能按血脉标记决定。
@@ -520,6 +522,28 @@ class EngineSession(
         /** 叠加层 `Memory: ... Cache` 那一项：三块缓存之和。 */
         val cacheBytes: Long
             get() = graphicCacheBytes + xp3SegmentCacheBytes + psbCacheBytes
+    }
+
+    /**
+     * 当前生效的兼容档（`<profile> <mode>`，例如 `krkrz-kag kag`）。
+     *
+     * 档位解析在**引擎侧**完成（`auto` 要看游戏目录里的血脉标记，见
+     * `engine_options.h`），所以壳只做缓存：`openGame()` 时失效、叠加层按 4Hz
+     * 采样时再向引擎取一次。任意线程可调。
+     */
+    @Volatile
+    private var compatProfileCache: String = ""
+    private val compatProfileBuffer = ByteArray(NativeEngine.COMPAT_PROFILE_BUFFER_SIZE)
+
+    fun compatProfile(): String {
+        val cached = compatProfileCache
+        if (cached.isNotEmpty()) return cached
+        val n = NativeEngine.engineGetCompatProfile(compatProfileBuffer)
+        if (n <= 0) return ""
+        val text = String(compatProfileBuffer, 0,
+                          minOf(n, compatProfileBuffer.size), Charsets.UTF_8).trim()
+        compatProfileCache = text
+        return text
     }
 
     /** 读一次内存统计；句柄未起来或引擎未运行返回 null。可从任意线程调用。 */

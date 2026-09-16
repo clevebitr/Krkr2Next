@@ -342,6 +342,18 @@ engine_get_frame_rendered_flag(engine_handle_t handle, uint32_t *out_);
 ENGINE_API_EXPORT engine_result_t engine_get_renderer_info(
     engine_handle_t handle, char *out_buffer, uint32_t buffer_size);
 
+/**
+ * 读回**当前生效**的游戏兼容档，写成 `<profile> <mode>`（空格分隔，例如
+ * `krkrz-kag kag`），供壳把"这个游戏按哪条血脉跑"显示在性能叠加层上。
+ *
+ * 解析在 engine_set_option 里完成（见 engine_options.h 的
+ * ENGINE_OPTION_GAME_COMPAT_PROFILE），所以本函数只是读结果：
+ * 还没解析过时写入空串。**不需要 handle，可从任意线程调用。**
+ * 缓冲区不足时截断；成功返回 ENGINE_RESULT_OK。
+ */
+ENGINE_API_EXPORT engine_result_t engine_get_compat_profile(
+    char *out_buffer, uint32_t buffer_size);
+
 /*
  * Gets runtime memory/cache statistics snapshot.
  * out_stats->struct_size must be initialized by caller.

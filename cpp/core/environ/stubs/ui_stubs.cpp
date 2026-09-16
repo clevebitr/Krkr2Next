@@ -217,7 +217,20 @@ public:
         const uint32_t nativeGLTex = tex->GetNativeGLTextureId();
         GLuint blitSrcTexture;
 
-        if(nativeGLTex != 0) {
+        // 纹理名可能已经失效：实测「进游戏后画面正常一瞬间、随后永久全黑」正是发生在
+        // 窗口/画布 resize 的那一下（3000x2120 → 1920x1080），之后主机侧拿到的
+        // nativeGLTex 就再也挂不上 FBO（SourceSample 恒报 FBO incomplete）。
+        // 这里显式校验一次：名字无效就走下面的 CPU 回读路径 —— 宁可慢一帧上传，
+        // 也不能永久黑屏。日志限频，避免每帧刷屏。
+        const bool nativeTexValid =
+            nativeGLTex != 0 && glIsTexture(static_cast<GLuint>(nativeGLTex)) != 0;
+        if(nativeGLTex != 0 && !nativeTexValid) {
+            spdlog::warn("HostWindowLayer: nativeTex={} 已失效（resize 后残留？），"
+                         "退回 CPU 回读路径",
+                         static_cast<unsigned>(nativeGLTex));
+        }
+
+        if(nativeTexValid) {
             // GPU fast-path: the composited scene is already in a GL texture.
             // We must detach it from the engine's FBO first to avoid
             // sampling a texture that is still an FBO attachment.

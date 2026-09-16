@@ -213,6 +213,9 @@ namespace {
     std::string g_compat_request = ENGINE_GAME_COMPAT_PROFILE_AUTO;
     std::string g_compat_game_root;
     bool g_ogldrawdevice_explicit = false;
+    // 解析结果，供 engine_get_compat_profile 读给壳显示（性能叠加层用）。
+    std::string g_compat_resolved_name;
+    std::string g_compat_resolved_mode;
 
     const CompatProfile *FindCompatProfile(const std::string &name) {
         for(const auto &p : kCompatProfiles) {
@@ -269,6 +272,8 @@ namespace {
         if(!prof)
             return;
 
+        g_compat_resolved_name = prof->name;
+        g_compat_resolved_mode = prof->ogldrawdevice;
         // 显式传过 ogldrawdevice_compat 时以它为准：这里只记录，不覆盖。
         spdlog::info("compat profile: {} v{} -> ogldrawdevice_compat={} ({}{})",
                      prof->name, prof->version, prof->ogldrawdevice, source,
@@ -1511,6 +1516,29 @@ engine_result_t engine_set_log_file_path(const char *path) {
                      "exception -- continuing without a file log sink\n");
         return ENGINE_RESULT_INTERNAL_ERROR;
     }
+}
+
+engine_result_t engine_get_compat_profile(char *out_buffer,
+                                          uint32_t buffer_size) {
+    if(out_buffer == nullptr || buffer_size == 0) {
+        return SetThreadErrorAndReturn(ENGINE_RESULT_INVALID_ARGUMENT,
+                                       "out_buffer is null or buffer_size is 0");
+    }
+    out_buffer[0] = '\0';
+    std::lock_guard<std::mutex> lock(g_compat_mutex);
+    if(g_compat_resolved_name.empty()) {
+        return ENGINE_RESULT_OK; // 还没解析过：空串表示"未定档"
+    }
+    std::string text = g_compat_resolved_name;
+    if(!g_compat_resolved_mode.empty()) {
+        text += ' ';
+        text += g_compat_resolved_mode;
+    }
+    if(text.size() >= buffer_size) {
+        text.resize(buffer_size - 1);
+    }
+    std::memcpy(out_buffer, text.c_str(), text.size() + 1);
+    return ENGINE_RESULT_OK;
 }
 
 engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {

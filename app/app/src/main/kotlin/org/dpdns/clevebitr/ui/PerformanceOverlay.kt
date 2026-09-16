@@ -36,6 +36,8 @@ data class PerfSnapshot(
     val errors: Long = 0L,
     val rendererInfo: String = "",
     val memory: EngineSession.MemoryStats? = null,
+    /** 当前生效的兼容档（`<profile> <mode>`）；空串表示引擎还没定档。 */
+    val compatProfile: String = "",
 ) {
     /** 宿主每帧除引擎 tick 之外的耗时：对应 AetherKiri detail 档的 `Update`。 */
     val updateMs: Float get() = (frameMs - tickMs).coerceAtLeast(0f)
@@ -51,6 +53,10 @@ data class PerfSnapshot(
     fun summaryText(): String = buildString {
         if (rendererInfo.isNotEmpty()) {
             append("Renderer: ").append(rendererInfo.trim()).append(" | ")
+        }
+        // 兼容层模式：这个游戏到底按哪条血脉跑的（auto 判档结果 + 映射出的档位）
+        if (compatProfile.isNotEmpty()) {
+            append("Compat: ").append(compatProfile).append(" | ")
         }
         append("FPS: ").append(fps.toInt())
         append(" | Frame: ").append(fmt2(frameMs)).append(" ms")

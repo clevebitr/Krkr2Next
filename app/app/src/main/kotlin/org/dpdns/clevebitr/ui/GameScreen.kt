@@ -107,6 +107,7 @@ fun GameScreen(
                     errors = session.tickFailureCount,
                     rendererInfo = session.rendererInfo(),
                     memory = session.memoryStats(),
+                    compatProfile = session.compatProfile(),
                 )
                 delay(250)
             }

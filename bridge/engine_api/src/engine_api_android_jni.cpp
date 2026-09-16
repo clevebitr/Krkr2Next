@@ -485,4 +485,31 @@ Java_org_dpdns_clevebitr_core_NativeEngine_engineGetMemoryStats(
     return kFieldCount;
 }
 
+// 当前生效的兼容档，写成 `<profile> <mode>`（如 `krkrz-kag kag`），供性能叠加层
+// 显示"这个游戏按哪条血脉跑"。引擎侧不校验调用线程，所以壳按 4Hz 从任意线程轮询；
+// 还没定档时写入长度为 0。
+extern "C" JNIEXPORT jint JNICALL
+Java_org_dpdns_clevebitr_core_NativeEngine_engineGetCompatProfile(
+    JNIEnv *env, jobject /*thiz*/, jbyteArray buffer) {
+    if(buffer == nullptr)
+        return -1;
+    const jsize len = env->GetArrayLength(buffer);
+    if(len <= 0)
+        return 0;
+
+    std::vector<char> tmp(static_cast<size_t>(len));
+    const engine_result_t rc =
+        engine_get_compat_profile(tmp.data(), static_cast<uint32_t>(len));
+    if(rc != ENGINE_RESULT_OK)
+        return -1;
+
+    // engine_get_compat_profile 写入的是 NUL 结尾字符串
+    const size_t written = strnlen(tmp.data(), static_cast<size_t>(len));
+    if(written > 0) {
+        env->SetByteArrayRegion(buffer, 0, static_cast<jsize>(written),
+                                reinterpret_cast<const jbyte *>(tmp.data()));
+    }
+    return static_cast<jint>(written);
+}
+
 #endif // __ANDROID__

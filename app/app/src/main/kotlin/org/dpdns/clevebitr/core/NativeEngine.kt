@@ -62,6 +62,12 @@ object NativeEngine {
     external fun engineGetRendererInfo(handle: Long, buffer: ByteArray): Int
 
     /**
+     * 当前生效的游戏兼容档（`<profile> <mode>`，如 `krkrz-kag kag`）写进 [buffer]，
+     * @return 写入字节数；失败返回 -1。**不需要 handle**，任意线程可调。
+     */
+    external fun engineGetCompatProfile(buffer: ByteArray): Int
+
+    /**
      * 内存/缓存统计写进 [out]（长度需 ≥ [MEMORY_STATS_FIELDS]），
      * @return 写入的字段数；失败返回 -1。
      *
@@ -124,4 +130,7 @@ object NativeEngine {
     // ── 性能叠加层 ────────────────────────────────────────────────────────
     /** [engineGetMemoryStats] 一次写入的字段数（Kotlin 侧解析依赖它）。 */
     const val MEMORY_STATS_FIELDS = 16
+
+    /** [engineGetCompatProfile] 建议的缓冲区长度（最长档名 + 模式名，留足余量）。 */
+    const val COMPAT_PROFILE_BUFFER_SIZE = 64
 }
