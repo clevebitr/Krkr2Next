@@ -312,6 +312,10 @@ public:
 class tTJSNI_Window;
 extern tTJSNI_Window *TVPGetWindowListAt(tjs_int idx);
 extern tjs_int TVPGetWindowCount();
+// 该窗口是否属于**当前**会话（在窗口表里）。引擎重启只清空窗口表，窗口对象
+// 本身可能还活着并继续被投递重绘 —— 见 WindowIntf.cpp 中 UpdateContent 的闸门
+// 说明。只比较指针、不解引用，传入悬垂指针同样安全。
+extern bool TVPIsWindowRegistered(const tTJSNI_Window *window);
 extern tTJSNI_Window *TVPMainWindow; //  = nullptr; // main window
 extern void TVPResetWindowListForRestart();
 

@@ -199,6 +199,22 @@ public:
         if(!tex)
             return;
 
+        // 上一会话残留的窗体仍会被投递重绘（引擎重启只清空窗口表，窗口对象还
+        // 活着，见 WindowIntf.cpp 的闸门说明）：它的源纹理属于**旧 EGL 上下文**
+        // 或被新上下文复用的无关纹理，挂 FBO 报 INCOMPLETE_ATTACHMENT，blit
+        // 出来是黑帧，还会盖掉当前会话已经画好的画面。这里再挡一道（引擎侧
+        // UpdateContent 已挡，这里是兜底 + 判据）。只警告一次，避免每帧刷屏。
+        if(owner_ && !TVPIsWindowRegistered(owner_)) {
+            static const tTJSNI_Window *s_lastLeaked = nullptr;
+            if(s_lastLeaked != owner_) {
+                s_lastLeaked = owner_;
+                spdlog::warn("HostWindowLayer: 窗体 {} 已不在窗口表（上一会话残留），"
+                             "跳过 blit —— 源纹理属于旧 EGL 上下文，只会画黑",
+                             static_cast<const void *>(owner_));
+            }
+            return;
+        }
+
         const tjs_uint tw = tex->GetWidth();
         const tjs_uint th = tex->GetHeight();
         if(tw == 0 || th == 0)
@@ -217,16 +233,15 @@ public:
         const uint32_t nativeGLTex = tex->GetNativeGLTextureId();
         GLuint blitSrcTexture;
 
-        // 纹理名可能已经失效：实测「进游戏后画面正常一瞬间、随后永久全黑」正是发生在
-        // 窗口/画布 resize 的那一下（3000x2120 → 1920x1080），之后主机侧拿到的
-        // nativeGLTex 就再也挂不上 FBO（SourceSample 恒报 FBO incomplete）。
-        // 这里显式校验一次：名字无效就走下面的 CPU 回读路径 —— 宁可慢一帧上传，
-        // 也不能永久黑屏。日志限频，避免每帧刷屏。
+        // 纹理名可能已经失效：换游戏/二次打开时 EGL 上下文被销毁重建，上个
+        // 上下文里的纹理名在新上下文里可能根本不是纹理（真机上表现为 SourceSample
+        // 恒报 FBO incomplete 0x8CD6 + PostBlit 恒黑）。这里显式校验一次：名字
+        // 无效就走下面的 CPU 回读路径 —— 宁可慢一帧上传，也不能整块黑掉。
         const bool nativeTexValid =
             nativeGLTex != 0 && glIsTexture(static_cast<GLuint>(nativeGLTex)) != 0;
         if(nativeGLTex != 0 && !nativeTexValid) {
-            spdlog::warn("HostWindowLayer: nativeTex={} 已失效（resize 后残留？），"
-                         "退回 CPU 回读路径",
+            spdlog::warn("HostWindowLayer: nativeTex={} 不是当前上下文的纹理"
+                         "（旧上下文残留？），退回 CPU 回读路径",
                          static_cast<unsigned>(nativeGLTex));
         }
 

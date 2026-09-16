@@ -69,6 +69,11 @@ tTJSNI_Window *TVPGetWindowListAt(tjs_int idx) { return TVPWindowVector[idx]; }
 //---------------------------------------------------------------------------
 tjs_int TVPGetWindowCount() { return (tjs_int)TVPWindowVector.size(); }
 //---------------------------------------------------------------------------
+bool TVPIsWindowRegistered(const tTJSNI_Window *window) {
+    return std::find(TVPWindowVector.begin(), TVPWindowVector.end(),
+                     window) != TVPWindowVector.end();
+}
+//---------------------------------------------------------------------------
 void TVPClearAllWindowInputEvents() {
     std::vector<tTJSNI_Window *>::iterator i;
     for(i = TVPWindowVector.begin(); i != TVPWindowVector.end(); i++) {
@@ -651,9 +656,34 @@ void tTJSNI_BaseWindow::NotifyUpdateRegionFixed(
     BeginUpdate(updaterects);
 }
 //---------------------------------------------------------------------------
+// 上一会话残留窗口的闸门
+//---------------------------------------------------------------------------
+// 引擎重启（换游戏 / 二次打开）时只清空了窗口表，窗口对象本身可能还活着，并且
+// 仍被投递重绘。这种窗口的渲染目标纹理属于**上一个 EGL 上下文**：挂 FBO 必然
+// INCOMPLETE_ATTACHMENT，画出来就是黑的，而它会和当前会话的窗口 blit 到**同一块**
+// surface —— 谁后画谁覆盖，真机现象就是"正常渲染一瞬间后永久黑屏"。
+// 判据：真机 engine.log 里 `HostWindowLayer created` 出现 9 次，
+// `HostWindowLayer destroyed` 0 次（旧窗体全部泄漏）。
+// 因此：不在窗口表里的窗口一律不再重绘。同一窗口只警告一次，避免刷屏。
+//---------------------------------------------------------------------------
+static void TVPReportLeakedWindowSkip(tTJSNI_Window *window) {
+    static tTJSNI_Window *s_lastLogged = nullptr;
+    if(s_lastLogged == window)
+        return;
+    s_lastLogged = window;
+    spdlog::warn("窗口 {} 已不在窗口表（上一会话残留），跳过重绘：它的渲染目标属于"
+                 "旧 EGL 上下文，blit 出来只会是黑帧并盖掉当前会话的画面",
+                 static_cast<const void *>(window));
+}
+//---------------------------------------------------------------------------
 void tTJSNI_BaseWindow::UpdateContent() {
     if(DrawDevice) {
         // is called from event dispatcher
+        if(!TVPIsWindowRegistered(static_cast<tTJSNI_Window *>(this))) {
+            TVPReportLeakedWindowSkip(static_cast<tTJSNI_Window *>(this));
+            EndUpdate();
+            return;
+        }
         DrawDevice->Update();
 
         if(!WaitVSync)
@@ -665,8 +695,10 @@ void tTJSNI_BaseWindow::UpdateContent() {
 //---------------------------------------------------------------------------
 void tTJSNI_BaseWindow::DeliverDrawDeviceShow() {
     // call DrawDevice->Show, at VBlank
-    if(DrawDevice)
+    if(DrawDevice &&
+       TVPIsWindowRegistered(static_cast<tTJSNI_Window *>(this))) {
         DrawDevice->Show();
+    }
 }
 //---------------------------------------------------------------------------
 void tTJSNI_BaseWindow::BeginUpdate(const tTVPComplexRect &rects) {
