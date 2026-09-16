@@ -91,4 +91,28 @@ bool TVPCheckGLExtension(const std::string &extname);
 #else
 #define CHECK_GL_ERROR_DEBUG() ((void)0)
 #endif
+
+// 这张纹理到底有没有拿到存储？驱动不接受内部格式/尺寸时 glTexImage2D 会返回错误
+// 并且**不分配存储**，之后纹理挂不上任何 FBO —— 引擎画进去的像素被整帧丢弃，
+// 主机侧的表现就是 `SourceSample: FBO incomplete 0x8CD6` + 屏幕全黑。
+// 用临时 FBO 显式校验一次；校验自身的 GL 错误清干净，不污染调用方状态。
+// 放在这里是为了让所有纹理创建路径（RenderManager_ogl / krkr_texture2d 等）共用。
+static inline bool TVPTextureHasStorage(GLuint tex) {
+    if(!tex)
+        return false;
+    GLint prevFbo = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+    GLuint dbgFbo = 0;
+    glGenFramebuffers(1, &dbgFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, dbgFbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                           tex, 0);
+    const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
+    if(dbgFbo)
+        glDeleteFramebuffers(1, &dbgFbo);
+    while(glGetError() != GL_NO_ERROR) {
+    }
+    return status == GL_FRAMEBUFFER_COMPLETE;
+}
 #endif

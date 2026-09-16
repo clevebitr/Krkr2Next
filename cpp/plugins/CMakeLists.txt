@@ -11,6 +11,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     layerExMovie.cpp
     kirikiroid2.cpp
     base64.cpp
+    json/jsonPlugin.cpp
     varfile.cpp
     saveStruct.cpp
     getabout.cpp
@@ -203,7 +204,9 @@ add_subdirectory(layerex_draw)
 add_subdirectory(motionplayer)
 add_subdirectory(kagparserex)
 
-#add_subdirectory(json)
+#add_subdirectory(json)   # 子目录写法在 krkr2/PocketKrKr/KrKr2-Next/AetherKiri 全是注释的；
+# AetherKiri 的做法是把 jsonPlugin.cpp **直接加进本目标源列表**（见下方 target_sources），
+# 那才是已验证可用的配置 —— json.dll 是三个验收游戏里两个都会 Plugins.link 的名字。
 add_subdirectory(fstat)
 #add_subdirectory(steam)
 #add_subdirectory(DrawDeviceForSteam)

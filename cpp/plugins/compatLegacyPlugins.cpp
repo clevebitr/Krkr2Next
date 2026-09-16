@@ -58,8 +58,11 @@ NCB_PRE_REGIST_CALLBACK(InitPlugin_M2VDecAlias);
 // 插件，其功能本引擎要么已内建、要么 Android 上根本不适用，所以这里只把
 // **名字**注册成空模块，让 link 成功。
 //
-// 名单与做法移植自 AetherKiri cpp/plugins/dummy_plugin_stubs.cpp（去掉本引擎
-// 已实现的名字，以及上面已做别名的 krmovie/m2vdec）。
+// 名单与做法移植自 AetherKiri cpp/plugins/dummy_plugin_stubs.cpp。去掉三类：
+//   1) 本引擎已实现的模块名；
+//   2) 上面已做别名的 krmovie/m2vdec；
+//   3) zcompat（cpp/plugins/zcompat/zcompat_plugin.cpp）已经挂过名的 ——
+//      那里用同一套 ncbCallbackAutoRegister 注册表，重复登记虽无害但冗余。
 //---------------------------------------------------------------------------
 #undef NCB_MODULE_NAME
 #define NCB_MODULE_NAME TJS_W("adjustMonitor.dll")
@@ -73,10 +76,6 @@ NCB_PRE_REGIST_CALLBACK(InitPlugin_dmmcloudStub);
 #define NCB_MODULE_NAME TJS_W("drawdevice.dll")
 static void InitPlugin_drawdeviceStub() {}
 NCB_PRE_REGIST_CALLBACK(InitPlugin_drawdeviceStub);
-#undef NCB_MODULE_NAME
-#define NCB_MODULE_NAME TJS_W("drawdeviceD3D.dll")
-static void InitPlugin_drawdeviceD3DStub() {}
-NCB_PRE_REGIST_CALLBACK(InitPlugin_drawdeviceD3DStub);
 #undef NCB_MODULE_NAME
 #define NCB_MODULE_NAME TJS_W("drawdeviceIrrlicht.dll")
 static void InitPlugin_drawdeviceIrrlichtStub() {}
@@ -122,18 +121,6 @@ NCB_PRE_REGIST_CALLBACK(InitPlugin_httpservStub);
 static void InitPlugin_javascriptStub() {}
 NCB_PRE_REGIST_CALLBACK(InitPlugin_javascriptStub);
 #undef NCB_MODULE_NAME
-#define NCB_MODULE_NAME TJS_W("k2compat.dll")
-static void InitPlugin_k2compatStub() {}
-NCB_PRE_REGIST_CALLBACK(InitPlugin_k2compatStub);
-#undef NCB_MODULE_NAME
-#define NCB_MODULE_NAME TJS_W("kagexopt.dll")
-static void InitPlugin_kagexoptStub() {}
-NCB_PRE_REGIST_CALLBACK(InitPlugin_kagexoptStub);
-#undef NCB_MODULE_NAME
-#define NCB_MODULE_NAME TJS_W("kztouch.dll")
-static void InitPlugin_kztouchStub() {}
-NCB_PRE_REGIST_CALLBACK(InitPlugin_kztouchStub);
-#undef NCB_MODULE_NAME
 #define NCB_MODULE_NAME TJS_W("layerEx.dll")
 static void InitPlugin_layerExStub() {}
 NCB_PRE_REGIST_CALLBACK(InitPlugin_layerExStub);
@@ -161,10 +148,6 @@ NCB_PRE_REGIST_CALLBACK(InitPlugin_libeglStub);
 #define NCB_MODULE_NAME TJS_W("libglesv2.dll")
 static void InitPlugin_libglesv2Stub() {}
 NCB_PRE_REGIST_CALLBACK(InitPlugin_libglesv2Stub);
-#undef NCB_MODULE_NAME
-#define NCB_MODULE_NAME TJS_W("lzfs.dll")
-static void InitPlugin_lzfsStub() {}
-NCB_PRE_REGIST_CALLBACK(InitPlugin_lzfsStub);
 #undef NCB_MODULE_NAME
 #define NCB_MODULE_NAME TJS_W("magickpp.dll")
 static void InitPlugin_magickppStub() {}
@@ -210,10 +193,6 @@ NCB_PRE_REGIST_CALLBACK(InitPlugin_shellExecuteStub);
 static void InitPlugin_sigcheckStub() {}
 NCB_PRE_REGIST_CALLBACK(InitPlugin_sigcheckStub);
 #undef NCB_MODULE_NAME
-#define NCB_MODULE_NAME TJS_W("squirrel.dll")
-static void InitPlugin_squirrelStub() {}
-NCB_PRE_REGIST_CALLBACK(InitPlugin_squirrelStub);
-#undef NCB_MODULE_NAME
 #define NCB_MODULE_NAME TJS_W("stdio.dll")
 static void InitPlugin_stdioStub() {}
 NCB_PRE_REGIST_CALLBACK(InitPlugin_stdioStub);
@@ -237,10 +216,6 @@ NCB_PRE_REGIST_CALLBACK(InitPlugin_versionStub);
 #define NCB_MODULE_NAME TJS_W("videoEncoder.dll")
 static void InitPlugin_videoEncoderStub() {}
 NCB_PRE_REGIST_CALLBACK(InitPlugin_videoEncoderStub);
-#undef NCB_MODULE_NAME
-#define NCB_MODULE_NAME TJS_W("win32ole.dll")
-static void InitPlugin_win32oleStub() {}
-NCB_PRE_REGIST_CALLBACK(InitPlugin_win32oleStub);
 #undef NCB_MODULE_NAME
 #define NCB_MODULE_NAME TJS_W("windowExProgress.dll")
 static void InitPlugin_windowExProgressStub() {}
@@ -270,3 +245,7 @@ NCB_PRE_REGIST_CALLBACK(InitPlugin_xpressiveStub);
 static void InitPlugin_zlibStub() {}
 NCB_PRE_REGIST_CALLBACK(InitPlugin_zlibStub);
 #undef NCB_MODULE_NAME
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("krkrsteam.dll")
+static void InitPlugin_krkrsteamStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_krkrsteamStub);

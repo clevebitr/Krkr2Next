@@ -21,6 +21,8 @@
 #pragma once
 
 #include "ogl_common.h"
+
+#include <spdlog/spdlog.h>
 #include <cstddef> // size_t, ssize_t
 #include <cstring> // memcpy
 
@@ -120,6 +122,25 @@ namespace krkr {
             glTexImage2D(GL_TEXTURE_2D, 0, glInternal, pixelsWide, pixelsHigh,
                          0, glFormat, glType, data);
             applyLuminanceSwizzle(format);
+
+            // 静默失败时纹理是没有存储的：挂不上 FBO、画进去的像素全被丢弃。
+            // 只补存储、不重传像素（data 的布局随格式变化，按 RGBA8 重传会读错）。
+            if(!TVPTextureHasStorage(_name)) {
+                static int s_rebuilds = 0;
+                if(s_rebuilds < 8) {
+                    ++s_rebuilds;
+                    spdlog::error("krkrgl: Texture2D storage missing ({}x{} "
+                                  "tex={} fmt=0x{:04X}) -> rebuilding as RGBA8",
+                                  pixelsWide, pixelsHigh,
+                                  static_cast<unsigned>(_name),
+                                  static_cast<unsigned>(glInternal));
+                }
+                glBindTexture(GL_TEXTURE_2D, _name);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, pixelsWide, pixelsHigh,
+                             0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                while(glGetError() != GL_NO_ERROR) {
+                }
+            }
             return true;
         }
 

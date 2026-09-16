@@ -938,30 +938,7 @@ static void TVPApplyLuminanceSwizzle(TVPLuminanceFormat format) {
     }
 }
 
-// 这张纹理到底有没有拿到存储？
-// 驱动不接受某个内部格式/尺寸时 glTexImage2D 会返回错误并且**不分配存储**，
-// 之后纹理挂不上任何 FBO —— 引擎画进去的像素被整帧丢弃。真机症状正是
-// HostWindowLayer::SourceSample 报 `FBO incomplete 0x8CD6`、PostBlit 恒黑，
-// 而 `CHECK_GL_ERROR_DEBUG()` 只把错误吞掉、日志里一条都看不到。
-// 用一个临时 FBO 显式校验一次；校验过程自身的 GL 错误也清干净，不污染调用方。
-static bool TVPTextureHasStorage(GLuint tex) {
-    if(!tex)
-        return false;
-    GLint prevFbo = 0;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
-    GLuint dbgFbo = 0;
-    glGenFramebuffers(1, &dbgFbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, dbgFbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                           tex, 0);
-    const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
-    if(dbgFbo)
-        glDeleteFramebuffers(1, &dbgFbo);
-    while(glGetError() != GL_NO_ERROR) {
-    }
-    return status == GL_FRAMEBUFFER_COMPLETE;
-}
+// TVPTextureHasStorage 见 ogl_common.h（各纹理创建路径共用同一份校验）。
 
 class tTVPOGLTexture2D : public iTVPTexture2D {
     friend class TVPRenderManager_OpenGL;
