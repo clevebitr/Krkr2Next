@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <atomic>
+#include <cstring>
 #include <thread>
 
 extern "C" {
@@ -182,12 +185,62 @@ void TVPMoviePlayer::SetLoopSegement(int beginFrame, int endFrame) {
     m_pPlayer->SetLoopSegement(beginFrame, endFrame);
 }
 
+static inline uint8_t ClampByte(int value) {
+    if(value < 0)
+        return 0;
+    if(value > 255)
+        return 255;
+    return static_cast<uint8_t>(value);
+}
+
+// sws_scale 兜底：上下文建不起来（裁剪异常等）时手写 YUV420P→RGBA，
+// 与 AetherKiri 一致。BT.601 limited range，够视频看。
+static void ConvertYuv420ToRgba(const DVDVideoPicture &pic, uint8_t *dst,
+                                int dstWidth, int dstHeight, int dstStride) {
+    const int copyWidth = std::min<int>(dstWidth, pic.iWidth);
+    const int copyHeight = std::min<int>(dstHeight, pic.iHeight);
+    for(int y = 0; y < copyHeight; ++y) {
+        const uint8_t *yRow = pic.data[0] + y * pic.iLineSize[0];
+        const uint8_t *uRow = pic.data[1] + (y / 2) * pic.iLineSize[1];
+        const uint8_t *vRow = pic.data[2] + (y / 2) * pic.iLineSize[2];
+        uint8_t *out = dst + static_cast<size_t>(y) * dstStride;
+        for(int x = 0; x < copyWidth; ++x) {
+            int c = static_cast<int>(yRow[x]) - 16;
+            int d = static_cast<int>(uRow[x / 2]) - 128;
+            int e = static_cast<int>(vRow[x / 2]) - 128;
+            if(c < 0)
+                c = 0;
+            out[x * 4 + 0] = ClampByte((298 * c + 409 * e + 128) >> 8);
+            out[x * 4 + 1] =
+                ClampByte((298 * c - 100 * d - 208 * e + 128) >> 8);
+            out[x * 4 + 2] = ClampByte((298 * c + 516 * d + 128) >> 8);
+            out[x * 4 + 3] = 0xff;
+        }
+    }
+}
+
 int TVPMoviePlayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
     // from other thread
-    if(pic.format != RENDER_FMT_YUV420P)
+    //
+    // 队列里存 **RGBA**（sws_scale 转换），overlay 呈现（宿主纹理共享）与 layer
+    // 路径都按 RGBA 消费。直接存 YUV 是 cocos2d-x 时代的做法：那时由
+    // TVPYUVSprite 在着色器里做 YUV→RGB；场景树移除后没有消费方，
+    // overlay 提交会把 Y 平面当 RGBA 读（越界 + 花屏）。
+    if(pic.format != RENDER_FMT_YUV420P) {
+        static std::atomic<int> s_formatSkips{ 0 };
+        if(s_formatSkips.fetch_add(1) < 3)
+            spdlog::warn("MoviePlayer AddVideoPicture: 丢弃非 YUV420P 帧 "
+                         "format={} pts={}",
+                         static_cast<int>(pic.format), pic.pts);
         return -2;
-    if(pic.pts == DVD_NOPTS_VALUE)
+    }
+    if(pic.pts == DVD_NOPTS_VALUE) {
+        static std::atomic<int> s_noptsSkips{ 0 };
+        if(s_noptsSkips.fetch_add(1) < 3)
+            spdlog::warn("MoviePlayer AddVideoPicture: 丢弃无 pts 帧 {}x{}",
+                         pic.iWidth, pic.iHeight);
         return 0;
+    }
 
     if(m_usedPicture >= MAX_BUFFER_COUNT) {
         std::unique_lock<std::mutex> lk(m_mtxPicture);
@@ -196,24 +249,32 @@ int TVPMoviePlayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
     if(m_usedPicture >= MAX_BUFFER_COUNT)
         return -1;
 
-    int width = pic.iWidth, height = pic.iHeight;
-    // YUV data passthrough
-    int yuvwidth[3] = { width, width / 2, width / 2 };
-    int yuvheight[3] = { height, height / 2, height / 2 };
-    uint8_t *yuvdata[3] = { nullptr };
-    for(int i = 0; i < sizeof(yuvdata) / sizeof(yuvdata[0]); ++i) {
-        int size = yuvwidth[i] * yuvheight[i];
-        yuvdata[i] = (uint8_t *)TJSAlignedAlloc(size, 4);
-        if(yuvwidth[i] == pic.iLineSize[i]) {
-            memcpy(yuvdata[i], pic.data[i], size);
-        } else {
-            uint8_t *d = yuvdata[i], *s = pic.data[i];
-            for(int y = 0; y < yuvheight[i]; ++y) {
-                memcpy(d, s, yuvwidth[i]);
-                d += yuvwidth[i];
-                s += pic.iLineSize[i];
-            }
-        }
+    const int srcWidth = pic.iWidth;
+    const int srcHeight = pic.iHeight;
+    const int width = pic.iDisplayWidth > 0 ? pic.iDisplayWidth : pic.iWidth;
+    const int height =
+        pic.iDisplayHeight > 0 ? pic.iDisplayHeight : pic.iHeight;
+    if(srcWidth <= 0 || srcHeight <= 0 || width <= 0 || height <= 0 ||
+       !pic.data[0] || !pic.data[1] || !pic.data[2])
+        return -1;
+    uint8_t *data =
+        (uint8_t *)TJSAlignedAlloc(static_cast<size_t>(width) * height * 4, 4);
+    if(!data)
+        return -1;
+    uint8_t *dstData[4] = { data, nullptr, nullptr, nullptr };
+    int dstLineSize[4] = { width * 4, 0, 0, 0 };
+
+    img_convert_ctx = sws_getCachedContext(
+        img_convert_ctx, srcWidth, srcHeight, AV_PIX_FMT_YUV420P, width, height,
+        AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
+    int processed = 0;
+    if(img_convert_ctx) {
+        processed = sws_scale(img_convert_ctx, pic.data, pic.iLineSize, 0,
+                              srcHeight, dstData, dstLineSize);
+    }
+    if(processed <= 0) {
+        std::memset(data, 0, static_cast<size_t>(width) * height * 4);
+        ConvertYuv420ToRgba(pic, data, width, height, dstLineSize[0]);
     }
 
     {
@@ -223,17 +284,17 @@ int TVPMoviePlayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
         picbuf.Clear();
         picbuf.width = width;
         picbuf.height = height;
-        for(int i = 0; i < sizeof(yuvdata) / sizeof(yuvdata[0]); ++i) {
-            picbuf.yuv[i] = yuvdata[i];
-        }
+        picbuf.rgba = data;
         picbuf.pts = pic.pts / DVD_TIME_BASE;
         ++m_usedPicture;
+        static std::atomic<int> s_queueLogs{ 0 };
+        if(s_queueLogs.fetch_add(1) < 3)
+            spdlog::info("MoviePlayer AddVideoPicture: queued {}x{} pts={} "
+                         "used={} visible={}",
+                         width, height, picbuf.pts, m_usedPicture,
+                         Visible ? "yes" : "no");
         return MAX_BUFFER_COUNT - m_usedPicture;
     }
-
-    // 	const static std::string sckey("present");
-    // 	m_pRootNode->scheduleOnce(std::bind(&PlayerOverlay::PresentPicture,
-    // this, std::placeholders::_1), 0, sckey);
 }
 
 VideoPresentOverlay::~VideoPresentOverlay() {
@@ -268,6 +329,10 @@ void VideoPresentOverlay::PresentPicture(float dt) {
     if(!pic.rgba)
         return;
     if(!Visible) {
+        static std::atomic<int> s_invisibleLogs{ 0 };
+        if(s_invisibleLogs.fetch_add(1) == 0)
+            spdlog::warn("VideoPresentOverlay: 帧已解出但 Visible=false，"
+                         "不呈现（overlay 未置可见？）");
         TVPHostClearVideoOverlayFrame();
         return;
     }
@@ -275,9 +340,15 @@ void VideoPresentOverlay::PresentPicture(float dt) {
     tTVPRect dest = GetBounds();
     if(dest.get_width() <= 0 || dest.get_height() <= 0)
         dest = tTVPRect(0, 0, pic.width, pic.height);
-    TVPHostSubmitVideoOverlayFrame(pic.rgba, pic.width, pic.height,
-                                   pic.width * 4, dest.left, dest.top,
-                                   dest.right, dest.bottom);
+    const bool submitted = TVPHostSubmitVideoOverlayFrame(
+        pic.rgba, pic.width, pic.height, pic.width * 4, dest.left, dest.top,
+        dest.right, dest.bottom);
+    static std::atomic<int> s_submitLogs{ 0 };
+    if(s_submitLogs.fetch_add(1) < 3)
+        spdlog::info("VideoPresentOverlay: submitted {}x{} dest=({},{})({},{}"
+                     ") ok={}",
+                     pic.width, pic.height, dest.left, dest.top, dest.right,
+                     dest.bottom, submitted ? 1 : 0);
 }
 
 // 呈现由两条路驱动：解码回调（OnPlayEvent Update，主线程时立即呈现）与连续
@@ -298,6 +369,8 @@ void VideoPresentOverlay::OnContinuousCallback(tjs_uint64 tick) {
 void KRMovie::VideoPresentOverlay::Play() {
     TVPMoviePlayer::Play();
     TVPAddContinuousEventHook(this);
+    spdlog::info("VideoPresentOverlay::Play: 连续事件钩子已挂（visible={}）",
+                 Visible ? "yes" : "no");
 }
 
 void KRMovie::VideoPresentOverlay::Stop() {
@@ -315,6 +388,11 @@ MoviePlayerOverlay::~MoviePlayerOverlay() {
 void MoviePlayerOverlay::SetWindow(tTJSNI_Window *window) {
     ClearNode();
     m_pOwnerWindow = window;
+    // 这行是 overlay 链路的关键指纹（每次开片一次）：有它说明 KAG 已经把
+    // overlay 挂到窗口上；配合 AddVideoPicture / submitted 两条日志能一眼区分
+    // "没解码"、"解了但不可见"、"提交了但宿主没画"。
+    spdlog::info("MoviePlayerOverlay::SetWindow: owner={} visible={}",
+                 static_cast<const void *>(window), Visible ? "yes" : "no");
 }
 
 void MoviePlayerOverlay::BuildGraph(tTJSNI_VideoOverlay *callbackwin,
