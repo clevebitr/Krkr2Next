@@ -48,3 +48,225 @@ static void InitPlugin_M2VDecAlias() {
     ncbAutoRegister::LoadModule(TJS_W("layerExMovie.dll"));
 }
 NCB_PRE_REGIST_CALLBACK(InitPlugin_M2VDecAlias);
+
+//---------------------------------------------------------------------------
+// 旧插件名桩：只注册名字，不实现功能
+//
+// 为什么要它：游戏脚本常用 `Plugins.link("xxx.dll")` 显式链接，而
+// `TVPLoadInternalPlugin()` 只认**已注册**的模块名 —— 没注册就是 Failed，
+// 脚本随后可能卡在等回调上（黑屏但引擎活着）。这些 DLL 在 Windows 版是独立
+// 插件，其功能本引擎要么已内建、要么 Android 上根本不适用，所以这里只把
+// **名字**注册成空模块，让 link 成功。
+//
+// 名单与做法移植自 AetherKiri cpp/plugins/dummy_plugin_stubs.cpp（去掉本引擎
+// 已实现的名字，以及上面已做别名的 krmovie/m2vdec）。
+//---------------------------------------------------------------------------
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("adjustMonitor.dll")
+static void InitPlugin_adjustMonitorStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_adjustMonitorStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("dmmcloud.dll")
+static void InitPlugin_dmmcloudStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_dmmcloudStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("drawdevice.dll")
+static void InitPlugin_drawdeviceStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_drawdeviceStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("drawdeviceD3D.dll")
+static void InitPlugin_drawdeviceD3DStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_drawdeviceD3DStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("drawdeviceIrrlicht.dll")
+static void InitPlugin_drawdeviceIrrlichtStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_drawdeviceIrrlichtStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("drawdeviceOgre.dll")
+static void InitPlugin_drawdeviceOgreStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_drawdeviceOgreStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("drawdeviceZ_D3D9.dll")
+static void InitPlugin_drawdeviceZ_D3D9Stub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_drawdeviceZ_D3D9Stub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("flashPlayer.dll")
+static void InitPlugin_flashPlayerStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_flashPlayerStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("fpslimit.dll")
+static void InitPlugin_fpslimitStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_fpslimitStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("gameswf.dll")
+static void InitPlugin_gameswfStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_gameswfStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("gfxEffect.dll")
+static void InitPlugin_gfxEffectStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_gfxEffectStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("htmlhelp.dll")
+static void InitPlugin_htmlhelpStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_htmlhelpStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("httprequest.dll")
+static void InitPlugin_httprequestStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_httprequestStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("httpserv.dll")
+static void InitPlugin_httpservStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_httpservStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("javascript.dll")
+static void InitPlugin_javascriptStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_javascriptStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("k2compat.dll")
+static void InitPlugin_k2compatStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_k2compatStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("kagexopt.dll")
+static void InitPlugin_kagexoptStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_kagexoptStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("kztouch.dll")
+static void InitPlugin_kztouchStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_kztouchStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("layerEx.dll")
+static void InitPlugin_layerExStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_layerExStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("layerExAgg.dll")
+static void InitPlugin_layerExAggStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_layerExAggStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("layerExCairo.dll")
+static void InitPlugin_layerExCairoStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_layerExCairoStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("layerExGdiPlus.dll")
+static void InitPlugin_layerExGdiPlusStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_layerExGdiPlusStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("layerExSubImage.dll")
+static void InitPlugin_layerExSubImageStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_layerExSubImageStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("libegl.dll")
+static void InitPlugin_libeglStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_libeglStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("libglesv2.dll")
+static void InitPlugin_libglesv2Stub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_libglesv2Stub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("lzfs.dll")
+static void InitPlugin_lzfsStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_lzfsStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("magickpp.dll")
+static void InitPlugin_magickppStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_magickppStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("messenger.dll")
+static void InitPlugin_messengerStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_messengerStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("mkpj.dll")
+static void InitPlugin_mkpjStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_mkpjStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("msgreceiver.dll")
+static void InitPlugin_msgreceiverStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_msgreceiverStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("oleclass.dll")
+static void InitPlugin_oleclassStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_oleclassStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("onigruma.dll")
+static void InitPlugin_onigrumaStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_onigrumaStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("process.dll")
+static void InitPlugin_processStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_processStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("registory.dll")
+static void InitPlugin_registoryStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_registoryStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("resourceRW.dll")
+static void InitPlugin_resourceRWStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_resourceRWStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("shellExecute.dll")
+static void InitPlugin_shellExecuteStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_shellExecuteStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("sigcheck.dll")
+static void InitPlugin_sigcheckStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_sigcheckStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("squirrel.dll")
+static void InitPlugin_squirrelStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_squirrelStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("stdio.dll")
+static void InitPlugin_stdioStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_stdioStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("systemEx.dll")
+static void InitPlugin_systemExStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_systemExStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("tasktray.dll")
+static void InitPlugin_tasktrayStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_tasktrayStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("tftSave.dll")
+static void InitPlugin_tftSaveStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_tftSaveStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("version.dll")
+static void InitPlugin_versionStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_versionStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("videoEncoder.dll")
+static void InitPlugin_videoEncoderStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_videoEncoderStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("win32ole.dll")
+static void InitPlugin_win32oleStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_win32oleStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("windowExProgress.dll")
+static void InitPlugin_windowExProgressStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_windowExProgressStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("wmrdump.dll")
+static void InitPlugin_wmrdumpStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_wmrdumpStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("wsh.dll")
+static void InitPlugin_wshStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_wshStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("wumsadp.dll")
+static void InitPlugin_wumsadpStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_wumsadpStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("xmlhttprequest.dll")
+static void InitPlugin_xmlhttprequestStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_xmlhttprequestStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("xpressive.dll")
+static void InitPlugin_xpressiveStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_xpressiveStub);
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("zlib.dll")
+static void InitPlugin_zlibStub() {}
+NCB_PRE_REGIST_CALLBACK(InitPlugin_zlibStub);
+#undef NCB_MODULE_NAME

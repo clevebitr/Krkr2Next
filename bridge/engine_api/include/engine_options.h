@@ -60,6 +60,46 @@
 #define ENGINE_OGLDRAWDEVICE_COMPAT_ALIAS "alias"
 #define ENGINE_OGLDRAWDEVICE_COMPAT_KAG "kag"
 
+/**
+ * 游戏兼容档（compat profile）—— 两条血脉的差异收敛点。
+ *
+ * 本项目要同时支持**老 KiriKiri2 系**（Kirikiroid2 血脉：旧 API 面、kr2ext 那套
+ * 容器/图像/音频）与 **krkrz / AetherKiri 系**（GPU 层、OGLDrawDevice、
+ * companion script、宽插件集）。差异**不允许**写成"某个游戏就怎样"的分支，而是
+ * 收敛成这里的**具名 + 带版本号**的档：
+ *
+ *   kirikiri2-classic  v1  → ogldrawdevice_compat=off
+ *   krkrz-gpu          v1  → ogldrawdevice_compat=alias
+ *   krkrz-kag          v1  → ogldrawdevice_compat=kag
+ *   krkrz-ogl          v1  → ogldrawdevice_compat=ogl
+ *
+ * 档只映射到既有选项，插件与核心照旧只认选项。档的口径变化必须同时 +1 版本号，
+ * 这样真机日志（`compat profile: <name> v<n> -> ...`）能区分"哪一版口径"。
+ *
+ * 取值：
+ *   - `auto`：按**血脉标记**自动判定（不看游戏名字），需要
+ *     [ENGINE_OPTION_GAME_COMPAT_GAME_ROOT]：
+ *       plugin/krkrgles.dll | krkrlive2d.dll → krkrz-gpu
+ *       plugin/motionplayer*.dll             → krkrz-kag
+ *       其它                                  → kirikiri2-classic
+ *   - 具名档：直接指定上面的名字。
+ *
+ * ⚠️ 时机：krkrgles 插件是在**注册完成（post-regist，engine_create 期）**读
+ * `ogldrawdevice_compat` 的，所以壳必须在 engine_create 之前把本选项与
+ * [ENGINE_OPTION_GAME_COMPAT_GAME_ROOT] 传进来；两个选项到齐的那一刻就完成解析。
+ * 若壳另外显式传了 `ogldrawdevice_compat`，以**显式值**为准。
+ */
+#define ENGINE_OPTION_GAME_COMPAT_PROFILE "game_compat_profile"
+
+/** 自动判档用的游戏根目录（裸文件系统路径，与 engine_open_game 同一个）。 */
+#define ENGINE_OPTION_GAME_COMPAT_GAME_ROOT "game_compat_game_root"
+
+#define ENGINE_GAME_COMPAT_PROFILE_AUTO "auto"
+#define ENGINE_GAME_COMPAT_PROFILE_KIRIKIRI2 "kirikiri2-classic"
+#define ENGINE_GAME_COMPAT_PROFILE_KRKRZ_GPU "krkrz-gpu"
+#define ENGINE_GAME_COMPAT_PROFILE_KRKRZ_KAG "krkrz-kag"
+#define ENGINE_GAME_COMPAT_PROFILE_KRKRZ_OGL "krkrz-ogl"
+
 /** Render pipeline selection ("opengl" or "software"). */
 #define ENGINE_OPTION_RENDERER "renderer"
 

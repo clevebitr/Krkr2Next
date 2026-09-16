@@ -42,6 +42,16 @@ class EngineSession(
      */
     private val oglDrawDeviceCompat: String = "off",
     /**
+     * 游戏兼容档（`auto` / `kirikiri2-classic` / `krkrz-gpu` / `krkrz-kag` /
+     * `krkrz-ogl`，见 [AppPrefs.GAME_COMPAT_PROFILES]）。
+     *
+     * `auto` 时由引擎按**血脉标记**判档（不看游戏名），所以要在 `openGame()` 里
+     * 连同游戏根目录一起传进去 —— 插件是在 `StartApplication`（post-regist）
+     * 读 `ogldrawdevice_compat` 的，晚于 [start] 里的选项下发。
+     * 非 `auto` 时这份取值与 [oglDrawDeviceCompat] 一起下发，显式模式优先。
+     */
+    private val gameCompatProfile: String = "auto",
+    /**
      * 引擎日志。**在渲染线程回调**——只做日志落盘/打印，不要在这里碰 UI 状态。
      */
     private val onLog: (String) -> Unit = {},
@@ -270,7 +280,11 @@ class EngineSession(
 
             applyOption("fps_limit", fpsLimit.toString())
             applyOption("font_fallback_mode", fontFallbackMode)
-            applyOption("ogldrawdevice_compat", oglDrawDeviceCompat)
+            // 手动档位（非 off）优先下发：引擎侧也是"显式值优先于判档结果"。
+            // off 视为"没手动指定"，交给 openGame() 的兼容档判档决定。
+            if (oglDrawDeviceCompat != "off") {
+                applyOption("ogldrawdevice_compat", oglDrawDeviceCompat)
+            }
 
             running = true
             choreographer?.postFrameCallback(frameCallback)
@@ -282,6 +296,11 @@ class EngineSession(
         post {
             lastFrameNanos = 0L
             tickFailures = 0L
+            // 兼容档必须在开游戏**之前**下发：krkrgles 是在 StartApplication
+            // （插件 post-regist）里读 ogldrawdevice_compat 的，而 auto 判档要
+            // 游戏根目录才能按血脉标记决定。
+            applyOption("game_compat_profile", gameCompatProfile)
+            applyOption("game_compat_game_root", gameRootPath)
             val rc = NativeEngine.engineOpenGameAsync(handle, gameRootPath, startupScript)
             if (rc != NativeEngine.RESULT_OK) {
                 AppLog.e(TAG, "engineOpenGameAsync failed: rc=$rc err=${lastError()}")

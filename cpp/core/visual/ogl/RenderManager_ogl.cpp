@@ -1559,6 +1559,29 @@ public:
                      pixfmt, GL_UNSIGNED_BYTE, tmp);
         if(luminance)
             TVPApplyLuminanceSwizzle(kTVPLuminanceGray);
+
+        // resize 重建同样要确认拿到了存储：失败就打印参数并用同一份数据退回 RGBA8。
+        // 这条路径最可能让纹理"中途失去存储" —— 之后引擎画进去的像素被整帧丢弃，
+        // 主机侧表现为 SourceSample: FBO incomplete 0x8CD6 + 屏幕全黑。
+        if(!TVPTextureHasStorage(texture)) {
+            static int s_restoreRebuilds = 0;
+            if(s_restoreRebuilds < 8) {
+                ++s_restoreRebuilds;
+                spdlog::error("krkrgl: RestoreNormalSize storage missing ({}x{} "
+                              "internal=0x{:04X} client=0x{:04X} tex={}) -> "
+                              "rebuilding as RGBA8",
+                              internalW, internalH,
+                              static_cast<unsigned>(internalfmt),
+                              static_cast<unsigned>(pixfmt),
+                              static_cast<unsigned>(texture));
+            }
+            _glBindTexture2D(texture);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, internalW, internalH, 0,
+                         GL_RGBA, GL_UNSIGNED_BYTE, tmp);
+            while(glGetError() != GL_NO_ERROR) {
+            }
+        }
+
         _totalVMemSize += (uint64_t)internalW * internalH * getPixelSize();
 
         delete[] tmp;
@@ -1619,6 +1642,24 @@ public:
             texinfo->Name = texture;
             texinfo->Point = indexer.Point;
             UpdateTextureData(*texinfo, rc);
+            // 新 split 纹理第一次上传后确认存储：split 类是**惰性建纹理**
+            // （构造传 mode=0，不走基类构造），基类那处自愈覆盖不到它。没有存储时
+            // 这张纹理挂不上 FBO、画进去的像素被整帧丢弃（主机侧就是 FBO incomplete）。
+            if(!TVPTextureHasStorage(texinfo->Name)) {
+                static int s_splitRebuilds = 0;
+                if(s_splitRebuilds < 8) {
+                    ++s_splitRebuilds;
+                    spdlog::error("krkrgl: split texture storage missing "
+                                  "(tex={}) -> rebuilding as RGBA8",
+                                  static_cast<unsigned>(texinfo->Name));
+                }
+                krkr::gl::BindTexture2D(texinfo->Name);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texinfo->Width,
+                             texinfo->Height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                             nullptr);
+                while(glGetError() != GL_NO_ERROR) {
+                }
+            }
         }
 
         vtx.vtx.resize(n * 2);
@@ -1689,6 +1730,24 @@ public:
             texinfo->Name = texture;
             texinfo->Point = indexer.Point;
             UpdateTextureData(*texinfo, rc);
+            // 新 split 纹理第一次上传后确认存储：split 类是**惰性建纹理**
+            // （构造传 mode=0，不走基类构造），基类那处自愈覆盖不到它。没有存储时
+            // 这张纹理挂不上 FBO、画进去的像素被整帧丢弃（主机侧就是 FBO incomplete）。
+            if(!TVPTextureHasStorage(texinfo->Name)) {
+                static int s_splitRebuilds = 0;
+                if(s_splitRebuilds < 8) {
+                    ++s_splitRebuilds;
+                    spdlog::error("krkrgl: split texture storage missing "
+                                  "(tex={}) -> rebuilding as RGBA8",
+                                  static_cast<unsigned>(texinfo->Name));
+                }
+                krkr::gl::BindTexture2D(texinfo->Name);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texinfo->Width,
+                             texinfo->Height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                             nullptr);
+                while(glGetError() != GL_NO_ERROR) {
+                }
+            }
         }
 
         vtx.vtx.resize(6 * 2);
@@ -2534,6 +2593,24 @@ bool tTVPOGLTexture2D::RestoreNormalSize() {
         internalH = inth;
         _totalVMemSize += internalW * internalH * getPixelSize();
         _scaleW = _scaleH = 1;
+
+        // 新纹理是刚才那次"拷贝渲染"的目标：没有存储的话，上面那次 glDrawArrays
+        // 画进去的像素全被丢弃（画面从此永远空白）。确认一次，失败就重建。
+        if(!TVPTextureHasStorage(texture)) {
+            static int s_restoreNewRebuilds = 0;
+            if(s_restoreNewRebuilds < 8) {
+                ++s_restoreNewRebuilds;
+                spdlog::error("krkrgl: RestoreNormalSize new texture storage "
+                              "missing ({}x{} tex={}) -> rebuilding as RGBA8",
+                              internalW, internalH,
+                              static_cast<unsigned>(texture));
+            }
+            _glBindTexture2D(texture);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, internalW, internalH, 0,
+                         GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            while(glGetError() != GL_NO_ERROR) {
+            }
+        }
         return true;
     } else {
         TVPShowSimpleMessageBox(

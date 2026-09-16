@@ -19,6 +19,7 @@
 
 #include <csignal>
 #include <cstdlib>
+#include <sys/stat.h>
 #if defined(__ANDROID__)
 #include <android/log.h>
 #include <android/native_window.h>
@@ -183,6 +184,110 @@ namespace {
     std::shared_ptr<spdlog::sinks::sink> g_file_sink;
 
     void PushRuntimeSpdlogToStartupQueue(const spdlog::details::log_msg &msg);
+
+    // ── 游戏兼容档（compat profile）─────────────────────────────────────
+    // 把"老 KiriKiri2 系"与"krkrz / AetherKiri 系"的差异收敛成具名 + 带版本号的
+    // 档，再映射到**既有选项**（目前是 ogldrawdevice_compat）。插件与核心照旧只认
+    // 选项，不需要知道"档"这个概念，更不允许在核心里写"某个游戏要怎么办"。
+    //
+    // 自动判档只看**血脉标记**（游戏目录里有哪些插件/provider），不看游戏名字。
+    // 档的口径一旦变化必须同时 +1 版本号，便于真机日志区分。
+    struct CompatProfile {
+        const char *name;
+        int version;
+        const char *ogldrawdevice;
+    };
+
+    const CompatProfile kCompatProfiles[] = {
+        {ENGINE_GAME_COMPAT_PROFILE_KIRIKIRI2, 1,
+         ENGINE_OGLDRAWDEVICE_COMPAT_OFF},
+        {ENGINE_GAME_COMPAT_PROFILE_KRKRZ_GPU, 1,
+         ENGINE_OGLDRAWDEVICE_COMPAT_ALIAS},
+        {ENGINE_GAME_COMPAT_PROFILE_KRKRZ_KAG, 1,
+         ENGINE_OGLDRAWDEVICE_COMPAT_KAG},
+        {ENGINE_GAME_COMPAT_PROFILE_KRKRZ_OGL, 1,
+         ENGINE_OGLDRAWDEVICE_COMPAT_OGL},
+    };
+
+    std::mutex g_compat_mutex;
+    std::string g_compat_request = ENGINE_GAME_COMPAT_PROFILE_AUTO;
+    std::string g_compat_game_root;
+    bool g_ogldrawdevice_explicit = false;
+
+    const CompatProfile *FindCompatProfile(const std::string &name) {
+        for(const auto &p : kCompatProfiles) {
+            if(name == p.name)
+                return &p;
+        }
+        return nullptr;
+    }
+
+    bool CompatFileExists(const std::string &path) {
+        struct stat st;
+        return ::stat(path.c_str(), &st) == 0 &&
+               (st.st_mode & S_IFMT) == S_IFREG;
+    }
+
+    // 血统标记 → 档。顺序即优先级：带 krkrgles/Live2D 的必是 krkrz GPU 层系；
+    // 带 E-mote(motionplayer) 的走 KAG 窗口绘制设备工厂；其余按老 KiriKiri2 处理。
+    const char *DetectCompatProfileByMarkers(const std::string &root) {
+        static const char *kGpuMarkers[] = { "krkrgles.dll", "krkrlive2d.dll" };
+        static const char *kKagMarkers[] = { "motionplayer.dll",
+                                            "motionplayer_nod3d.dll" };
+        for(const char *m : kGpuMarkers) {
+            if(CompatFileExists(root + "/plugin/" + m))
+                return ENGINE_GAME_COMPAT_PROFILE_KRKRZ_GPU;
+        }
+        for(const char *m : kKagMarkers) {
+            if(CompatFileExists(root + "/plugin/" + m))
+                return ENGINE_GAME_COMPAT_PROFILE_KRKRZ_KAG;
+        }
+        return ENGINE_GAME_COMPAT_PROFILE_KIRIKIRI2;
+    }
+
+    // 调用方必须持有 g_compat_mutex。
+    void ApplyCompatProfileLocked() {
+        const CompatProfile *prof = nullptr;
+        const char *source = nullptr;
+        if(g_compat_request != ENGINE_GAME_COMPAT_PROFILE_AUTO) {
+            prof = FindCompatProfile(g_compat_request);
+            source = "explicit";
+            if(!prof) {
+                spdlog::warn("compat profile: 未知档位 '{}'，按默认档处理",
+                             g_compat_request);
+            }
+        } else if(!g_compat_game_root.empty()) {
+            const char *detected = DetectCompatProfileByMarkers(g_compat_game_root);
+            prof = FindCompatProfile(detected);
+            source = "auto";
+        }
+        if(!prof) {
+            prof = FindCompatProfile(ENGINE_GAME_COMPAT_PROFILE_KIRIKIRI2);
+            if(!source)
+                source = "default";
+        }
+        if(!prof)
+            return;
+
+        // 显式传过 ogldrawdevice_compat 时以它为准：这里只记录，不覆盖。
+        spdlog::info("compat profile: {} v{} -> ogldrawdevice_compat={} ({}{})",
+                     prof->name, prof->version, prof->ogldrawdevice, source,
+                     g_ogldrawdevice_explicit ? ", 但显式选项优先" : "");
+        if(g_ogldrawdevice_explicit)
+            return;
+        if(!g_compat_game_root.empty() &&
+           g_compat_request == ENGINE_GAME_COMPAT_PROFILE_AUTO) {
+            spdlog::info("compat profile: 判档依据 game_root={}",
+                         g_compat_game_root);
+        }
+        TVPSetCommandLine(TJS_W("ogldrawdevice_compat"),
+                          ttstr(prof->ogldrawdevice).c_str());
+    }
+
+    void ApplyCompatProfile() {
+        std::lock_guard<std::mutex> lock(g_compat_mutex);
+        ApplyCompatProfileLocked();
+    }
 
     class StartupLogSink final : public spdlog::sinks::sink {
     public:
@@ -1919,12 +2024,33 @@ engine_result_t engine_set_option(engine_handle_t handle,
     // krkrz 的 OGLDrawDevice 兼容层：真正生效在 krkrgles 插件的 post-regist 里
     // （见 cpp/plugins/krkrgles.cpp）。这里只校验收到的取值并打一行日志；取值非法
     // 时按 `off` 处理而不报错——旧设置文件里带个没见过的值不该让开游戏失败。
-    if(key == ENGINE_OPTION_OGLDRAWDEVICE_COMPAT) {
+    if(key == ENGINE_OPTION_GAME_COMPAT_PROFILE) {
+        std::string requested(option->value_utf8);
+        if(requested.empty())
+            requested = ENGINE_GAME_COMPAT_PROFILE_AUTO;
+        {
+            std::lock_guard<std::mutex> lock(g_compat_mutex);
+            g_compat_request = requested;
+        }
+        // 两个选项（profile / game_root）到齐的那一刻就解析完；
+        // 插件是在 post-regist 读 ogldrawdevice_compat 的，不能再晚。
+        ApplyCompatProfile();
+    } else if(key == ENGINE_OPTION_GAME_COMPAT_GAME_ROOT) {
+        {
+            std::lock_guard<std::mutex> lock(g_compat_mutex);
+            g_compat_game_root = option->value_utf8;
+        }
+        ApplyCompatProfile();
+    } else if(key == ENGINE_OPTION_OGLDRAWDEVICE_COMPAT) {
         const std::string mode(option->value_utf8);
         const bool known = mode == ENGINE_OGLDRAWDEVICE_COMPAT_OFF ||
                            mode == ENGINE_OGLDRAWDEVICE_COMPAT_OGL ||
                            mode == ENGINE_OGLDRAWDEVICE_COMPAT_ALIAS ||
                            mode == ENGINE_OGLDRAWDEVICE_COMPAT_KAG;
+        {
+            std::lock_guard<std::mutex> lock(g_compat_mutex);
+            g_ogldrawdevice_explicit = true;
+        }
         spdlog::info("engine_set_option: ogldrawdevice_compat={}{}", mode,
                      known ? "" : " (unknown, treated as off)");
     }

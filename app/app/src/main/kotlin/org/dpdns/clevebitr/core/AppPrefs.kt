@@ -45,6 +45,9 @@ object AppPrefs {
      */
     private const val KEY_OGLDRAWDEVICE_COMPAT = "engine.ogldrawdevice_compat"
 
+    /** 游戏兼容档（`auto` / `kirikiri2-classic` / `krkrz-gpu` / `krkrz-kag` / `krkrz-ogl`）。 */
+    private const val KEY_GAME_COMPAT_PROFILE = "engine.game_compat_profile"
+
     const val FPS_LIMIT_UNLIMITED = 0
 
     private fun prefs(context: Context): SharedPreferences =
@@ -158,5 +161,30 @@ object AppPrefs {
     fun setOglDrawDeviceCompat(context: Context, mode: String) {
         val normalized = if (mode in OGLDRAWDEVICE_COMPAT_MODES) mode else "off"
         prefs(context).edit().putString(KEY_OGLDRAWDEVICE_COMPAT, normalized).apply()
+    }
+
+    /**
+     * 游戏兼容档（compat profile）—— 两条血脉差异的收敛点，见 `engine_options.h`。
+     *
+     * 引擎按**血脉标记**自动判档（只看游戏目录里有没有 `krkrgles.dll` /
+     * `krkrlive2d.dll` / `motionplayer*.dll`，**不看游戏名字**）：
+     *   - 带 krkrgles / Live2D → `krkrz-gpu`（GPU 层闸门 + GLESAdaptor）
+     *   - 带 motionplayer     → `krkrz-kag`（窗口绘制设备工厂走 KAGWindow）
+     *   - 其余                → `kirikiri2-classic`
+     *
+     * 取 `auto` 之外的具名档就是直接指定。无论哪种，只要 [oglDrawDeviceCompat]
+     * 被显式设置过，引擎以显式值为准（档只在没显式设置时决定它）。
+     */
+    val GAME_COMPAT_PROFILES =
+        listOf("auto", "kirikiri2-classic", "krkrz-gpu", "krkrz-kag", "krkrz-ogl")
+
+    fun gameCompatProfile(context: Context): String {
+        val stored = prefs(context).getString(KEY_GAME_COMPAT_PROFILE, null)
+        return if (stored != null && stored in GAME_COMPAT_PROFILES) stored else "auto"
+    }
+
+    fun setGameCompatProfile(context: Context, profile: String) {
+        val normalized = if (profile in GAME_COMPAT_PROFILES) profile else "auto"
+        prefs(context).edit().putString(KEY_GAME_COMPAT_PROFILE, normalized).apply()
     }
 }

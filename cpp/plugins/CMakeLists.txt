@@ -9,6 +9,8 @@ target_sources(${PROJECT_NAME} PUBLIC
     dirlist.cpp
     csvParser.cpp
     layerExMovie.cpp
+    kirikiroid2.cpp
+    base64.cpp
     varfile.cpp
     saveStruct.cpp
     getabout.cpp

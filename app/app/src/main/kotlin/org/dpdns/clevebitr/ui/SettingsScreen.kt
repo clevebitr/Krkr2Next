@@ -85,6 +85,15 @@ private val OGLDRAWDEVICE_COMPAT_CHOICES = listOf(
     "kag" to "接管",
 )
 
+/** 游戏兼容档：`auto` 之外都是直接指定（见 `engine_options.h`）。 */
+private val GAME_COMPAT_PROFILE_CHOICES = listOf(
+    "auto" to "自动判档",
+    "kirikiri2-classic" to "老 KiriKiri2",
+    "krkrz-gpu" to "krkrz GPU",
+    "krkrz-kag" to "krkrz KAG",
+    "krkrz-ogl" to "krkrz 仅 OGL",
+)
+
 /**
  * 设置页。目前只有调试相关的东西——这是给排障用的壳，设置项也都服务于
  * "把问题现场原样带出来"：日志怎么收、怎么导出、引擎跑多快、画面上叠什么。
@@ -108,6 +117,12 @@ fun SettingsScreen(
     /** krkrz 的 OGLDrawDevice 兼容档位；同样**下次开游戏**生效。 */
     oglDrawDeviceCompat: String = "off",
     onOglDrawDeviceCompatChanged: (String) -> Unit = {},
+    /**
+     * 游戏兼容档（`auto` / `kirikiri2-classic` / `krkrz-gpu` / `krkrz-kag` /
+     * `krkrz-ogl`）。`auto` 由引擎按血脉标记判档；同样**下次开游戏**生效。
+     */
+    gameCompatProfile: String = "auto",
+    onGameCompatProfileChanged: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -118,6 +133,7 @@ fun SettingsScreen(
     var fpsLimit by remember { mutableStateOf(AppPrefs.fpsLimit(context)) }
     var fontMode by remember { mutableStateOf(fontFallbackMode) }
     var oglCompatMode by remember { mutableStateOf(oglDrawDeviceCompat) }
+    var compatProfile by remember { mutableStateOf(gameCompatProfile) }
 
     Column(modifier = modifier.fillMaxSize()) {
         Row(
@@ -171,6 +187,26 @@ fun SettingsScreen(
             )
 
             SectionTitle("渲染兼容（krkrz）")
+
+            // 两条血脉（老 KiriKiri2 / krkrz-AetherKiri）的差异收敛在这里：档位由引擎
+            // 按**血脉标记**判定（只看游戏目录里有没有 krkrgles/krkrlive2d/motionplayer，
+            // 不看游戏名字），再映射到下面的 OGLDrawDevice 档；手动档位仍然优先。
+            ChoiceRow(
+                title = "游戏兼容档",
+                subtitle = "按游戏目录里的插件标记自动判档：带 krkrgles/Live2D 的按" +
+                    "「krkrz-gpu」（GPU 层闸门 + GLESAdaptor）、带 motionplayer 的按" +
+                    "「krkrz-kag」（窗口绘制设备工厂走 KAGWindow）、其余按" +
+                    "「kirikiri2-classic」。选具名档即固定该档；下面的 OGLDrawDevice " +
+                    "手动档位若非「关闭」，仍以手动值为准。改完下次开游戏生效。",
+                choices = GAME_COMPAT_PROFILE_CHOICES,
+                selected = compatProfile,
+                onSelected = { profile ->
+                    compatProfile = profile
+                    AppPrefs.setGameCompatProfile(context, profile)
+                    onGameCompatProfileChanged(profile)
+                    AppLog.i(TAG, "game compat profile = $profile（下次开游戏生效）")
+                },
+            )
 
             // krkrgles 系（吉里吉里Z）游戏的 Initialize.tjs 会先看 Window.OGLDrawDevice
             // 在不在，再决定要不要加载 GPU 层脚本。实测缺了它就静默跳过

@@ -86,6 +86,9 @@ class MainActivity : ComponentActivity() {
     /** krkrz 的 OGLDrawDevice 兼容档位（`off` / `alias` / `kag`）；改完下次开游戏生效。 */
     private var oglDrawDeviceCompat by mutableStateOf("off")
 
+    /** 游戏兼容档（`auto` / `kirikiri2-classic` / `krkrz-gpu` / `krkrz-kag` / `krkrz-ogl`）。 */
+    private var gameCompatProfile by mutableStateOf("auto")
+
     private val logDirPath: String by lazy { LogFiles.logsDir(this).absolutePath }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -109,6 +112,7 @@ class MainActivity : ComponentActivity() {
         themeMode = AppPrefs.themeMode(this)
         fontFallbackMode = AppPrefs.fontFallbackMode(this)
         oglDrawDeviceCompat = AppPrefs.oglDrawDeviceCompat(this)
+        gameCompatProfile = AppPrefs.gameCompatProfile(this)
 
         setContent {
             KrKr2NextTheme(darkTheme = resolveDarkTheme(themeMode)) {
@@ -136,6 +140,8 @@ class MainActivity : ComponentActivity() {
                             onFontFallbackModeChanged = { fontFallbackMode = it },
                             oglDrawDeviceCompat = oglDrawDeviceCompat,
                             onOglDrawDeviceCompatChanged = { oglDrawDeviceCompat = it },
+                            gameCompatProfile = gameCompatProfile,
+                            onGameCompatProfileChanged = { gameCompatProfile = it },
                         )
                     } else {
                         LauncherScreen(
@@ -238,6 +244,7 @@ class MainActivity : ComponentActivity() {
             fpsLimit = AppPrefs.fpsLimit(this),
             fontFallbackMode = AppPrefs.fontFallbackMode(this),
             oglDrawDeviceCompat = AppPrefs.oglDrawDeviceCompat(this),
+            gameCompatProfile = AppPrefs.gameCompatProfile(this),
             onLog = { log ->
                 // 引擎启动日志已经在 engine.log 里了，这里只做一次转发，
                 // 顺带让连着 adb 的人也能看到
