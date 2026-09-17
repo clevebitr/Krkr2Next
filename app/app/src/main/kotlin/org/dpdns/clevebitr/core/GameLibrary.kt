@@ -2,6 +2,7 @@ package org.dpdns.clevebitr.core
 
 import android.content.Context
 import java.io.File
+import org.dpdns.clevebitr.core.scrape.CoverStore
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -178,20 +179,92 @@ class GameLibrary(context: Context) {
     /**
      * 加入库。[title] 为空时用目录名——目录名常常就是游戏名，比空白强。
      * 已存在则原样返回（不覆盖用户改过的标题），并把 [AddResult.added] 置 false。
+     *
+     * **同时从游戏目录的 `krkr2next.json` 读回刮削信息**：刮削结果本来就写在那份
+     * 配置里（见 [ScrapeService.syncRecordToGameDir]），但以前只有"读库"这一条路，
+     * 重装应用后库是空的，重新扫描只会拿目录名建记录 ⇒ 用户每次重装都得重刮一遍。
+     * 这里把配置里的标题/厂商/VNDB id/发售日/标签/简介/封面名与备注并进来，
+     * 让"重装 + 重扫"就能恢复，不必再联网刮削。
      */
     fun add(gameDir: File, title: String? = null): AddResult {
         ensureLoaded()
         findByPath(gameDir.absolutePath)?.let { return AddResult(it, added = false) }
-        val game = LibraryGame(
+        var game = LibraryGame(
             id = GamePaths.stableId(gameDir),
             path = gameDir.absolutePath,
             title = title?.takeIf { it.isNotBlank() } ?: gameDir.name,
             addedAt = System.currentTimeMillis(),
         )
+        game = game.withRestoredMetadata(gameDir, explicitTitle = title)
         items += game
         save()
         return AddResult(game, added = true)
     }
+
+    /**
+     * 给**库里已有**的记录补回游戏目录里的刮削信息。
+     *
+     * 覆盖两种情形：
+     *   * 本功能上线前就已入库、元数据为空的记录；
+     *   * 库文件丢了（重装）后重新扫描，但记录是"先建后补"的。
+     *
+     * 只补**空字段**，绝不覆盖用户已经改过的内容（[mergeMetadata] 的语义）。
+     * @return 实际发生变化的记录数；调用方据此决定要不要刷新列表。
+     */
+    fun restoreMetadataFromGameDirs(): Int {
+        ensureLoaded()
+        var changed = 0
+        for (index in items.indices) {
+            val before = items[index]
+            if (!before.needsMetadataRestore()) continue
+            val after = before.withRestoredMetadata(File(before.path))
+            if (after != before) {
+                items[index] = after
+                changed++
+            }
+        }
+        if (changed > 0) {
+            save()
+            AppLog.i(TAG, "从游戏目录的 krkr2next.json 补回元数据：$changed 条")
+        }
+        return changed
+    }
+
+    private fun LibraryGame.withRestoredMetadata(
+        gameDir: File,
+        explicitTitle: String? = null,
+    ): LibraryGame {
+        val config = try {
+            GameConfigStore.load(appContext, gameDir)
+        } catch (t: Throwable) {
+            AppLog.w(TAG, "读取游戏配置失败（跳过元数据恢复）：${gameDir.absolutePath} / $t")
+            return this
+        }
+        if (config.metadata.isEmpty && config.notes.isNullOrBlank()) return this
+        val merged = mergeMetadata(config.metadata)
+        val withNotes = if (notes.isBlank() && !config.notes.isNullOrBlank()) {
+            merged.copy(notes = config.notes!!)
+        } else {
+            merged
+        }
+        // 私有封面会随卸载消失：能拿回文件名却拿不到图，用户仍得为封面重刮一次。
+        // 所以顺手把游戏目录里的副本恢复回私有目录（有副本才做，失败不影响元数据）。
+        if (withNotes.coverFile.isNotBlank()) {
+            try {
+                CoverStore.restoreFromGameDir(appContext, gameDir, withNotes.coverFile)
+            } catch (t: Throwable) {
+                AppLog.w(TAG, "封面恢复异常（忽略）：${gameDir.absolutePath} / $t")
+            }
+        }
+        // 显式传入的标题优先级最高（用户手动改名/调用方指定）
+        return if (!explicitTitle.isNullOrBlank()) withNotes.copy(title = explicitTitle) else withNotes
+    }
+
+    /** 库里这份记录还有值得从游戏目录补的字段吗。 */
+    private fun LibraryGame.needsMetadataRestore(): Boolean =
+        title.isBlank() || developer.isBlank() || vndbId.isBlank() ||
+            released.isBlank() || description.isBlank() || coverFile.isBlank() ||
+            tags.isEmpty() || notes.isBlank()
 
     fun remove(id: String): Boolean {
         ensureLoaded()

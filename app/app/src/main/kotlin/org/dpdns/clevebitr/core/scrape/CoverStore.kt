@@ -79,6 +79,59 @@ object CoverStore {
     }
 
     /**
+     * 游戏目录里的封面副本名（`krkr2next.cover.jpg`）。
+     *
+     * 与 `krkr2next.json` 同前缀同目录，明显是壳自己的文件，不会和游戏资源撞名。
+     */
+    fun gameDirCoverFile(gameDir: File, coverName: String): File {
+        val ext = coverName.substringAfterLast('.', "jpg").lowercase()
+            .takeIf { it in EXTENSIONS } ?: "jpg"
+        return File(gameDir, "krkr2next.cover.$ext")
+    }
+
+    /**
+     * 把封面**另存一份**到游戏目录。
+     *
+     * 为什么需要：私有 `covers/` 会随卸载一起没掉，只把文件名写进 `krkr2next.json`
+     * 并不能让封面在重装后回来——用户还是得为了封面重刮一次。副本放在游戏旁边才能
+     * 真正"跟着游戏走"。写不进去（只读整合包）就静默跳过，不影响刮削结果。
+     */
+    fun mirrorToGameDir(context: Context, gameDir: File, coverName: String): Boolean {
+        if (coverName.isBlank() || !gameDir.isDirectory) return false
+        val src = file(context, coverName)
+        if (!src.isFile || src.length() <= 0) return false
+        return try {
+            val dst = gameDirCoverFile(gameDir, coverName)
+            src.copyTo(dst, overwrite = true)
+            AppLog.i(TAG, "封面已随配置备份到游戏目录：${dst.absolutePath}")
+            true
+        } catch (t: Throwable) {
+            AppLog.w(TAG, "封面备份到游戏目录失败（不影响刮削）：${gameDir.absolutePath} / $t")
+            false
+        }
+    }
+
+    /**
+     * 私有封面丢失时，从游戏目录的副本恢复回去（重装后重新扫描时调用）。
+     * @return 是否真的恢复了一份。
+     */
+    fun restoreFromGameDir(context: Context, gameDir: File, coverName: String): Boolean {
+        if (coverName.isBlank()) return false
+        if (file(context, coverName).isFile) return false
+        val src = gameDirCoverFile(gameDir, coverName)
+        if (!src.isFile || src.length() <= 0) return false
+        return try {
+            dir(context)
+            src.copyTo(file(context, coverName), overwrite = true)
+            AppLog.i(TAG, "封面已从游戏目录副本恢复：$coverName")
+            true
+        } catch (t: Throwable) {
+            AppLog.w(TAG, "封面恢复失败：$coverName / $t")
+            false
+        }
+    }
+
+    /**
      * 扩展名以**内容**为准，URL 只作兜底：VNDB 的图床给的是 jpg，但 URL 偶尔带查询串，
      * 直接取后缀会得到 `jpg?width=600` 这种不合法文件名。
      */

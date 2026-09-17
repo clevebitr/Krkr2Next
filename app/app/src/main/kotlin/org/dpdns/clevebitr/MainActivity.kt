@@ -142,6 +142,11 @@ class MainActivity : ComponentActivity() {
         fontFallbackMode = AppPrefs.fontFallbackMode(this)
         oglDrawDeviceCompat = AppPrefs.oglDrawDeviceCompat(this)
         gameCompatProfile = AppPrefs.gameCompatProfile(this)
+        // 重装后库是空的、重新扫描也只拿到目录名；这里从各游戏目录的
+        // krkr2next.json 把刮削过的标题/厂商/封面等补回来，省掉重刮一遍。
+        // 放在 refreshLibrary() 之前，列表首帧就是补好的结果。
+        runCatching { library.restoreMetadataFromGameDirs() }
+            .onFailure { AppLog.w(TAG, "从游戏目录恢复元数据失败：$it") }
         refreshLibrary()
 
         setContent {

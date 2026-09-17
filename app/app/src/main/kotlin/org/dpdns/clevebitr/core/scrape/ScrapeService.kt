@@ -56,6 +56,9 @@ object ScrapeService {
         val vn = candidate.vn
 
         val coverFile = CoverStore.download(context, vn)
+        // 封面同时在游戏目录留一份副本：私有 covers/ 会随卸载消失，只存文件名的话
+        // 重装后还得为了封面再刮一次（元数据能恢复、封面恢复不了）。
+        coverFile?.let { CoverStore.mirrorToGameDir(context, File(game.path), it) }
         val metadata = GameMetadata(
             title = vn.title.takeIf { it.isNotBlank() },
             developer = vn.developers.joinToString("、").takeIf { it.isNotBlank() },
