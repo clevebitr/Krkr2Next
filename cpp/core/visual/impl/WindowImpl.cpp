@@ -10,6 +10,8 @@
 //---------------------------------------------------------------------------
 #include "tjsCommHead.h"
 
+#include <spdlog/spdlog.h>
+
 // #define DIRECTDRAW_VERSION 0x0300
 // #include <ddraw.h>
 // #include <d3d9.h>
@@ -1501,6 +1503,11 @@ void tTJSNI_Window::Update(tTVPUpdateType type) {
 void tTJSNI_Window::ShowModal() {
     FullScreenGuard();
     if(Form) {
+        // 诊断：游戏内置对话框（退出确认等）走的就是 Window.showModal()。内置弹窗
+        // 不显示时，这条能确认脚本是否真的调了它 —— 调了却看不到，问题在合成；
+        // 没调，就是脚本走了别的路径。
+        spdlog::info("tTJSNI_Window::ShowModal: 脚本请求模态（caption='{}'）",
+                     Form->GetCaption() ? Form->GetCaption() : "");
         TVPClearAllWindowInputEvents();
         // cancel all input events that can cause delayed operation
         Form->ShowWindowAsModal();

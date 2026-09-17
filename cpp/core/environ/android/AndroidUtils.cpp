@@ -79,8 +79,13 @@ static void readMemoryInfoFromProc() {
     if(availKb == 0)
         availKb = _meminfo_value("MemFree:"); // 老内核没有 MemAvailable
     _availMemory = static_cast<tjs_int>(availKb / 1024);
-    // VmRSS 单位 kB，与 JNI 分支的 usedMemory 保持同一口径
-    usedMemory = _proc_self_mem("VmRSS:");
+
+    // ⚠️ 必须换算到 **MB**：`Platform.h` 的声明与消费方（tTVPSystemControl 把
+    // 它当 self_used_mb 用、壳的内存面板也按 MB 显示）都按 MB。`_proc_self_mem`
+    // 返回的是 /proc/self/status 的原始 kB，直接当 MB 用会把用量放大 1024 倍 ——
+    // 真机实测 `(mem) used=699572MB`（并且一直涨）、壳面板显示成天文数字，
+    // 同时 `self_used_mb >= critical_threshold` 让 pressure 永远钉在 3。
+    usedMemory = _proc_self_mem("VmRSS:") / 1024; // kB -> MB
 }
 
 static void updateMemoryInfo() {
@@ -681,6 +686,10 @@ using namespace kr2android;
 
 int TVPShowSimpleMessageBox(const char *pszText, const char *pszTitle,
                             unsigned int nButton, const char **btnText) {
+    // 诊断：游戏弹系统消息框时留下指纹（低频，不需要限频）。内置弹窗不显示时
+    // 这条能区分"根本没走到系统消息框"与"走了但宿主没显示"。
+    spdlog::info("TVPShowSimpleMessageBox: title='{}' buttons={} text='{}'",
+                 pszTitle ? pszTitle : "", nButton, pszText ? pszText : "");
     JniMethodInfo methodInfo;
     if(JniHelper::getStaticMethodInfo(
            methodInfo, "org/tvp/kirikiri2/KR2Activity", "ShowMessageBox",

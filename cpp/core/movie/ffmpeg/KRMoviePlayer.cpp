@@ -12,6 +12,8 @@ extern "C" {
 }
 
 #include <spdlog/spdlog.h>
+// 统计汇总在解锁后才输出：先在锁内 fmt::format 成字符串（见下方死锁说明）。
+#include <spdlog/fmt/fmt.h>
 #include "KRMoviePlayer.h"
 #include "VideoCodec.h"
 #include "CodecUtils.h"
@@ -49,32 +51,41 @@ namespace {
     std::mutex g_movieStatsMutex;
     std::map<std::string, MovieStatsState> g_movieStats;
 
-    // 只在持锁时调用。窗口到点就汇总输出并把计数清零。
-    void MovieStatsMaybeReportLocked(const char *tag, MovieStatsState &s) {
+    // 只在持锁时调用：累计计数；窗口到点就把汇总文本写进 outMsg 并返回 true。
+    //
+    // ⚠️ 这里**绝对不能**直接调 spdlog。spdlog 的 StartupLogSink 内部要取
+    // `g_registry_mutex`，而 `engine_tick()` 整帧持有同一把锁并会调用
+    // `TVPMovieStatsNotePresent()`。若本函数在持 `g_movieStatsMutex` 时打日志，
+    // 两个线程的加锁顺序正好相反（解码线程 movieStats→registry；引擎线程
+    // registry→movieStats）⇒ 必然死锁。真机表现就是：传统兼容层播放视频时
+    // 卡死到 ANR（首个 5 秒窗口到点的那一刻）。
+    // 所以只在这里拼字符串，真正的输出交给解锁之后的调用方。
+    bool MovieStatsMaybeFillReportLocked(const char *tag, MovieStatsState &s,
+                                         std::string &outMsg) {
         const auto now = std::chrono::steady_clock::now();
         if(s.windowStart.time_since_epoch().count() == 0) {
             s.windowStart = now;
-            return;
+            return false;
         }
         const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                             now - s.windowStart)
                             .count();
         if(ms < 5000)
-            return;
+            return false;
         const double secs = static_cast<double>(ms) / 1000.0;
         const double avgConvertMs =
             s.frames ? static_cast<double>(s.convertUs) /
                     static_cast<double>(s.frames) / 1000.0
                      : 0.0;
-        spdlog::info("movie[{}]: 入队 {:.1f} 帧/秒，呈现 {:.1f} 帧/秒，"
-                     "pts未到跳过 {}，转换 avg={:.2f}ms max={:.2f}ms "
-                     "（窗口 {:.1f}s）",
-                     tag ? tag : "?", static_cast<double>(s.frames) / secs,
-                     static_cast<double>(s.presents) / secs, s.futureSkips,
-                     avgConvertMs,
-                     static_cast<double>(s.convertMaxUs) / 1000.0, secs);
+        outMsg = fmt::format(
+            "movie[{}]: 入队 {:.1f} 帧/秒，呈现 {:.1f} 帧/秒，pts未到跳过 {}，"
+            "转换 avg={:.2f}ms max={:.2f}ms（窗口 {:.1f}s）",
+            tag ? tag : "?", static_cast<double>(s.frames) / secs,
+            static_cast<double>(s.presents) / secs, s.futureSkips,
+            avgConvertMs, static_cast<double>(s.convertMaxUs) / 1000.0, secs);
         s = MovieStatsState{};
         s.windowStart = now;
+        return true;
     }
 
     MovieStatsState &MovieStatsLocked(const char *tag) {
@@ -83,23 +94,35 @@ namespace {
 } // namespace
 
 void TVPMovieStatsNoteDecode(const char *tag, uint64_t convertUs) {
-    std::lock_guard<std::mutex> lk(g_movieStatsMutex);
-    MovieStatsState &s = MovieStatsLocked(tag);
-    ++s.frames;
-    s.convertUs += convertUs;
-    if(convertUs > s.convertMaxUs)
-        s.convertMaxUs = convertUs;
-    MovieStatsMaybeReportLocked(tag, s);
+    std::string msg;
+    bool due = false;
+    {
+        std::lock_guard<std::mutex> lk(g_movieStatsMutex);
+        MovieStatsState &s = MovieStatsLocked(tag);
+        ++s.frames;
+        s.convertUs += convertUs;
+        if(convertUs > s.convertMaxUs)
+            s.convertMaxUs = convertUs;
+        due = MovieStatsMaybeFillReportLocked(tag, s, msg);
+    }
+    if(due)
+        spdlog::info("{}", msg); // 已解锁，见上面的死锁说明
 }
 
 void TVPMovieStatsNotePresent(const char *tag, bool ptsNotYet) {
-    std::lock_guard<std::mutex> lk(g_movieStatsMutex);
-    MovieStatsState &s = MovieStatsLocked(tag);
-    if(ptsNotYet)
-        ++s.futureSkips;
-    else
-        ++s.presents;
-    MovieStatsMaybeReportLocked(tag, s);
+    std::string msg;
+    bool due = false;
+    {
+        std::lock_guard<std::mutex> lk(g_movieStatsMutex);
+        MovieStatsState &s = MovieStatsLocked(tag);
+        if(ptsNotYet)
+            ++s.futureSkips;
+        else
+            ++s.presents;
+        due = MovieStatsMaybeFillReportLocked(tag, s, msg);
+    }
+    if(due)
+        spdlog::info("{}", msg); // 已解锁，见上面的死锁说明
 }
 
 

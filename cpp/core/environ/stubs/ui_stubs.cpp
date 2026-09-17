@@ -878,7 +878,15 @@ public:
         // Rendering is driven by engine_tick / engine_read_frame_rgba
     }
 
-    void SetVisibleFromScript(bool b) override { visible_ = b; }
+    void SetVisibleFromScript(bool b) override {
+        // 边沿记录：`Window.visible=...` 是"游戏自己弹窗/关窗"的关键指纹。内置弹窗
+        // 若不显示，这一行能区分"脚本压根没让它可见"与"可见了但没被合成"。
+        if(b != visible_) {
+            spdlog::info("HostWindowLayer: 脚本置可见性 {} -> {}",
+                         visible_ ? "true" : "false", b ? "true" : "false");
+        }
+        visible_ = b;
+    }
 
     void SetUseMouseKey(bool b) override {}
 
@@ -1196,8 +1204,10 @@ std::string TVPShowFileSelector(const std::string &title,
 // Shows a popup context menu. Handled by the host shell.
 // ---------------------------------------------------------------------------
 void TVPShowPopMenu(tTJSNI_MenuItem *menu) {
-    spdlog::warn(
-        "TVPShowPopMenu: stub — popup menus handled by the host shell");
+    // 宿主没有弹出菜单接入点：只记录一次调用指纹（游戏用它做右键/长按菜单）。
+    // 从 warn 降为 info —— 这不是"出错"，逐次 warn 会让人误判成故障。
+    spdlog::info("TVPShowPopMenu: 宿主未实现弹出菜单，忽略本次请求（menu={}）",
+                 menu ? "present" : "null");
 }
 
 // ---------------------------------------------------------------------------
