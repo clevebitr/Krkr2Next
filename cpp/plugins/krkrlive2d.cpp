@@ -28,6 +28,8 @@
 #include "StorageIntf.h"
 #include "EventIntf.h"
 #include "WindowIntf.h"
+// TVPGetCommandLine：用于判断当前是否 KAG 兼容档（见 IsKagCompatEnabled）。
+#include "SysInitIntf.h"
 
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
@@ -83,6 +85,44 @@ extern "C" bool KrkrGLES_IsCaptureActive();
 class CubismLive2DModel; // forward
 static std::vector<CubismLive2DModel *> g_activeModels;
 static void EnsureContinuousHook(); // forward
+
+// ---------------------------------------------------------------------------
+// KAG 兼容档开关 —— 决定是否启用本插件"真正解析并驱动动作"的那套逻辑
+//
+// 为什么要有这个开关：本插件历史上（以及 AetherKiri 的桩实现里）对外表现是
+// 「动作枚举恒为空、startMotion 是 no-op」—— 老 KiriKiri2 游戏是围绕这个行为
+// 写的。为修本作（krkrz-kag 档）的 CG 轮播，我们补上了真实动作表、组名别名、
+// 真正启动动作、loop/fade、show/hide 等语义；这些一旦对**所有**游戏生效，就会
+// 改变老游戏脚本看到的值（例如 getMotionCount 从 0 变成真实条数），把它们的
+// 动画流程带进另一条分支 —— 实测老 KRKR 默认档游戏的轮播因此变不正常。
+//
+// 所以：只有 kag 档才启用这套特殊解析与驱动，其余档一律保持历史行为。
+// 兼容档由壳经命令行选项下发（与 krkrgles 读的是同一个键）。
+// 缓存：同一进程内档位不变；重开游戏（插件卸载）时清掉，避免换档后读到旧值。
+// ---------------------------------------------------------------------------
+static int g_kagCompatCached = -1; // -1=未知, 0=否, 1=是
+
+static bool IsKagCompatEnabled() {
+    if(g_kagCompatCached >= 0)
+        return g_kagCompatCached == 1;
+    bool kag = false;
+    tTJSVariant v;
+    if(TVPGetCommandLine(TJS_W("ogldrawdevice_compat"), &v)) {
+        const ttstr mode(v);
+        kag = (mode == ttstr(TJS_W("kag")));
+    }
+    // 具名档兜底：krkrz-kag 会映射到 ogldrawdevice_compat=kag，但两条选项下发
+    // 有先后，任一命中即认为在 KAG 档。
+    if(!kag && TVPGetCommandLine(TJS_W("game_compat_profile"), &v)) {
+        const ttstr prof(v);
+        kag = (prof == ttstr(TJS_W("krkrz-kag")));
+    }
+    g_kagCompatCached = kag ? 1 : 0;
+    spdlog::info("krkrlive2d: KAG 兼容档{} ⇒ {}特殊动作解析",
+                 kag ? "已启用" : "未启用",
+                 kag ? "启用" : "不启用（保持历史行为）");
+    return kag;
+}
 
 // ---------------------------------------------------------------------------
 // GL 纹理缓存（按归档内路径键控）
@@ -861,9 +901,17 @@ public:
         // `getMotionCount("main")` 恒为 0、`startMotion("main", n)` 永远找不到动作 ——
         // 表现就是「每次点击都在重放当前动画」。所以空组名按 `main` 对外，
         // 内部仍用真实组名索引 motions_（见 groupRealName_）。
-        motionGroupNames_.clear();
+        // ---- 仅在 KAG 档建立"对外动作表"；其余档保持历史行为 ----------------
+        // 非 KAG 档：getMotionGroupCount 恒为 1、getMotionGroupName(0) 恒为 "main"、
+        // getMotionCount 恒为 0、getMotionName 恒为 ""（与原实现逐字一致）。
+        // motions_ 本身照旧加载（绘制与自动播放要用），只是不对外暴露。
+        const bool kagMode = IsKagCompatEnabled();
         motionNames_.clear();
         groupRealName_.clear();
+        motionGroupNames_.clear();
+        if(!kagMode)
+            motionGroupNames_.push_back(TJS_W("main"));
+
         csmInt32 groupCount = setting_->GetMotionGroupCount();
         for(csmInt32 g = 0; g < groupCount; ++g) {
             const csmChar *group = setting_->GetMotionGroupName(g);
@@ -899,6 +947,8 @@ public:
                         std::string key =
                             realGroup + "_" + std::to_string(m);
                         motions_[key] = motion;
+                        if(!kagMode)
+                            continue;
                         if(!groupRegistered) {
                             groupRegistered = true;
                             motionGroupNames_.push_back(ttstr(externalGroup));
@@ -926,7 +976,7 @@ public:
                 }
             }
         }
-        if(motionGroupNames_.empty()) {
+        if(kagMode && motionGroupNames_.empty()) {
             motionGroupNames_.push_back(TJS_W("main"));
             groupRealName_["main"] = "";
         }
@@ -953,20 +1003,27 @@ public:
         }
 
         if(_motionManager && !motions_.empty()) {
-            // 自动起播必须是**确定的**第一个动作（首组 #0），不能取
-            // motions_.begin() —— 那是 unordered_map 的桶序，等于随机挑一个动作
-            // （真机日志里就出现过"首播 '_5'"）。
-            // 同时把 loop 打开：模型加载完脚本不一定马上给动作，默认状态应该是
-            // "一直在动"，而不是播一遍就定格（定格表现为"进去之后不动，点一下
-            // 才开始"）。
-            const std::string firstGroup = groupRealName_.empty()
-                ? std::string()
-                : groupRealName_.begin()->second;
-            if(!StartDefaultMotion(firstGroup, /*priority=*/1)) {
+            if(kagMode) {
+                // KAG 档：自动起播取**确定的**首组 #0，不能取 motions_.begin()
+                // —— 那是 unordered_map 的桶序，等于随机挑一个动作（真机日志里
+                // 就出现过"首播 '_5'"）。同时把 loop 打开：模型加载完脚本不一定
+                // 马上给动作，默认状态应当是"一直在动"，而不是播一遍就定格
+                // （定格表现为"进去之后不动，点一下才开始"）。
+                const std::string firstGroup = groupRealName_.empty()
+                    ? std::string()
+                    : groupRealName_.begin()->second;
+                if(!StartDefaultMotion(firstGroup, /*priority=*/1)) {
+                    auto it = motions_.begin();
+                    StartMotionObject(it->first, 1, -1.f, -1.f, 1);
+                }
+            } else {
+                // 非 KAG 档：逐字保持历史行为 —— 取 motions_.begin()，不碰
+                // loop/fade（动作对象沿用 motion3.json 的既有设置）。
                 auto it = motions_.begin();
-                StartMotionObject(it->first, 1, -1.f, -1.f, 1);
+                _motionManager->StartMotionPriority(it->second, false, 1);
+                autoFirstMotionKey_ = it->first;
+                selectedMotionKey_ = it->first;
             }
-            autoFirstMotionKey_ = selectedMotionKey_;
             spdlog::debug("krkrlive2d: auto-started motion '{}'",
                           autoFirstMotionKey_);
         }
@@ -1015,16 +1072,28 @@ public:
 
         GetModel()->LoadParameters();
         if(_motionManager && _motionManager->IsFinished() &&
-           !motions_.empty() && !motionStopped_) {
-            // 续播"当前选中的动作"，而非无脑回到第一个。脚本切过动作后
-            // （StartMotionByIndex 会刷新 selectedMotionKey_），这里才不会把它
-            // 拽回 motions_.begin()，轮播才能真正连续。
-            auto it = selectedMotionKey_.empty()
-                ? motions_.find(autoFirstMotionKey_)
-                : motions_.find(selectedMotionKey_);
-            if(it == motions_.end())
-                it = motions_.begin();
-            _motionManager->StartMotionPriority(it->second, false, 1);
+           !motions_.empty()) {
+            // 档位判断走带缓存的 IsKagCompatEnabled()：本函数每帧都会跑到，
+            // 但缓存命中后只是一次 int 比较，不需要在类里再存一份。
+            if(IsKagCompatEnabled()) {
+                // KAG 档：续播"当前选中的动作"，而非无脑回到第一个。脚本切过
+                // 动作后（StartMotionByIndex 会刷新 selectedMotionKey_），这里才
+                // 不会把它拽回 motions_.begin()，轮播才能真正连续。
+                // motionStopped_：脚本显式 stopMotion 之后不再抢着续播。
+                if(!motionStopped_) {
+                    auto it = selectedMotionKey_.empty()
+                        ? motions_.find(autoFirstMotionKey_)
+                        : motions_.find(selectedMotionKey_);
+                    if(it == motions_.end())
+                        it = motions_.begin();
+                    _motionManager->StartMotionPriority(it->second, false, 1);
+                }
+            } else {
+                // 非 KAG 档：逐字保持历史行为 —— 无脑续播 motions_.begin()，
+                // 不看选中键、也不受 stopMotion 影响。
+                auto it = motions_.begin();
+                _motionManager->StartMotionPriority(it->second, false, 1);
+            }
         }
         if(_motionManager)
             _motionManager->UpdateMotion(GetModel(), dt);
@@ -2418,11 +2487,14 @@ public:
         return TJS_S_OK;
     }
 
-    // show/hide 必须真正作用到 CubismModel：连续动画钩子按可见性跳过更新与
-    // 整帧 blit。否则切 CG 后所有历史模型都在每帧参与渲染。
+    // show/hide：**仅 KAG 档**真正作用到 CubismModel。
+    //
+    // KAG 档下连续动画钩子按可见性跳过更新与整帧 blit，否则切 CG 后所有历史模型
+    // 都在每帧参与渲染。非 KAG 档保持历史行为（空实现），因为老游戏是在
+    // "show/hide 不起作用"的前提下写的，改变它会影响它们的显示逻辑。
     static tjs_error showCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
             KRKR_PROBE_TJS("Live2DModel", "show", n, p);
-        if(s) {
+        if(s && IsKagCompatEnabled()) {
             s->visible_ = true;
             if(s->cubismModel_)
                 s->cubismModel_->SetVisible(true);
@@ -2435,7 +2507,7 @@ public:
 
     static tjs_error hideCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
             KRKR_PROBE_TJS("Live2DModel", "hide", n, p);
-        if(s) {
+        if(s && IsKagCompatEnabled()) {
             s->visible_ = false;
             if(s->cubismModel_)
                 s->cubismModel_->SetVisible(false);
@@ -2673,6 +2745,22 @@ public:
             KRKR_PROBE_TJS("Live2DModel", "startMotion", n, p);
         if(!s)
             return TJS_S_OK;
+
+        // 非 KAG 档：逐字保持历史行为 —— 只把动作名记进 currentMotions_ 并返回
+        // true，**不**去驱动 CubismMotionManager。老游戏是在"startMotion 不起
+        // 实际作用"的前提下写的，改成真启动会把它们的动画流程带乱。
+        if(!IsKagCompatEnabled()) {
+            s->playing_ = true;
+            ttstr motion = (n > 0 && p) ? ToTTStr(*p[0]) : TJS_W("idle");
+            if(motion.IsEmpty())
+                motion = TJS_W("idle");
+            s->currentMotions_.clear();
+            s->currentMotions_.push_back(motion);
+            if(r)
+                *r = true;
+            return TJS_S_OK;
+        }
+
         if(!s->cubismModel_) {
             if(r)
                 *r = false;
@@ -2834,10 +2922,14 @@ public:
         if(s) {
             s->playing_ = false;
             s->currentMotions_.clear();
-            // 同时清掉"选中动作"，否则停掉之后播完续播还会把上一个动作拉回来。
-            if(s->cubismModel_)
+            // 只有 KAG 档才真的去停 Cubism 动作：历史行为里 stopMotion 不碰动作
+            // 管理器（老游戏不指望它真停）。顺带清掉"选中动作"，否则停掉之后
+            // 播完续播还会把上一个动作拉回来。
+            if(IsKagCompatEnabled() && s->cubismModel_) {
                 s->cubismModel_->StopMotion();
-            spdlog::info("krkrlive2d: stopMotion: {}", s->storage_.AsStdString());
+                spdlog::info("krkrlive2d: stopMotion: {}",
+                             s->storage_.AsStdString());
+            }
         }
         if(r)
             *r = true;
@@ -3354,6 +3446,9 @@ static void KrkrLive2DPreUnregist() {
         spdlog::info("krkrlive2d: 卸载时清空纹理缓存（丢弃 {} 条记录，"
                      "GL 纹理由旧 context 一并销毁）",
                      n);
+    // 重开游戏时清掉档位缓存：下一次可能换成别的兼容档（壳每次都会下发），
+    // 缓存住旧值会让新档读到错误判断。
+    g_kagCompatCached = -1;
 }
 NCB_PRE_UNREGIST_CALLBACK(KrkrLive2DPreUnregist);
 
