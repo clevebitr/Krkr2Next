@@ -12,6 +12,8 @@ extern "C" {
 #include <algorithm>
 #include "VideoRenderer.h"
 #include "RenderFlags.h"
+#include <atomic>
+#include <spdlog/spdlog.h>
 
 NS_KRMOVIE_BEGIN
 using namespace RenderManager;
@@ -377,6 +379,16 @@ void CVideoPlayerVideo::Process() {
         } else if(pMsg->IsType(CDVDMsg::DEMUXER_PACKET)) {
             DemuxPacket *pPacket = ((CDVDMsgDemuxerPacket *)pMsg)->GetPacket();
             bool bPacketDrop = ((CDVDMsgDemuxerPacket *)pMsg)->GetPacketDrop();
+
+            // 首包探针（只记前 3 次）：区分"解码器开了但根本没收到视频包"与
+            // "收到包但解不出帧" —— 这是"只有声音没画面"最需要先分清的一步。
+            {
+                static std::atomic<int> s_firstPackets{ 0 };
+                if(s_firstPackets.fetch_add(1) < 3)
+                    spdlog::info("movie: 视频线程收到首个数据包 {} 字节 pts={}",
+                                 pPacket ? pPacket->iSize : 0,
+                                 pPacket ? pPacket->pts : 0.0);
+            }
 
             if(m_stalled) {
                 //	CLog::Log(LOGINFO, "CVideoPlayerVideo - Stillframe

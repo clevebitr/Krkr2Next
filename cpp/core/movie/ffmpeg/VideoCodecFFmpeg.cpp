@@ -39,6 +39,7 @@ extern "C" {
 #include "CodecUtils.h"
 #include <cstdlib>
 #include <algorithm>
+#include <spdlog/spdlog.h>
 
 NS_KRMOVIE_BEGIN
 enum DecoderState {
@@ -287,9 +288,25 @@ bool CDVDVideoCodecFFmpeg::Open(CDVDStreamInfo &hints,
 
     pCodec = avcodec_find_decoder(hints.codec);
 
+    // 开片一次的边沿日志：这一条链路原本**所有**失败都是静默的（下面几处
+    // CLog::Log 全被注释掉），于是"开场视频有声音没画面"在日志里完全无迹可循
+    // ——既分不清是找不到解码器、还是 avcodec_open2 失败、还是根本没收不到包。
+    spdlog::info("movie: 视频解码器 hints: id={} ({}) tag=0x{:x} {}x{} "
+                 "software={} fps={}/{}",
+                 static_cast<int>(hints.codec),
+                 avcodec_get_name(static_cast<AVCodecID>(hints.codec)),
+                 static_cast<unsigned>(hints.codec_tag),
+                 static_cast<int>(hints.width), static_cast<int>(hints.height),
+                 hints.software ? 1 : 0, static_cast<int>(hints.fpsrate),
+                 static_cast<int>(hints.fpsscale));
+
     if(pCodec == nullptr) {
         //    CLog::Log(LOGDEBUG,"CDVDVideoCodecFFmpeg::Open() Unable
         //    to find codec %d", hints.codec);
+        spdlog::warn("movie: 找不到 id={} ({}) 的解码器 —— 这条影片只有声音、"
+                     "不会有画面",
+                     static_cast<int>(hints.codec),
+                     avcodec_get_name(static_cast<AVCodecID>(hints.codec)));
         return false;
     }
 
@@ -394,17 +411,30 @@ bool CDVDVideoCodecFFmpeg::Open(CDVDStreamInfo &hints,
     // deinterlace is set to automatic, but file is not deinterlaced.
     m_pCodecContext->refcounted_frames = 1;
 
-    while(avcodec_open2(m_pCodecContext, pCodec, nullptr) < 0) {
-        // trying set lowres to 0
-        if(pCodec->max_lowres < m_pCodecContext->lowres) {
-            m_pCodecContext->lowres = pCodec->max_lowres;
-            if(avcodec_open2(m_pCodecContext, pCodec, nullptr) >= 0)
-                break;
+    {
+        // 同样原本是静默失败（日志被注释掉）：这里能看到解码器是否真的打开成功，
+        // 以及 libavcodec 给出的原因串。
+        int openRc = avcodec_open2(m_pCodecContext, pCodec, nullptr);
+        while(openRc < 0) {
+            // trying set lowres to 0
+            if(pCodec->max_lowres < m_pCodecContext->lowres) {
+                m_pCodecContext->lowres = pCodec->max_lowres;
+                openRc = avcodec_open2(m_pCodecContext, pCodec, nullptr);
+                if(openRc >= 0)
+                    break;
+            }
+            char errbuf[AV_ERROR_MAX_STRING_SIZE] = { 0 };
+            av_strerror(openRc, errbuf, sizeof(errbuf));
+            spdlog::warn("movie: avcodec_open2 失败 rc={} ({}) codec={} "
+                         "id={} —— 该影片不会有画面",
+                         openRc, errbuf, pCodec->name ? pCodec->name : "?",
+                         static_cast<int>(hints.codec));
+            avcodec_free_context(&m_pCodecContext);
+            return false;
         }
-        //    CLog::Log(LOGDEBUG,"CDVDVideoCodecFFmpeg::Open() Unable
-        //    to open codec");
-        avcodec_free_context(&m_pCodecContext);
-        return false;
+        spdlog::info("movie: 解码器已打开 codec={} id={}",
+                     pCodec->name ? pCodec->name : "?",
+                     static_cast<int>(hints.codec));
     }
 
     m_pFrame = av_frame_alloc();

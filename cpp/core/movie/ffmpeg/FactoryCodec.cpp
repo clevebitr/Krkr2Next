@@ -1,4 +1,5 @@
 #include "FactoryCodec.h"
+#include <spdlog/spdlog.h>
 #include "VideoCodec.h"
 #include "AudioCodec.h"
 #include "Codecs.h"
@@ -134,6 +135,12 @@ CDVDVideoCodec *CDVDFactoryCodec::CreateVideoCodec(CDVDStreamInfo &hint,
     if(pCodec)
         return pCodec;
 
+    // 没有任何解码器可用：这条影片就只有声音、不会有画面（现象与"开场视频没画面"
+    // 完全一致）。原本这里静默返回 nullptr，日志里什么都看不到。
+    spdlog::warn("movie: 无可用视频解码器（id={} {}x{} software={}）—— "
+                 "该影片只会有声音",
+                 static_cast<int>(hint.codec), static_cast<int>(hint.width),
+                 static_cast<int>(hint.height), hint.software ? 1 : 0);
     return nullptr;
     ;
 }
