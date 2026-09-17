@@ -163,6 +163,10 @@ void TVPMovieLogOpened(TVPMoviePlayer *player, const char *tag,
 TVPMoviePlayer::TVPMoviePlayer() { m_pPlayer = new BasePlayer(this); }
 
 TVPMoviePlayer::~TVPMoviePlayer() {
+    // 关键顺序：先唤醒可能卡在"等空槽位"的解码线程，再删播放器。否则
+    // delete m_pPlayer → CloseStream/StopThread 会去 join 那条线程，而它正因为
+    // 队列满（游戏已停止消费）永远等不到空槽位 —— 渲染线程就此无限期挂住。
+    AbortPictureWait();
     delete m_pPlayer;
     if(img_convert_ctx)
         sws_freeContext(img_convert_ctx), img_convert_ctx = nullptr;
@@ -373,8 +377,18 @@ int TVPMoviePlayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
     }
 
     if(m_usedPicture >= MAX_BUFFER_COUNT) {
+        // 有界 + 可中止地等空槽位：消费者是渲染线程每帧的 GetFrontBuffer()，
+        // 一旦游戏不再消费（片段播完/切换中），无界等待会把解码线程永久钉在这里，
+        // 进而让停播路径的 StopThread()（join 这条线程）无限期挂住渲染线程 ——
+        // 真机表现就是播 CG 视频时整机无响应、十几秒后被 ANR。停播/析构会调用
+        // AbortPictureWait() 置位并唤醒，这里每 50ms 复查一次。
         std::unique_lock<std::mutex> lk(m_mtxPicture);
-        m_condPicture.wait(lk);
+        while(m_usedPicture >= MAX_BUFFER_COUNT &&
+              !m_pictureWaitAbort.load(std::memory_order_acquire)) {
+            m_condPicture.wait_for(lk, std::chrono::milliseconds(50));
+        }
+        if(m_pictureWaitAbort.load(std::memory_order_acquire))
+            return -1;
     }
     if(m_usedPicture >= MAX_BUFFER_COUNT)
         return -1;
@@ -500,8 +514,19 @@ void VideoPresentOverlay::OnContinuousCallback(tjs_uint64 tick) {
     const double curpts = m_pPlayer->GetClock() / DVD_TIME_BASE;
     {
         std::lock_guard<std::mutex> lk(m_mtxPicture);
-        if(m_picture[m_curPicture].pts > curpts)
+        if(m_picture[m_curPicture].pts > curpts) {
+            // 呈现门控探针（只记前 5 次）：真机实测"开场视频有声音没画面"时，
+            // 解码帧进得来（queued ... visible=yes）却一次 submitted 都没有。
+            // 这条直接区分"时钟没走（curpts 一直落后于帧 pts）"与"门控通过了但
+            // PresentPicture 内部提前返回"。
+            static std::atomic<int> s_gateLogs{ 0 };
+            if(s_gateLogs.fetch_add(1) < 5)
+                spdlog::info("movie[overlay]: 呈现门控未通过（帧 pts={:.6f} > "
+                             "时钟 curpts={:.6f}，used={}）",
+                             m_picture[m_curPicture].pts, curpts,
+                             m_usedPicture);
             return;
+        }
     }
     PresentPicture(0.0f);
 }

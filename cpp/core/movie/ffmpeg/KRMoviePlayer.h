@@ -6,6 +6,8 @@
 #include "ComplexRect.h"
 #include "EventIntf.h"
 
+#include <atomic>
+
 struct SwsContext;
 
 class iTVPSoundBuffer;
@@ -49,9 +51,17 @@ public:
 
     void SetVisible(bool b) override { Visible = b; }
 
-    void Play() override { m_pPlayer->Play(); }
+    void Play() override {
+        // 新一轮播放：清掉上一次停播/析构留下的中止标志。
+        m_pictureWaitAbort.store(false, std::memory_order_release);
+        m_pPlayer->Play();
+    }
 
-    void Stop() override { m_pPlayer->Stop(); }
+    void Stop() override {
+        // 停播时唤醒卡在"等空槽位"的解码线程，别让它拖住 StopThread/析构。
+        AbortPictureWait();
+        m_pPlayer->Stop();
+    }
 
     void Pause() override { m_pPlayer->Pause(); }
 
@@ -244,6 +254,24 @@ protected:
     std::condition_variable m_condPicture;
     struct SwsContext *img_convert_ctx = nullptr;
     double m_curpts = 0;
+
+    /**
+     * 唤醒并放弃"等一个空 picture 槽位"的等待（解码线程）。
+     *
+     * 为什么必须有：解码线程在 `AddVideoPicture` 里等空槽位，消费者是**渲染线程**
+     * 每帧调用的 `GetFrontBuffer()`。一旦游戏停止消费（片段播完/切换中），队列填满
+     * 后解码线程就永久卡在条件变量里；而停播/销毁路径要走
+     * `CVideoPlayerVideo::CloseStream` + `StopThread()` 去 join 这条线程 ——
+     * 于是渲染线程被无限期挂住（真机实测：播 CG 视频时整机无响应，13 秒后被系统
+     * ANR 杀掉）。这里给等待加上"可被中止"的出口，停播/析构时唤醒它。
+     */
+    std::atomic<bool> m_pictureWaitAbort{ false };
+
+    /** 置中止标志并唤醒等待中的解码线程（幂等）。 */
+    void AbortPictureWait() {
+        m_pictureWaitAbort.store(true, std::memory_order_release);
+        m_condPicture.notify_all();
+    }
 };
 
 // 视频呈现 overlay（overlay 模式电影）：连续事件钩子驱动呈现，帧经宿主纹理

@@ -82,8 +82,16 @@ int VideoPresentLayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
         return 0;
 
     if(m_usedPicture >= MAX_BUFFER_COUNT) {
+        // 与 overlay 链路同样的有界/可中止等待：消费者是渲染线程每帧的
+        // GetFrontBuffer()，无界等待会把解码线程永久钉住，进而让停播/析构路径的
+        // StopThread() 挂死渲染线程（真机：播 CG 视频时无响应并被 ANR）。
         std::unique_lock<std::mutex> lk(m_mtxPicture);
-        m_condPicture.wait(lk);
+        while(m_usedPicture >= MAX_BUFFER_COUNT &&
+              !m_pictureWaitAbort.load(std::memory_order_acquire)) {
+            m_condPicture.wait_for(lk, std::chrono::milliseconds(50));
+        }
+        if(m_pictureWaitAbort.load(std::memory_order_acquire))
+            return -1;
     }
     if(m_usedPicture >= MAX_BUFFER_COUNT)
         return -1;
