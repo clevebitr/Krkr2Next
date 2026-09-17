@@ -162,6 +162,19 @@ namespace {
         }
     }
 
+    // 该路径的纹理是否已在缓存里（不增加引用）。
+    //
+    // 用途：解包 .l2d 时跳过这些条目。.l2d 里最大的一项就是 4096² 的 KTX
+    // （本作约 21MB），而"同一个 CG 反复进出"时纹理必然命中缓存 —— 既然
+    // 字节拿回来也不会用，就没必要再解压一遍、再占 21MB 内存。
+    bool IsTextureCached(const std::string &key) {
+        if(key.empty())
+            return false;
+        std::lock_guard<std::mutex> lock(g_textureCacheMutex);
+        auto it = g_textureCache.find(key);
+        return it != g_textureCache.end() && it->second.id != 0;
+    }
+
     // 清空纹理缓存；返回记录的条目数。
     //
     // `deleteGlObjects` 区分两种场景：
@@ -467,6 +480,19 @@ namespace {
             unz_file_info info;
             unzGetCurrentFileInfo(zf, &info, name, sizeof(name), nullptr, 0,
                                   nullptr, 0);
+            // 纹理条目已在缓存里：跳过解压。
+            // .l2d 里最占地的就是 4096² 的 KTX（本作约 21MB），而进出同一个 CG
+            // 时纹理必然命中缓存，解出来的字节不会被用到 —— 白解一遍还多占
+            // 21MB 峰值内存。判定只读一张哈希表，代价可忽略。
+            if(IsTextureCached(name)) {
+                spdlog::info("krkrlive2d: zip 跳过已缓存纹理 '{}'"
+                             "（{} 字节未解压）",
+                             name,
+                             static_cast<unsigned long long>(
+                                 info.uncompressed_size));
+                ret = unzGoToNextFile(zf);
+                continue;
+            }
             if(info.uncompressed_size > 0 && unzOpenCurrentFile(zf) == UNZ_OK) {
                 std::vector<uint8_t> buf(info.uncompressed_size);
                 int bytesRead = unzReadCurrentFile(
@@ -589,11 +615,26 @@ public:
         // 缓存里的纹理永远删不掉（内存泄漏），且 textureIds_ 会越滚越长。
         ReleaseTextures();
 
+        // ── 分段计时 ──────────────────────────────────────────────────────
+        // "进入 CG 要等 3 秒"这类问题必须能看出时间花在哪一段，否则只能猜。
+        // 每段只取两次 steady_clock::now()，模型加载是低频操作（每次进场景一次），
+        // 开销可忽略；汇总成**一行**记录，便于直接在日志里对比。
+        const auto tLoadStart = std::chrono::steady_clock::now();
+        auto msSince = [](const std::chrono::steady_clock::time_point &a) {
+            return std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - a)
+                .count();
+        };
+        auto tPhase = tLoadStart;
+        long long msZip = 0, msMoc = 0, msTex = 0, msRenderer = 0, msMotion = 0;
+
         ZipArchive archive;
         if(!ExtractZipToMemory(zipData.data(), zipData.size(), archive)) {
             spdlog::error("krkrlive2d: failed to extract ZIP for {}", baseName);
             return false;
         }
+        msZip = msSince(tPhase);
+        tPhase = std::chrono::steady_clock::now();
 
         // Find and parse model3.json
         std::string modelJsonName = baseName + ".model3.json";
@@ -633,6 +674,8 @@ public:
         }
 
         DetectMosaicDrawables(archive);
+        msMoc = msSince(tPhase);
+        tPhase = std::chrono::steady_clock::now();
 
         // Load textures
         csmInt32 texCount = setting_->GetTextureCount();
@@ -662,15 +705,19 @@ public:
             // "KTX 缺失退化成 PNG" 的场景与纯 KTX 路径互相覆盖。
             std::string cacheKey;
 
-            auto ktxIt = archive.find(ktxPath);
-            if(ktxIt != archive.end()) {
+            // ⚠️ 顺序很重要：**先查缓存，再查归档**。
+            // 因为已缓存的纹理条目在解包阶段会被直接跳过（见 IsTextureCached 的
+            // 说明），此时 archive 里根本没有这个 key；若先查归档就会误判成
+            // "KTX 不在包里"，进而退化成 1x1 白色占位。
+            if(AcquireCachedTexture(ktxPath, &texId)) {
                 cacheKey = ktxPath;
-                if(AcquireCachedTexture(cacheKey, &texId)) {
-                    // 命中：跳过 20MB 的 BC7 软解与重复上传。
-                    spdlog::info("krkrlive2d: tex #{}: 纹理缓存命中 '{}' -> "
-                                 "texId={}（跳过重复解码/上传）",
-                                 i, cacheKey, static_cast<unsigned>(texId));
-                } else {
+                spdlog::info("krkrlive2d: tex #{}: 纹理缓存命中 '{}' -> "
+                             "texId={}（跳过重复解码/上传）",
+                             i, cacheKey, static_cast<unsigned>(texId));
+            } else {
+                auto ktxIt = archive.find(ktxPath);
+                if(ktxIt != archive.end()) {
+                    cacheKey = ktxPath;
                     L2D_LOGI("tex #%d: found KTX in archive (%zu bytes)", i,
                              ktxIt->second.size());
                     texId = LoadKtxTexture(ktxIt->second.data(),
@@ -686,24 +733,24 @@ public:
                                  "texId={}（已入缓存）",
                                  i, ktxIt->second.size(),
                                  static_cast<unsigned>(texId));
+                } else {
+                    L2D_LOGI("tex #%d: KTX not found in archive", i);
+                    spdlog::warn("krkrlive2d: tex #{}: KTX 不在包里（key='{}'，"
+                                 "包里共 {} 项）",
+                                 i, ktxPath, archive.size());
                 }
-            } else {
-                L2D_LOGI("tex #%d: KTX not found in archive", i);
-                spdlog::warn("krkrlive2d: tex #{}: KTX 不在包里（key='{}'，"
-                             "包里共 {} 项）",
-                             i, ktxPath, archive.size());
             }
 
             if(!texId) {
-                auto texIt = archive.find(texPath);
-                if(texIt != archive.end()) {
+                if(AcquireCachedTexture(texPath, &texId)) {
                     cacheKey = texPath;
-                    if(AcquireCachedTexture(cacheKey, &texId)) {
-                        spdlog::info("krkrlive2d: tex #{}: 纹理缓存命中 '{}' "
-                                     "-> texId={}（跳过重复解码/上传）",
-                                     i, cacheKey,
-                                     static_cast<unsigned>(texId));
-                    } else {
+                    spdlog::info("krkrlive2d: tex #{}: 纹理缓存命中 '{}' "
+                                 "-> texId={}（跳过重复解码/上传）",
+                                 i, cacheKey, static_cast<unsigned>(texId));
+                } else {
+                    auto texIt = archive.find(texPath);
+                    if(texIt != archive.end()) {
+                        cacheKey = texPath;
                         L2D_LOGI("tex #%d: found PNG in archive (%zu bytes)", i,
                                  texIt->second.size());
                         texId = LoadPngTexture(texIt->second.data(),
@@ -715,12 +762,12 @@ public:
                         } else {
                             L2D_LOGW("tex #%d: PNG decode FAILED", i);
                         }
+                    } else {
+                        L2D_LOGW("tex #%d: PNG not found in archive either", i);
+                        spdlog::warn("krkrlive2d: tex #{}: PNG 也不在包里"
+                                     "（key='{}'）",
+                                     i, texPath);
                     }
-                } else {
-                    L2D_LOGW("tex #%d: PNG not found in archive either", i);
-                    spdlog::warn("krkrlive2d: tex #{}: PNG 也不在包里"
-                                 "（key='{}'）",
-                                 i, texPath);
                 }
             }
 
@@ -756,6 +803,8 @@ public:
             spdlog::info("krkrlive2d: 纹理槽 {} 个，GL id = [{}]",
                          textureIds_.size(), ids);
         }
+        msTex = msSince(tPhase);
+        tPhase = std::chrono::steady_clock::now();
 
         // SDK 的签名是 CreateRenderer(width, height, maskBufferCount = 1)，
         // 没有无参重载。尺寸按模型画布像素算——绘制用的 internalFbo_ 就依
@@ -779,6 +828,8 @@ public:
                                   textureIds_[static_cast<size_t>(i)]);
         renderer->SetMvpMatrix(&projMatrix_);
         renderer->IsPremultipliedAlpha(false);
+        msRenderer = msSince(tPhase);
+        tPhase = std::chrono::steady_clock::now();
 
         csmInt32 eyeBlinkCount = setting_->GetEyeBlinkParameterCount();
         for(csmInt32 i = 0; i < eyeBlinkCount; ++i) {
@@ -904,20 +955,31 @@ public:
         if(_motionManager && !motions_.empty()) {
             // 自动起播必须是**确定的**第一个动作（首组 #0），不能取
             // motions_.begin() —— 那是 unordered_map 的桶序，等于随机挑一个动作
-            // （真机日志里就出现过"首播 '_5'"）。脚本没显式 startMotion 时，
-            // 起播动作决定了玩家看到什么，随机是不可接受的。
-            auto it = motions_.find(groupRealName_.empty()
-                                        ? std::string()
-                                        : groupRealName_.begin()->second + "_0");
-            if(it == motions_.end())
-                it = motions_.begin();
-            _motionManager->StartMotionPriority(it->second, false, 1);
-            autoFirstMotionKey_ = it->first;
-            spdlog::debug("krkrlive2d: auto-started motion '{}'", it->first);
+            // （真机日志里就出现过"首播 '_5'"）。
+            // 同时把 loop 打开：模型加载完脚本不一定马上给动作，默认状态应该是
+            // "一直在动"，而不是播一遍就定格（定格表现为"进去之后不动，点一下
+            // 才开始"）。
+            const std::string firstGroup = groupRealName_.empty()
+                ? std::string()
+                : groupRealName_.begin()->second;
+            if(!StartDefaultMotion(firstGroup, /*priority=*/1)) {
+                auto it = motions_.begin();
+                StartMotionObject(it->first, 1, -1.f, -1.f, 1);
+            }
+            autoFirstMotionKey_ = selectedMotionKey_;
+            spdlog::debug("krkrlive2d: auto-started motion '{}'",
+                          autoFirstMotionKey_);
         }
         spdlog::info("krkrlive2d: motion 表就绪：{} 组 / {} 个动作（首播 '{}'）",
                      motionGroupNames_.size(), motions_.size(),
                      autoFirstMotionKey_);
+        msMotion = msSince(tPhase);
+        // 一行给出全部阶段耗时：zip 解包 / moc3+mosaic / 纹理 / 渲染器 / 动作。
+        // 定位"进 CG 要等几秒"时直接看这一行，不用再靠猜。
+        spdlog::info("krkrlive2d: 加载耗时 [{}] zip={}ms moc3={}ms 纹理={}ms "
+                     "渲染器={}ms 动作={}ms 合计={}ms",
+                     baseName, msZip, msMoc, msTex, msRenderer, msMotion,
+                     msSince(tLoadStart));
 
         loaded_ = true;
         EnsureBlitProgram();
@@ -1159,17 +1221,66 @@ public:
         return requested;
     }
 
-    // 返回是否真的切成功了（调用方据此决定要不要更新 selectedMotionKey_）。
-    bool StartMotionByIndex(const std::string &group, int index) {
-        const std::string real = ResolveGroupName(group);
-        std::string key = real + "_" + std::to_string(index);
+    // 真正启动一个动作，并把脚本给的可选参数落到 Cubism 上。
+    //
+    // `loop >= 0` 时用脚本给的值覆盖；`< 0` 表示"不改"，沿用 motion3.json 的循环设置。
+    // `fadeIn/fadeOut >= 0` 同理（<0 表示沿用文件里的淡入淡出）。
+    //
+    // ⚠️ 为什么要显式 SetLoop：本仓库 vendored 的 Cubism SDK 把
+    // `CubismMotion.cpp:308` 的 `ret->_loop = (ret->_motionData->Loop > 0)` **注释掉了**，
+    // 而 ACubismMotion 的默认 `_isLoop` 是 **false**。也就是说 motion3.json 里写的
+    // `"Loop": true` 根本不会生效：动作播完 GetDuration() 就到期、IsFinished() 变真，
+    // 只能靠外层"播完再 startMotion 一次"来续，而那条路每次都会重放淡入 ——
+    // 真机上表现为循环处"顿一下/不够连贯"。脚本传进来的 loop 参数必须由我们落实。
+    //
+    // 另外 `_isLoopFadeIn` 默认是 **true**，含义是"每次回环时重新做一次淡入"。
+    // 连续循环播放时这正是接缝处那一下掉帧感，所以循环时显式关掉，让回环无缝。
+    bool StartMotionObject(const std::string &key, int loop, tjs_real fadeIn,
+                           tjs_real fadeOut, int priority) {
         auto it = motions_.find(key);
-        if(it == motions_.end() || !_motionManager)
+        if(it == motions_.end() || it->second == nullptr || !_motionManager)
             return false;
-        // priority 2 高于加载时的自动起播(1)，切动作才能立刻生效。
-        _motionManager->StartMotionPriority(it->second, false, 2);
+        ACubismMotion *motion = it->second;
+        if(loop >= 0) {
+            const bool looping = loop != 0;
+            motion->SetLoop(looping);
+            if(looping)
+                motion->SetLoopFadeIn(false);
+        }
+        if(fadeIn >= 0.f)
+            motion->SetFadeInTime(static_cast<csmFloat32>(fadeIn));
+        if(fadeOut >= 0.f)
+            motion->SetFadeOutTime(static_cast<csmFloat32>(fadeOut));
+        _motionManager->StartMotionPriority(motion, false, priority);
         selectedMotionKey_ = key;
         motionStopped_ = false;
+        return true;
+    }
+
+    // 返回是否真的切成功了（调用方据此决定要不要更新 selectedMotionKey_）。
+    bool StartMotionByIndex(const std::string &group, int index, int loop = -1,
+                            tjs_real fadeIn = -1.f, tjs_real fadeOut = -1.f) {
+        const std::string real = ResolveGroupName(group);
+        // priority 2 高于加载时的自动起播(1)，切动作才能立刻生效。
+        return StartMotionObject(real + "_" + std::to_string(index), loop,
+                                 fadeIn, fadeOut, 2);
+    }
+
+    // 启动"该组的默认动作"（组内 #0）。用于两种场合：
+    //   1) 脚本请求的动作名找不到时兜底（本作会传 ('main','main',0,0,0)，
+    //      即把组名当动作名，实际语义就是"回到默认动作"）；
+    //   2) 模型加载后的自动起播。
+    // 这两处都按"默认动作应当持续循环"处理：否则动作只播一遍就定格，
+    // 玩家看到的是"进去之后不动，点一下才开始"，也就是脚本兜底等于没兜。
+    bool StartDefaultMotion(const std::string &group, int priority = 2) {
+        const std::string real = ResolveGroupName(group);
+        if(!StartMotionObject(real + "_0", /*loop=*/1, -1.f, -1.f, priority)) {
+            // 该组没有 0 号动作：退回 motions_ 里任意一个（好过什么都不播）。
+            if(motions_.empty())
+                return false;
+            return StartMotionObject(motions_.begin()->first, 1, -1.f, -1.f,
+                                    priority);
+        }
         return true;
     }
 
@@ -1205,7 +1316,8 @@ public:
         return true;
     }
 
-    bool StartMotionByName(const std::string &name) {
+    bool StartMotionByName(const std::string &name, int loop = -1,
+                           tjs_real fadeIn = -1.f, tjs_real fadeOut = -1.f) {
         if(name.empty())
             return false;
         for(const auto &kv : motionNames_) {
@@ -1218,7 +1330,8 @@ public:
                 if(NameEqNoCase(full, name) ||
                    (!tail.empty() && NameEqNoCase(tail, name))) {
                     return StartMotionByIndex(kv.first,
-                                              static_cast<int>(i));
+                                              static_cast<int>(i), loop,
+                                              fadeIn, fadeOut);
                 }
             }
         }
@@ -2224,6 +2337,9 @@ public:
         s->storage_ = storagePath;
 
         // Load the .l2d file from the engine's storage
+        // 单独计时：这份 .l2d 有 20MB 量级，从 XP3 读出来是"进场景要等几秒"里
+        // 最容易被忽略的一段（发生在插件内部，之前完全没有日志）。
+        const auto tStorage = std::chrono::steady_clock::now();
         std::vector<uint8_t> zipData;
         if(!LoadFromStorage(storagePath, zipData)) {
             spdlog::error("krkrlive2d: failed to load from storage: {}",
@@ -2232,6 +2348,11 @@ public:
                 *r = false;
             return TJS_S_OK;
         }
+        spdlog::info("krkrlive2d: 读取 .l2d {} 字节耗时 {} ms", zipData.size(),
+                     static_cast<long long>(
+                         std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - tStorage)
+                             .count()));
 
         // Extract base name from filename (e.g., "ev_cg003_02s" from path)
         std::string fullPath = storagePath.AsStdString();
@@ -2606,28 +2727,48 @@ public:
             n > 1 && p && p[1] &&
             (p[1]->Type() == tvtString || p[1]->Type() == tvtOctet);
 
+        // 可选参数：loop / fadein / fadeout。缺省 -1 = "不改"，
+        // 即沿用 motion3.json 里的循环与淡入淡出设置。
+        int loopArg = -1;
+        tjs_real fadeInArg = -1.f, fadeOutArg = -1.f;
+        if(n > 2 && p && p[2] && (p[2]->Type() == tvtInteger ||
+                                  p[2]->Type() == tvtReal))
+            loopArg = ToInt(*p[2], -1);
+        if(n > 3 && p && p[3] && (p[3]->Type() == tvtInteger ||
+                                  p[3]->Type() == tvtReal))
+            fadeInArg = ToReal(*p[3], -1.0);
+        if(n > 4 && p && p[4] && (p[4]->Type() == tvtInteger ||
+                                  p[4]->Type() == tvtReal))
+            fadeOutArg = ToReal(*p[4], -1.0);
+
         if(secondIsString) {
-            // (组名, 动作名)
+            // (组名, 动作名, loop, fadein, fadeout)
             const std::string motionName = ToTTStr(*p[1]).AsStdString();
-            started = s->cubismModel_->StartMotionByName(motionName);
+            started = s->cubismModel_->StartMotionByName(
+                motionName, loopArg, fadeInArg, fadeOutArg);
             if(!started)
-                started = s->cubismModel_->StartMotionByName(raw);
+                started = s->cubismModel_->StartMotionByName(
+                    raw, loopArg, fadeInArg, fadeOutArg);
         } else {
             if(n > 1 && p && p[1])
                 index = ToInt(*p[1], 0);
             // 先按 (组名, 序号)。未命名组已按 main 对外，这里能直接命中。
-            started = s->cubismModel_->StartMotionByIndex(raw, index);
+            started = s->cubismModel_->StartMotionByIndex(
+                raw, index, loopArg, fadeInArg, fadeOutArg);
             if(!started)
-                started = s->cubismModel_->StartMotionByName(raw);
+                started = s->cubismModel_->StartMotionByName(
+                    raw, loopArg, fadeInArg, fadeOutArg);
             if(!started) {
                 // "组名.动作名"：本作的实际写法。按**第一个** '.' 拆（组名不会含点）。
                 const auto dot = raw.find('.');
                 if(dot != std::string::npos && dot + 1 < raw.size()) {
                     const std::string g = raw.substr(0, dot);
                     const std::string nm = raw.substr(dot + 1);
-                    started = s->cubismModel_->StartMotionByName(nm);
+                    started = s->cubismModel_->StartMotionByName(
+                        nm, loopArg, fadeInArg, fadeOutArg);
                     if(!started)
-                        started = s->cubismModel_->StartMotionByIndex(g, index);
+                        started = s->cubismModel_->StartMotionByIndex(
+                            g, index, loopArg, fadeInArg, fadeOutArg);
                     if(started)
                         groupName = g;
                 }
@@ -2641,7 +2782,8 @@ public:
                        std::string::npos) {
                         const tjs_int parsed = std::atoi(tail.c_str());
                         const std::string head = raw.substr(0, us);
-                        if(s->cubismModel_->StartMotionByIndex(head, parsed)) {
+                        if(s->cubismModel_->StartMotionByIndex(
+                               head, parsed, loopArg, fadeInArg, fadeOutArg)) {
                             groupName = head;
                             index = parsed;
                             started = true;
@@ -2651,17 +2793,32 @@ public:
             }
         }
 
+        // 兜底：动作名找不到时回到"该组的默认动作"并让它循环。
+        //
+        // 为什么需要：本作会发出 `startMotion('main','main',0,0,0)` —— 把**组名**
+        // 当动作名传进来，模型里根本没有叫 main 的动作。这条调用落在每次 CG 加载
+        // 之后（紧跟 stopMotion），若直接判失败什么都不做，模型就停在"已停止"状态：
+        // 真机表现正是"进入 CG 后要再点一下才开始播放"。按"默认动作"兜底既符合
+        // 这条调用的语义，也让画面立刻动起来。
+        if(!started) {
+            spdlog::warn("krkrlive2d: startMotion '{}' 找不到动作，"
+                         "回退到该组默认动作（模型 {} 组 / {} 个动作）",
+                         raw, s->cubismModel_->MotionGroups().size(),
+                         s->cubismModel_->TotalMotionCount());
+            started = s->cubismModel_->StartDefaultMotion(
+                secondIsString ? raw : groupName);
+        }
+
         s->playing_ = true;
         s->currentMotions_.clear();
         s->currentMotions_.push_back(group);
         if(started) {
-            spdlog::info("krkrlive2d: startMotion '{}' #{} -> 已启动（键 {}）",
+            spdlog::info("krkrlive2d: startMotion '{}' #{} -> 已启动"
+                         "（键 {}，loop={}）",
                          groupName, static_cast<int>(index),
-                         s->cubismModel_->SelectedMotionKey());
+                         s->cubismModel_->SelectedMotionKey(), loopArg);
         } else {
-            // 找不到动作时不要假装成功：脚本靠返回值决定后续流程，
-            // 恒返回 true 会让"切不过去"变成静默失败。
-            spdlog::warn("krkrlive2d: startMotion '{}' #{} 未找到该动作"
+            spdlog::warn("krkrlive2d: startMotion '{}' #{} 连默认动作都无法启动"
                          "（模型 {} 组 / {} 个动作）",
                          groupName, static_cast<int>(index),
                          s->cubismModel_->MotionGroups().size(),

@@ -956,6 +956,14 @@ extern "C" GLuint LoadKtxTexture(const uint8_t *data, size_t dataSize) {
             if(ptr + imageSize > data + dataSize)
                 break;
 
+            // 软件解码路径只需要 level 0。
+            //
+            // 为什么可以停在第 0 级：本函数末尾会无条件 `glGenerateMipmap`，
+            // 它会**用 level 0 重新生成** 1..N 级 —— 也就是说 KTX 里自带的
+            // level>=1 上传上去之后立刻被覆盖掉。真机实测（4096² BC7，Mali）：
+            // 那次多余的 2048² 解码 + 16MB 上传纯属白做，只浪费进场景的时间。
+            // 反过来如果 level 0 解码失败，则继续往下试（下面不 break），
+            // 保留"坏 level 还有备用级"的原行为。
             std::vector<uint8_t> decoded;
             bool ok = false;
             if(decodeMeth == DECODE_BPTC)
@@ -991,6 +999,12 @@ extern "C" GLuint LoadKtxTexture(const uint8_t *data, size_t dataSize) {
             ptr += (imageSize + 3) & ~3u;
             mw = (mw > 1) ? mw / 2 : 1;
             mh = (mh > 1) ? mh / 2 : 1;
+
+            // level 0 已成功上传：后面的级都会被 glGenerateMipmap 覆盖，
+            // 没必要再解码/上传（见本分支开头的说明）。level 0 失败时继续往下，
+            // 保留原来的逐级重试行为。
+            if(level == 0 && baseLevelUploaded)
+                break;
         }
     } else {
         uint32_t mw = w, mh = h;
