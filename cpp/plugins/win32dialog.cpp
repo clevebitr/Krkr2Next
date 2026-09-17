@@ -33,6 +33,7 @@
 #include "ncbind.hpp"
 #include "Platform.h"
 
+#include <atomic>
 #include <map>
 #include <string>
 #include <vector>
@@ -326,6 +327,15 @@ public:
         } else {
             buttons.emplace_back(TJS_W("OK"));
         }
+        // 调用探针（前 3 次）：确认游戏真的走到 messageBox，以及它怎么调用。
+        {
+            static std::atomic<int> s_calls{ 0 };
+            if(s_calls.fetch_add(1) < 3)
+                spdlog::info("win32dialog: messageBox 调用 text='{}' caption='{}' "
+                             "type={} buttons={}",
+                             message.AsStdString(), caption.AsStdString(),
+                             static_cast<int>(type), buttons.size());
+        }
         const int ret = TVPShowSimpleMessageBox(message, caption, buttons);
         tjs_int id;
         if(yesNo)
@@ -342,6 +352,12 @@ public:
     static tjs_error Store(tTJSVariant *r, tjs_int numparams,
                            tTJSVariant **param, iTJSDispatch2 *objthis) {
         DLG_SELF(WIN32Dialog, self);
+        {
+            static std::atomic<int> s_stores{ 0 };
+            if(s_stores.fetch_add(1) < 3)
+                spdlog::info("win32dialog: store 调用（numparams={}）",
+                             static_cast<int>(numparams));
+        }
         if(numparams >= 1 && param[0] && param[0]->Type() == tvtObject) {
             iTJSDispatch2 *elm = param[0]->AsObjectNoAddRef();
             self->_title = PropText(elm, TJS_W("title"), self->_title);
@@ -428,6 +444,20 @@ public:
             ? ttstr(TJS_W("Information"))
             : ttstr(self->_title);
         const ttstr body = VarEmpty(self->_text) ? caption : ttstr(self->_text);
+        // 调用探针（前 3 次）：确认游戏确实调了 open()，以及模板被收集成什么。
+        {
+            static std::atomic<int> s_opens{ 0 };
+            if(s_opens.fetch_add(1) < 3) {
+                std::string list;
+                for(size_t i = 0; i < labels.size(); i++)
+                    list += "[" + std::to_string(ids[i]) + "]" +
+                        labels[i].AsStdString() + " ";
+                spdlog::info("win32dialog: open 调用 caption='{}' text='{}' "
+                             "buttons={} → {}",
+                             caption.AsStdString(), body.AsStdString(),
+                             labels.size(), list);
+            }
+        }
         const int idx = TVPShowSimpleMessageBox(body, caption, labels);
         const tjs_int id =
             (idx >= 0 && idx < static_cast<int>(ids.size())) ? ids[idx] : ids[0];

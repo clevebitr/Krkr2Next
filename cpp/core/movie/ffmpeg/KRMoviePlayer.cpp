@@ -466,6 +466,15 @@ void VideoPresentOverlay::PresentPicture(float dt) {
     BitmapPicture pic;
     m_curpts = m_pPlayer->GetClock() / DVD_TIME_BASE;
     {
+        // 入口探针（前 3 次）：门控一旦放行就会走到这里；配合上面的门控快照，
+        // 就能判定"从没被放行"还是"放行了但在内部提前返回"。
+        static std::atomic<int> s_entries{ 0 };
+        if(s_entries.fetch_add(1) < 3)
+            spdlog::info("movie[overlay]: PresentPicture 进入（curpts={:.6f} "
+                         "used={} visible={}）",
+                         m_curpts, m_usedPicture, Visible ? 1 : 0);
+    }
+    {
         std::unique_lock<std::mutex> lk(m_mtxPicture);
         if(m_usedPicture <= 0)
             return;
@@ -512,19 +521,24 @@ void VideoPresentOverlay::OnContinuousCallback(tjs_uint64 tick) {
     if(!m_usedPicture)
         return;
     const double curpts = m_pPlayer->GetClock() / DVD_TIME_BASE;
+    static std::atomic<uint64_t> s_gateTicks{ 0 };
+    const uint64_t gateTick = s_gateTicks.fetch_add(1) + 1;
     {
         std::lock_guard<std::mutex> lk(m_mtxPicture);
         if(m_picture[m_curPicture].pts > curpts) {
-            // 呈现门控探针（只记前 5 次）：真机实测"开场视频有声音没画面"时，
-            // 解码帧进得来（queued ... visible=yes）却一次 submitted 都没有。
-            // 这条直接区分"时钟没走（curpts 一直落后于帧 pts）"与"门控通过了但
-            // PresentPicture 内部提前返回"。
-            static std::atomic<int> s_gateLogs{ 0 };
-            if(s_gateLogs.fetch_add(1) < 5)
+            // 呈现门控探针：真机实测"开场视频有声音没画面"时，解码帧进得来
+            // （queued ... visible=yes）却一次 submitted 都没有。这条用来区分
+            // "时钟没走（curpts 一直落后于帧 pts）"与"门控通过但 PresentPicture
+            // 内部提前返回"。
+            //   前 30 次每次都记；之后每 120 帧（约 2 秒）记一条状态快照 ——
+            //   只有周期性快照才能看出"时钟是否真的越过了帧 pts"。
+            const bool early = gateTick <= 30;
+            const bool periodic = (gateTick % 120) == 0;
+            if(early || periodic)
                 spdlog::info("movie[overlay]: 呈现门控未通过（帧 pts={:.6f} > "
-                             "时钟 curpts={:.6f}，used={}）",
+                             "时钟 curpts={:.6f}，used={}，第 {} 帧）",
                              m_picture[m_curPicture].pts, curpts,
-                             m_usedPicture);
+                             m_usedPicture, gateTick);
             return;
         }
     }

@@ -45,18 +45,33 @@ namespace {
     bool g_autoDriveHooked = false;
     int64_t g_autoDriveLastMs = 0;
 
+    std::atomic<uint64_t> g_autoDriveRegisters{ 0 };
+
     void AutoDriveRegister(motion::Player *player) {
         if(!player)
             return;
-        std::lock_guard<std::mutex> lock(g_autoDriveMutex);
-        if(std::find(g_autoDrivePlayers.begin(), g_autoDrivePlayers.end(),
-                     player) == g_autoDrivePlayers.end())
-            g_autoDrivePlayers.push_back(player);
-        if(!g_autoDriveHooked) {
-            TVPAddContinuousEventHook(&g_autoDriveHook);
-            g_autoDriveHooked = true;
-            g_autoDriveLastMs = 0; // 下一帧重新取基准，避免停顿时跳一大步
+        size_t count = 0;
+        bool added = false;
+        {
+            std::lock_guard<std::mutex> lock(g_autoDriveMutex);
+            if(std::find(g_autoDrivePlayers.begin(), g_autoDrivePlayers.end(),
+                         player) == g_autoDrivePlayers.end()) {
+                g_autoDrivePlayers.push_back(player);
+                added = true;
+            }
+            count = g_autoDrivePlayers.size();
+            if(!g_autoDriveHooked) {
+                TVPAddContinuousEventHook(&g_autoDriveHook);
+                g_autoDriveHooked = true;
+                g_autoDriveLastMs = 0; // 下一帧重新取基准，避免停顿时跳一大步
+            }
         }
+        // 登记探针：确认"游戏确实调了 play/draw、我们把玩家登记进来了"。
+        // 没有这条日志时，无法区分"没登记"与"钩子没跑"。
+        const uint64_t n = g_autoDriveRegisters.fetch_add(1) + 1;
+        if(added && (n <= 3 || (n % 200) == 0) && LOGGER)
+            LOGGER->info("MCP 自动驱动: 登记玩家 {}（表内 {} 个，第 {} 次登记）",
+                         static_cast<const void *>(player), count, n);
     }
 
     void AutoDriveUnregister(motion::Player *player) {
@@ -108,10 +123,19 @@ void motion::AutoDriveForget(motion::Player *player) {
 }
 
 void MotionAutoDriveHook::OnContinuousCallback(tjs_uint64 /*tick*/) {
+    static std::atomic<uint64_t> s_hookCalls{ 0 };
+    const uint64_t hookCall = s_hookCalls.fetch_add(1) + 1;
+
     std::vector<motion::Player *> players;
     {
         std::lock_guard<std::mutex> lock(g_autoDriveMutex);
         players = g_autoDrivePlayers;
+    }
+    // 钩子调用探针：first 3 + every 600 —— 区分"钩子根本没被调用"与"调用了但表为空"。
+    if(hookCall <= 3 || (hookCall % 600) == 0) {
+        if(LOGGER)
+            LOGGER->info("MCP 自动驱动: 连续事件第 {} 次（表内 {} 个玩家）",
+                         hookCall, players.size());
     }
     if(players.empty())
         return;
