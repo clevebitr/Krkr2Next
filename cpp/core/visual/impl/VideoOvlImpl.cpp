@@ -347,17 +347,24 @@ void tTJSNI_VideoOverlay::Open(const ttstr &_name) {
 }
 //---------------------------------------------------------------------------
 void tTJSNI_VideoOverlay::Close() {
+    // 阶段标记逐调用点铺开：真机实测开场视频收尾时看门狗报过"卡在 Close 入口
+    // 2.0s"，只标入口无法区分是 Release/Pause/销毁播放器（join 解码线程）哪一步。
     krkr::stall::MarkStage("movie: VideoOverlay::Close 入口");
     if(VideoOverlay) {
         if(CachedOverlay) {
+            krkr::stall::MarkStage("movie: Close→释放 CachedOverlay");
             CachedOverlay->Release();
             CachedOverlay = nullptr;
         }
+        krkr::stall::MarkStage("movie: Close→SetVisible(false)");
         VideoOverlay->SetVisible(false);
+        krkr::stall::MarkStage("movie: Close→Pause()");
         VideoOverlay->Pause();
+        krkr::stall::MarkStage("movie: Close→Release()（销毁播放器/join 解码线程）");
         VideoOverlay->Release();
         VideoOverlay = nullptr;
     }
+    krkr::stall::MarkStage("movie: Close→清理临时存储/消息");
     if(LocalTempStorageHolder)
         delete LocalTempStorageHolder, LocalTempStorageHolder = nullptr;
     ClearWndProcMessages();

@@ -306,6 +306,12 @@ int TVPMoviePlayer::WaitForBuffer(volatile std::atomic_bool &bStop,
 
 void TVPMoviePlayer::Flush() {
     std::unique_lock<std::mutex> lk(m_mtxPicture);
+    // Flush 会把未呈现的帧直接丢掉（m_usedPicture 归零）——"解码在跑却永远没有
+    // submitted"的一种来路。谁在放片中途调它就一目了然，故记录丢弃数量。
+    static std::atomic<int> s_flushLogs{ 0 };
+    if(s_flushLogs.fetch_add(1) < 3)
+        spdlog::info("MoviePlayer Flush: 丢弃 {} 帧待呈现缓冲（curPicture={}）",
+                     m_usedPicture, m_curPicture);
     for(int i = 0; i < MAX_BUFFER_COUNT; ++i) {
         m_picture[i].Clear();
     }
@@ -476,8 +482,13 @@ void VideoPresentOverlay::PresentPicture(float dt) {
     }
     {
         std::unique_lock<std::mutex> lk(m_mtxPicture);
-        if(m_usedPicture <= 0)
+        if(m_usedPicture <= 0) {
+            // 被调用但没帧可拿（生产者还没入队，或 Flush 把未消费帧丢了）。
+            static std::atomic<int> s_emptyLogs{ 0 };
+            if(s_emptyLogs.fetch_add(1) < 3)
+                spdlog::info("movie[overlay]: PresentPicture 进入但 m_usedPicture<=0，无帧可呈现");
             return;
+        }
         do {
             m_picture[m_curPicture].MoveFrom(pic);
             --m_usedPicture;
@@ -488,8 +499,15 @@ void VideoPresentOverlay::PresentPicture(float dt) {
         m_condPicture.notify_all();
     }
     FrameMove();
-    if(!pic.rgba)
+    if(!pic.rgba) {
+        // 队列里有帧却没有像素：MoveFrom 拿到空指针（谁把 data[0] 清了？）。
+        static std::atomic<int> s_nullLogs{ 0 };
+        if(s_nullLogs.fetch_add(1) < 3)
+            spdlog::warn("movie[overlay]: PresentPicture 取到空像素帧（rgba=null，"
+                         "{}x{} pts={}），不呈现",
+                         pic.width, pic.height, pic.pts);
         return;
+    }
     if(!Visible) {
         static std::atomic<int> s_invisibleLogs{ 0 };
         if(s_invisibleLogs.fetch_add(1) == 0)
