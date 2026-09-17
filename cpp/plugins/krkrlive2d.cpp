@@ -801,15 +801,26 @@ public:
         // getMotionCount / getMotionName / startMotion 全靠它。原先这张表**从未被
         // 填充**（motionGroupNames_ 硬编码成 {"main"}、motionNames_ 只有读没有写），
         // 于是 getMotionCount 恒为 0、getMotionName 恒为空串 —— 游戏拿不到可播的
-        // 动作名，切 CG/轮播动画时自然什么都不会发生。这是轮播失效的另一半根因。
+        // 动作名，切 CG/轮播动画时自然什么都不会发生。
+        //
+        // ⚠️ 组名必须以"对外暴露名"登记：Cubism 允许**未命名组**——
+        // `"motions": { "": [...] }`，实测本作 ev_cg001_02s.l2d 正是这种（1 组 7 个
+        // 动作，组名字面就是空串）。而游戏的 system/AffineSourceLive2D.tjs 是按固定
+        // 组名 `main` 调 startMotion/getMotionCount 的。若直接把空串暴露出去，
+        // `getMotionCount("main")` 恒为 0、`startMotion("main", n)` 永远找不到动作 ——
+        // 表现就是「每次点击都在重放当前动画」。所以空组名按 `main` 对外，
+        // 内部仍用真实组名索引 motions_（见 groupRealName_）。
         motionGroupNames_.clear();
         motionNames_.clear();
+        groupRealName_.clear();
         csmInt32 groupCount = setting_->GetMotionGroupCount();
         for(csmInt32 g = 0; g < groupCount; ++g) {
             const csmChar *group = setting_->GetMotionGroupName(g);
             if(!group)
                 continue;
-            const std::string groupName(group);
+            const std::string realGroup(group);
+            const std::string externalGroup =
+                realGroup.empty() ? std::string("main") : realGroup;
             bool groupRegistered = false;
             csmInt32 motionCount = setting_->GetMotionCount(group);
             for(csmInt32 m = 0; m < motionCount; ++m) {
@@ -835,24 +846,27 @@ public:
                             motion->SetFadeOutTime(fadeOut);
                         motion->SetEffectIds(_eyeBlinkIds, _lipSyncIds);
                         std::string key =
-                            std::string(group) + "_" + std::to_string(m);
+                            realGroup + "_" + std::to_string(m);
                         motions_[key] = motion;
                         if(!groupRegistered) {
                             groupRegistered = true;
-                            motionGroupNames_.push_back(ttstr(group));
+                            motionGroupNames_.push_back(ttstr(externalGroup));
+                            groupRealName_[externalGroup] = realGroup;
                         }
                         // 脚本按**组内序号**定位动作（见 StartMotionByIndex），
                         // 所以这张表必须按 m 的顺序 push，不能按归档命中顺序。
-                        auto &names = motionNames_[groupName];
+                        auto &names = motionNames_[externalGroup];
                         if(names.size() <= static_cast<size_t>(m))
                             names.resize(static_cast<size_t>(m) + 1);
-                        // 播报用的名字取动作文件名（去掉目录与扩展名），
-                        // 便于日志里区分「切到了哪个动作」。
+                        // 动作名取文件名主干（去掉目录、以及 .motion3.json 这类
+                        // 全部后缀），例如 "motions/ev_mv001_02_00.motion3.json"
+                        // → "ev_mv001_02_00"。用 rfind('.') 只会切掉最后一个点，
+                        // 会得到带 ".motion3" 的怪名字。
                         std::string display = motionPath;
                         auto slashPos = display.find_last_of("/\\");
                         if(slashPos != std::string::npos)
                             display = display.substr(slashPos + 1);
-                        auto dotPos = display.rfind('.');
+                        auto dotPos = display.find('.');
                         if(dotPos != std::string::npos)
                             display = display.substr(0, dotPos);
                         names[static_cast<size_t>(m)] =
@@ -861,11 +875,42 @@ public:
                 }
             }
         }
-        if(motionGroupNames_.empty())
+        if(motionGroupNames_.empty()) {
             motionGroupNames_.push_back(TJS_W("main"));
+            groupRealName_["main"] = "";
+        }
+
+        // 把"脚本能看到什么"完整记一次：轮播类问题只有对照这张表才能判断
+        // 是「动作没登记」还是「组名/序号对不上」。
+        {
+            std::string table;
+            for(const auto &grp : motionGroupNames_) {
+                const std::string g = grp.AsStdString();
+                table += g.empty() ? "(空)" : g;
+                table += "[";
+                auto it = motionNames_.find(g);
+                if(it != motionNames_.end()) {
+                    for(size_t i = 0; i < it->second.size(); ++i) {
+                        if(i)
+                            table += ",";
+                        table += it->second[i].AsStdString();
+                    }
+                }
+                table += "] ";
+            }
+            spdlog::info("krkrlive2d: 暴露给脚本的动作表: {}", table);
+        }
 
         if(_motionManager && !motions_.empty()) {
-            auto it = motions_.begin();
+            // 自动起播必须是**确定的**第一个动作（首组 #0），不能取
+            // motions_.begin() —— 那是 unordered_map 的桶序，等于随机挑一个动作
+            // （真机日志里就出现过"首播 '_5'"）。脚本没显式 startMotion 时，
+            // 起播动作决定了玩家看到什么，随机是不可接受的。
+            auto it = motions_.find(groupRealName_.empty()
+                                        ? std::string()
+                                        : groupRealName_.begin()->second + "_0");
+            if(it == motions_.end())
+                it = motions_.begin();
             _motionManager->StartMotionPriority(it->second, false, 1);
             autoFirstMotionKey_ = it->first;
             spdlog::debug("krkrlive2d: auto-started motion '{}'", it->first);
@@ -908,7 +953,7 @@ public:
 
         GetModel()->LoadParameters();
         if(_motionManager && _motionManager->IsFinished() &&
-           !motions_.empty()) {
+           !motions_.empty() && !motionStopped_) {
             // 续播"当前选中的动作"，而非无脑回到第一个。脚本切过动作后
             // （StartMotionByIndex 会刷新 selectedMotionKey_），这里才不会把它
             // 拽回 motions_.begin()，轮播才能真正连续。
@@ -1100,52 +1145,103 @@ public:
         renderHeight_ = h;
     }
 
+    // 把脚本给的组名解析成模型里的真实组名：
+    //   1) 命中别名表（典型：未命名组按 "main" 暴露，真实组名是 ""）；
+    //   2) 单组模型：任何没命中的组名都当成那唯一一组 —— 容忍脚本用
+    //      main/idle/default/"" 等不同叫法，这些在单组模型里都是同一组；
+    //   3) 都不成立就原样返回，让调用方按找不到处理（并打 warn）。
+    std::string ResolveGroupName(const std::string &requested) const {
+        auto it = groupRealName_.find(requested);
+        if(it != groupRealName_.end())
+            return it->second;
+        if(groupRealName_.size() == 1)
+            return groupRealName_.begin()->second;
+        return requested;
+    }
+
     // 返回是否真的切成功了（调用方据此决定要不要更新 selectedMotionKey_）。
     bool StartMotionByIndex(const std::string &group, int index) {
-        std::string key = group + "_" + std::to_string(index);
+        const std::string real = ResolveGroupName(group);
+        std::string key = real + "_" + std::to_string(index);
         auto it = motions_.find(key);
         if(it == motions_.end() || !_motionManager)
             return false;
         // priority 2 高于加载时的自动起播(1)，切动作才能立刻生效。
         _motionManager->StartMotionPriority(it->second, false, 2);
         selectedMotionKey_ = key;
+        motionStopped_ = false;
         return true;
     }
 
-    // 停止当前动作。清掉选中键，否则播完续播会把刚停掉的动作又拉回来。
+    // 停止当前动作。清掉选中键，否则播完续播会把刚停掉的动作又拉回来；
+    // 同时置 motionStopped_，让 ContinuousUpdate 的"播完续播"不再把它重新拉起
+    // —— 脚本显式 stopMotion 之后，插件不应该跟它抢控制权。
     void StopMotion() {
         if(_motionManager)
             _motionManager->StopAllMotions();
         selectedMotionKey_.clear();
+        motionStopped_ = true;
     }
 
-    // 按"动作显示名"切动作。脚本有两种常见用法：
-    //   1) startMotion(组名, 序号)  —— getMotionName 拿到的序号
-    //   2) startMotion(动作名)      —— 直接把名字传进来
-    // 两种都要支持，否则第 2 种会因为找不对键而静默失败（旧实现则是永远不生效）。
+    // 按"动作显示名"切动作。脚本的用法不止一种：
+    //   1) startMotion(动作全名)      —— getMotionName 的返回值
+    //   2) startMotion("00")          —— 只给文件名末尾的序号
+    //   3) startMotion(组名, 序号)
+    // 因此匹配时同时接受：全名、全名去掉组前缀后的尾段（最后一个 '_' 之后）、
+    // 以及大小写不敏感的比较。全都对不上才算失败。
+    static std::string MotionNameTail(const std::string &full) {
+        const auto us = full.rfind('_');
+        return us == std::string::npos ? std::string() : full.substr(us + 1);
+    }
+
+    static bool NameEqNoCase(const std::string &a, const std::string &b) {
+        if(a.size() != b.size())
+            return false;
+        for(size_t i = 0; i < a.size(); ++i) {
+            if(std::tolower(static_cast<unsigned char>(a[i])) !=
+               std::tolower(static_cast<unsigned char>(b[i])))
+                return false;
+        }
+        return true;
+    }
+
     bool StartMotionByName(const std::string &name) {
+        if(name.empty())
+            return false;
         for(const auto &kv : motionNames_) {
             const auto &names = kv.second;
             for(size_t i = 0; i < names.size(); ++i) {
-                if(names[i].AsStdString() == name)
+                const std::string full = names[i].AsStdString();
+                if(full.empty())
+                    continue;
+                const std::string tail = MotionNameTail(full);
+                if(NameEqNoCase(full, name) ||
+                   (!tail.empty() && NameEqNoCase(tail, name))) {
                     return StartMotionByIndex(kv.first,
                                               static_cast<int>(i));
+                }
             }
         }
         return false;
     }
 
-    // 供脚本 getCurrentMotions 用：当前真正在播/选中的动作键。
-    const std::string &SelectedMotionKey() const { return selectedMotionKey_; }
-    bool HasMotion(const std::string &group, int index) const {
-        return motions_.find(group + "_" + std::to_string(index)) !=
-            motions_.end();
-    }
-    const std::vector<ttstr> &MotionGroups() const { return motionGroupNames_; }
-    const std::unordered_map<std::string, std::vector<ttstr>> &MotionNames() const {
-        return motionNames_;
+    // 查"组内动作名表"。先按对外组名精确查；查不到且模型只有一组时退化为
+    // 那一组（容忍脚本用 main/idle/"" 等不同叫法）。
+    const std::vector<ttstr> *FindMotionNames(const std::string &group) const {
+        auto it = motionNames_.find(group);
+        if(it != motionNames_.end())
+            return &it->second;
+        if(motionNames_.size() == 1)
+            return &motionNames_.begin()->second;
+        return nullptr;
     }
 
+    // 实际已加载的动作总数（不是组数）。
+    size_t TotalMotionCount() const { return motions_.size(); }
+
+    // 供脚本 getCurrentMotions 用：当前真正在播/选中的动作键。
+    const std::string &SelectedMotionKey() const { return selectedMotionKey_; }
+    const std::vector<ttstr> &MotionGroups() const { return motionGroupNames_; }
     bool IsLoaded() const { return loaded_; }
 
     // ── 可见性 ────────────────────────────────────────────────────────────
@@ -1894,14 +1990,21 @@ private:
     std::unordered_map<std::string, ACubismMotion *> motions_;
     // 动作元数据表：与 motions_ 同属"模型自身的动作信息"，必须定义在本类里
     // （脚本侧 getMotionGroupName / getMotionCount / getMotionName 经
-    // MotionGroups()/MotionNames() 读出去）。加载期由 LoadFromL2D 填充。
+    // MotionGroups()/FindMotionNames() 读出去）。加载期由 LoadFromL2D 填充。
     std::vector<ttstr> motionGroupNames_;
     std::unordered_map<std::string, std::vector<ttstr>> motionNames_;
+    // 对外暴露的组名 → 模型里的真实组名。两者不同只发生在**未命名组**上：
+    // model3.json 的 `"motions": { "": [...] }` 会让真实组名为空串，而对脚本
+    // 暴露成 "main"（游戏脚本按 main 调用）。见 LoadFromL2D 里的说明。
+    std::unordered_map<std::string, std::string> groupRealName_;
     // 加载时自动起播的动作键（motions_ 的键："组_序号"）。动作播完后按它续播，
     // 而不是重新取 motions_.begin() —— 否则脚本切过的动作会被"跳回"第一个。
     std::string autoFirstMotionKey_;
     // 当前选中的动作键，由 StartMotionByIndex 成功后写入，供播完续播使用。
     std::string selectedMotionKey_;
+    // 脚本显式 stopMotion 后置位，禁止 ContinuousUpdate 自动续播（否则插件会
+    // 立刻把刚停掉的动作又拉起来）。任何一次成功的 startMotion 都会清掉它。
+    bool motionStopped_ = false;
     csmVector<const CubismId *> _eyeBlinkIds;
     csmVector<const CubismId *> _lipSyncIds;
     std::vector<csmInt32> mosaicDrawableIndices_;
@@ -2415,10 +2518,9 @@ public:
             return TJS_S_OK;
         }
         ttstr group = (n > 0 && p) ? ToTTStr(*p[0]) : TJS_W("main");
-        const auto &names = s->cubismModel_->MotionNames();
-        auto it = names.find(group.AsStdString());
-        *r = (it == names.end()) ? 0
-                                 : static_cast<tjs_int>(it->second.size());
+        const std::vector<ttstr> *names =
+            s->cubismModel_->FindMotionNames(group.AsStdString());
+        *r = (names == nullptr) ? 0 : static_cast<tjs_int>(names->size());
         return TJS_S_OK;
     }
 
@@ -2432,11 +2534,11 @@ public:
         }
         ttstr group = (n > 0 && p) ? ToTTStr(*p[0]) : TJS_W("main");
         tjs_int idx = (n > 1 && p) ? ToInt(*p[1], 0) : 0;
-        const auto &names = s->cubismModel_->MotionNames();
-        auto it = names.find(group.AsStdString());
-        if(it != names.end() && idx >= 0 &&
-           idx < static_cast<tjs_int>(it->second.size()))
-            *r = it->second[static_cast<size_t>(idx)];
+        const std::vector<ttstr> *names =
+            s->cubismModel_->FindMotionNames(group.AsStdString());
+        if(names != nullptr && idx >= 0 &&
+           idx < static_cast<tjs_int>(names->size()))
+            *r = (*names)[static_cast<size_t>(idx)];
         else
             *r = ttstr();
         return TJS_S_OK;
@@ -2461,22 +2563,75 @@ public:
             group = TJS_W("main");
         const std::string raw = group.AsStdString();
 
+        // 把脚本**实际传来的参数**记下来（含个数与类型）。轮播类问题只有看到
+        // 真实入参才能判断是"组名对不上"、"序号恒为 0"、还是"只传了名字"。
+        // startMotion 由玩家点击驱动，频率极低，不需要限频。
+        {
+            std::string dump;
+            for(tjs_int i = 0; i < n && p; ++i) {
+                if(i)
+                    dump += ", ";
+                if(!p[i]) {
+                    dump += "null";
+                    continue;
+                }
+                if(p[i]->Type() == tvtString || p[i]->Type() == tvtOctet) {
+                    dump += "'" + ToTTStr(*p[i]).AsStdString() + "'";
+                } else if(p[i]->Type() == tvtInteger ||
+                          p[i]->Type() == tvtReal) {
+                    dump += std::to_string(static_cast<long long>(
+                        ToInt(*p[i], 0)));
+                } else {
+                    dump += "<type=" +
+                        std::to_string(static_cast<int>(p[i]->Type())) + ">";
+                }
+            }
+            spdlog::info("krkrlive2d: startMotion 实参 {} 个: {}", n, dump);
+        }
+
         // 参数写法有三种，按"从最具体到最宽松"的顺序试，避免误拆：
-        //   1) startMotion(组名, 序号)      —— 两个参数，最明确
-        //   2) startMotion(动作显示名)      —— 单个参数，名字里可能含下划线
-        //   3) startMotion("组_序号")       —— 单个参数，序号才是解析手段
-        //   4) startMotion(组名)            —— 取该组第 0 个
-        // 第 2 步必须先于第 3 步：否则 "idle_2" 这种组名会被按 `_` 错拆成
-        // 组 "idle" + 序号 2。
+        // 参数形态（按"从最具体到最宽松"试，避免误拆）：
+        //   1) startMotion(组名, 序号)          —— 两个参数，最明确
+        //   2) startMotion(组名, 动作名)        —— 两个参数，第二个是字符串
+        //   3) startMotion("组名.动作名")       —— **本作实测用法**：
+        //      scn 的字符串表里就是 "main.ev_mv001_02_03h"
+        //   4) startMotion(动作名)              —— 单个参数，名字里可能含下划线
+        //   5) startMotion("组_序号")
+        //   6) startMotion(组名)                —— 取该组第 0 个
         std::string groupName = raw;
         tjs_int index = 0;
         bool started = false;
 
-        if(n > 1) {
-            index = ToInt(*p[1], 0);
-            started = s->cubismModel_->StartMotionByIndex(groupName, index);
+        const bool secondIsString =
+            n > 1 && p && p[1] &&
+            (p[1]->Type() == tvtString || p[1]->Type() == tvtOctet);
+
+        if(secondIsString) {
+            // (组名, 动作名)
+            const std::string motionName = ToTTStr(*p[1]).AsStdString();
+            started = s->cubismModel_->StartMotionByName(motionName);
+            if(!started)
+                started = s->cubismModel_->StartMotionByName(raw);
         } else {
-            started = s->cubismModel_->StartMotionByName(raw);
+            if(n > 1 && p && p[1])
+                index = ToInt(*p[1], 0);
+            // 先按 (组名, 序号)。未命名组已按 main 对外，这里能直接命中。
+            started = s->cubismModel_->StartMotionByIndex(raw, index);
+            if(!started)
+                started = s->cubismModel_->StartMotionByName(raw);
+            if(!started) {
+                // "组名.动作名"：本作的实际写法。按**第一个** '.' 拆（组名不会含点）。
+                const auto dot = raw.find('.');
+                if(dot != std::string::npos && dot + 1 < raw.size()) {
+                    const std::string g = raw.substr(0, dot);
+                    const std::string nm = raw.substr(dot + 1);
+                    started = s->cubismModel_->StartMotionByName(nm);
+                    if(!started)
+                        started = s->cubismModel_->StartMotionByIndex(g, index);
+                    if(started)
+                        groupName = g;
+                }
+            }
             if(!started) {
                 // "组_序号"：只认**最后一个**下划线且其右侧全为数字。
                 const auto us = raw.rfind('_');
@@ -2494,8 +2649,6 @@ public:
                     }
                 }
             }
-            if(!started)
-                started = s->cubismModel_->StartMotionByIndex(raw, 0);
         }
 
         s->playing_ = true;
@@ -2512,7 +2665,7 @@ public:
                          "（模型 {} 组 / {} 个动作）",
                          groupName, static_cast<int>(index),
                          s->cubismModel_->MotionGroups().size(),
-                         s->cubismModel_->MotionNames().size());
+                         s->cubismModel_->TotalMotionCount());
         }
         if(r)
             *r = started;
@@ -2911,7 +3064,7 @@ private:
     std::vector<ttstr> expressionNames_{ TJS_W("default") };
     // 注意：动作元数据表（motionGroupNames_ / motionNames_ / autoFirstMotionKey_ /
     // selectedMotionKey_）**不在这里** —— 它们属于 CubismLive2DModel（与 motions_
-    // 同处一地），脚本侧经 s->cubismModel_->MotionGroups()/MotionNames() 读取。
+    // 同处一地），脚本侧经 s->cubismModel_->MotionGroups()/FindMotionNames() 读取。
     std::vector<ttstr> parameterNames_;
     std::vector<ttstr> partNames_{ TJS_W("PartMain") };
     std::vector<ttstr> currentMotions_;
