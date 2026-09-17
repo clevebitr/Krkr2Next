@@ -2,6 +2,7 @@
 // Created by LiDon on 2025/9/13.
 // TODO: implement emoteplayer.dll plugin
 //
+#include <atomic>
 #include <spdlog/spdlog.h>
 #include "tjs.h"
 #include "tjsDictionary.h"
@@ -284,6 +285,26 @@ static ttstr VariantTypeName(const tTJSVariant &v) {
 static ttstr VariantTypeName(iTJSDispatch2 *o) {
     return o ? TJS_W("obj") : TJS_W("void");
 }
+
+// captureCanvas 是**每帧**调用的诊断点：逐次 info 会把日志刷爆（60 行/秒），
+// 构造 ttstr 签名还有堆开销。这里只放行前 3 次（拿到真实调用契约），之后每 300
+// 次留一条心跳 —— 心跳本身就回答了排查"Q 版动画只显示一两帧"时要问的问题：
+// 这条交付到现在还在被驱动吗？slot 区分两个宿主（0=SeparateLayerAdaptor，
+// 1=D3DAdaptor）。
+static bool MotionCaptureCallDue(int slot, const char *who) {
+    static std::atomic<uint64_t> s_calls[2];
+    const uint64_t n = s_calls[slot & 1].fetch_add(1);
+    if(n < 3)
+        return true;
+    if((n % 300) != 0)
+        return false;
+    auto lg = spdlog::get("plugin");
+    if(lg)
+        lg->info("MCP {}.captureCanvas: 累计 {} 次（每 300 次一条心跳，"
+                 "完整契约只记前 3 次）",
+                 who ? who : "?", n + 1);
+    return false;
+}
 // 游戏脚本 affinesourcemotion.tjs 会调 captureCanvas/canvasCaptureEnabled/
 // unloadUnusedTextures（Kirikiroid2 发布 APK 的 libgame.so 同款成员，实证）。
 // Senren Clinic etc. Yuzusoft titles: the motion work layer is carried by
@@ -328,7 +349,10 @@ static tjs_error SeparateLayerAdaptor_captureCanvas(tTJSVariant *r,
                                                     tTJSVariant **param,
                                                     iTJSDispatch2 *objthis) {
     auto dl = spdlog::get("plugin");
-    if(dl) {
+    // 这是**每帧**都会走的入口，逐次 info 会把日志和性能一起吃掉（构造 ttstr
+    // 签名本身也有堆开销）。保留前 3 次的完整调用契约，之后抽样心跳，既能看出
+    // "这条交付还在被驱动"，也不会刷屏。
+    if(dl && MotionCaptureCallDue(/*slot=*/0, "SeparateLayerAdaptor")) {
         // TEMP DIAGNOSTIC: observe the real captureCanvas call contract from
         // the running game (bytecode-encrypted script). Removed once known.
         // 临时诊断：观察 captureCanvas 的真实调用契约（游戏脚本为加密字节码）。
@@ -1033,13 +1057,14 @@ static tjs_error D3DAdaptor_captureCanvas(tTJSVariant *r, tjs_int numparams,
                                           tTJSVariant **param,
                                           iTJSDispatch2 *objthis) {
     auto l = spdlog::get("plugin");
-    if(l) {
+    if(l && MotionCaptureCallDue(/*slot=*/1, "D3DAdaptor")) {
         // TEMP DIAGNOSTIC: observe the real captureCanvas call contract (param
         // count/types) from the running game, since the game script is
         // bytecode- encrypted. Removed once the contract is known.
         // 临时诊断：从运行中的游戏观察 captureCanvas
         // 的真实调用契约（入参个数/类型），
         // 因为游戏脚本是加密字节码。确认契约后移除。
+        // 这是逐帧路径 ⇒ 只记前 3 次 + 每 300 次心跳，见 MotionCaptureCallDue。
         ttstr sig;
         sig += TJS_W("objthis=");
         sig += VariantTypeName(objthis);

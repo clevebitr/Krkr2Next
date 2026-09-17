@@ -61,7 +61,7 @@ namespace {
     // 卡死到 ANR（首个 5 秒窗口到点的那一刻）。
     // 所以只在这里拼字符串，真正的输出交给解锁之后的调用方。
     bool MovieStatsMaybeFillReportLocked(const char *tag, MovieStatsState &s,
-                                         std::string &outMsg) {
+                                         std::string &outMsg, bool &outStarved) {
         const auto now = std::chrono::steady_clock::now();
         if(s.windowStart.time_since_epoch().count() == 0) {
             s.windowStart = now;
@@ -77,6 +77,9 @@ namespace {
             s.frames ? static_cast<double>(s.convertUs) /
                     static_cast<double>(s.frames) / 1000.0
                      : 0.0;
+        // "有声音没画面"的指纹：解码一直在进帧（音频独立解码，所以声音照常），
+        // 但一帧都没上屏。把它单独标出来，免得混在普通统计里被忽略。
+        outStarved = s.frames > 0 && s.presents == 0;
         outMsg = fmt::format(
             "movie[{}]: 入队 {:.1f} 帧/秒，呈现 {:.1f} 帧/秒，pts未到跳过 {}，"
             "转换 avg={:.2f}ms max={:.2f}ms（窗口 {:.1f}s）",
@@ -96,6 +99,7 @@ namespace {
 void TVPMovieStatsNoteDecode(const char *tag, uint64_t convertUs) {
     std::string msg;
     bool due = false;
+    bool starved = false;
     {
         std::lock_guard<std::mutex> lk(g_movieStatsMutex);
         MovieStatsState &s = MovieStatsLocked(tag);
@@ -103,15 +107,21 @@ void TVPMovieStatsNoteDecode(const char *tag, uint64_t convertUs) {
         s.convertUs += convertUs;
         if(convertUs > s.convertMaxUs)
             s.convertMaxUs = convertUs;
-        due = MovieStatsMaybeFillReportLocked(tag, s, msg);
+        due = MovieStatsMaybeFillReportLocked(tag, s, msg, starved);
     }
-    if(due)
-        spdlog::info("{}", msg); // 已解锁，见上面的死锁说明
+    if(due) {
+        if(starved)
+            spdlog::warn("movie[{}]: 解码在进帧但一帧都没上屏（有声音没画面的指纹）—— {}",
+                         tag ? tag : "?", msg);
+        else
+            spdlog::info("{}", msg); // 已解锁，见上面的死锁说明
+    }
 }
 
 void TVPMovieStatsNotePresent(const char *tag, bool ptsNotYet) {
     std::string msg;
     bool due = false;
+    bool starved = false;
     {
         std::lock_guard<std::mutex> lk(g_movieStatsMutex);
         MovieStatsState &s = MovieStatsLocked(tag);
@@ -119,10 +129,33 @@ void TVPMovieStatsNotePresent(const char *tag, bool ptsNotYet) {
             ++s.futureSkips;
         else
             ++s.presents;
-        due = MovieStatsMaybeFillReportLocked(tag, s, msg);
+        due = MovieStatsMaybeFillReportLocked(tag, s, msg, starved);
     }
-    if(due)
-        spdlog::info("{}", msg); // 已解锁，见上面的死锁说明
+    if(due) {
+        if(starved)
+            spdlog::warn("movie[{}]: 解码在进帧但一帧都没上屏（有声音没画面的指纹）—— {}",
+                         tag ? tag : "?", msg);
+        else
+            spdlog::info("{}", msg); // 已解锁，见上面的死锁说明
+    }
+}
+
+// 开片时记一次片源与链路（三条 BuildGraph 都调它）：出问题时第一件要确认的事
+// 就是"这条电影到底开没开、走的是 layer 还是 overlay、片源声明的帧率/尺寸是多少"
+// —— 声明的 60fps 落在只跑 30fps 的引擎上，与"解码慢"是两种完全不同的结论。
+void TVPMovieLogOpened(TVPMoviePlayer *player, const char *tag,
+                       const char *name_utf8) {
+    if(!player)
+        return;
+    double fps = 0.0;
+    long w = 0, h = 0;
+    int frames = 0;
+    player->GetFPS(&fps);
+    player->GetVideoSize(&w, &h);
+    player->GetNumberOfFrame(&frames);
+    spdlog::info("movie[{}]: 打开片源 {} fps={:.3f} 尺寸={}x{} 总帧数={}",
+                 tag ? tag : "?", name_utf8 ? name_utf8 : "?", fps, w, h,
+                 frames);
 }
 
 
@@ -511,6 +544,10 @@ void MoviePlayerOverlay::BuildGraph(tTJSNI_VideoOverlay *callbackwin,
                     std::forward<decltype(PH2)>(PH2));
     });
     m_pPlayer->OpenFromStream(stream, streamname, type, size);
+    // 与 layer 链路同一行格式：日志里能直接对比"哪条链路开了这个片源"。
+    const std::string srcName =
+        streamname ? ttstr(streamname).AsStdString() : std::string();
+    TVPMovieLogOpened(this, "overlay", srcName.c_str());
 }
 
 const tTVPRect &MoviePlayerOverlay::GetBounds() {

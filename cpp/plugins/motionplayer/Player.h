@@ -9,6 +9,7 @@
 #include <set>
 #include <unordered_map>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <spdlog/spdlog.h>
 #include "ResourceManager.h"
@@ -254,6 +255,25 @@ namespace motion {
                 return true; // finished this frame / 本帧播完
             }
             return false;
+        }
+        // 目标层状态摘要（诊断用）：可见性/不透明度/子层数。见 drawOnto 的说明。
+        ttstr DescribeLayerState(iTJSDispatch2 *layer) {
+            if(!layer)
+                return ttstr(TJS_W("layer=null"));
+            auto readInt = [layer](const tjs_char *name, int fallback) {
+                tTJSVariant v;
+                if(TJS_SUCCEEDED(layer->PropGet(0, name, nullptr, &v, layer)) &&
+                   v.Type() == tvtInteger)
+                    return static_cast<int>(v);
+                return fallback;
+            };
+            const int visible = readInt(TJS_W("visible"), -1);
+            const int opacity = readInt(TJS_W("opacity"), -1);
+            const int count = readInt(TJS_W("count"), -1);
+            return ttstr(TJS_W("layer(visible=")) +
+                ttstr(static_cast<tjs_int>(visible)) + TJS_W(",opacity=") +
+                ttstr(static_cast<tjs_int>(opacity)) + TJS_W(",count=") +
+                ttstr(static_cast<tjs_int>(count)) + TJS_W(")");
         }
         void clear(iTJSDispatch2 *target, tjs_int color) {
             if(!target)
@@ -2925,9 +2945,13 @@ namespace motion {
             // 会双画同一份帧到游戏层导致叠影。此处只缓存/加载，真正绘制由
             // drawOnto 完成。
             if(_captureActive) {
-                if(logger)
+                // 逐帧路径：前 3 次 + 每 300 次一条心跳（见 drawOnto 的说明）。
+                static std::atomic<uint64_t> s_skipLogs{ 0 };
+                const uint64_t n = s_skipLogs.fetch_add(1);
+                if(logger && (n < 3 || (n % 300) == 0))
                     logger->info("drawPSBImages: captureCanvas active, skip "
-                                 "draw (cache only)");
+                                 "draw (cache only) x{}",
+                                 n + 1);
                 return;
             }
 
@@ -3224,10 +3248,21 @@ namespace motion {
                 } else {
                     drawn = compositeTo(target, tempParent, logger);
                 }
-                if(logger)
+                // 逐帧路径：只记前 3 次 + 每 300 次一条心跳。心跳里带上目标层
+                // 自身的状态，用来区分两种完全不同的"动画不见了"：
+                //   1) 目标层被游戏隐藏/清空（visible=0）⇒ 脚本决定的，不是交付问题；
+                //   2) 层仍然可见、drew>0，却看不到画面 ⇒ 交付/合成链路问题。
+                // 少了这两列，只能靠猜。
+                static std::atomic<uint64_t> s_drawOntoLogs{ 0 };
+                const uint64_t n = s_drawOntoLogs.fetch_add(1);
+                if(logger && (n < 3 || (n % 300) == 0)) {
+                    // 状态取自实际上屏的那一层（resolveRealLayer 的结果 tempParent），
+                    // 而不是游戏传进来的包装对象。
                     logger->info(
-                        "drawOnto: drew {} images onto capture target={}",
-                        drawn, static_cast<void *>(target));
+                        "drawOnto: drew {} images onto capture target={} x{} {}",
+                        drawn, static_cast<void *>(target), n + 1,
+                        DescribeLayerState(tempParent));
+                }
             } catch(const std::exception &e) {
                 if(logger)
                     logger->error("drawOnto: exception: {}", e.what());

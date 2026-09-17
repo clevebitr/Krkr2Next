@@ -34,6 +34,10 @@ NS_KRMOVIE_BEGIN
 // ---------------------------------------------------------------------------
 void TVPMovieStatsNoteDecode(const char *tag, uint64_t convertUs);
 void TVPMovieStatsNotePresent(const char *tag, bool ptsNotYet);
+// 开片时记一次片源与链路（三条 BuildGraph 都调）：声明见上面的统计说明。
+// name 传 UTF-8，避免在本头里依赖 ttstr 的声明。
+void TVPMovieLogOpened(class TVPMoviePlayer *player, const char *tag,
+                       const char *name_utf8);
 
 class TVPMoviePlayer : public iTVPVideoOverlay, public CBaseRenderer {
 public:

@@ -29,6 +29,13 @@ protected:
                         const tjs_char *type, uint64_t size) {
             m_pPlayer->SetCallback(m_funcCallback);
             m_pPlayer->OpenFromStream(stream, streamname, type, size);
+            // layerExMovie（krmovie.dll/m2vdec.dll 的别名落点）走的是自己的
+            // VideoPresentLayer，不经过 MoviePlayerLayer::BuildGraph —— 少了这一行，
+            // 这类游戏开片在日志里完全看不到"这条电影开了"，无法与"根本没开"区分。
+            const std::string srcName =
+                streamname ? ttstr(streamname).AsStdString() : std::string();
+            // 本文件不在 KRMovie 命名空间里，调用必须显式限定。
+            KRMovie::TVPMovieLogOpened(this, "layerExMovie", srcName.c_str());
         }
         virtual void OnPlayEvent(KRMovieEvent msg, void *p) override {
             m_funcCallback(msg, p);

@@ -135,18 +135,12 @@ void MoviePlayerLayer::BuildGraph(tTJSNI_VideoOverlay *callbackwin,
                     std::forward<decltype(PH2)>(PH2));
     });
     m_pPlayer->OpenFromStream(stream, streamname, type, size);
-    // 开片时记一次片源自身参数：视频声明的帧率与尺寸是判断"卡"的基准线
-    // （例如片源 60fps 而引擎只跑 30fps，那就不是解码问题而是呈现节流）。
-    {
-        double fps = 0.0;
-        GetFPS(&fps);
-        long vw = 0, vh = 0;
-        GetVideoSize(&vw, &vh);
-        int frames = 0;
-        GetNumberOfFrame(&frames);
-        spdlog::info("Movie[layer]: 片源 fps={:.3f} 尺寸={}x{} 总帧数={}", fps,
-                     vw, vh, frames);
-    }
+    // 开片时记一次片源自身参数 + 链路标签：视频声明的帧率与尺寸是判断"卡"的基准线
+    // （例如片源 60fps 而引擎只跑 30fps，那就不是解码问题而是呈现节流）；
+    // 有了这一行才能在日志里区分"这条电影根本没开"与"开了但没上屏"。
+    const std::string srcName =
+        streamname ? ttstr(streamname).AsStdString() : std::string();
+    TVPMovieLogOpened(this, "layer", srcName.c_str());
 }
 
 void MoviePlayerLayer::OnPlayEvent(KRMovieEvent msg, void *p) {
