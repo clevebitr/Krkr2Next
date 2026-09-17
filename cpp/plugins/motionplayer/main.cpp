@@ -96,6 +96,17 @@ namespace {
 
 } // namespace
 
+// 供 Player 析构调用（声明在 Player.h）：把死掉的 player 从登记表里摘掉，
+// 否则连续钩子会解引用悬垂指针（真机即 SIGSEGV）。
+void motion::AutoDriveForget(motion::Player *player) {
+    if(!player)
+        return;
+    std::lock_guard<std::mutex> lock(g_autoDriveMutex);
+    g_autoDrivePlayers.erase(
+        std::remove(g_autoDrivePlayers.begin(), g_autoDrivePlayers.end(), player),
+        g_autoDrivePlayers.end());
+}
+
 void MotionAutoDriveHook::OnContinuousCallback(tjs_uint64 /*tick*/) {
     std::vector<motion::Player *> players;
     {

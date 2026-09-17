@@ -52,6 +52,11 @@ namespace motion {
         }
     };
 
+    // 自动驱动登记表的注销入口（实现在 main.cpp）。Player 析构时必须调用：
+    // 登记表只存裸指针，脚本丢掉最后一个引用时 Player 会先死，若不清登记表，
+    // 下一帧连续钩子就会解引用悬垂指针 —— 直接 SIGSEGV。
+    void AutoDriveForget(Player *player);
+
     class Player {
         static std::shared_ptr<spdlog::logger> _logger() {
             return spdlog::get("plugin");
@@ -59,7 +64,10 @@ namespace motion {
 
     public:
         Player() = default;
-        ~Player() { cleanupTempLayer(); }
+        ~Player() {
+            AutoDriveForget(this);
+            cleanupTempLayer();
+        }
 
         Player(const Player &) = delete;
         Player &operator=(const Player &) = delete;
