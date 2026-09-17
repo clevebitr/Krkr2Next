@@ -313,6 +313,14 @@ Java_org_dpdns_clevebitr_core_NativeEngine_engineCancelTermination(
 }
 
 extern "C" JNIEXPORT jint JNICALL
+Java_org_dpdns_clevebitr_core_NativeEngine_engineResolveWindowClose(
+    JNIEnv * /*env*/, jobject /*thiz*/, jlong handle, jint allow_close) {
+    return static_cast<jint>(engine_resolve_window_close(
+        reinterpret_cast<engine_handle_t>(handle),
+        static_cast<int32_t>(allow_close)));
+}
+
+extern "C" JNIEXPORT jint JNICALL
 Java_org_dpdns_clevebitr_core_NativeEngine_engineOpenGameAsync(
     JNIEnv *env, jobject /*thiz*/, jlong handle, jstring game_root_path,
     jstring startup_script) {

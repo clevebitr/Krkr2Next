@@ -848,6 +848,12 @@ public:
     bool GetWindowActive() override { return active_; }
 
     void Close() override {
+        // 宿主要求"关窗前先问用户"时，这里**不拆窗口也不终止**：KAG 的退出菜单
+        // （kag.close() → MainWindow.close() → Window.close()）唯一的下场就是这里，
+        // 而用户要的正是"选继续就接着玩"。请求交给 engine_tick 用
+        // ENGINE_RESULT_WINDOW_CLOSE_REQUESTED 报给壳；壳确认后才走下面的真关窗。
+        if(krkr::host::RequestWindowClose())
+            return;
         closing_ = true;
         spdlog::debug("HostWindowLayer::Close called");
         // 这是"游戏关窗退出"的那条路（实测 千恋万花 退出菜单走的就是它）：窗口

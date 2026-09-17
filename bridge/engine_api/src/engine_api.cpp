@@ -1124,6 +1124,9 @@ engine_result_t engine_create(const engine_create_desc_t *desc,
     EnsureRuntimeLoggersInitialized();
     EnsureInternalPluginAnchorsLinked();
     TVPHostSuppressProcessExit = true;
+    // 宿主模式下"游戏关窗"不再直接终止：挂起后由壳弹确认框，再用
+    // engine_resolve_window_close() 答复（见 krkr::host 的说明）。
+    krkr::host::SetDeferWindowClose(true);
 
     auto *impl = new(std::nothrow) engine_handle_s();
     if(impl == nullptr) {
@@ -1763,6 +1766,16 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
                                              "runtime has been terminated");
     }
 
+    // "游戏请求关窗"挂起：引擎没终止，窗口也没拆（见 krkr::host 的说明）。
+    // 这一帧停在这里不跑，等宿主的确认框答复 —— 模态框压住游戏是想要的效果；
+    // 用户选"继续"后 engine_resolve_window_close(allow=0) 清掉请求，下一帧照常跑。
+    // 同样**不是错误**（壳不计数），否则叠加层的错误数又会每帧 +1。
+    if(krkr::host::WindowClosePending()) {
+        ClearHandleErrorLocked(impl);
+        SetThreadError(nullptr);
+        return ENGINE_RESULT_WINDOW_CLOSE_REQUESTED;
+    }
+
     if(g_runtime_startup_active && g_runtime_startup_owner == handle) {
         // 启动期（StartApplication 还在 worker 线程里跑）**不是错误**：壳每帧都会
         // 调 tick，真机上每次开游戏都会因此记下 300+ 次"失败"
@@ -2270,6 +2283,49 @@ engine_result_t engine_cancel_termination(engine_handle_t handle) {
     krkr::stall::SetPaused(false);
     krkr::stall::MarkStage("engine_tick: 已取消退出，恢复运行");
     spdlog::info("engine_cancel_termination: 宿主选择继续游戏，已撤销终止标志");
+    ClearHandleErrorLocked(impl);
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+}
+
+engine_result_t engine_resolve_window_close(engine_handle_t handle,
+                                            int32_t allow_close) {
+    std::lock_guard<std::recursive_mutex> registry_guard(g_registry_mutex);
+    engine_handle_s *impl = nullptr;
+    auto result = ValidateHandleLocked(handle, &impl);
+    if(result != ENGINE_RESULT_OK) {
+        return result;
+    }
+
+    std::lock_guard<std::recursive_mutex> guard(impl->mutex);
+    result = ValidateHandleThreadLocked(impl);
+    if(result != ENGINE_RESULT_OK) {
+        return result;
+    }
+
+    if(allow_close) {
+        // 宿主确认退出：执行真正的关窗终止。此后 engine_tick 走既有的
+        // TVPTerminated + TVPTerminateWindowClosed 分支报 WINDOW_CLOSED。
+        krkr::host::ConfirmWindowClose();
+        krkr::stall::SetPaused(false);
+        spdlog::info("engine_resolve_window_close: 宿主确认退出，已执行关窗终止");
+        ClearHandleErrorLocked(impl);
+        SetThreadError(nullptr);
+        return ENGINE_RESULT_OK;
+    }
+
+    // 宿主选"继续游戏"。若已经真的终止了（例如兜底超时已自行关窗），没什么可
+    // 撤销的：诚实拒绝，宿主应当直接离开游戏界面。
+    if(TVPTerminated) {
+        SetHandleErrorLocked(
+            impl, "cannot keep playing: the runtime already terminated");
+        return ENGINE_RESULT_INVALID_STATE;
+    }
+
+    krkr::host::CancelWindowClose();
+    krkr::stall::SetPaused(false);
+    krkr::stall::MarkStage("engine_tick: 已取消关窗请求，恢复运行");
+    spdlog::info("engine_resolve_window_close: 宿主选择继续游戏，已取消关窗请求");
     ClearHandleErrorLocked(impl);
     SetThreadError(nullptr);
     return ENGINE_RESULT_OK;
@@ -3411,6 +3467,23 @@ engine_result_t engine_set_option(engine_handle_t handle,
 engine_result_t engine_cancel_termination(engine_handle_t handle) {
     // 无 krkr2 运行时的构建（宿主校验用）：这里根本没有终止状态，幂等返回成功，
     // 与运行时实现保持同一份 ABI 语义。
+    std::lock_guard<std::recursive_mutex> registry_guard(g_registry_mutex);
+    engine_handle_s *impl = nullptr;
+    auto result = ValidateHandleLocked(handle, &impl);
+    if(result != ENGINE_RESULT_OK) {
+        return result;
+    }
+    std::lock_guard<std::recursive_mutex> guard(impl->mutex);
+    impl->last_error.clear();
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+}
+
+engine_result_t engine_resolve_window_close(engine_handle_t handle,
+                                            int32_t allow_close) {
+    // 无 krkr2 运行时的构建（宿主校验用）：没有窗口状态可言，幂等返回成功，
+    // 与运行时实现保持同一份 ABI 语义。allow_close 只为签名一致。
+    (void)allow_close;
     std::lock_guard<std::recursive_mutex> registry_guard(g_registry_mutex);
     engine_handle_s *impl = nullptr;
     auto result = ValidateHandleLocked(handle, &impl);

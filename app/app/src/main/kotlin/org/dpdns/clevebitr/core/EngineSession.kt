@@ -77,6 +77,13 @@ class EngineSession(
      * 回调**，只回调一次。宿主应直接离开游戏界面：窗口已经没了，"继续游戏"无从谈起。
      */
     private val onWindowClosed: () -> Unit = {},
+    /**
+     * 游戏**请求关闭窗口**（KAG 退出菜单走的就是这条）。**已切到主线程回调**，只回调
+     * 一次。此刻引擎什么都没拆，只是把这一帧停住等答复：
+     *   - 确认退出 → [resolveWindowClose]`(true)`（下一帧报 [onWindowClosed]）；
+     *   - 继续游戏 → [resolveWindowClose]`(false)`，游戏从原处接着跑。
+     */
+    private val onWindowCloseRequested: () -> Unit = {},
 ) {
     companion object {
         private const val TAG = "KrKr2Next/Engine"
@@ -237,6 +244,12 @@ class EngineSession(
      */
     private var gameTerminated = false
 
+    /**
+     * 游戏是否已请求关窗。同样只为把"请宿主弹确认框"收敛成一次（挂起期间引擎会一直
+     * 返回 `RESULT_WINDOW_CLOSE_REQUESTED`）。[resolveWindowClose] 之外只在渲染线程读写。
+     */
+    private var windowCloseRequested = false
+
     private val logBuffer = ByteArray(LOG_BUFFER_SIZE)
 
     private val frameCallback = object : Choreographer.FrameCallback {
@@ -287,6 +300,16 @@ class EngineSession(
                             AppLog.i(TAG, "游戏关窗退出（engineTick 返回 WINDOW_CLOSED），直接收尾")
                             postToMain { onWindowClosed() }
                             return
+                        }
+                    } else if (rc == NativeEngine.RESULT_WINDOW_CLOSE_REQUESTED) {
+                        // 游戏**请求**关窗（KAG 退出菜单）：引擎把关闭挂起、什么都没拆，
+                        // 等宿主确认。这不是错误（不计 tickFailures），帧循环也**不停**
+                        // —— 用户选"继续游戏"后 resolveWindowClose(false) 一清，下一帧
+                        // 就照常跑，不需要再接回帧循环。只上报一次，避免每帧弹框。
+                        if (!windowCloseRequested) {
+                            windowCloseRequested = true
+                            AppLog.i(TAG, "游戏请求关闭窗口（engineTick 返回 WINDOW_CLOSE_REQUESTED），等宿主确认")
+                            postToMain { onWindowCloseRequested() }
                         }
                     } else if (rc == NativeEngine.RESULT_STARTUP_PENDING) {
                         // 游戏仍在启动（StartApplication 在 worker 线程里跑）。
@@ -475,6 +498,41 @@ class EngineSession(
                 if (!paused) choreographer?.postFrameCallback(frameCallback)
             }
             AppLog.i(TAG, "宿主确认继续游戏：已撤销终止标志，恢复帧循环")
+        }
+    }
+
+    /**
+     * 答复"游戏请求关窗"（[onWindowCloseRequested]）。**可在任意线程调用**（内部切到
+     * 渲染线程，与 engineTick 同线程）。
+     *
+     * @param allowClose true=退出（下一帧 tick 返回 [onWindowClosed]）；false=继续游戏，
+     *   游戏从原处接着跑。幂等；会话已关闭时空操作。
+     * @param onRefused 引擎拒绝时回调（例如挂起已被兜底超时关掉）——宿主应直接退出到库
+     *   界面，绝不能把用户留在死画面上。
+     */
+    fun resolveWindowClose(allowClose: Boolean, onRefused: () -> Unit = {}) {
+        post {
+            if (handle == 0L) {
+                if (!allowClose) postToMain { onRefused() }
+                return@post
+            }
+            val rc = NativeEngine.engineResolveWindowClose(handle, if (allowClose) 1 else 0)
+            if (rc != NativeEngine.RESULT_OK) {
+                AppLog.w(TAG, "engineResolveWindowClose(allow=$allowClose) rc=$rc err=${lastError()}")
+                if (!allowClose) {
+                    postToMain { onRefused() }
+                }
+                return@post
+            }
+            windowCloseRequested = false
+            if (allowClose) {
+                // 引擎已执行关窗终止：下一帧 tick 返回 RESULT_WINDOW_CLOSED，由那里的
+                // 分支走 exitToLauncher()。这里只记一笔。
+                AppLog.i(TAG, "宿主确认退出：已请求引擎执行关窗终止")
+            } else {
+                lastFrameNanos = 0L
+                AppLog.i(TAG, "宿主选择继续游戏：已取消关窗请求，游戏继续运行")
+            }
         }
     }
 

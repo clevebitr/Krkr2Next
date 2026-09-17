@@ -69,6 +69,7 @@ ENGINE_SYMBOLS=(
     engine_read_frame_rgba
     engine_resume
     engine_cancel_termination
+    engine_resolve_window_close
     engine_send_input
     engine_set_log_file_path
     engine_set_option

@@ -80,7 +80,25 @@ typedef enum engine_result_t {
      * 因为窗口已经没了：宿主**不能**提供"继续游戏"（撤销后只是在空场景上继续跑，
      * 真机实测就是卡死），应当直接离开游戏界面。
      */
-    ENGINE_RESULT_WINDOW_CLOSED = -8
+    ENGINE_RESULT_WINDOW_CLOSED = -8,
+    /*
+     * The game asked to close its window (KAG's quit menu: `kag.close()` →
+     * `Window.close()`), but the host deferred the close so it can ask the player
+     * first. Nothing has been torn down: the window still paints, the script keeps
+     * its state, and the tick is simply paused until the host answers with
+     * engine_resolve_window_close().
+     *
+     * Not an error. The host MUST answer: allow=1 quits (the next tick returns
+     * ENGINE_RESULT_WINDOW_CLOSED), allow=0 cancels and the game keeps running.
+     * The engine force-closes by itself if nobody answers within ~20s.
+     *
+     * 游戏请求关闭窗口（KAG 退出菜单），但宿主把关闭挂起以便先问用户。什么都没拆：
+     * 窗口照常绘制、脚本状态完好，只是 tick 停在挂起状态等宿主用
+     * engine_resolve_window_close() 给答复。**不是错误**；宿主必须答复：
+     * allow=1 退出（下一帧报 WINDOW_CLOSED），allow=0 取消、游戏继续跑。
+     * 无人答复时引擎约 20s 后自行关窗兜底。
+     */
+    ENGINE_RESULT_WINDOW_CLOSE_REQUESTED = -9
 } engine_result_t;
 
 typedef struct engine_create_desc_t {
@@ -296,6 +314,30 @@ ENGINE_API_EXPORT engine_result_t engine_resume(engine_handle_t handle);
  */
 ENGINE_API_EXPORT engine_result_t
 engine_cancel_termination(engine_handle_t handle);
+
+/*
+ * Answers a pending window-close request (the state that makes engine_tick return
+ * ENGINE_RESULT_WINDOW_CLOSE_REQUESTED).
+ *
+ * Host flow: show a confirmation dialog.
+ *   - allow != 0 -> quit: the engine performs the real window close, and the next
+ *     engine_tick returns ENGINE_RESULT_WINDOW_CLOSED so the host leaves the game
+ *     screen as usual.
+ *   - allow == 0 -> keep playing: the request is dropped, nothing was torn down,
+ *     and the game continues from exactly where it was (this is what makes
+ *     "keep playing" meaningful for KAG's quit menu, unlike WINDOW_CLOSED).
+ * Idempotent: with nothing pending, allow==0 returns ENGINE_RESULT_OK; allow!=0 on
+ * an already terminated runtime returns ENGINE_RESULT_INVALID_STATE.
+ * Must be called on the engine's owner thread (the engine_tick thread).
+ *
+ * 答复"游戏请求关窗"（engine_tick 返回 ENGINE_RESULT_WINDOW_CLOSE_REQUESTED 的状态）。
+ * 宿主收到该结果码后弹确认框：allow!=0 退出（引擎执行真正的关窗，下一帧 tick 报
+ * WINDOW_CLOSED，宿主照常离开游戏界面）；allow==0 继续游戏（丢掉请求，什么都没拆，
+ * 游戏从原处接着跑 —— 这正是 KAG 退出菜单里"继续游戏"能成立的原因，与
+ * WINDOW_CLOSED 那种"窗口已经没了"的情形不同）。幂等；必须在引擎 owner 线程调用。
+ */
+ENGINE_API_EXPORT engine_result_t
+engine_resolve_window_close(engine_handle_t handle, int32_t allow_close);
 
 /*
  * Sets runtime option by UTF-8 key/value pair.

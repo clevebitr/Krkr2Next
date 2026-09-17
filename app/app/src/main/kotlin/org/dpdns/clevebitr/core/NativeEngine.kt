@@ -46,6 +46,18 @@ object NativeEngine {
      */
     external fun engineCancelTermination(handle: Long): Int
 
+    /**
+     * 答复"游戏请求关窗"（即让 [engineTick] 返回 [RESULT_WINDOW_CLOSE_REQUESTED] 的
+     * 那个状态）。
+     *
+     * @param allowClose 非 0=退出：引擎执行真正的关窗，下一帧 tick 返回
+     *   [RESULT_WINDOW_CLOSED]；0=继续游戏：丢掉请求，什么都没拆，游戏从原处接着跑。
+     *
+     * **必须在渲染线程调用**（与 engineTick 同线程）—— [EngineSession.resolveWindowClose]
+     * 负责切线程。幂等。
+     */
+    external fun engineResolveWindowClose(handle: Long, allowClose: Int): Int
+
     // ── 打开游戏 ──────────────────────────────────────────────────────────
     /** @param startupScript 传 null 用默认启动脚本 */
     external fun engineOpenGameAsync(
@@ -152,6 +164,16 @@ object NativeEngine {
      * **不能**提供"继续游戏"——撤销后只是在空场景上继续跑（真机实测画面彻底不动）。
      */
     const val RESULT_WINDOW_CLOSED = -8
+
+    /**
+     * 游戏**请求关闭窗口**（KAG 退出菜单：`kag.close()` → `Window.close()`），但引擎把
+     * 关闭挂起等宿主确认。此刻什么都没拆：窗口照常绘制、脚本状态完好。
+     *
+     * **不是错误**（壳不要计数）。宿主必须弹确认框并调 [engineResolveWindowClose] 答复：
+     * 非 0 退出（下一帧返回 [RESULT_WINDOW_CLOSED]），0 继续游戏（游戏从原处继续）。
+     * 取值与 `engine_api.h` 的 `ENGINE_RESULT_WINDOW_CLOSE_REQUESTED` 一致。
+     */
+    const val RESULT_WINDOW_CLOSE_REQUESTED = -9
 
     // ── 启动状态 ──────────────────────────────────────────────────────────
     const val STARTUP_IDLE = 0

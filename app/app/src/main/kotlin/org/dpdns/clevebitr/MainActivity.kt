@@ -94,10 +94,17 @@ class MainActivity : ComponentActivity() {
     private var recoveryNotice by mutableStateOf<String?>(null)
 
     /**
-     * 游戏请求退出（引擎返回 GAME_TERMINATED）时置起：弹出确认框。
-     * 选"退出游戏"→ exitToLauncher()；选"继续游戏"→ session.cancelGameTermination()。
+     * 游戏请求退出时置起：弹出确认框。两种来路：
+     *  - [ExitPromptKind.TERMINATED]：脚本 `System.exit()`（引擎已终止挂起，可撤销）；
+     *  - [ExitPromptKind.WINDOW_CLOSE_REQUESTED]：KAG 退出菜单请求关窗（引擎把关闭挂起，
+     *    什么都没拆，选"继续游戏"能真的接着玩）。
+     * 选"退出游戏"→ exitToLauncher()；选"继续游戏"→ cancelGameTermination() /
+     * resolveWindowClose(false)。
      */
-    private var gameExitPrompt by mutableStateOf(false)
+    private var gameExitPrompt by mutableStateOf<ExitPromptKind?>(null)
+
+    /** 确认框的两种来路，文案与"继续"的处理不同。 */
+    private enum class ExitPromptKind { TERMINATED, WINDOW_CLOSE_REQUESTED }
 
     /** 游戏内悬浮菜单打开的设置页（覆盖在游戏画面之上）。 */
     private var inGameSettings by mutableStateOf(false)
@@ -246,24 +253,36 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    // 游戏内"退出游戏"确认框：此刻引擎已把终止挂起（不再渲染，但什么
-                    // 都没拆），这里问一句。选"继续游戏"会撤销终止、游戏从当前进度接着
-                    // 跑；点外部/返回键等同"继续游戏"，避免误触直接退出。
-                    if (gameExitPrompt) {
+                    // 游戏内"退出游戏"确认框：此刻引擎已把终止/关窗挂起（不再渲染，但
+                    // 什么都没拆），这里问一句。选"继续游戏"会撤销挂起、游戏从当前进度
+                    // 接着跑；点外部/返回键等同"继续游戏"，避免误触直接退出。
+                    gameExitPrompt?.let { kind ->
                         AlertDialog(
                             onDismissRequest = { keepPlaying() },
                             title = { Text("游戏请求退出") },
                             text = {
                                 Text(
-                                    "游戏内的退出操作请求结束游戏。\n" +
-                                        "选择「继续游戏」会回到游戏当前进度。"
+                                    when (kind) {
+                                        ExitPromptKind.TERMINATED ->
+                                            "游戏内的退出操作请求结束游戏。\n" +
+                                                "选择「继续游戏」会回到游戏当前进度。"
+                                        ExitPromptKind.WINDOW_CLOSE_REQUESTED ->
+                                            "游戏请求关闭窗口（游戏内的退出菜单）。\n" +
+                                                "选择「继续游戏」会留在游戏里继续玩。"
+                                    }
                                 )
                             },
                             confirmButton = {
                                 TextButton(onClick = {
-                                    gameExitPrompt = false
-                                    AppLog.i(TAG, "用户确认退出游戏")
-                                    exitToLauncher()
+                                    gameExitPrompt = null
+                                    AppLog.i(TAG, "用户确认退出游戏（kind=$kind）")
+                                    if (kind == ExitPromptKind.WINDOW_CLOSE_REQUESTED) {
+                                        // 引擎执行真正的关窗；下一帧 tick 会返回
+                                        // WINDOW_CLOSED，由 onWindowClosed 走 exitToLauncher()。
+                                        session?.resolveWindowClose(allowClose = true)
+                                    } else {
+                                        exitToLauncher()
+                                    }
                                 }) { Text("退出游戏") }
                             },
                             dismissButton = {
@@ -277,12 +296,23 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 用户在"游戏请求退出"确认框里选了继续游戏：请引擎撤销终止标志并恢复帧循环。
+     * 用户在"游戏请求退出"确认框里选了继续游戏：按来路请引擎撤销挂起。
      * 幂等；会话已关闭时是空操作。
      */
     private fun keepPlaying() {
-        gameExitPrompt = false
-        AppLog.i(TAG, "用户选择继续游戏：已请求撤销退出流程")
+        val kind = gameExitPrompt
+        gameExitPrompt = null
+        AppLog.i(TAG, "用户选择继续游戏（kind=$kind）：已请求撤销退出流程")
+        if (kind == ExitPromptKind.WINDOW_CLOSE_REQUESTED) {
+            // KAG 退出菜单这条路：引擎把关窗挂起了，什么都没拆，撤销后游戏能真的
+            // 接着玩。引擎若已兜底关窗（20s 无人确认）则拒绝 —— 那时只能退出。
+            session?.resolveWindowClose(allowClose = false, onRefused = {
+                AppLog.w(TAG, "撤销关窗请求被拒（引擎已关窗），直接退出游戏界面")
+                Toast.makeText(this, "游戏已关闭窗口，无法继续", Toast.LENGTH_LONG).show()
+                exitToLauncher()
+            })
+            return
+        }
         session?.cancelGameTermination(onRefused = {
             // 引擎拒绝撤销（游戏已经关掉自己的窗口）时不能把用户留在死画面上：
             // 提示一句并直接退出到库界面。
@@ -513,7 +543,14 @@ class MainActivity : ComponentActivity() {
             // 引擎此刻只是"终止挂起"（不再渲染、什么都没拆），所以可以取消。
             onGameExitRequested = {
                 AppLog.i(TAG, "game requested exit -> 弹确认框")
-                gameExitPrompt = true
+                gameExitPrompt = ExitPromptKind.TERMINATED
+            },
+            // 游戏**请求关窗**（KAG 退出菜单：kag.close() → Window.close()）：引擎把关闭
+            // 挂起，窗口没拆、脚本状态完好，所以"继续游戏"能真的接着玩 —— 这正是
+            // 用户要的"游戏请求退出时先问一句"。
+            onWindowCloseRequested = {
+                AppLog.i(TAG, "game requested window close -> 弹确认框")
+                gameExitPrompt = ExitPromptKind.WINDOW_CLOSE_REQUESTED
             },
             // 游戏关掉了自己的窗口：窗口已经没了，给"继续游戏"也是骗人的（撤销后只是
             // 在空场景上继续跑）。直接收尾，不弹确认框。
@@ -539,7 +576,7 @@ class MainActivity : ComponentActivity() {
         }
         session = null
         // 会话没了，退出确认框不该再挂着（否则退出后还会再弹一次）。
-        gameExitPrompt = false
+        gameExitPrompt = null
     }
 
     private fun exitToLauncher() {

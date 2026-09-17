@@ -41,8 +41,14 @@
 #define uint32_t unsigned int
 
 #include <thread>
+#include <atomic>
+#include <chrono>
 
 #undef uint32_t
+
+// spdlog 放在 uint32_t 宏之外：它内部有 std::uint32_t 这类限定名，
+// 在 `#define uint32_t unsigned int` 生效期间会被替换成 std::unsigned int 而编译不过。
+#include <spdlog/spdlog.h>
 
 #include "Platform.h"
 #include "ConfigManager/IndividualConfigManager.h"
@@ -397,6 +403,74 @@ int TVPTerminateCode = 0;
 bool TVPHostSuppressProcessExit = false;
 
 //---------------------------------------------------------------------------
+// 关窗确认闸门状态（见 SysInitImpl.h 的说明）。原子即可：写方是宿主线程
+// （engine_resolve_window_close，其实也就是 tick 的 owner 线程）与渲染线程。
+namespace krkr::host {
+namespace {
+std::atomic<bool> g_deferWindowClose{ false };
+std::atomic<bool> g_windowClosePending{ false };
+std::atomic<int64_t> g_windowCloseRequestMs{ 0 };
+
+// 宿主一直不回答时的兜底：宁可自己关掉，也不要把游戏永久钉在挂起状态。
+constexpr int64_t kWindowCloseFallbackMs = 20000;
+
+int64_t NowSteadyMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+} // namespace
+
+void SetDeferWindowClose(bool defer) {
+    g_deferWindowClose.store(defer, std::memory_order_relaxed);
+}
+
+bool DeferWindowClose() {
+    return g_deferWindowClose.load(std::memory_order_relaxed);
+}
+
+bool RequestWindowClose() {
+    if(!g_deferWindowClose.load(std::memory_order_relaxed))
+        return false;
+    // 已经挂起时同样返回 true：调用方（HostWindowLayer::Close 的第二次调用）
+    // 也不能再把窗口拆掉。
+    bool expected = false;
+    if(g_windowClosePending.compare_exchange_strong(expected, true)) {
+        g_windowCloseRequestMs.store(NowSteadyMs(), std::memory_order_relaxed);
+        spdlog::info("host: 游戏请求关闭窗口，已挂起等宿主确认（engine_tick 返回 "
+                     "WINDOW_CLOSE_REQUESTED）");
+    }
+    return true;
+}
+
+bool WindowClosePending() {
+    if(!g_windowClosePending.load(std::memory_order_relaxed))
+        return false;
+    const int64_t requested = g_windowCloseRequestMs.load(std::memory_order_relaxed);
+    if(NowSteadyMs() - requested > kWindowCloseFallbackMs) {
+        spdlog::warn("host: 关窗请求 {}ms 无人确认，兜底执行关窗终止",
+                     static_cast<long long>(NowSteadyMs() - requested));
+        ConfirmWindowClose();
+        return false;
+    }
+    return true;
+}
+
+void CancelWindowClose() {
+    if(g_windowClosePending.exchange(false))
+        spdlog::info("host: 宿主选择继续游戏，已撤销未决的关窗请求");
+}
+
+void ConfirmWindowClose() {
+    g_windowClosePending.store(false, std::memory_order_relaxed);
+    // 不走 HostWindowLayer::Close()（那会再次撞上闸门）：宿主已经确认，
+    // 这里直接按"关窗退出"处理，engine_tick 下一帧会报 WINDOW_CLOSED。
+    TVPTerminateWindowClosed = true;
+    TVPTerminateAsync(0);
+}
+} // namespace krkr::host
+
+//---------------------------------------------------------------------------
 void TVPTerminateAsync(int code) {
     // do "A"synchronous temination of application
     TVPTerminated = true;
@@ -434,6 +508,9 @@ void TVPMainWindowClosed() {
     // called from WindowIntf.cpp, caused by closing all window.
     if(TVPTerminateOnWindowClose) {
         // 记下"由窗口关闭引起"：宿主据此不提供"继续游戏"（窗口已经没了）。
+        // 这条日志用来区分两种关窗来路：Window.close()（走 HostWindowLayer::Close，
+        // 可被确认闸门拦下）与窗口注销（走这里，窗口已经注销，拦不住）。
+        spdlog::debug("TVPMainWindowClosed: 主窗口已注销，按关窗退出处理");
         TVPTerminateWindowClosed = true;
         TVPTerminateAsync();
     }
@@ -705,6 +782,10 @@ void TVPResetSysInitImplForRestart() {
     TVPTerminated = false;
     TVPTerminateWindowClosed = false;
     TVPTerminateCode = 0;
+
+    // 上一局的未决关窗请求不能带到新启动的引擎里（否则新游戏一 tick 就被报成
+    // "请求关窗"）。闸门开关由宿主在 engine_create 里重新打开。
+    krkr::host::CancelWindowClose();
 
     TVPProjectDirSelected = false;
     TVPNativeProjectDir.Clear();
