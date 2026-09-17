@@ -257,9 +257,11 @@ namespace motion {
             return false;
         }
         // 目标层状态摘要（诊断用）：可见性/不透明度/子层数。见 drawOnto 的说明。
-        ttstr DescribeLayerState(iTJSDispatch2 *layer) {
+        // 返回 std::string 而不是 ttstr —— spdlog/fmt 不认识 tTJSString
+        // （fmt::detail::type_is_unformattable_for<TJS::tTJSString>，CI 实测）。
+        std::string DescribeLayerState(iTJSDispatch2 *layer) {
             if(!layer)
-                return ttstr(TJS_W("layer=null"));
+                return "layer=null";
             auto readInt = [layer](const tjs_char *name, int fallback) {
                 tTJSVariant v;
                 if(TJS_SUCCEEDED(layer->PropGet(0, name, nullptr, &v, layer)) &&
@@ -270,10 +272,9 @@ namespace motion {
             const int visible = readInt(TJS_W("visible"), -1);
             const int opacity = readInt(TJS_W("opacity"), -1);
             const int count = readInt(TJS_W("count"), -1);
-            return ttstr(TJS_W("layer(visible=")) +
-                ttstr(static_cast<tjs_int>(visible)) + TJS_W(",opacity=") +
-                ttstr(static_cast<tjs_int>(opacity)) + TJS_W(",count=") +
-                ttstr(static_cast<tjs_int>(count)) + TJS_W(")");
+            return "layer(visible=" + std::to_string(visible) + ",opacity=" +
+                std::to_string(opacity) + ",count=" + std::to_string(count) +
+                ")";
         }
         void clear(iTJSDispatch2 *target, tjs_int color) {
             if(!target)
