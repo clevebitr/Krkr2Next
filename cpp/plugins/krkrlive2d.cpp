@@ -3,8 +3,10 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -81,6 +83,108 @@ extern "C" bool KrkrGLES_IsCaptureActive();
 class CubismLive2DModel; // forward
 static std::vector<CubismLive2DModel *> g_activeModels;
 static void EnsureContinuousHook(); // forward
+
+// ---------------------------------------------------------------------------
+// GL 纹理缓存（按归档内路径键控）
+//
+// 为什么必须有：同一个 CG 的 `*.4096/texture_00.ktx` 是一份 ~21MB 的 BC7 KTX，
+// 真机上单次 BC7 软解就是 150ms 量级（4096² 146ms + 2048² 41ms，见 krkrgles 的
+// "BC7 decode" 日志）。而"切 CG / 轮播"这类操作会让同一路径在一局里被加载多次
+// （引擎会为同一个 baseName 重新 new 一个 Live2DModel），原来的实现每次都重新
+// 解码、重新上传并生成一张**新的** GL 纹理 —— 真机日志实测同一模型 3.2 秒内
+// 完整加载两遍，纹理 id 从 356 变成 380，前一张直接泄漏（约 40MB 常驻）。
+//
+// 语义：引用计数。多个模型/多次加载共享同一张 GL 纹理，最后一个引用释放时才删除。
+// 只在渲染线程访问（与本插件其余 GL 状态一致），因此只需要一把互斥锁保护跨线程的
+// 计数，不需要额外的线程亲和处理。
+// ---------------------------------------------------------------------------
+namespace {
+    struct CachedTexture {
+        GLuint id = 0;
+        int refs = 0;
+    };
+
+    std::mutex g_textureCacheMutex;
+    std::unordered_map<std::string, CachedTexture> g_textureCache;
+
+    // 命中返回 true 并 +1 引用；未命中返回 false（调用方负责上传并 RegisterTexture）。
+    bool AcquireCachedTexture(const std::string &key, GLuint *outId) {
+        if(key.empty() || !outId)
+            return false;
+        std::lock_guard<std::mutex> lock(g_textureCacheMutex);
+        auto it = g_textureCache.find(key);
+        if(it == g_textureCache.end() || it->second.id == 0)
+            return false;
+        it->second.refs++;
+        *outId = it->second.id;
+        return true;
+    }
+
+    // 登记一张新上传的纹理并返回该键**当前有效**的 GL id。
+    //
+    // 正常情况下这里必然是首次登记（命中缓存时调用方走的是 AcquireCachedTexture，
+    // 不会走到这里），返回的就是传入的 id。只有并发/重复登记才会命中 else 分支；
+    // 那时必须把本次多出来的那张删掉，并**返回既有 id**给调用方 —— 否则调用方会
+    // 拿着一个刚被删除的 id 去渲染（悬垂纹理）。
+    GLuint RegisterTexture(const std::string &key, GLuint id) {
+        if(key.empty() || id == 0)
+            return id;
+        std::lock_guard<std::mutex> lock(g_textureCacheMutex);
+        auto &entry = g_textureCache[key];
+        if(entry.id == 0) {
+            entry.id = id;
+            entry.refs = 1;
+            return id;
+        }
+        if(entry.id != id) {
+            GLuint dup = id;
+            glDeleteTextures(1, &dup);
+        }
+        // 本次调用同样持有一个引用。
+        entry.refs++;
+        return entry.id;
+    }
+
+    // 释放一个引用；引用归零时删除 GL 纹理并从表里摘除。
+    void ReleaseTextureRef(const std::string &key) {
+        if(key.empty())
+            return;
+        std::lock_guard<std::mutex> lock(g_textureCacheMutex);
+        auto it = g_textureCache.find(key);
+        if(it == g_textureCache.end())
+            return;
+        if(--it->second.refs <= 0) {
+            if(it->second.id) {
+                GLuint id = it->second.id;
+                glDeleteTextures(1, &id);
+            }
+            g_textureCache.erase(it);
+        }
+    }
+
+    // 清空纹理缓存；返回记录的条目数。
+    //
+    // `deleteGlObjects` 区分两种场景：
+    //   - true：当前 GL context 有效（正常游戏内清理），把 GL 纹理一并删掉。
+    //   - false：正在做插件卸载 / runtime-restart 收尾。此时调用方（engine_destroy）
+    //     **没有**保证 EGL context 仍然 current，而在无 current context 时调
+    //     glDeleteTextures 是未定义行为；何况那个 context 马上就要销毁，纹理会随
+    //     它一起消失。这里只需要把记录丢掉，避免把失效的 id 交给新 context 复用。
+    size_t ClearTextureCache(bool deleteGlObjects = true) {
+        std::lock_guard<std::mutex> lock(g_textureCacheMutex);
+        const size_t n = g_textureCache.size();
+        if(deleteGlObjects) {
+            for(auto &kv : g_textureCache) {
+                if(kv.second.id) {
+                    GLuint id = kv.second.id;
+                    glDeleteTextures(1, &id);
+                }
+            }
+        }
+        g_textureCache.clear();
+        return n;
+    }
+} // namespace
 
 // configure 期由 scripts/gen_embedded_shaders.py 生成（见
 // cpp/plugins/CMakeLists.txt）： 按文件名返回 SDK 的 GLES2 着色器源码。
@@ -481,6 +585,10 @@ public:
         EnsureCubismInitialized();
         baseName_ = baseName;
 
+        // 允许同一实例重复加载：先释放上一轮的纹理引用，否则引用计数会只增不减，
+        // 缓存里的纹理永远删不掉（内存泄漏），且 textureIds_ 会越滚越长。
+        ReleaseTextures();
+
         ZipArchive archive;
         if(!ExtractZipToMemory(zipData.data(), zipData.size(), archive)) {
             spdlog::error("krkrlive2d: failed to extract ZIP for {}", baseName);
@@ -550,21 +658,35 @@ public:
                          texPath, ktxPath);
 
             GLuint texId = 0;
+            // 缓存键：实际命中的归档内路径。KTX 与 PNG 分开记，避免
+            // "KTX 缺失退化成 PNG" 的场景与纯 KTX 路径互相覆盖。
+            std::string cacheKey;
 
             auto ktxIt = archive.find(ktxPath);
             if(ktxIt != archive.end()) {
-                L2D_LOGI("tex #%d: found KTX in archive (%zu bytes)", i,
-                         ktxIt->second.size());
-                texId =
-                    LoadKtxTexture(ktxIt->second.data(), ktxIt->second.size());
-                if(texId)
-                    L2D_LOGI("tex #%d: KTX loaded OK (texId=%u)", i, texId);
-                else
-                    L2D_LOGW("tex #%d: KTX load FAILED", i);
-                spdlog::info("krkrlive2d: tex #{}: KTX found ({} bytes) -> "
-                             "texId={}",
-                             i, ktxIt->second.size(),
-                             static_cast<unsigned>(texId));
+                cacheKey = ktxPath;
+                if(AcquireCachedTexture(cacheKey, &texId)) {
+                    // 命中：跳过 20MB 的 BC7 软解与重复上传。
+                    spdlog::info("krkrlive2d: tex #{}: 纹理缓存命中 '{}' -> "
+                                 "texId={}（跳过重复解码/上传）",
+                                 i, cacheKey, static_cast<unsigned>(texId));
+                } else {
+                    L2D_LOGI("tex #%d: found KTX in archive (%zu bytes)", i,
+                             ktxIt->second.size());
+                    texId = LoadKtxTexture(ktxIt->second.data(),
+                                           ktxIt->second.size());
+                    if(texId) {
+                        L2D_LOGI("tex #%d: KTX loaded OK (texId=%u)", i, texId);
+                        // 用登记后的"有效 id"：并发/重复登记时它会换成既有那张。
+                        texId = RegisterTexture(cacheKey, texId);
+                    } else {
+                        L2D_LOGW("tex #%d: KTX load FAILED", i);
+                    }
+                    spdlog::info("krkrlive2d: tex #{}: KTX found ({} bytes) -> "
+                                 "texId={}（已入缓存）",
+                                 i, ktxIt->second.size(),
+                                 static_cast<unsigned>(texId));
+                }
             } else {
                 L2D_LOGI("tex #%d: KTX not found in archive", i);
                 spdlog::warn("krkrlive2d: tex #{}: KTX 不在包里（key='{}'，"
@@ -575,14 +697,25 @@ public:
             if(!texId) {
                 auto texIt = archive.find(texPath);
                 if(texIt != archive.end()) {
-                    L2D_LOGI("tex #%d: found PNG in archive (%zu bytes)", i,
-                             texIt->second.size());
-                    texId = LoadPngTexture(texIt->second.data(),
-                                           texIt->second.size());
-                    if(texId)
-                        L2D_LOGI("tex #%d: PNG loaded OK (texId=%u)", i, texId);
-                    else
-                        L2D_LOGW("tex #%d: PNG decode FAILED", i);
+                    cacheKey = texPath;
+                    if(AcquireCachedTexture(cacheKey, &texId)) {
+                        spdlog::info("krkrlive2d: tex #{}: 纹理缓存命中 '{}' "
+                                     "-> texId={}（跳过重复解码/上传）",
+                                     i, cacheKey,
+                                     static_cast<unsigned>(texId));
+                    } else {
+                        L2D_LOGI("tex #%d: found PNG in archive (%zu bytes)", i,
+                                 texIt->second.size());
+                        texId = LoadPngTexture(texIt->second.data(),
+                                               texIt->second.size());
+                        if(texId) {
+                            L2D_LOGI("tex #%d: PNG loaded OK (texId=%u)", i,
+                                     texId);
+                            texId = RegisterTexture(cacheKey, texId);
+                        } else {
+                            L2D_LOGW("tex #%d: PNG decode FAILED", i);
+                        }
+                    }
                 } else {
                     L2D_LOGW("tex #%d: PNG not found in archive either", i);
                     spdlog::warn("krkrlive2d: tex #{}: PNG 也不在包里"
@@ -606,9 +739,13 @@ public:
                 spdlog::warn("krkrlive2d: tex #{}: 用 1x1 白色占位纹理"
                              "（纹理没加载到，模型会变成纯色）",
                              i);
+                // 占位纹理不入缓存：它属于"这次加载失败"的产物，缓存下来会让
+                // 后续加载永远拿到白色，掩盖真正的加载错误。缓存键置空即可。
+                cacheKey.clear();
             }
 
             textureIds_.push_back(texId);
+            textureKeys_.push_back(cacheKey);
         }
 
         {
@@ -660,11 +797,20 @@ public:
         }
 
         // Load motions
+        // 同时登记"组名 → 组内动作名"表：脚本侧 getMotionGroupName /
+        // getMotionCount / getMotionName / startMotion 全靠它。原先这张表**从未被
+        // 填充**（motionGroupNames_ 硬编码成 {"main"}、motionNames_ 只有读没有写），
+        // 于是 getMotionCount 恒为 0、getMotionName 恒为空串 —— 游戏拿不到可播的
+        // 动作名，切 CG/轮播动画时自然什么都不会发生。这是轮播失效的另一半根因。
+        motionGroupNames_.clear();
+        motionNames_.clear();
         csmInt32 groupCount = setting_->GetMotionGroupCount();
         for(csmInt32 g = 0; g < groupCount; ++g) {
             const csmChar *group = setting_->GetMotionGroupName(g);
             if(!group)
                 continue;
+            const std::string groupName(group);
+            bool groupRegistered = false;
             csmInt32 motionCount = setting_->GetMotionCount(group);
             for(csmInt32 m = 0; m < motionCount; ++m) {
                 const csmChar *motionFile =
@@ -691,16 +837,42 @@ public:
                         std::string key =
                             std::string(group) + "_" + std::to_string(m);
                         motions_[key] = motion;
+                        if(!groupRegistered) {
+                            groupRegistered = true;
+                            motionGroupNames_.push_back(ttstr(group));
+                        }
+                        // 脚本按**组内序号**定位动作（见 StartMotionByIndex），
+                        // 所以这张表必须按 m 的顺序 push，不能按归档命中顺序。
+                        auto &names = motionNames_[groupName];
+                        if(names.size() <= static_cast<size_t>(m))
+                            names.resize(static_cast<size_t>(m) + 1);
+                        // 播报用的名字取动作文件名（去掉目录与扩展名），
+                        // 便于日志里区分「切到了哪个动作」。
+                        std::string display = motionPath;
+                        auto slashPos = display.find_last_of("/\\");
+                        if(slashPos != std::string::npos)
+                            display = display.substr(slashPos + 1);
+                        auto dotPos = display.rfind('.');
+                        if(dotPos != std::string::npos)
+                            display = display.substr(0, dotPos);
+                        names[static_cast<size_t>(m)] =
+                            ttstr(display.empty() ? key : display);
                     }
                 }
             }
         }
+        if(motionGroupNames_.empty())
+            motionGroupNames_.push_back(TJS_W("main"));
 
         if(_motionManager && !motions_.empty()) {
             auto it = motions_.begin();
             _motionManager->StartMotionPriority(it->second, false, 1);
+            autoFirstMotionKey_ = it->first;
             spdlog::debug("krkrlive2d: auto-started motion '{}'", it->first);
         }
+        spdlog::info("krkrlive2d: motion 表就绪：{} 组 / {} 个动作（首播 '{}'）",
+                     motionGroupNames_.size(), motions_.size(),
+                     autoFirstMotionKey_);
 
         loaded_ = true;
         EnsureBlitProgram();
@@ -737,7 +909,14 @@ public:
         GetModel()->LoadParameters();
         if(_motionManager && _motionManager->IsFinished() &&
            !motions_.empty()) {
-            auto it = motions_.begin();
+            // 续播"当前选中的动作"，而非无脑回到第一个。脚本切过动作后
+            // （StartMotionByIndex 会刷新 selectedMotionKey_），这里才不会把它
+            // 拽回 motions_.begin()，轮播才能真正连续。
+            auto it = selectedMotionKey_.empty()
+                ? motions_.find(autoFirstMotionKey_)
+                : motions_.find(selectedMotionKey_);
+            if(it == motions_.end())
+                it = motions_.begin();
             _motionManager->StartMotionPriority(it->second, false, 1);
         }
         if(_motionManager)
@@ -921,15 +1100,69 @@ public:
         renderHeight_ = h;
     }
 
-    void StartMotionByIndex(const std::string &group, int index) {
+    // 返回是否真的切成功了（调用方据此决定要不要更新 selectedMotionKey_）。
+    bool StartMotionByIndex(const std::string &group, int index) {
         std::string key = group + "_" + std::to_string(index);
         auto it = motions_.find(key);
-        if(it != motions_.end() && _motionManager) {
-            _motionManager->StartMotionPriority(it->second, false, 2);
+        if(it == motions_.end() || !_motionManager)
+            return false;
+        // priority 2 高于加载时的自动起播(1)，切动作才能立刻生效。
+        _motionManager->StartMotionPriority(it->second, false, 2);
+        selectedMotionKey_ = key;
+        return true;
+    }
+
+    // 停止当前动作。清掉选中键，否则播完续播会把刚停掉的动作又拉回来。
+    void StopMotion() {
+        if(_motionManager)
+            _motionManager->StopAllMotions();
+        selectedMotionKey_.clear();
+    }
+
+    // 按"动作显示名"切动作。脚本有两种常见用法：
+    //   1) startMotion(组名, 序号)  —— getMotionName 拿到的序号
+    //   2) startMotion(动作名)      —— 直接把名字传进来
+    // 两种都要支持，否则第 2 种会因为找不对键而静默失败（旧实现则是永远不生效）。
+    bool StartMotionByName(const std::string &name) {
+        for(const auto &kv : motionNames_) {
+            const auto &names = kv.second;
+            for(size_t i = 0; i < names.size(); ++i) {
+                if(names[i].AsStdString() == name)
+                    return StartMotionByIndex(kv.first,
+                                              static_cast<int>(i));
+            }
         }
+        return false;
+    }
+
+    // 供脚本 getCurrentMotions 用：当前真正在播/选中的动作键。
+    const std::string &SelectedMotionKey() const { return selectedMotionKey_; }
+    bool HasMotion(const std::string &group, int index) const {
+        return motions_.find(group + "_" + std::to_string(index)) !=
+            motions_.end();
+    }
+    const std::vector<ttstr> &MotionGroups() const { return motionGroupNames_; }
+    const std::unordered_map<std::string, std::vector<ttstr>> &MotionNames() const {
+        return motionNames_;
     }
 
     bool IsLoaded() const { return loaded_; }
+
+    // ── 可见性 ────────────────────────────────────────────────────────────
+    // 脚本调 model.hide() 后必须真的停止"每帧更新 + 每帧整帧 blit"。
+    // 原来的实现里 show/hide 是空壳，于是**每个**加载过的 CG 都会一直参与每帧
+    // 渲染：切 N 个 CG 后每帧就有 N 次模型更新 + N 次全屏拷贝，这正是 KAG 模式下
+    // 越玩越卡的直接原因（g_activeModels 只增不减）。
+    void SetVisible(bool v) {
+        if(visible_ == v)
+            return;
+        visible_ = v;
+        // 重新显示时清掉陈旧的时间基准：否则隐藏期间累积的 dt 会在恢复的第一帧
+        // 被夹到上限，动作会"跳"一下。
+        if(visible_)
+            lastUpdateTime_ = std::chrono::steady_clock::time_point();
+    }
+    bool IsVisible() const { return visible_; }
 
     void SetMosaicSize(float x, float y) {
         mosaicSizeX_ = x;
@@ -1494,11 +1727,21 @@ private:
     }
 
     void ReleaseTextures() {
-        for(auto texId : textureIds_) {
-            if(texId)
-                glDeleteTextures(1, &texId);
+        // 共享纹理按缓存键递减引用，只有最后一个引用释放时才真正删 GL 纹理；
+        // 占位纹理（key 为空）没有共享者，直接删。
+        for(size_t i = 0; i < textureIds_.size(); ++i) {
+            const GLuint texId = textureIds_[i];
+            if(!texId)
+                continue;
+            if(i < textureKeys_.size() && !textureKeys_[i].empty()) {
+                ReleaseTextureRef(textureKeys_[i]);
+            } else {
+                GLuint id = texId;
+                glDeleteTextures(1, &id);
+            }
         }
         textureIds_.clear();
+        textureKeys_.clear();
     }
 
     void EnsureInternalFBO(GLsizei w, GLsizei h) {
@@ -1637,13 +1880,28 @@ private:
     }
 
     bool loaded_ = false;
+    // 默认可见：不调 show()/hide() 的老游戏行为不变。
+    bool visible_ = true;
     int renderWidth_ = 1920;
     int renderHeight_ = 1080;
     std::string baseName_;
     CubismModelSettingJson *setting_ = nullptr;
     std::vector<GLuint> textureIds_;
+    // 与 textureIds_ 一一对应的缓存键（空串 = 占位纹理，不参与缓存/引用计数）。
+    // 释放时按它递减引用，最后一个引用才真正 glDeleteTextures。
+    std::vector<std::string> textureKeys_;
     CubismMatrix44 projMatrix_;
     std::unordered_map<std::string, ACubismMotion *> motions_;
+    // 动作元数据表：与 motions_ 同属"模型自身的动作信息"，必须定义在本类里
+    // （脚本侧 getMotionGroupName / getMotionCount / getMotionName 经
+    // MotionGroups()/MotionNames() 读出去）。加载期由 LoadFromL2D 填充。
+    std::vector<ttstr> motionGroupNames_;
+    std::unordered_map<std::string, std::vector<ttstr>> motionNames_;
+    // 加载时自动起播的动作键（motions_ 的键："组_序号"）。动作播完后按它续播，
+    // 而不是重新取 motions_.begin() —— 否则脚本切过的动作会被"跳回"第一个。
+    std::string autoFirstMotionKey_;
+    // 当前选中的动作键，由 StartMotionByIndex 成功后写入，供播完续播使用。
+    std::string selectedMotionKey_;
     csmVector<const CubismId *> _eyeBlinkIds;
     csmVector<const CubismId *> _lipSyncIds;
     std::vector<csmInt32> mosaicDrawableIndices_;
@@ -1701,14 +1959,17 @@ public:
         glGetIntegerv(GL_VIEWPORT, savedVP);
 
         for(auto *m : g_activeModels) {
-            if(m && m->IsLoaded()) {
-                m->ContinuousUpdate(savedFBO, savedVP);
-                anyActive = true;
-                if(layer && g_live2dRenderTarget.fbo) {
-                    CopyFBOToLayer(
-                        g_live2dRenderTarget.fbo, g_live2dRenderTarget.width,
-                        g_live2dRenderTarget.height, layer, savedFBO);
-                }
+            // 不可见的模型既不更新也不拷贝。之前缺这道判断，切过 N 个 CG 之后
+            // 每帧就是 N 次模型更新 + N 次全屏 CopyFBOToLayer（KAG 档下的主要
+            // 卡顿来源）。
+            if(!m || !m->IsLoaded() || !m->IsVisible())
+                continue;
+            m->ContinuousUpdate(savedFBO, savedVP);
+            anyActive = true;
+            if(layer && g_live2dRenderTarget.fbo) {
+                CopyFBOToLayer(g_live2dRenderTarget.fbo,
+                               g_live2dRenderTarget.width,
+                               g_live2dRenderTarget.height, layer, savedFBO);
             }
         }
         if(anyActive && !layer && TVPGetWindowCount() > 0) {
@@ -1743,7 +2004,7 @@ static void Live2DPostDrawHook() {
     glGetIntegerv(GL_VIEWPORT, vp);
 
     for(auto *m : g_activeModels) {
-        if(m && m->IsLoaded()) {
+        if(m && m->IsLoaded() && m->IsVisible()) {
             m->BlitOverlay(curFBO, vp);
         }
     }
@@ -1901,6 +2162,8 @@ public:
         }
         s->cubismModel_->SetMosaicSize(static_cast<float>(s->mosaicX_),
                                        static_cast<float>(s->mosaicY_));
+        // 把 TJS 侧已有的可见性状态同步给新模型：脚本可能先 hide() 再 load()。
+        s->cubismModel_->SetVisible(s->visible_);
 
         s->loaded_ = true;
         s->progress_ = 1.0;
@@ -1931,8 +2194,16 @@ public:
         return TJS_S_OK;
     }
 
+    // show/hide 必须真正作用到 CubismModel：连续动画钩子按可见性跳过更新与
+    // 整帧 blit。否则切 CG 后所有历史模型都在每帧参与渲染。
     static tjs_error showCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
             KRKR_PROBE_TJS("Live2DModel", "show", n, p);
+        if(s) {
+            s->visible_ = true;
+            if(s->cubismModel_)
+                s->cubismModel_->SetVisible(true);
+            spdlog::info("krkrlive2d: model show: {}", s->storage_.AsStdString());
+        }
         if(r)
             *r = true;
         return TJS_S_OK;
@@ -1940,6 +2211,12 @@ public:
 
     static tjs_error hideCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
             KRKR_PROBE_TJS("Live2DModel", "hide", n, p);
+        if(s) {
+            s->visible_ = false;
+            if(s->cubismModel_)
+                s->cubismModel_->SetVisible(false);
+            spdlog::info("krkrlive2d: model hide: {}", s->storage_.AsStdString());
+        }
         if(r)
             *r = true;
         return TJS_S_OK;
@@ -2106,42 +2383,58 @@ public:
     static tjs_error getMotionGroupCountCb(tTJSVariant *r, tjs_int,
                                            tTJSVariant **, Live2DModel *s) {
         if(r)
-            *r = static_cast<tjs_int>(s ? s->motionGroupNames_.size() : 0);
+            *r = static_cast<tjs_int>(
+                (s && s->cubismModel_)
+                    ? s->cubismModel_->MotionGroups().size()
+                    : 0);
         return TJS_S_OK;
     }
 
     static tjs_error getMotionGroupNameCb(tTJSVariant *r, tjs_int n,
                                           tTJSVariant **p, Live2DModel *s) {
-        if(!r || !s)
+        if(!r)
             return TJS_S_OK;
+        if(!s || !s->cubismModel_) {
+            *r = ttstr();
+            return TJS_S_OK;
+        }
+        const auto &groups = s->cubismModel_->MotionGroups();
         tjs_int idx = (n > 0 && p) ? ToInt(*p[0], 0) : 0;
-        *r = (idx >= 0 &&
-              idx < static_cast<tjs_int>(s->motionGroupNames_.size()))
-            ? s->motionGroupNames_[static_cast<size_t>(idx)]
+        *r = (idx >= 0 && idx < static_cast<tjs_int>(groups.size()))
+            ? groups[static_cast<size_t>(idx)]
             : ttstr();
         return TJS_S_OK;
     }
 
     static tjs_error getMotionCountCb(tTJSVariant *r, tjs_int n,
                                       tTJSVariant **p, Live2DModel *s) {
-        if(!r || !s)
+        if(!r)
             return TJS_S_OK;
+        if(!s || !s->cubismModel_) {
+            *r = 0;
+            return TJS_S_OK;
+        }
         ttstr group = (n > 0 && p) ? ToTTStr(*p[0]) : TJS_W("main");
-        auto it = s->motionNames_.find(group.AsStdString());
-        *r = (it == s->motionNames_.end())
-            ? 0
-            : static_cast<tjs_int>(it->second.size());
+        const auto &names = s->cubismModel_->MotionNames();
+        auto it = names.find(group.AsStdString());
+        *r = (it == names.end()) ? 0
+                                 : static_cast<tjs_int>(it->second.size());
         return TJS_S_OK;
     }
 
     static tjs_error getMotionNameCb(tTJSVariant *r, tjs_int n, tTJSVariant **p,
                                      Live2DModel *s) {
-        if(!r || !s)
+        if(!r)
             return TJS_S_OK;
+        if(!s || !s->cubismModel_) {
+            *r = ttstr();
+            return TJS_S_OK;
+        }
         ttstr group = (n > 0 && p) ? ToTTStr(*p[0]) : TJS_W("main");
         tjs_int idx = (n > 1 && p) ? ToInt(*p[1], 0) : 0;
-        auto it = s->motionNames_.find(group.AsStdString());
-        if(it != s->motionNames_.end() && idx >= 0 &&
+        const auto &names = s->cubismModel_->MotionNames();
+        auto it = names.find(group.AsStdString());
+        if(it != names.end() && idx >= 0 &&
            idx < static_cast<tjs_int>(it->second.size()))
             *r = it->second[static_cast<size_t>(idx)];
         else
@@ -2149,18 +2442,80 @@ public:
         return TJS_S_OK;
     }
 
+    // 脚本侧 startMotion 的签名沿用官方插件：startMotion(组名[, 组内序号])。
+    // 关键修复：原实现只把动作名记进 currentMotions_ 就返回 true，**从不真正启动
+    // 动作** —— 于是切 CG / 轮播动画时画面纹丝不动（模型一直在播加载时自动起播的
+    // 那个动作），这是轮播失效的直接根因。这里改为真正落到 CubismMotionManager。
     static tjs_error startMotionCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
             KRKR_PROBE_TJS("Live2DModel", "startMotion", n, p);
         if(!s)
             return TJS_S_OK;
+        if(!s->cubismModel_) {
+            if(r)
+                *r = false;
+            return TJS_S_OK;
+        }
+
+        ttstr group = (n > 0 && p) ? ToTTStr(*p[0]) : TJS_W("main");
+        if(group.IsEmpty())
+            group = TJS_W("main");
+        const std::string raw = group.AsStdString();
+
+        // 参数写法有三种，按"从最具体到最宽松"的顺序试，避免误拆：
+        //   1) startMotion(组名, 序号)      —— 两个参数，最明确
+        //   2) startMotion(动作显示名)      —— 单个参数，名字里可能含下划线
+        //   3) startMotion("组_序号")       —— 单个参数，序号才是解析手段
+        //   4) startMotion(组名)            —— 取该组第 0 个
+        // 第 2 步必须先于第 3 步：否则 "idle_2" 这种组名会被按 `_` 错拆成
+        // 组 "idle" + 序号 2。
+        std::string groupName = raw;
+        tjs_int index = 0;
+        bool started = false;
+
+        if(n > 1) {
+            index = ToInt(*p[1], 0);
+            started = s->cubismModel_->StartMotionByIndex(groupName, index);
+        } else {
+            started = s->cubismModel_->StartMotionByName(raw);
+            if(!started) {
+                // "组_序号"：只认**最后一个**下划线且其右侧全为数字。
+                const auto us = raw.rfind('_');
+                if(us != std::string::npos && us + 1 < raw.size()) {
+                    const std::string tail = raw.substr(us + 1);
+                    if(tail.find_first_not_of("0123456789") ==
+                       std::string::npos) {
+                        const tjs_int parsed = std::atoi(tail.c_str());
+                        const std::string head = raw.substr(0, us);
+                        if(s->cubismModel_->StartMotionByIndex(head, parsed)) {
+                            groupName = head;
+                            index = parsed;
+                            started = true;
+                        }
+                    }
+                }
+            }
+            if(!started)
+                started = s->cubismModel_->StartMotionByIndex(raw, 0);
+        }
+
         s->playing_ = true;
-        ttstr motion = (n > 0 && p) ? ToTTStr(*p[0]) : TJS_W("idle");
-        if(motion.IsEmpty())
-            motion = TJS_W("idle");
         s->currentMotions_.clear();
-        s->currentMotions_.push_back(motion);
+        s->currentMotions_.push_back(group);
+        if(started) {
+            spdlog::info("krkrlive2d: startMotion '{}' #{} -> 已启动（键 {}）",
+                         groupName, static_cast<int>(index),
+                         s->cubismModel_->SelectedMotionKey());
+        } else {
+            // 找不到动作时不要假装成功：脚本靠返回值决定后续流程，
+            // 恒返回 true 会让"切不过去"变成静默失败。
+            spdlog::warn("krkrlive2d: startMotion '{}' #{} 未找到该动作"
+                         "（模型 {} 组 / {} 个动作）",
+                         groupName, static_cast<int>(index),
+                         s->cubismModel_->MotionGroups().size(),
+                         s->cubismModel_->MotionNames().size());
+        }
         if(r)
-            *r = true;
+            *r = started;
         return TJS_S_OK;
     }
 
@@ -2169,6 +2524,10 @@ public:
         if(s) {
             s->playing_ = false;
             s->currentMotions_.clear();
+            // 同时清掉"选中动作"，否则停掉之后播完续播还会把上一个动作拉回来。
+            if(s->cubismModel_)
+                s->cubismModel_->StopMotion();
+            spdlog::info("krkrlive2d: stopMotion: {}", s->storage_.AsStdString());
         }
         if(r)
             *r = true;
@@ -2530,6 +2889,9 @@ private:
 
     bool loaded_ = false;
     bool playing_ = false;
+    // 可见性（TJS 侧状态）。脚本可能先 hide() 再 load()，所以加载完成时要把
+    // 这个状态同步给新建的 CubismLive2DModel（见 loadCb）。
+    bool visible_ = true;
     iTJSDispatch2 *deviceObj_ = nullptr;
     CubismLive2DModel *cubismModel_ = nullptr;
 
@@ -2547,8 +2909,9 @@ private:
     tjs_int renderWidth_ = 1920, renderHeight_ = 1080;
 
     std::vector<ttstr> expressionNames_{ TJS_W("default") };
-    std::vector<ttstr> motionGroupNames_{ TJS_W("main") };
-    std::unordered_map<std::string, std::vector<ttstr>> motionNames_;
+    // 注意：动作元数据表（motionGroupNames_ / motionNames_ / autoFirstMotionKey_ /
+    // selectedMotionKey_）**不在这里** —— 它们属于 CubismLive2DModel（与 motions_
+    // 同处一地），脚本侧经 s->cubismModel_->MotionGroups()/MotionNames() 读取。
     std::vector<ttstr> parameterNames_;
     std::vector<ttstr> partNames_{ TJS_W("PartMain") };
     std::vector<ttstr> currentMotions_;
@@ -2663,5 +3026,25 @@ NCB_REGISTER_CLASS(Live2DModel) {
     NCB_METHOD_RAW_CALLBACK(resetExpressionVariables,
                             &Live2DModel::resetExpressionVariablesCb, 0);
 }
+
+// 插件卸载 / runtime-restart 时清空全局纹理缓存。
+//
+// 为什么必须做：缓存里的 GL 纹理 id 属于**创建它们的那个 GL context**。
+// engine_destroy → 重新 engine_open_game 会重建 EGL context（AGENTS.md 硬约束 7：
+// context 重建后不得复用旧纹理），而本缓存是进程级静态的 —— 不在这里清掉，
+// 新 context 下第一次命中缓存就会把一个已失效的 id 绑上去，表现为立绘变黑/错纹理，
+// 且因为没有 GL 报错会非常难查。
+//
+// 传 false：此处不保证 EGL context 仍 current（engine_destroy 在注销前没有
+// eglMakeCurrent），而那个 context 紧接着就会被销毁，纹理会随之消失。只需要
+// 丢掉记录，绝不能让失效 id 活到下一个 context。
+static void KrkrLive2DPreUnregist() {
+    const size_t n = ClearTextureCache(/*deleteGlObjects=*/false);
+    if(n)
+        spdlog::info("krkrlive2d: 卸载时清空纹理缓存（丢弃 {} 条记录，"
+                     "GL 纹理由旧 context 一并销毁）",
+                     n);
+}
+NCB_PRE_UNREGIST_CALLBACK(KrkrLive2DPreUnregist);
 
 extern "C" void TVPRegisterKrkrLive2DPluginAnchor() {}

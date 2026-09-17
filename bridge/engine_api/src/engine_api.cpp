@@ -55,6 +55,10 @@ extern "C" void krkr_GetSurfaceDimensions(uint32_t *, uint32_t *);
 #include "environ/Application.h"
 #include "environ/Platform.h"
 #include "environ/EngineBootstrap.h"
+
+// 日志去重/限频门闩。经 krkr2core 导出的 cpp/core 包含路径引入
+// （见 cpp/core/CMakeLists.txt 的 INTERFACE include）。
+#include "utils/LogUtil.h"
 #include "environ/EngineLoop.h"
 #include "environ/MainScene.h"
 #include "base/StorageIntf.h"
@@ -115,6 +119,32 @@ struct engine_handle_s {
         std::chrono::steady_clock::time_point last_render_time{};
         bool initialized = false;
     } fps;
+
+    // 每帧耗时统计（引擎侧）。壳侧的 perf 只能看到 engine_tick 总耗时，
+    // 这里把一帧拆成 update（Application::Run）与 post（呈现/回收/交付）两段，
+    // 按 5s 窗口汇总一行，用于回答"卡在引擎内部还是宿主交付"。
+    // 只在 tick 线程访问，无需加锁。
+    struct FramePerfState {
+        std::chrono::steady_clock::time_point window_start{};
+        uint64_t frames = 0;
+        // 本窗口内的累计耗时，单位微秒；结算后清零。
+        uint64_t update_us = 0;
+        uint64_t post_us = 0;
+        // 尖峰：单帧 update/post 的最大值，用于暴露"偶发一帧巨慢"。
+        uint64_t max_update_us = 0;
+        uint64_t max_post_us = 0;
+        // 本帧 update 段耗时，供 post 段结算"整帧是否超预算"。
+        uint64_t last_update_us = 0;
+        // 整帧（update+post）超过 33ms（≈30fps 下限）的帧数，反映掉帧规模。
+        uint64_t slow_frames = 0;
+        std::chrono::steady_clock::time_point prev_tick_end{};
+        uint64_t long_gap_frames = 0; // 两次 tick 间隔 > 100ms 的次数
+    } perf;
+
+    // 引擎侧帧耗时统计总开关。默认开启：它只在 5s 边界拼一条日志，
+    // 对每帧路径只加两次 steady_clock::now()，开销可忽略，而"没有引擎侧数据"
+    // 会让卡顿排查只能靠猜（原状）。可用选项 frame_perf=off 关闭。
+    bool perf_enabled = true;
 
     // Input event queue
     struct InputState {
@@ -213,6 +243,8 @@ namespace {
     std::string g_compat_request = ENGINE_GAME_COMPAT_PROFILE_AUTO;
     std::string g_compat_game_root;
     bool g_ogldrawdevice_explicit = false;
+    // 上一次真正记录过的判档结论（见 ApplyCompatProfileLocked 的幂等判断）。
+    std::string s_last_resolved_key;
     // 解析结果，供 engine_get_compat_profile 读给壳显示（性能叠加层用）。
     std::string g_compat_resolved_name;
     std::string g_compat_resolved_mode;
@@ -301,16 +333,36 @@ namespace {
 
         g_compat_resolved_name = prof->name;
         g_compat_resolved_mode = prof->ogldrawdevice;
+        // 幂等：profile 与 game_root 是分两条选项下发的，第二条到达时会把同一份
+        // 结论再解析一遍。真机日志里因此出现过**逐字重复**的两行
+        // "compat profile: krkrz-kag v1 -> ..."。这里只对**日志**去重。
+        //
+        // ⚠️ 绝不能因此跳过下面的 TVPSetCommandLine：该选项是"先写先赢"，而且
+        // 这些静态变量在同一进程的多次开游戏之间**不会重置**（跨 engine_destroy）。
+        // 若按"同键就提前返回"，第二次开同类档游戏时就不会再写选项，一旦命令行
+        // 配置在重启时被清过，插件读到的就是空 → 兼容档失效 → 正是注释里记载的
+        // "千恋万花黑屏进不去"。写操作必须每次都执行，只有日志允许省。
+        const std::string resolved_key =
+            std::string(prof->name) + "|" + prof->ogldrawdevice + "|" +
+            source + "|" + (g_ogldrawdevice_explicit ? "1" : "0") + "|" +
+            g_compat_game_root;
+        const bool same_as_last = (resolved_key == s_last_resolved_key);
+        s_last_resolved_key = resolved_key;
         // 显式传过 ogldrawdevice_compat 时以它为准：这里只记录，不覆盖。
-        spdlog::info("compat profile: {} v{} -> ogldrawdevice_compat={} ({}{})",
-                     prof->name, prof->version, prof->ogldrawdevice, source,
-                     g_ogldrawdevice_explicit ? ", 但显式选项优先" : "");
+        if(!same_as_last) {
+            spdlog::info(
+                "compat profile: {} v{} -> ogldrawdevice_compat={} ({}{})",
+                prof->name, prof->version, prof->ogldrawdevice, source,
+                g_ogldrawdevice_explicit ? ", 但显式选项优先" : "");
+        }
         if(g_ogldrawdevice_explicit)
             return;
         if(!g_compat_game_root.empty() &&
            g_compat_request == ENGINE_GAME_COMPAT_PROFILE_AUTO) {
-            spdlog::info("compat profile: 判档依据 game_root={}",
-                         g_compat_game_root);
+            if(!same_as_last) {
+                spdlog::info("compat profile: 判档依据 game_root={}",
+                             g_compat_game_root);
+            }
         }
         TVPSetCommandLine(TJS_W("ogldrawdevice_compat"),
                           ttstr(prof->ogldrawdevice).c_str());
@@ -499,6 +551,93 @@ namespace {
             }
             InstallCrashSignalHandlers();
         });
+    }
+
+    // ── 引擎侧每帧耗时统计 ────────────────────────────────────────────────
+    // 只在 tick 线程调用。5 秒结算一次，输出一行与壳侧 "perf:" 同口径的汇总，
+    // 用于把"卡顿"定位到引擎更新段还是呈现/交付段。
+    // 热路径上不做任何字符串构造，只有结算那一帧才拼一次日志。
+    void FramePerfAccumulate(
+        engine_handle_s *impl,
+        const std::chrono::steady_clock::time_point &update_begin,
+        const std::chrono::steady_clock::time_point &update_end) {
+        if(impl == nullptr || !impl->perf_enabled)
+            return;
+        auto &p = impl->perf;
+        const uint64_t update_us = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(update_end -
+                                                                 update_begin)
+                .count());
+        p.frames++;
+        p.update_us += update_us;
+        if(update_us > p.max_update_us)
+            p.max_update_us = update_us;
+        // post 段在本帧稍后才计时（见 FramePerfAccumulatePost），所以这里先把
+        // update 段存下来，由那边按"update+post"判定整帧是否超预算。
+        p.last_update_us = update_us;
+
+        // 两次 tick 的间隔：暴露宿主长时间没来 tick，或引擎内部把线程阻塞了。
+        if(p.prev_tick_end.time_since_epoch().count() != 0) {
+            const uint64_t gap_ms = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    update_begin - p.prev_tick_end)
+                    .count());
+            if(gap_ms > 100)
+                p.long_gap_frames++;
+        }
+        p.prev_tick_end = update_end;
+
+        if(p.window_start.time_since_epoch().count() == 0)
+            p.window_start = update_begin;
+        const uint64_t elapsed_ms = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                update_begin - p.window_start)
+                .count());
+        if(elapsed_ms < 5000 || p.frames == 0)
+            return;
+
+        const double frames = static_cast<double>(p.frames);
+        const double fps = frames * 1000.0 / static_cast<double>(elapsed_ms);
+        const double avg_update =
+            static_cast<double>(p.update_us) / frames / 1000.0;
+        const double avg_post =
+            static_cast<double>(p.post_us) / frames / 1000.0;
+        spdlog::info(
+            "frame_perf: fps={:.1f} update_avg={:.2f}ms post_avg={:.2f}ms "
+            "update_max={:.2f}ms post_max={:.2f}ms frames={} slow(>33ms)={} "
+            "tick_gap(>100ms)={}",
+            fps, avg_update, avg_post,
+            static_cast<double>(p.max_update_us) / 1000.0,
+            static_cast<double>(p.max_post_us) / 1000.0, p.frames,
+            p.slow_frames, p.long_gap_frames);
+
+        p.window_start = update_begin;
+        p.frames = 0;
+        p.update_us = 0;
+        p.post_us = 0;
+        p.max_update_us = 0;
+        p.max_post_us = 0;
+        p.slow_frames = 0;
+        p.long_gap_frames = 0;
+    }
+
+    // 记录一帧的 post 段（呈现 / 纹理回收 / 帧交付）耗时。
+    void FramePerfAccumulatePost(
+        engine_handle_s *impl,
+        const std::chrono::steady_clock::time_point &begin,
+        const std::chrono::steady_clock::time_point &end) {
+        if(impl == nullptr || !impl->perf_enabled)
+            return;
+        const uint64_t post_us = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count());
+        impl->perf.post_us += post_us;
+        if(post_us > impl->perf.max_post_us)
+            impl->perf.max_post_us = post_us;
+        // 整帧 = update + post。两段分两次计时，只有在这里才能得到整帧口径，
+        // 因此"掉帧数"在本函数里结算。33ms ≈ 30fps 下限。
+        if(impl->perf.last_update_us + post_us > 33000)
+            impl->perf.slow_frames++;
     }
 
     void SetThreadError(const char *message) {
@@ -808,6 +947,10 @@ namespace {
         spdlog::info("engine_open_game: runtime initialized, starting "
                      "application with path: {} (normalized: {})",
                      game_root_path_utf8, normalized_game_root_path);
+        // 新一局开始：清空"只记一次/限频"日志门闩。这两张表是进程级的，
+        // 不清的话换游戏后同类告警（如 PSB 解析失败）会被上一局的状态吞掉，
+        // 诊断信息凭空消失。
+        krkr::ResetLogGuards();
 #if defined(__ANDROID__)
         AndroidInfoLog("engine_open_game: input='%s' normalized='%s'",
                        game_root_path_utf8, normalized_game_root_path.c_str());
@@ -1793,7 +1936,15 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
             spdlog::default_logger()->flush();
         }
 #endif
+        // 引擎侧每帧耗时统计。壳侧的 "perf:" 只能看到 engine_tick 的总耗时，
+        // 分不出"引擎内部更新慢"还是"宿主/post 慢"；这里把一帧拆成
+        // update（Application::Run：脚本+场景合成+绘制）与 post
+        // （TVPDrawSceneOnce + 纹理回收 + 帧交付）两段，按固定间隔汇总一行。
+        // 与壳侧的 5s 采样对齐，便于两份日志并排看。
+        const auto update_start = std::chrono::steady_clock::now();
         ::Application->Run();
+        const auto update_end = std::chrono::steady_clock::now();
+        FramePerfAccumulate(impl, update_start, update_end);
 #if defined(KRKR_RENDER_PROBE)
         if(impl->tick_count % 15 == 0) {
             spdlog::info("engine_tick: tick={} Application::Run return",
@@ -1802,6 +1953,9 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
         }
 #endif
     }
+    // post 段：呈现 + 延迟纹理回收。与 update 段分开计时，才能区分
+    // "场景/脚本慢" 与 "呈现/交付慢"。
+    const auto post_start = std::chrono::steady_clock::now();
     ::TVPDrawSceneOnce(0);
 
     // Process deferred texture deletions. iTVPTexture2D::Release() uses
@@ -1811,6 +1965,8 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
     // indefinitely, causing a memory leak — especially visible in OpenGL
     // mode where each texture also holds GPU resources.
     iTVPTexture2D::RecycleProcess();
+    FramePerfAccumulatePost(impl, post_start,
+                            std::chrono::steady_clock::now());
 
     if(TVPTerminated) {
         return SetHandleErrorAndReturnLocked(impl, ENGINE_RESULT_INVALID_STATE,
@@ -2074,6 +2230,16 @@ engine_result_t engine_set_option(engine_handle_t handle,
         TVPSetFontFallbackModeFromString(option->value_utf8);
         spdlog::info("engine_set_option: font_fallback_mode={}",
                      option->value_utf8);
+    }
+
+    // 引擎侧帧耗时采样开关（默认开）。默认值见 engine_handle_s::perf_enabled：
+    // 它只在 5s 边界拼一行日志，代价可忽略；留个关掉的开关是为了做 A/B 对照，
+    // 确认采样本身没有引入可测量的开销。
+    if(key == "frame_perf") {
+        const std::string v(option->value_utf8);
+        impl->perf_enabled = !(v == "off" || v == "0" || v == "false");
+        spdlog::info("engine_set_option: frame_perf={}",
+                     impl->perf_enabled ? "on" : "off");
     }
 
     // krkrz 的 OGLDrawDevice 兼容层：真正生效在 krkrgles 插件的 post-regist 里

@@ -1604,6 +1604,38 @@ extern "C" bool KrkrGLES_IsCaptureActive() {
 // 原先"置位 → 调用 → 复位"的写法会漏掉复位，标志永久卡在 true，此后每一帧
 // `krkrlive2d` 的 render() 都会多 blit 一层到调用方目标（花屏/错层的来源）。
 // 用 RAII 保证任何退出路径（含异常）都复位。
+//
+// 顺带按 5 秒窗口统计 capture 次数：capture 路径每帧可能有多达两次整屏拷贝，
+// 而"每秒几百次"是真机实测过的病态值（228 次/秒）。没有这个计数就只能靠猜。
+static uint64_t g_captureCount = 0;
+static uint32_t g_capturePerSec = 0;
+namespace {
+    std::chrono::steady_clock::time_point g_captureWindowStart{};
+
+    void NoteCaptureForStats() {
+        ++g_captureCount;
+        const auto now = std::chrono::steady_clock::now();
+        if(g_captureWindowStart.time_since_epoch().count() == 0) {
+            g_captureWindowStart = now;
+            return;
+        }
+        const auto elapsed_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - g_captureWindowStart)
+                .count();
+        if(elapsed_ms < 5000)
+            return;
+        g_capturePerSec =
+            static_cast<uint32_t>(g_captureCount * 1000 / elapsed_ms);
+        spdlog::info("krkrgles: capture 速率 {} 次/秒（窗口 {}ms，共 {} 次）",
+                     g_capturePerSec, static_cast<long long>(elapsed_ms),
+                     static_cast<long long>(g_captureCount));
+        // 进入下一个窗口
+        g_captureCount = 0;
+        g_captureWindowStart = now;
+    }
+} // namespace
+
 namespace {
     class CaptureScope {
     public:
@@ -1618,12 +1650,17 @@ namespace {
                 }
             }
             g_captureActive = true;
+            NoteCaptureForStats();
         }
         ~CaptureScope() { g_captureActive = false; }
         CaptureScope(const CaptureScope &) = delete;
         CaptureScope &operator=(const CaptureScope &) = delete;
     };
 } // namespace
+
+extern "C" uint32_t KrkrGLES_GetCapturePerSec() {
+    return g_capturePerSec;
+}
 
 bool CopyFBOToLayer(GLuint fbo, GLsizei srcW, GLsizei srcH,
                     iTJSDispatch2 *layer, GLint prevFbo) {
@@ -3242,14 +3279,31 @@ class KrkrOglKagInstallHook : public tTVPContinuousEventCallbackIntf {
 public:
     void OnContinuousCallback(tjs_uint64 /*tick*/) override {
         TVPRemoveContinuousEventHook(this);
+        // 记录"从插件注册到真正接管"的等待时长。真机实测这一步会晚到
+        // 9.5 秒（KAGWindow 构造 + embFontLoader/Override 脚本加载都在它前面），
+        // 期间窗口用的还是原生 BasicDrawDevice —— 排查"开局这段为什么慢/没走 GL"
+        // 必须能一眼看出这个时间点与间隔。
+        const auto waited_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   std::chrono::steady_clock::now() -
+                                   registeredAt_)
+                                   .count();
         try {
             TVPExecuteExpression(ttstr(KrkrOglKagScript()));
             spdlog::info("krkrgles: kag 档已接管 KAGWindow_createDrawDevice"
-                         "（GL 设备进 gpuDrawDevice，真设备仍是 BasicDrawDevice）");
+                         "（GL 设备进 gpuDrawDevice，真设备仍是 BasicDrawDevice）"
+                         "，距插件注册 {} ms",
+                         static_cast<long long>(waited_ms));
         } catch(...) {
-            spdlog::warn("krkrgles: kag 档接管 KAGWindow_createDrawDevice 失败");
+            spdlog::warn("krkrgles: kag 档接管 KAGWindow_createDrawDevice 失败"
+                         "（距插件注册 {} ms）",
+                         static_cast<long long>(waited_ms));
         }
     }
+
+    void MarkRegistered() { registeredAt_ = std::chrono::steady_clock::now(); }
+
+private:
+    std::chrono::steady_clock::time_point registeredAt_{};
 };
 
 static KrkrOglKagInstallHook g_krkrOglKagInstallHook;
@@ -3283,6 +3337,7 @@ static void KrkrGlesPostRegist() {
 
     // kag 档：额外接管窗口的绘制设备工厂。必须延迟安装，见本段开头说明。
     if(mode == kKag) {
+        g_krkrOglKagInstallHook.MarkRegistered();
         TVPAddContinuousEventHook(&g_krkrOglKagInstallHook);
         spdlog::info("krkrgles: kag 档就绪，KAGWindow_createDrawDevice 将在"
                      "脚本加载完成后的首个连续事件里接管");
@@ -3290,6 +3345,33 @@ static void KrkrGlesPostRegist() {
 }
 NCB_PRE_REGIST_CALLBACK(KrkrGlesPreRegist);
 NCB_POST_REGIST_CALLBACK(KrkrGlesPostRegist);
+
+// 插件卸载（含 runtime-restart 的二次初始化）时复位模块级状态。
+//
+// 为什么必须做：`g_registeredLayer` 是**跨 TJS world** 的裸指针（iTJSDispatch2*），
+// 而 restart 会销毁上一个 world 的全部脚本对象。不复位的话，新 world 起来时
+// g_registeredLayer 仍指向已释放的旧对象 —— krkrlive2d 的连续钩子会拿它去
+// CopyFBOToLayer，属于 use-after-free。老实现里没有这个钩子，等于把这个隐患
+// 一直挂着；AetherKiri 有对应的 PreUnregist，本仓库缺失（见 compat 清单）。
+static void KrkrGlesPreUnregist() {
+    // 注意：不 Release（注册时也没有 AddRef，见 g_registeredLayer 的写入点），
+    // 只把指针置空，避免对已销毁的 world 对象做引用计数操作。
+    if(g_registeredLayer) {
+        spdlog::info("krkrgles: 卸载时清掉已注册的 Layer 引用（跨 world 悬垂）");
+        g_registeredLayer = nullptr;
+    }
+    g_captureActive = false;
+    g_captureCount = 0;
+    g_capturePerSec = 0;
+    g_captureWindowStart = std::chrono::steady_clock::time_point();
+    // 运动播放器自动渲染登记表同样持有 world 内的对象引用。
+    {
+        std::lock_guard<std::mutex> lock(YuzuMotionRenderMutex());
+        YuzuMotionRenderables().clear();
+    }
+    GetYuzuMotionRenderHook().Stop();
+}
+NCB_PRE_UNREGIST_CALLBACK(KrkrGlesPreUnregist);
 
 NCB_REGISTER_CLASS(GLESModule) {
     Constructor();

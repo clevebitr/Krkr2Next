@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <spdlog/spdlog.h>
 
+#include "utils/LogUtil.h"
+
 #include "PSBMedia.h"
 
 #include "PSBFile.h"
@@ -629,42 +631,49 @@ namespace PSB {
             auto frameList =
                 std::dynamic_pointer_cast<PSBList>((*layerDict)["frameList"]);
             if(!frameList || frameList->size() == 0) {
-                if(logger)
-                    logger->info("  ExtractFrameInfo[{}]: no frameList",
-                                 debugLabel);
+                KRKR_LOG_ONCE(
+                    "psb_extract_no_framelist_" + debugLabel,
+                    if(logger) logger->info(
+                        "  ExtractFrameInfo[{}]: no frameList", debugLabel));
                 return false;
             }
             auto frame0 =
                 std::dynamic_pointer_cast<PSBDictionary>((*frameList)[0]);
             if(!frame0) {
-                if(logger)
-                    logger->info("  ExtractFrameInfo[{}]: frame0 not dict",
-                                 debugLabel);
+                KRKR_LOG_ONCE(
+                    "psb_extract_f0_not_dict_" + debugLabel,
+                    if(logger) logger->info(
+                        "  ExtractFrameInfo[{}]: frame0 not dict", debugLabel));
                 return false;
             }
             auto content =
                 std::dynamic_pointer_cast<PSBDictionary>((*frame0)["content"]);
             if(!content) {
-                if(logger) {
-                    std::string keys;
-                    for(const auto &[k, v] : *frame0) {
-                        if(!keys.empty())
-                            keys += ", ";
-                        keys += k;
-                    }
-                    logger->info("  ExtractFrameInfo[{}]: no content in frame0 "
-                                 "(keys: {})",
-                                 debugLabel, keys);
-                }
+                // 同一份资源解析会重复走到这里（真机实测同一行连刷 6 次）：
+                // 按 label 去重，只记第一次，避免把 4MiB 的轮转窗口刷满。
+                KRKR_LOG_ONCE("psb_extract_no_content_" + debugLabel,
+                              if(logger) {
+                                  std::string keys;
+                                  for(const auto &[k, v] : *frame0) {
+                                      if(!keys.empty())
+                                          keys += ", ";
+                                      keys += k;
+                                  }
+                                  logger->info(
+                                      "  ExtractFrameInfo[{}]: no content in "
+                                      "frame0 (keys: {})",
+                                      debugLabel, keys);
+                              });
                 return false;
             }
             auto srcStr =
                 std::dynamic_pointer_cast<PSBString>((*content)["src"]);
             if(!srcStr || srcStr->value.empty()) {
-                if(logger)
-                    logger->info(
+                KRKR_LOG_ONCE(
+                    "psb_extract_no_src_" + debugLabel,
+                    if(logger) logger->info(
                         "  ExtractFrameInfo[{}]: no src string in content",
-                        debugLabel);
+                        debugLabel));
                 return false;
             }
 
