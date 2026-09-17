@@ -849,8 +849,17 @@ bool BasePlayer::OpenStream(CCurrentStream &current, int64_t demuxerId,
             return false;
 
         stream = m_pDemuxer->GetStream(demuxerId, iStream);
-        if(!stream || stream->disabled)
+        if(!stream || stream->disabled) {
+            // 原本是静默 return false：视频流拿不到就不会建播放器，表现正是
+            // "只有声音没有画面"。这条日志用来把它与"解码器建不起来"区分开。
+            static std::atomic<int> s_disabledLogs{ 0 };
+            if(s_disabledLogs.fetch_add(1) < 3)
+                spdlog::warn("movie: 视频流不可用（stream={} disabled={}）—— "
+                             "该影片不会有画面",
+                             static_cast<const void *>(stream),
+                             stream ? (stream->disabled ? 1 : 0) : -1);
             return false;
+        }
 
         m_pDemuxer->EnableStream(demuxerId, iStream, true);
 

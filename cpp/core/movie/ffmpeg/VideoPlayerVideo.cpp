@@ -442,6 +442,17 @@ void CVideoPlayerVideo::Process() {
             int iDecoderState = m_pVideoCodec->Decode(
                 pPacket->pData, pPacket->iSize, pPacket->dts, pPacket->pts);
 
+            // 解码结果探针（只记前 3 次）：区分"收到包但解不出帧"与"解出来了但
+            // 没交付"。至此四个静默失败点都有了日志：找不到解码器 / 打不开解码器 /
+            // 收不到包 / 解不出帧。
+            {
+                static std::atomic<int> s_firstDecodes{ 0 };
+                if(s_firstDecodes.fetch_add(1) < 3)
+                    spdlog::info("movie: 视频解码第 {} 次 state=0x{:x} 包={} 字节",
+                                 s_firstDecodes.load(), iDecoderState,
+                                 pPacket->iSize);
+            }
+
             // buffer packets so we can recover should decoder flush
             // for some reason
             if(m_pVideoCodec->GetConvergeCount() > 0) {
