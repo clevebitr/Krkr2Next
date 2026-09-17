@@ -2211,6 +2211,42 @@ engine_result_t engine_resume(engine_handle_t handle) {
     return ENGINE_RESULT_OK;
 }
 
+engine_result_t engine_cancel_termination(engine_handle_t handle) {
+    std::lock_guard<std::recursive_mutex> registry_guard(g_registry_mutex);
+    engine_handle_s *impl = nullptr;
+    auto result = ValidateHandleLocked(handle, &impl);
+    if(result != ENGINE_RESULT_OK) {
+        return result;
+    }
+
+    std::lock_guard<std::recursive_mutex> guard(impl->mutex);
+    result = ValidateHandleThreadLocked(impl);
+    if(result != ENGINE_RESULT_OK) {
+        return result;
+    }
+
+    // 幂等：没有待处理的终止时什么都不做。
+    if(!TVPTerminated) {
+        ClearHandleErrorLocked(impl);
+        SetThreadError(nullptr);
+        return ENGINE_RESULT_OK;
+    }
+
+    // 终止挂起期间引擎并没有拆掉任何东西（宿主模式下 TVPExitApplication 不结束
+    // 进程，engine_tick 一见到 TVPTerminated 就提前返回），所以"取消"只需清标志，
+    // 下一帧 Run() 就会照常处理消息与绘制。
+    TVPTerminated = false;
+    TVPTerminateCode = 0;
+    if(::Application)
+        ::Application->Unterminate();
+    krkr::stall::SetPaused(false);
+    krkr::stall::MarkStage("engine_tick: 已取消退出，恢复运行");
+    spdlog::info("engine_cancel_termination: 宿主选择继续游戏，已撤销终止标志");
+    ClearHandleErrorLocked(impl);
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+}
+
 engine_result_t engine_set_option(engine_handle_t handle,
                                   const engine_option_t *option) {
     if(option == nullptr || option->key_utf8 == nullptr ||
@@ -3339,6 +3375,21 @@ engine_result_t engine_set_option(engine_handle_t handle,
         return ENGINE_RESULT_INVALID_STATE;
     }
 
+    impl->last_error.clear();
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+}
+
+engine_result_t engine_cancel_termination(engine_handle_t handle) {
+    // 无 krkr2 运行时的构建（宿主校验用）：这里根本没有终止状态，幂等返回成功，
+    // 与运行时实现保持同一份 ABI 语义。
+    std::lock_guard<std::recursive_mutex> registry_guard(g_registry_mutex);
+    engine_handle_s *impl = nullptr;
+    auto result = ValidateHandleLocked(handle, &impl);
+    if(result != ENGINE_RESULT_OK) {
+        return result;
+    }
+    std::lock_guard<std::recursive_mutex> guard(impl->mutex);
     impl->last_error.clear();
     SetThreadError(nullptr);
     return ENGINE_RESULT_OK;

@@ -105,6 +105,13 @@ public:
 
     [[nodiscard]] bool IsTarminate() const { return tarminate_; }
 
+    /**
+     * 撤销 Terminate() 置的终止标志。宿主在"游戏请求退出"确认框里选"否"时由
+     * engine_cancel_termination 调用，让 Run() 继续正常跑。
+     * 只清标志、不做任何回收 —— 终止挂起期间本来也没拆过东西。
+     */
+    void Unterminate() { tarminate_ = false; }
+
     //	HWND GetHandle();
     static bool IsIconic() {
 #if 0

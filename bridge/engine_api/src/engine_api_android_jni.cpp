@@ -306,6 +306,13 @@ Java_org_dpdns_clevebitr_core_NativeEngine_engineResume(JNIEnv * /*env*/,
 }
 
 extern "C" JNIEXPORT jint JNICALL
+Java_org_dpdns_clevebitr_core_NativeEngine_engineCancelTermination(
+    JNIEnv * /*env*/, jobject /*thiz*/, jlong handle) {
+    return static_cast<jint>(
+        engine_cancel_termination(reinterpret_cast<engine_handle_t>(handle)));
+}
+
+extern "C" JNIEXPORT jint JNICALL
 Java_org_dpdns_clevebitr_core_NativeEngine_engineOpenGameAsync(
     JNIEnv *env, jobject /*thiz*/, jlong handle, jstring game_root_path,
     jstring startup_script) {

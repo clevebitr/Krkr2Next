@@ -265,6 +265,27 @@ ENGINE_API_EXPORT engine_result_t engine_pause(engine_handle_t handle);
 ENGINE_API_EXPORT engine_result_t engine_resume(engine_handle_t handle);
 
 /*
+ * Cancels a pending game-requested termination (the state that makes
+ * engine_tick return ENGINE_RESULT_GAME_TERMINATED).
+ *
+ * Host flow: on ENGINE_RESULT_GAME_TERMINATED ask the player whether to quit.
+ *   - quit    -> destroy the engine as usual;
+ *   - keep on -> call this, then keep ticking and the game continues.
+ * Host mode never tears anything down while the termination is pending (it does
+ * not exit the process), so cancelling just clears the flag. Idempotent: with no
+ * termination pending it returns ENGINE_RESULT_OK and changes nothing.
+ * Must be called on the engine's owner thread (the engine_tick thread).
+ *
+ * 取消"游戏请求退出"（即让 engine_tick 返回 ENGINE_RESULT_GAME_TERMINATED 的状态）。
+ * 宿主流程：收到该结果码后弹确认框 —— 退出就照常销毁引擎；继续游戏就调本函数，
+ * 之后照常 tick，游戏继续跑。终止挂起期间并没有真的拆掉任何东西（宿主模式不结束
+ * 进程），所以"取消"只需清标志。幂等；必须在引擎 owner 线程（与 engine_tick 同一
+ * 线程）调用。
+ */
+ENGINE_API_EXPORT engine_result_t
+engine_cancel_termination(engine_handle_t handle);
+
+/*
  * Sets runtime option by UTF-8 key/value pair.
  * handle and option must be non-null.
  */

@@ -66,10 +66,12 @@ class EngineSession(
     /**
      * 游戏自己要求退出（TJS `System.exit()` / 游戏内"退出游戏"）。
      *
-     * **已切到主线程回调**，且只会回调一次。宿主应当离开游戏界面并销毁本会话
-     * （`MainActivity.exitToLauncher()`）——引擎在这之后不会再渲染任何一帧。
+     * **已切到主线程回调**，且只会回调一次。宿主应当**先弹确认框问用户**：
+     *   - 确认退出 → 离开游戏界面并销毁本会话（`MainActivity.exitToLauncher()`）；
+     *   - 用户选"继续" → 调 [cancelGameTermination]，游戏从当前进度继续。
+     * 此刻引擎处于"终止挂起"状态：不再渲染，但**什么都没拆**（所以可以取消）。
      */
-    private val onGameTerminated: () -> Unit = {},
+    private val onGameExitRequested: () -> Unit = {},
 ) {
     companion object {
         private const val TAG = "KrKr2Next/Engine"
@@ -255,15 +257,15 @@ class EngineSession(
                 if (rc != NativeEngine.RESULT_OK) {
                     if (rc == NativeEngine.RESULT_GAME_TERMINATED) {
                         // 游戏自己要求退出（TJS `System.exit()`）。这**不是**错误：
-                        // 引擎此后不再渲染，只会一直返回本码。以前它和普通错误一样
-                        // 走下面的分支，表现就是"点了游戏内退出 → 画面卡住 + 叠加层
-                        // 错误数每帧 +1"，而宿主永远不离开游戏界面。
-                        // 这里停掉帧循环并请宿主退出到库界面（幂等：只上报一次）。
+                        // 引擎此后不再渲染，只会一直返回本码。
+                        // 停掉帧循环，请宿主**弹确认框问用户**：确认退出就走
+                        // exitToLauncher()；选"继续"就调 cancelGameTermination()
+                        // 撤销终止标志并恢复帧循环（幂等：只上报一次）。
                         if (!gameTerminated) {
                             gameTerminated = true
                             running = false
-                            AppLog.i(TAG, "游戏请求退出（engineTick 返回 GAME_TERMINATED），交给宿主收尾")
-                            postToMain { onGameTerminated() }
+                            AppLog.i(TAG, "游戏请求退出（engineTick 返回 GAME_TERMINATED），等宿主确认")
+                            postToMain { onGameExitRequested() }
                             // 直接结束本帧：不再 post 下一帧，也不轮到
                             // pollStartupState —— 否则"启动期退出"会被它报成启动失败
                             // （onFatal），宿主会多弹一个错误框。
@@ -425,6 +427,33 @@ class EngineSession(
         }
     }
 
+    /**
+     * 用户在"游戏请求退出"确认框里选了**继续游戏**：撤销引擎的终止标志并恢复帧
+     * 循环。**可在任意线程调用**（内部切到渲染线程，与 engineTick 同线程）。
+     *
+     * 幂等：不在终止挂起状态时调用无副作用。会话已关闭时直接忽略（那时退出流程
+     * 已经走完了）。
+     */
+    fun cancelGameTermination() {
+        post {
+            if (handle == 0L) return@post
+            val rc = NativeEngine.engineCancelTermination(handle)
+            if (rc != NativeEngine.RESULT_OK) {
+                AppLog.w(TAG, "engineCancelTermination rc=$rc err=${lastError()}")
+                return@post
+            }
+            gameTerminated = false
+            lastFrameNanos = 0L
+            // 帧循环在检测到终止时就停了（running=false）。这里把它接回去；
+            // 若此刻正好在后台（paused），resume() 里会再挂一次。
+            if (!running && !destroyed) {
+                running = true
+                if (!paused) choreographer?.postFrameCallback(frameCallback)
+            }
+            AppLog.i(TAG, "宿主确认继续游戏：已撤销终止标志，恢复帧循环")
+        }
+    }
+
     /** 回到前台。 */
     fun resume() {
         post {
@@ -432,6 +461,9 @@ class EngineSession(
             val rc = NativeEngine.engineResume(handle)
             if (rc != NativeEngine.RESULT_OK) AppLog.w(TAG, "engineResume rc=$rc")
             paused = false
+            // 切后台时若正好发生"游戏请求退出→用户选继续"，帧循环会停在
+            // running=true 但没挂回调的状态，这里补挂一次。
+            if (running && !destroyed) choreographer?.postFrameCallback(frameCallback)
         }
     }
 

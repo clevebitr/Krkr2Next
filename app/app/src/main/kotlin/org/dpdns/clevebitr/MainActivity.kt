@@ -93,6 +93,12 @@ class MainActivity : ComponentActivity() {
     /** 上次异常退出的提示文本；null 表示这次不需要提示。 */
     private var recoveryNotice by mutableStateOf<String?>(null)
 
+    /**
+     * 游戏请求退出（引擎返回 GAME_TERMINATED）时置起：弹出确认框。
+     * 选"退出游戏"→ exitToLauncher()；选"继续游戏"→ session.cancelGameTermination()。
+     */
+    private var gameExitPrompt by mutableStateOf(false)
+
     /** 游戏内悬浮菜单打开的设置页（覆盖在游戏画面之上）。 */
     private var inGameSettings by mutableStateOf(false)
 
@@ -239,9 +245,45 @@ class MainActivity : ComponentActivity() {
                             },
                         )
                     }
+
+                    // 游戏内"退出游戏"确认框：此刻引擎已把终止挂起（不再渲染，但什么
+                    // 都没拆），这里问一句。选"继续游戏"会撤销终止、游戏从当前进度接着
+                    // 跑；点外部/返回键等同"继续游戏"，避免误触直接退出。
+                    if (gameExitPrompt) {
+                        AlertDialog(
+                            onDismissRequest = { keepPlaying() },
+                            title = { Text("游戏请求退出") },
+                            text = {
+                                Text(
+                                    "游戏内的退出操作请求结束游戏。\n" +
+                                        "选择「继续游戏」会回到游戏当前进度。"
+                                )
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    gameExitPrompt = false
+                                    AppLog.i(TAG, "用户确认退出游戏")
+                                    exitToLauncher()
+                                }) { Text("退出游戏") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { keepPlaying() }) { Text("继续游戏") }
+                            },
+                        )
+                    }
                 }
             }
         }
+    }
+
+    /**
+     * 用户在"游戏请求退出"确认框里选了继续游戏：请引擎撤销终止标志并恢复帧循环。
+     * 幂等；会话已关闭时是空操作。
+     */
+    private fun keepPlaying() {
+        gameExitPrompt = false
+        session?.cancelGameTermination()
+        AppLog.i(TAG, "用户选择继续游戏：已请求撤销退出流程")
     }
 
     /** 导航图需要的状态与回调。每次重组都会新建，成本只是几个引用。 */
@@ -461,12 +503,11 @@ class MainActivity : ComponentActivity() {
                 startupState = NativeEngine.STARTUP_FAILED
                 AppLog.e(TAG, "fatal: $msg")
             },
-            // 游戏内"退出游戏"（TJS System.exit()）：引擎已停止渲染，这里离开游戏界面。
-            // 与返回键连按两次等价；不这样做时的表现是画面卡住 + 叠加层错误数暴涨。
-            onGameTerminated = {
-                AppLog.i(TAG, "game terminated by engine -> exitToLauncher")
-                Toast.makeText(this, "游戏已退出", Toast.LENGTH_SHORT).show()
-                exitToLauncher()
+            // 游戏内"退出游戏"（TJS System.exit()）：先弹确认框问用户，而不是直接退出。
+            // 引擎此刻只是"终止挂起"（不再渲染、什么都没拆），所以可以取消。
+            onGameExitRequested = {
+                AppLog.i(TAG, "game requested exit -> 弹确认框")
+                gameExitPrompt = true
             },
         )
         session = s
@@ -484,6 +525,8 @@ class MainActivity : ComponentActivity() {
             it.shutdown()
         }
         session = null
+        // 会话没了，退出确认框不该再挂着（否则退出后还会再弹一次）。
+        gameExitPrompt = false
     }
 
     private fun exitToLauncher() {

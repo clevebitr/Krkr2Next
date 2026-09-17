@@ -3,7 +3,7 @@
 # verify_engine_so.sh — 对构建出的 libengine_api.so 做结构与符号断言
 #
 # 这些断言把「只会在真机上以黑屏/SatisfiedLinkError 暴露」的问题提前到构建期：
-#   1. 24 个 engine_* C ABI 符号齐全（Kotlin 壳与调试工具依赖）
+#   1. 全部 engine_* C ABI 符号齐全（Kotlin 壳与调试工具依赖）
 #   2. NativeEngine 的三个 JNI 符号存在（包名/类名重绑后最容易静默出错）
 #   3. 动态依赖里是平台原生 libEGL/libGLESv2，而不是被静态链进来的 ANGLE
 #   4. 二进制里不含 ANGLE 的平台扩展常量（去 ANGLE 是否彻底）
@@ -68,6 +68,7 @@ ENGINE_SYMBOLS=(
     engine_pause
     engine_read_frame_rgba
     engine_resume
+    engine_cancel_termination
     engine_send_input
     engine_set_log_file_path
     engine_set_option

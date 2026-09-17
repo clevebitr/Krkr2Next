@@ -37,6 +37,15 @@ object NativeEngine {
     external fun enginePause(handle: Long): Int
     external fun engineResume(handle: Long): Int
 
+    /**
+     * 取消"游戏请求退出"（即让 [engineTick] 返回 [RESULT_GAME_TERMINATED] 的那个状态）。
+     *
+     * 宿主在确认框里选了"继续游戏"时调用：引擎只清掉终止标志（期间并没有拆过任何
+     * 东西），下一帧就照常运行。**必须在渲染线程调用**（与 engineTick 同线程）——
+     * [EngineSession.cancelGameTermination] 负责切线程。幂等。
+     */
+    external fun engineCancelTermination(handle: Long): Int
+
     // ── 打开游戏 ──────────────────────────────────────────────────────────
     /** @param startupScript 传 null 用默认启动脚本 */
     external fun engineOpenGameAsync(
