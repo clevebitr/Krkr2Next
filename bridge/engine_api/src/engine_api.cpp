@@ -1732,6 +1732,18 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
     if(result != ENGINE_RESULT_OK) {
         return result;
     }
+
+    // 终止检查必须放在所有状态门之前：游戏可能在**启动期**就退出（启动脚本里的
+    // `System.exit()`），此时 state 不是 kOpened、g_runtime_active 也可能已复位，
+    // 若先撞上下面那些门就会返回 INVALID_STATE，宿主又把它当普通错误累计
+    // —— 正是"点了退出游戏卡住 + 叠加层错误数每帧 +1"的另一条来路。
+    // 只要运行期已终止，一律回答"游戏自己退了"，让宿主去收尾。
+    if(TVPTerminated) {
+        return SetHandleErrorAndReturnLocked(impl,
+                                             ENGINE_RESULT_GAME_TERMINATED,
+                                             "runtime has been terminated");
+    }
+
     if(g_runtime_startup_active && g_runtime_startup_owner == handle) {
         return SetHandleErrorAndReturnLocked(impl, ENGINE_RESULT_INVALID_STATE,
                                              "engine startup is still running");
@@ -1860,7 +1872,10 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
 #endif
 
     if(TVPTerminated) {
-        return SetHandleErrorAndReturnLocked(impl, ENGINE_RESULT_INVALID_STATE,
+        // 本帧的输入派发里脚本调了 System.exit()（顶部那次检查在本帧之前跑过）。
+        // 与它同一个语义：游戏自己退了，交给宿主收尾，不算 tick 失败。
+        return SetHandleErrorAndReturnLocked(impl,
+                                             ENGINE_RESULT_GAME_TERMINATED,
                                              "runtime has been terminated");
     }
 
@@ -1969,7 +1984,11 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
                             std::chrono::steady_clock::now());
 
     if(TVPTerminated) {
-        return SetHandleErrorAndReturnLocked(impl, ENGINE_RESULT_INVALID_STATE,
+        // 本帧的 Application::Run() 里脚本调了 System.exit()（EAbort 退栈后置位），
+        // 或者更早的路径已置位。与上面的提前返回同一个语义：交给宿主退出，
+        // 不算 tick 失败。见 ENGINE_RESULT_GAME_TERMINATED 的说明。
+        return SetHandleErrorAndReturnLocked(impl,
+                                             ENGINE_RESULT_GAME_TERMINATED,
                                              "runtime requested termination");
     }
 

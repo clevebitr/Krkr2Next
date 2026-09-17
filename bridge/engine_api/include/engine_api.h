@@ -39,7 +39,24 @@ typedef enum engine_result_t {
     ENGINE_RESULT_INVALID_STATE = -2,
     ENGINE_RESULT_NOT_SUPPORTED = -3,
     ENGINE_RESULT_IO_ERROR = -4,
-    ENGINE_RESULT_INTERNAL_ERROR = -5
+    ENGINE_RESULT_INTERNAL_ERROR = -5,
+    /*
+     * The game itself asked to quit (TJS `System.exit()` / `Application.terminate`).
+     * engine_tick returns this instead of ENGINE_RESULT_INVALID_STATE so the host can
+     * tell "the game ended" apart from a real error, and leave the game screen
+     * instead of counting a failed tick every frame. Host mode never terminates the
+     * process for this (see TVPHostSuppressProcessExit), so without host action the
+     * engine only reports this code forever and the picture freezes.
+     *
+     * 游戏自己要求退出（TJS `System.exit()` / `Application.terminate`）。engine_tick
+     * 用它把"游戏结束"与真正的错误区分开：宿主应当离开游戏界面，而不是把它记成一次
+     * 失败的 tick。宿主模式下不会因此结束进程，所以宿主不接手时只会每帧拿到这个码、
+     * 画面冻结。
+     *
+     * Appended last so existing values stay stable for already-built hosts.
+     * 追加在最后，保证已编译宿主看到的既有取值不变。
+     */
+    ENGINE_RESULT_GAME_TERMINATED = -6
 } engine_result_t;
 
 typedef struct engine_create_desc_t {
@@ -210,6 +227,13 @@ ENGINE_API_EXPORT engine_result_t engine_set_log_file_path(const char *path);
  * Ticks engine main loop once.
  * handle must be non-null.
  * delta_ms is caller-provided elapsed milliseconds.
+ * Returns ENGINE_RESULT_GAME_TERMINATED once the game asked to quit
+ * (TJS `System.exit()`); the host should then leave the game screen and
+ * destroy the engine. Every later call returns the same code.
+ *
+ * 驱动引擎主循环一帧。游戏提出退出（TJS `System.exit()`）后返回
+ * ENGINE_RESULT_GAME_TERMINATED，宿主应据此离开游戏界面并销毁引擎；
+ * 之后的每次调用都返回同一个码。
  */
 ENGINE_API_EXPORT engine_result_t engine_tick(engine_handle_t handle,
                                               uint32_t delta_ms);

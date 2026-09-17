@@ -43,8 +43,11 @@ TEST_CASE("engine_result_t 取值固定", "[abi]") {
     STATIC_REQUIRE(ENGINE_RESULT_NOT_SUPPORTED == -3);
     STATIC_REQUIRE(ENGINE_RESULT_IO_ERROR == -4);
     STATIC_REQUIRE(ENGINE_RESULT_INTERNAL_ERROR == -5);
+    STATIC_REQUIRE(ENGINE_RESULT_GAME_TERMINATED == -6);
 
     // 约定：0 为成功，负值为错误。外壳依赖这一点判断成败。
+    // 唯一的例外是 ENGINE_RESULT_GAME_TERMINATED：它也是负值，但语义是"游戏自己
+    // 要求退出"而不是失败 —— 外壳必须据此离开游戏界面，而不是累计错误。
     STATIC_REQUIRE(ENGINE_RESULT_OK == 0);
 }
 

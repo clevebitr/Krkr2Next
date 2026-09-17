@@ -121,6 +121,14 @@ object NativeEngine {
     const val RESULT_IO_ERROR = -4
     const val RESULT_INTERNAL_ERROR = -5
 
+    /**
+     * 游戏自己要求退出（TJS `System.exit()`）。**不是**错误：`engineTick` 用它
+     * 通知宿主"离开游戏界面并销毁引擎"。宿主模式不会因此结束进程，所以不接手的
+     * 表现是画面冻结 + 每次 tick 都返回本码。取值与 `engine_api.h` 的
+     * `ENGINE_RESULT_GAME_TERMINATED` 一致。
+     */
+    const val RESULT_GAME_TERMINATED = -6
+
     // ── 启动状态 ──────────────────────────────────────────────────────────
     const val STARTUP_IDLE = 0
     const val STARTUP_RUNNING = 1

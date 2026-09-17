@@ -1,6 +1,7 @@
 package org.tvp.kirikiri2
 
 import org.dpdns.clevebitr.core.AppLog
+import org.dpdns.clevebitr.core.EngineExitHost
 import org.dpdns.clevebitr.core.MessageBoxHost
 
 /**
@@ -104,10 +105,30 @@ object KR2Activity {
     // 这些宿主侧没有对应实现，但**必须存在**：JniHelper 找不到就每个调用点打一条
     // error 到 logcat，而它们都在游戏流程里（文本输入、设备 id、广告位控制），
     // 于是错误日志会持续增长。这里给出"明确的降级实现"，让查找成功、行为可预期。
-    // 注意：`exit()` 与 `GetVersion()` **故意不实现** —— 前者在宿主模式强制退出会
-    // 与 worker 线程抢锁（见 AndroidUtils.cpp 的说明），后者只影响错误框标题里的
-    // 版本串。
     // ───────────────────────────────────────────────────────────────────────
+
+    /**
+     * 签名 `()V`。引擎"直接退出"路径的宿主通知渠道。
+     *
+     * `cpp/core/environ/android/AndroidUtils.cpp` 的 `TVPExitApplication` 用这个
+     * 静态方法名找宿主。走它的是**致命错误**那条路（`ShowException` 等：弹完错误框
+     * 就调 `TVPExitApplication`）。游戏内菜单的"退出游戏"走的是另一条：TJS
+     * `System.exit()` → `TVPTerminateSync` → 宿主模式只标记终止并抛 `EAbort`，
+     * 由 `engine_tick` 返回 `ENGINE_RESULT_GAME_TERMINATED` 通知宿主
+     * （见 `EngineSession.onGameTerminated`）。
+     *
+     * 两条路都必须有落点：没有这个方法时，引擎每次退出尝试都在 logcat 里留一条
+     * `JniHelper: static method '...KR2Activity.exit()V' not found`，然后什么都不做
+     * —— 宿主既不知道要退出，引擎也不再渲染。
+     *
+     * 这里只登记请求（见 [EngineExitHost]），由 UI 线程走既有退出流程，
+     * 因此**不会**在引擎线程里退出进程、也不碰任何锁。旧注释里"宿主模式强制退出
+     * 会与 worker 线程抢锁"针对的是直接杀进程的写法。
+     */
+    @JvmStatic
+    fun exit() {
+        EngineExitHost.request("TVPExitApplication")
+    }
 
     /** 签名 `(III)V`。宿主没有广告位/对话框控制器，明确忽略。 */
     @JvmStatic

@@ -33,6 +33,7 @@ import kotlinx.coroutines.launch
 import org.dpdns.clevebitr.core.AppLog
 import org.dpdns.clevebitr.core.AppPrefs
 import org.dpdns.clevebitr.core.CrashTracker
+import org.dpdns.clevebitr.core.EngineExitHost
 import org.dpdns.clevebitr.core.EngineSession
 import org.dpdns.clevebitr.core.GameConfig
 import org.dpdns.clevebitr.core.GameConfigStore
@@ -126,6 +127,10 @@ class MainActivity : ComponentActivity() {
         // 接管引擎消息框：从这一刻起 System.inform / 致命错误框会走本 Activity 的
         // 对话框（引擎线程在弹出期间阻塞等回复）。onDestroy 里交还。
         MessageBoxHost.attachUi()
+        // 接管"游戏内退出游戏"：引擎的 TVPExitApplication 会回调 KR2Activity.exit()，
+        // 这里把它接到与返回键连按两次相同的退出流程上。没有这一步时游戏请求退出后
+        // 引擎每帧返回 INVALID_STATE，表现为卡住 + 叠加层错误数暴涨。
+        EngineExitHost.attachUi { exitToLauncher() }
         if (previous.kind != CrashTracker.ExitKind.CLEAN) {
             AppLog.w(TAG, "上次未正常退出：${previous.kind} / ${previous.detail}")
             if (previous.kind != CrashTracker.ExitKind.JAVA_CRASH) {
@@ -456,6 +461,13 @@ class MainActivity : ComponentActivity() {
                 startupState = NativeEngine.STARTUP_FAILED
                 AppLog.e(TAG, "fatal: $msg")
             },
+            // 游戏内"退出游戏"（TJS System.exit()）：引擎已停止渲染，这里离开游戏界面。
+            // 与返回键连按两次等价；不这样做时的表现是画面卡住 + 叠加层错误数暴涨。
+            onGameTerminated = {
+                AppLog.i(TAG, "game terminated by engine -> exitToLauncher")
+                Toast.makeText(this, "游戏已退出", Toast.LENGTH_SHORT).show()
+                exitToLauncher()
+            },
         )
         session = s
         startupState = NativeEngine.STARTUP_IDLE
@@ -554,6 +566,8 @@ class MainActivity : ComponentActivity() {
         // 交还消息框接管权（仅真正退出时）：未回复的请求按取消回掉，不让引擎卡在
         // 等待里。配置变更重建不交还——新实例会重新接管，队列里待回复的请求不丢。
         if (finishing) MessageBoxHost.detachUi()
+        // 同上：配置变更重建不解除，新实例会重新接管（避免退出请求落在窗口里丢掉）。
+        if (finishing) EngineExitHost.detachUi()
         closeSession()
         if (finishing) {
             // 走到这里才算"正常退出"。没走到的话会话标记会停在 running，

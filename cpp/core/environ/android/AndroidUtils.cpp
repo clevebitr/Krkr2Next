@@ -15,6 +15,10 @@
 #include <sstream>
 #include <spdlog/spdlog.h>
 #include "SysInitIntf.h"
+// TVPExitApplication 要落 TVPTerminated / TVPTerminateCode（同 platform_linux.cpp
+// 的同名实现），这两个全局量声明在 SysInitImpl.h（base/impl 是 PUBLIC include 目录，
+// 与 Application.cpp 的包含方式一致）。
+#include "SysInitImpl.h"
 #include "ConfigManager/LocaleConfigManager.h"
 #include "Platform.h"
 #include <EGL/egl.h>
@@ -1149,6 +1153,11 @@ std::string TVPGetCurrentLanguage() {
 }
 
 void TVPExitApplication(int code) {
+    // 与 stubs/platform_linux.cpp 的同名实现保持一致：先落"已终止"状态，再释放
+    // 资源、再通知宿主。少了这一步时，走 ShowException 等直接调用本函数的路径
+    // 不会置位，engine_tick 就永远看不到终止（宿主既不退出、画面也不再更新）。
+    TVPTerminated = true;
+    TVPTerminateCode = code;
     TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
     // Guard: only recycle textures if the render manager was already
     // initialised.  Calling TVPIsSoftwareRenderManager() when no
@@ -1160,6 +1169,11 @@ void TVPExitApplication(int code) {
     } catch(...) {
         // Ignore – we are shutting down anyway.
     }
+    // 通知宿主"游戏要求退出"。宿主必须接手：宿主模式下这里不结束进程，引擎只是
+    // 让 engine_tick 持续返回 ENGINE_RESULT_GAME_TERMINATED，没有落点时的真机
+    // 表现就是"要求退出后卡住 + 叠加层错误数暴涨"。调用点位于 engine_tick 内
+    // （持有引擎 registry 锁），因此 Kotlin 侧只登记 + post 到主线程，不回流引擎
+    // （见 EngineExitHost.kt）。
     JniMethodInfo t;
     if(JniHelper::getStaticMethodInfo(t, "org/tvp/kirikiri2/KR2Activity",
                                       "exit", "()V")) {
@@ -1167,6 +1181,9 @@ void TVPExitApplication(int code) {
         t.env->DeleteLocalRef(t.classID);
         return;
     }
+    // 找不到宿主落点：明确记一条，否则"退出游戏没反应"完全无迹可循。
+    spdlog::warn("TVPExitApplication: KR2Activity.exit() 不可用，退出请求无人接手"
+                 "（engine_tick 将一直返回 ENGINE_RESULT_GAME_TERMINATED）");
     // In Android host-shell mode, forcing process-wide exit can race with
     // worker threads and trigger FORTIFY mutex checks.
     (void)code;

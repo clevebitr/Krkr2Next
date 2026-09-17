@@ -63,6 +63,13 @@ class EngineSession(
      * 不可恢复的错误（引擎创建失败、游戏启动失败）。**已切到主线程回调**。
      */
     private val onFatal: (String) -> Unit = {},
+    /**
+     * 游戏自己要求退出（TJS `System.exit()` / 游戏内"退出游戏"）。
+     *
+     * **已切到主线程回调**，且只会回调一次。宿主应当离开游戏界面并销毁本会话
+     * （`MainActivity.exitToLauncher()`）——引擎在这之后不会再渲染任何一帧。
+     */
+    private val onGameTerminated: () -> Unit = {},
 ) {
     companion object {
         private const val TAG = "KrKr2Next/Engine"
@@ -217,6 +224,12 @@ class EngineSession(
     @Volatile private var running = false
     @Volatile private var destroyed = false
 
+    /**
+     * 游戏是否已请求退出。只用来把"请宿主收尾"收敛成一次（引擎会一直返回
+     * `RESULT_GAME_TERMINATED`）。只在渲染线程读写。
+     */
+    private var gameTerminated = false
+
     private val logBuffer = ByteArray(LOG_BUFFER_SIZE)
 
     private val frameCallback = object : Choreographer.FrameCallback {
@@ -240,14 +253,32 @@ class EngineSession(
                 tickMs = (System.nanoTime() - tickStartNanos) / 1_000_000f
                 logPerfIfDue(tickStartNanos)
                 if (rc != NativeEngine.RESULT_OK) {
-                    // 每帧都能失败，逐帧记录会把日志刷爆（60 行/秒）。限频到 5 秒一条，
-                    // 并把次数带上——次数本身是判断"偶发一次"还是"彻底坏了"的关键。
-                    tickFailures++
-                    AppLog.wLimited(
-                        TAG,
-                        "engineTick",
-                        TICK_FAILURE_LOG_INTERVAL_MS,
-                    ) { "engineTick failed x$tickFailures (最近一次 rc=$rc err=${lastError()})" }
+                    if (rc == NativeEngine.RESULT_GAME_TERMINATED) {
+                        // 游戏自己要求退出（TJS `System.exit()`）。这**不是**错误：
+                        // 引擎此后不再渲染，只会一直返回本码。以前它和普通错误一样
+                        // 走下面的分支，表现就是"点了游戏内退出 → 画面卡住 + 叠加层
+                        // 错误数每帧 +1"，而宿主永远不离开游戏界面。
+                        // 这里停掉帧循环并请宿主退出到库界面（幂等：只上报一次）。
+                        if (!gameTerminated) {
+                            gameTerminated = true
+                            running = false
+                            AppLog.i(TAG, "游戏请求退出（engineTick 返回 GAME_TERMINATED），交给宿主收尾")
+                            postToMain { onGameTerminated() }
+                            // 直接结束本帧：不再 post 下一帧，也不轮到
+                            // pollStartupState —— 否则"启动期退出"会被它报成启动失败
+                            // （onFatal），宿主会多弹一个错误框。
+                            return
+                        }
+                    } else {
+                        // 每帧都能失败，逐帧记录会把日志刷爆（60 行/秒）。限频到 5 秒一条，
+                        // 并把次数带上——次数本身是判断"偶发一次"还是"彻底坏了"的关键。
+                        tickFailures++
+                        AppLog.wLimited(
+                            TAG,
+                            "engineTick",
+                            TICK_FAILURE_LOG_INTERVAL_MS,
+                        ) { "engineTick failed x$tickFailures (最近一次 rc=$rc err=${lastError()})" }
+                    }
                 }
                 if (++frameCounter % STARTUP_POLL_FRAMES == 0L) {
                     pollStartupState()
@@ -331,6 +362,7 @@ class EngineSession(
         post {
             lastFrameNanos = 0L
             tickFailures = 0L
+            gameTerminated = false
             // 换了游戏（或改了档位）：让叠加层下次采样重新从引擎取解析结果
             compatProfileCache = ""
             // 兼容档必须在开游戏**之前**下发：krkrgles 是在 StartApplication
