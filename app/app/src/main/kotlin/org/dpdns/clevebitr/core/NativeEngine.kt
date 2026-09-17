@@ -129,6 +129,14 @@ object NativeEngine {
      */
     const val RESULT_GAME_TERMINATED = -6
 
+    /**
+     * 游戏仍在启动（StartApplication 在 worker 线程里跑）。**不是**错误：
+     * 启动期每帧都会返回它，当成失败累计的话每次开游戏就多出 300+ 个错误
+     * （真机 app.log 里 `engineTick failed x301/x304/x373` 全是这一条）。
+     * 取值与 `engine_api.h` 的 `ENGINE_RESULT_STARTUP_PENDING` 一致。
+     */
+    const val RESULT_STARTUP_PENDING = -7
+
     // ── 启动状态 ──────────────────────────────────────────────────────────
     const val STARTUP_IDLE = 0
     const val STARTUP_RUNNING = 1

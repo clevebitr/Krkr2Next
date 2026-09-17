@@ -269,6 +269,12 @@ class EngineSession(
                             // （onFatal），宿主会多弹一个错误框。
                             return
                         }
+                    } else if (rc == NativeEngine.RESULT_STARTUP_PENDING) {
+                        // 游戏仍在启动（StartApplication 在 worker 线程里跑）。
+                        // 这**不是**错误：以前它走下面的分支，于是每次开游戏都会记下
+                        // 300+ 次"失败"（真机 app.log: engineTick failed x301/x304/x373，
+                        // err=engine startup is still running），叠加层的错误数就是这么
+                        // 涨起来的。启动状态本身由 pollStartupState 上报，这里什么都不做。
                     } else {
                         // 每帧都能失败，逐帧记录会把日志刷爆（60 行/秒）。限频到 5 秒一条，
                         // 并把次数带上——次数本身是判断"偶发一次"还是"彻底坏了"的关键。
@@ -487,8 +493,11 @@ class EngineSession(
                 handle, type, x, y, deltaX, deltaY, pointerId, button,
                 keyCode, modifiers, unicodeCodepoint, timestampMicros,
             )
-            if (rc != NativeEngine.RESULT_OK) {
-                // 触摸是高频事件，输入若被持续拒绝会逐条刷屏——限频并带上次数
+            if (rc != NativeEngine.RESULT_OK &&
+                rc != NativeEngine.RESULT_STARTUP_PENDING
+            ) {
+                // 触摸是高频事件，输入若被持续拒绝会逐条刷屏——限频并带上次数。
+                // 启动期（STARTUP_PENDING）被拒是正常的，不计数也不记日志。
                 sendFailures++
                 AppLog.wLimited(TAG, "sendInput", 5_000L) {
                     "engineSendInput failed x$sendFailures (最近一次 type=$type rc=$rc err=${lastError()})"

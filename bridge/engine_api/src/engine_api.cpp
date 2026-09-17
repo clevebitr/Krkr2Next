@@ -1758,7 +1758,11 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
     }
 
     if(g_runtime_startup_active && g_runtime_startup_owner == handle) {
-        return SetHandleErrorAndReturnLocked(impl, ENGINE_RESULT_INVALID_STATE,
+        // 启动期（StartApplication 还在 worker 线程里跑）**不是错误**：壳每帧都会
+        // 调 tick，真机上每次开游戏都会因此记下 300+ 次"失败"
+        // （err=engine startup is still running，见 app.log 的 x301/x304/x373），
+        // 叠加层的错误数就是这么涨起来的。给它一个独立的结果码，让壳不当错误。
+        return SetHandleErrorAndReturnLocked(impl, ENGINE_RESULT_STARTUP_PENDING,
                                              "engine startup is still running");
     }
 

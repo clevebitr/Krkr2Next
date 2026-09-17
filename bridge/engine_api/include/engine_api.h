@@ -56,7 +56,19 @@ typedef enum engine_result_t {
      * Appended last so existing values stay stable for already-built hosts.
      * 追加在最后，保证已编译宿主看到的既有取值不变。
      */
-    ENGINE_RESULT_GAME_TERMINATED = -6
+    ENGINE_RESULT_GAME_TERMINATED = -6,
+    /*
+     * The game is still starting up (StartApplication is running on the worker
+     * thread). engine_tick returns this instead of ENGINE_RESULT_INVALID_STATE so
+     * the host does not record every frame of a normal startup as a failed tick —
+     * on device that added 300+ bogus errors per launch and made the debug
+     * overlay's error counter meaningless.
+     *
+     * 游戏仍在启动（StartApplication 还在 worker 线程里跑）。engine_tick 用它代替
+     * INVALID_STATE，宿主就不会把正常启动的每一帧都记成失败 —— 真机上每次开游戏
+     * 都会因此多出 300+ 个错误，叠加层的错误计数直接失去意义。
+     */
+    ENGINE_RESULT_STARTUP_PENDING = -7
 } engine_result_t;
 
 typedef struct engine_create_desc_t {
@@ -234,6 +246,8 @@ ENGINE_API_EXPORT engine_result_t engine_set_log_file_path(const char *path);
  * 驱动引擎主循环一帧。游戏提出退出（TJS `System.exit()`）后返回
  * ENGINE_RESULT_GAME_TERMINATED，宿主应据此离开游戏界面并销毁引擎；
  * 之后的每次调用都返回同一个码。
+ * 游戏仍在启动时返回 ENGINE_RESULT_STARTUP_PENDING（同样**不是错误**，
+ * 宿主不该把它计入失败次数）。
  */
 ENGINE_API_EXPORT engine_result_t engine_tick(engine_handle_t handle,
                                               uint32_t delta_ms);
