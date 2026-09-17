@@ -10,6 +10,8 @@
 #include <unordered_map>
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cstdint>
 #include <cmath>
 #include <spdlog/spdlog.h>
 #include "ResourceManager.h"
@@ -68,6 +70,44 @@ namespace motion {
         static void setEnableD3D(bool v) { _enableD3D = v; }
 
         bool getPlaying() const { return _playing; }
+
+        // ── 每帧自动推进（自 AetherKiri 的 autoProgress 驱动移植）────────────
+        // 为什么需要：PSB 动画要靠"每帧推进时钟 + 每帧重绘"才会动。参考实现里
+        // Player 自己注册进一个连续事件钩子，每帧 frameProgress()。本仓库原先没有
+        // 这条驱动，真机实测（千恋万花 SD/Q版 动画）游戏只在开播时调了一两次
+        // progress（delta=0/1ms），随后什么都不做 ⇒ `drawAnimated ... at tick=0`
+        // 永远是第一帧，动画看起来"只闪一两帧/根本不动"。
+        //
+        // 自门控（与参考实现同一套判据）：只要游戏自己在最近 ~120ms 内调过
+        // progress / draw，就当"游戏自己在驱动"，自动驱动让路，避免把时间线推快
+        // （或双画）。这样对"驱动完整"的游戏没有任何行为变化。
+        static constexpr int64_t kAutoDriveManualGuardMs = 120;
+
+        bool autoProgressEligible() const { return _playing; }
+
+        void noteManualProgress() { _manualProgressMs = SteadyNowMs(); }
+        void noteManualDraw() { _manualDrawMs = SteadyNowMs(); }
+        bool manualProgressRecent() const {
+            return SteadyNowMs() - _manualProgressMs < kAutoDriveManualGuardMs;
+        }
+        bool manualDrawRecent() const {
+            return SteadyNowMs() - _manualDrawMs < kAutoDriveManualGuardMs;
+        }
+
+        /** 自动驱动用：上一次 draw()/drawOnto() 的目标层（可为空）。 */
+        iTJSDispatch2 *lastDrawTarget() const {
+            return _lastDrawTarget.Type() == tvtObject
+                ? _lastDrawTarget.AsObjectNoAddRef()
+                : nullptr;
+        }
+        /** 自动驱动用：最近一次 draw 是否走的 captureCanvas 交付（那条自己每帧画）。 */
+        bool captureActive() const { return _captureActive; }
+
+        static int64_t SteadyNowMs() {
+            return std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now().time_since_epoch())
+                .count();
+        }
         bool getAllplaying() const { return _allplaying; }
         ttstr getMotion() const { return _motion; }
         void setMotion(const ttstr &v) { _motion = v; }
@@ -301,6 +341,9 @@ namespace motion {
         void draw(iTJSDispatch2 *target) {
             if(!target)
                 return;
+            // 记下目标层，供每帧自动驱动重绘（见 autoProgressEligible 注释）。
+            _lastDrawTarget = tTJSVariant(target, target);
+            noteManualDraw();
             // Same as play(): mark this player as the latest motion source so
             // the D3DAdaptor.captureCanvas callback can reach it. See play().
             // 与 play() 相同：标记本 player 为最新 motion 源，供
@@ -3194,6 +3237,8 @@ namespace motion {
                 return;
             sLastDrawSource = this;
             _captureActive = true;
+            _lastDrawTarget = tTJSVariant(target, target);
+            noteManualDraw();
             const ttstr storage = _loadedStorage.IsEmpty()
                 ? ResourceManager::getLastLoadedPath()
                 : _loadedStorage;
@@ -4274,6 +4319,10 @@ namespace motion {
 
         bool _playing = false;
         bool _allplaying = false;
+        // 自动驱动用的时间戳与最后一次绘制目标（见 autoProgressEligible 注释）。
+        int64_t _manualProgressMs = 0;
+        int64_t _manualDrawMs = 0;
+        tTJSVariant _lastDrawTarget;
         bool _playWasCalled = false;
         bool _isTransition = false;
         bool _stopCommandSent = false;

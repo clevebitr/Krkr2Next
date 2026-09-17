@@ -3,9 +3,12 @@
 // TODO: implement emoteplayer.dll plugin
 //
 #include <atomic>
+#include <chrono>
+#include <mutex>
 #include <spdlog/spdlog.h>
 #include "tjs.h"
 #include "tjsDictionary.h"
+#include "EventIntf.h"
 #include "ncbind.hpp"
 #include "psbfile/PSBFile.h"
 
@@ -19,6 +22,138 @@ using namespace TJS;
 
 #define NCB_MODULE_NAME TJS_W("motionplayer.dll")
 #define LOGGER spdlog::get("plugin")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 每帧自动推进 + 自动重绘（自 AetherKiri 的 autoProgress / presentationHold 驱动
+// 移植）。PSB 动画必须"每帧推进时钟 + 每帧重绘"才会动；本仓库原先缺这条驱动，
+// 真机实测游戏只在开播时调一两次 progress（delta=0/1ms），于是
+// `drawAnimated ... at tick=0` 永远是第一帧 —— 表现就是 Q版/SD 动画"只闪一两帧"。
+//
+// 自门控（与参考实现同一判据）：游戏自己在最近 ~120ms 内调过 progress/draw 时，
+// 自动驱动让路，避免把时间线推快或重复绘制。对驱动完整的游戏零行为变化。
+// ─────────────────────────────────────────────────────────────────────────────
+namespace {
+
+    class MotionAutoDriveHook : public tTVPContinuousEventCallbackIntf {
+    public:
+        void OnContinuousCallback(tjs_uint64 tick) override;
+    };
+
+    std::mutex g_autoDriveMutex;
+    std::vector<motion::Player *> g_autoDrivePlayers;
+    MotionAutoDriveHook g_autoDriveHook;
+    bool g_autoDriveHooked = false;
+    int64_t g_autoDriveLastMs = 0;
+
+    void AutoDriveRegister(motion::Player *player) {
+        if(!player)
+            return;
+        std::lock_guard<std::mutex> lock(g_autoDriveMutex);
+        if(std::find(g_autoDrivePlayers.begin(), g_autoDrivePlayers.end(),
+                     player) == g_autoDrivePlayers.end())
+            g_autoDrivePlayers.push_back(player);
+        if(!g_autoDriveHooked) {
+            TVPAddContinuousEventHook(&g_autoDriveHook);
+            g_autoDriveHooked = true;
+            g_autoDriveLastMs = 0; // 下一帧重新取基准，避免停顿时跳一大步
+        }
+    }
+
+    void AutoDriveUnregister(motion::Player *player) {
+        std::lock_guard<std::mutex> lock(g_autoDriveMutex);
+        g_autoDrivePlayers.erase(
+            std::remove(g_autoDrivePlayers.begin(), g_autoDrivePlayers.end(),
+                        player),
+            g_autoDrivePlayers.end());
+        if(g_autoDriveHooked && g_autoDrivePlayers.empty()) {
+            TVPRemoveContinuousEventHook(&g_autoDriveHook);
+            g_autoDriveHooked = false;
+        }
+    }
+
+    void AutoDriveClearAll() {
+        std::vector<motion::Player *> players;
+        {
+            std::lock_guard<std::mutex> lock(g_autoDriveMutex);
+            players.swap(g_autoDrivePlayers);
+        }
+        if(g_autoDriveHooked) {
+            TVPRemoveContinuousEventHook(&g_autoDriveHook);
+            g_autoDriveHooked = false;
+        }
+        g_autoDriveLastMs = 0;
+        (void)players; // 只清登记表：对象生命周期由各自的所有者负责
+    }
+
+    // 每 600 帧一条心跳，便于在真机日志里确认这条驱动确实在跑。
+    std::atomic<uint64_t> g_autoDriveCalls{ 0 };
+
+    int64_t AutoDriveNowMs() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::steady_clock::now().time_since_epoch())
+            .count();
+    }
+
+} // namespace
+
+void MotionAutoDriveHook::OnContinuousCallback(tjs_uint64 /*tick*/) {
+    std::vector<motion::Player *> players;
+    {
+        std::lock_guard<std::mutex> lock(g_autoDriveMutex);
+        players = g_autoDrivePlayers;
+    }
+    if(players.empty())
+        return;
+
+    const int64_t now = AutoDriveNowMs();
+    int64_t deltaMs = 16;
+    if(g_autoDriveLastMs != 0) {
+        deltaMs = now - g_autoDriveLastMs;
+        if(deltaMs < 0)
+            deltaMs = 0;
+        if(deltaMs > 100) // 卡顿后不要一次跳完，参考实现同样是 clamp
+            deltaMs = 100;
+    }
+    g_autoDriveLastMs = now;
+
+    const uint64_t call = g_autoDriveCalls.fetch_add(1) + 1;
+    const bool heartbeat = (call == 1 || (call % 600) == 0);
+
+    for(auto *player : players) {
+        if(!player)
+            continue;
+        // 游戏没在播 / 已经停了：摘掉登记。
+        if(!player->autoProgressEligible()) {
+            AutoDriveUnregister(player);
+            continue;
+        }
+        // 游戏自己在驱动：让路（见文件上方说明）。
+        if(player->manualProgressRecent())
+            continue;
+
+        const bool finished = player->progress(static_cast<tjs_int>(deltaMs));
+        if(heartbeat && LOGGER)
+            LOGGER->info("MCP 自动驱动: 推进 {}ms -> tick={} finished={}",
+                         static_cast<int>(deltaMs), player->getTickCount(),
+                         finished ? 1 : 0);
+
+        // 动画播完并且是脚本在等 onSync 的情形：由脚本自己处理（我们不冒充脚本
+        // 事件），把登记摘掉，避免空转。
+        if(finished) {
+            AutoDriveUnregister(player);
+            continue;
+        }
+
+        // 每帧重绘：captureCanvas 那条交付自己每帧画（drawOnto），这里不重复；
+        // 游戏自己在最近 120ms 内画过的也跳过（那是它自己的驱动）。
+        if(player->captureActive() || player->manualDrawRecent())
+            continue;
+        if(auto *target = player->lastDrawTarget()) {
+            player->draw(target);
+        }
+    }
+}
+
 
 static motion::SeparateLayerAdaptor *
 GetSeparateLayerAdaptorInstance(iTJSDispatch2 *objthis) {
@@ -735,6 +870,8 @@ static tjs_error Player_play(tTJSVariant *, tjs_int count, tTJSVariant **p,
     const tjs_int all =
         count >= 2 ? static_cast<tjs_int>(p[1]->AsInteger()) : 0;
     player->play(motion, all);
+    // 交给每帧自动驱动：脚本只调一两次 play/draw 时，动画才动得起来（见驱动注释）。
+    AutoDriveRegister(player);
     return TJS_S_OK;
 }
 
@@ -744,6 +881,7 @@ static tjs_error Player_stop(tTJSVariant *, tjs_int, tTJSVariant **,
     if(!player)
         return TJS_E_INVALIDPARAM;
     player->stop();
+    AutoDriveUnregister(player);
     return TJS_S_OK;
 }
 
@@ -752,6 +890,8 @@ static tjs_error Player_progress(tTJSVariant *, tjs_int count, tTJSVariant **p,
     auto *player = GetPlayerInstance(objthis);
     if(!player || count < 1)
         return TJS_E_INVALIDPARAM;
+    // 游戏自己在推进：自动驱动让路（见驱动注释）。
+    player->noteManualProgress();
     const bool finished =
         player->progress(static_cast<tjs_int>(p[0]->AsInteger()));
     // 动画时钟探针（只记前 5 次 + 每 600 次一条心跳）：PSB 动画靠游戏每帧调
@@ -912,6 +1052,8 @@ static tjs_error Player_draw(tTJSVariant *, tjs_int count, tTJSVariant **p,
                     (void *)p[0]->AsObjectNoAddRef(), sDrawWrapCount);
     }
     player->draw(p[0]->AsObjectNoAddRef());
+    // 只调 draw 不调 play 的用法也登记：驱动会自己判断是否该推进。
+    AutoDriveRegister(player);
     return TJS_S_OK;
 }
 
@@ -1299,7 +1441,7 @@ NCB_REGISTER_CLASS(Motion) {
 
 static void PreRegistCallback() {}
 
-static void PostUnregistCallback() {}
+static void PostUnregistCallback() { AutoDriveClearAll(); }
 
 NCB_PRE_REGIST_CALLBACK(PreRegistCallback);
 NCB_POST_UNREGIST_CALLBACK(PostUnregistCallback);
