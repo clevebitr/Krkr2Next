@@ -31,6 +31,8 @@
 #include "krkr_egl_context.h"
 #include "SysInitImpl.h"
 #include "VideoOvlImpl.h"
+// TVPPostWindowUpdate（BringToFront / ShowWindowAsModal 用它请求重绘）
+#include "EventIntf.h"
 
 #include <GLES3/gl3.h>
 
@@ -266,10 +268,32 @@ public:
         // No zoom transformation — coordinates pass through 1:1
     }
 
-    void BringToFront() override {}
+    void BringToFront() override {
+        // 宿主只有一个 surface，没有真正的 z 序；能做的"排到最前"就是请求一次
+        // 重绘，让这一层（通常是对话框窗口）在本帧被重新合成提交。空实现会让
+        // Show()/showModal() 之后窗口一直不刷新。
+        if(owner_)
+            TVPPostWindowUpdate(owner_);
+    }
 
+    // 游戏内置对话框（退出确认等）走的就是 Window.showModal()。
+    //
+    // 以前这里是 `spdlog::warn("...stub")`：既让窗口始终不可见（对话框画不出来），
+    // 又让每次弹窗都写一条 warning —— 真机上就表现为"引擎显示不了游戏自带弹窗，
+    // 而且错误日志一直涨"。宿主没有嵌套消息循环可用（渲染由壳的 frameCallback
+    // 驱动），所以"模态"在这里的可交付语义是：置为可见 + 排到最前 + 请求重绘，
+    // 让对话框真正出现在画面上；输入焦点仍由壳统一转发，不需要额外门闩。
     void ShowWindowAsModal() override {
-        spdlog::warn("HostWindowLayer::ShowWindowAsModal: stub");
+        visible_ = true;
+        if(owner_)
+            TVPPostWindowUpdate(owner_);
+        // 边沿记录：游戏可能反复调 showModal()，逐次打日志会让日志无限增长
+        // （老实现就是每条一次 warn，正是"错误日志一直涨"的来源）。
+        if(!modal_logged_) {
+            modal_logged_ = true;
+            spdlog::info("HostWindowLayer::ShowWindowAsModal: 置为可见并请求重绘"
+                         "（模态对话框由宿主正常合成）");
+        }
     }
 
     bool GetVisible() override { return visible_; }
@@ -973,6 +997,8 @@ private:
 
     tTJSNI_Window *owner_;
     bool visible_;
+    /// showModal() 的诊断日志只记一次（边沿），避免游戏反复调用时刷日志。
+    bool modal_logged_ = false;
     std::string caption_;
     tjs_int width_;
     tjs_int height_;

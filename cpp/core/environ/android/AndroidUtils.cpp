@@ -53,33 +53,82 @@ void TVPPrintLog(const char *str) {
 
 static tjs_uint32 _lastMemoryInfoQuery = 0;
 static tjs_int _availMemory, usedMemory;
+
+// /proc 辅助（定义在本文件稍后；先声明，免得为了调用次序把它们搬来搬去）
+static unsigned long _meminfo_value(const char *key); // 返回值单位 kB
+static tjs_int _proc_self_mem(const char *key);       // 返回值单位 kB
+
+// 壳是否提供 KR2Activity 的内存接口（`updateMemoryInfo`/`getAvailMemory`/
+// `getUsedMemory`）。KiriNext 的 KR2Activity 只实现消息框那几个方法，所以这里
+// 首次探测就会失败。失败后不再每 3 秒重试 JNI，改用 /proc 只读回退。
+static bool _memInfoViaJni = true;
+
+// /proc 回退：**只读遥测**，不参与任何内存分配/回收决策。
+//
+// 为什么要它：这两个函数返回 0 时后果不止"日志难看"——
+//   * `TVPCheckMemory()`（Application.cpp，_DEBUG 下由 RenderManager 调用）在
+//     freeMem < 24MB 时弹 "No Memory Warning"，于是**每次进游戏都误报没内存**；
+//   * `tTVPSystemControl::RunMemoryGovernor()` 里 `free_mb < 512` 直接判
+//     `pressure=3`（严重），也就是说引擎会**长期以"内存危急"状态运行**并据此
+//     收紧缓存。真机日志实测 35/35 行都是 pressure=3，正是这个原因。
+//
+// 单位必须与声明一致（Platform.h：`TVPGetSystemFreeMemory` 以 MB 计，
+// `tTVPSystemControl` 也按 MB 消费），所以这里两条路都产出 MB。
+static void readMemoryInfoFromProc() {
+    unsigned long availKb = _meminfo_value("MemAvailable:");
+    if(availKb == 0)
+        availKb = _meminfo_value("MemFree:"); // 老内核没有 MemAvailable
+    _availMemory = static_cast<tjs_int>(availKb / 1024);
+    // VmRSS 单位 kB，与 JNI 分支的 usedMemory 保持同一口径
+    usedMemory = _proc_self_mem("VmRSS:");
+}
+
 static void updateMemoryInfo() {
     if(TVPGetRoughTickCount32() - _lastMemoryInfoQuery > 3000) { // freq in 3s
 
-        JniMethodInfo methodInfo;
-        if(JniHelper::getStaticMethodInfo(methodInfo, KR2ActJavaPath,
-                                          "updateMemoryInfo", "()V")) {
-            methodInfo.env->CallStaticVoidMethod(methodInfo.classID,
-                                                 methodInfo.methodID);
-            methodInfo.env->DeleteLocalRef(methodInfo.classID);
+        if(_memInfoViaJni) {
+            JniMethodInfo methodInfo;
+            bool gotAvail = false, gotUsed = false;
+
+            if(JniHelper::getStaticMethodInfo(methodInfo, KR2ActJavaPath,
+                                              "updateMemoryInfo", "()V")) {
+                methodInfo.env->CallStaticVoidMethod(methodInfo.classID,
+                                                     methodInfo.methodID);
+                methodInfo.env->DeleteLocalRef(methodInfo.classID);
+            }
+
+            if(JniHelper::getStaticMethodInfo(methodInfo, KR2ActJavaPath,
+                                              "getAvailMemory", "()J")) {
+                _availMemory = static_cast<tjs_int>(
+                    methodInfo.env->CallStaticLongMethod(
+                        methodInfo.classID, methodInfo.methodID) /
+                    (1024 * 1024)); // bytes -> MB
+                methodInfo.env->DeleteLocalRef(methodInfo.classID);
+                gotAvail = true;
+            }
+
+            if(JniHelper::getStaticMethodInfo(methodInfo, KR2ActJavaPath,
+                                              "getUsedMemory", "()J")) {
+                // 契约是 MB（Platform.h / tTVPSystemControl 都按 MB 消费）。
+                // 旧写法只除到 kB，会让消费方把用量放大 1024 倍并直接判 pressure=3。
+                usedMemory = static_cast<tjs_int>(
+                    methodInfo.env->CallStaticLongMethod(
+                        methodInfo.classID, methodInfo.methodID) /
+                    (1024 * 1024)); // bytes -> MB
+                methodInfo.env->DeleteLocalRef(methodInfo.classID);
+                gotUsed = true;
+            }
+
+            if(!gotAvail || !gotUsed) {
+                _memInfoViaJni = false;
+                spdlog::info("内存遥测：壳未提供 KR2Activity"
+                             " getAvailMemory/getUsedMemory，改用 /proc 只读回退"
+                             "（不影响内存分配逻辑）");
+            }
         }
 
-        if(JniHelper::getStaticMethodInfo(methodInfo, KR2ActJavaPath,
-                                          "getAvailMemory", "()J")) {
-            _availMemory = methodInfo.env->CallStaticLongMethod(
-                               methodInfo.classID, methodInfo.methodID) /
-                (1024 * 1024);
-            methodInfo.env->DeleteLocalRef(methodInfo.classID);
-        }
-
-        if(JniHelper::getStaticMethodInfo(methodInfo, KR2ActJavaPath,
-                                          "getUsedMemory", "()J")) {
-            // in kB
-            usedMemory = methodInfo.env->CallStaticLongMethod(
-                             methodInfo.classID, methodInfo.methodID) /
-                1024;
-            methodInfo.env->DeleteLocalRef(methodInfo.classID);
-        }
+        if(!_memInfoViaJni)
+            readMemoryInfoFromProc();
 
         _lastMemoryInfoQuery = TVPGetRoughTickCount32();
     }
@@ -706,6 +755,13 @@ int TVPShowSimpleMessageBox(const ttstr &text, const ttstr &caption,
     btnTextHold.reserve(vecButtons.size());
     for(const ttstr &btn : vecButtons) {
         btnTextHold.emplace_back(btn.AsStdString());
+        btnText.emplace_back(btnTextHold.back().c_str());
+    }
+    // 空按钮列表时 `&btnText[0]` 是越界（对空 vector 取元素是 UB）：
+    // `System.inform(text, caption, [])` 正好会走到这里。补一个 OK 兜底。
+    if(btnText.empty()) {
+        btnTextHold.emplace_back(
+            LocaleConfigManager::GetInstance()->GetText("msgbox_ok"));
         btnText.emplace_back(btnTextHold.back().c_str());
     }
     return TVPShowSimpleMessageBox(pszText, pszTitle, btnText.size(),
