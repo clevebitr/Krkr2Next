@@ -282,8 +282,14 @@ class MainActivity : ComponentActivity() {
      */
     private fun keepPlaying() {
         gameExitPrompt = false
-        session?.cancelGameTermination()
         AppLog.i(TAG, "用户选择继续游戏：已请求撤销退出流程")
+        session?.cancelGameTermination(onRefused = {
+            // 引擎拒绝撤销（游戏已经关掉自己的窗口）时不能把用户留在死画面上：
+            // 提示一句并直接退出到库界面。
+            AppLog.w(TAG, "撤销被拒（游戏已关窗），直接退出游戏界面")
+            Toast.makeText(this, "游戏已关闭窗口，无法继续", Toast.LENGTH_LONG).show()
+            exitToLauncher()
+        })
     }
 
     /** 导航图需要的状态与回调。每次重组都会新建，成本只是几个引用。 */

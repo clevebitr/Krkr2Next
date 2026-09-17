@@ -451,12 +451,19 @@ class EngineSession(
      * 幂等：不在终止挂起状态时调用无副作用。会话已关闭时直接忽略（那时退出流程
      * 已经走完了）。
      */
-    fun cancelGameTermination() {
+    fun cancelGameTermination(onRefused: () -> Unit = {}) {
         post {
-            if (handle == 0L) return@post
+            if (handle == 0L) {
+                postToMain { onRefused() }
+                return@post
+            }
             val rc = NativeEngine.engineCancelTermination(handle)
             if (rc != NativeEngine.RESULT_OK) {
-                AppLog.w(TAG, "engineCancelTermination rc=$rc err=${lastError()}")
+                // 引擎拒绝撤销（真机情形：**游戏已经关掉了自己的窗口**，撤销只会让
+                // 它在空场景上继续跑）。绝不能把用户留在一个已经死掉的画面上 ——
+                // 交给宿主直接退出。见 MainActivity.keepPlaying。
+                AppLog.w(TAG, "engineCancelTermination 被拒绝 rc=$rc err=${lastError()}：交给宿主退出")
+                postToMain { onRefused() }
                 return@post
             }
             gameTerminated = false

@@ -2016,9 +2016,17 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
                             std::chrono::steady_clock::now());
 
     if(TVPTerminated) {
-        // 本帧的 Application::Run() 里脚本调了 System.exit()（EAbort 退栈后置位），
-        // 或者更早的路径已置位。与上面的提前返回同一个语义：交给宿主退出，
-        // 不算 tick 失败。见 ENGINE_RESULT_GAME_TERMINATED 的说明。
+        // 本帧的 Application::Run() 里脚本要求退出（EAbort 退栈后置位）——**游戏内
+        // 菜单的"退出游戏"就是这条**（KAG 的 @close → Window.close →
+        // HostWindowLayer::Close → TVPTerminateAsync）。这一条以前漏了关窗判断，
+        // 于是宿主收到 GAME_TERMINATED、弹了"是否继续"的确认框，用户点继续时
+        // engine_cancel_termination 才发现"窗口已关、不能取消"而拒绝 —— 用户就
+        // 被留在已经死掉的画面上（真机 01:59:13 完全吻合）。
+        if(TVPTerminateWindowClosed) {
+            return SetHandleErrorAndReturnLocked(
+                impl, ENGINE_RESULT_WINDOW_CLOSED,
+                "runtime terminated because the game closed its window");
+        }
         return SetHandleErrorAndReturnLocked(impl,
                                              ENGINE_RESULT_GAME_TERMINATED,
                                              "runtime requested termination");
