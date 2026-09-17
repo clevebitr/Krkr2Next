@@ -218,10 +218,17 @@ class WIN32Dialog {
 // 模板/控件容器：脚本用 new WIN32Dialog.Header() / .Items() 构造并 store/add。
 class WIN32DialogHeader {
 	function WIN32DialogHeader() { this.style = 0; this.exStyle = 0; }
+	// 显式键拷贝（不用 for..in：TJS 方言差异不值得为它冒运行时语法错误的风险，
+	// 一旦脚本整体抛异常，游戏连 messageBox 都用不上了）。
 	function store(elm) {
 		if (typeof elm != 'Object') return false;
-		for (var key in elm) {
-			try { this[key] = elm[key]; } catch (e) { }
+		var keys = ['style', 'exStyle', 'x', 'y', 'cx', 'cy', 'title', 'font',
+			'pointSize', 'weight', 'italic', 'charset', 'helpID'];
+		for (var i = 0; i < keys.count; i++) {
+			var key = keys[i];
+			if (typeof elm[key] != 'void') {
+				try { this[key] = elm[key]; } catch (e) { }
+			}
 		}
 		return true;
 	}
