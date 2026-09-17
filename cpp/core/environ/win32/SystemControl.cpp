@@ -235,6 +235,7 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
         static_cast<uint32_t>(MemoryProfile ? 20000 : 40000);
     if(pressure == 0 && tick - LastIdleCompactTick >= idle_compact_interval) {
         LastIdleCompactTick = tick;
+        krkr::stall::MarkStage("内存清理: DEACTIVATE（压力 0）");
         TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_DEACTIVATE);
 #ifdef __APPLE__
         malloc_zone_pressure_relief(nullptr, 0);
@@ -243,6 +244,7 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
 
     if(pressure >= 1 && tick - LastDeepCompactedTick >= deep_compact_interval) {
         LastDeepCompactedTick = tick;
+        krkr::stall::MarkStage("内存清理: MINIMIZE（压力 1 深度清理）");
         TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MINIMIZE);
 #ifdef __APPLE__
         malloc_zone_pressure_relief(nullptr, 0);
@@ -252,8 +254,27 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
     if(pressure >= 2 &&
        tick - LastAggressiveCompactedTick >= aggressive_compact_interval) {
         LastAggressiveCompactedTick = tick;
+        // 与压力 3 的分支一样是**同步**跑在渲染线程一帧里的清理，也一样计时：
+        // 真机上 1.0–3.7s 的长帧并不都落在压力 3（压力 1/2 的样本同样存在）。
+        const auto aggressiveStart = std::chrono::steady_clock::now();
+        krkr::stall::MarkStage("内存清理: XP3 段缓存（压力 2 激进清理）");
         TVPClearXP3SegmentCache();
+        krkr::stall::MarkStage("内存清理: MINIMIZE（压力 2 激进清理）");
         TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MINIMIZE);
+        const auto aggressiveMs =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - aggressiveStart)
+                .count();
+        if(aggressiveMs >= 500) {
+            static uint32_t s_lastAggressiveWarnTick = 0;
+            if(s_lastAggressiveWarnTick == 0 ||
+               tick - s_lastAggressiveWarnTick >= 15000) {
+                s_lastAggressiveWarnTick = tick;
+                spdlog::warn("内存压力 2 的同步激进清理耗时 {} ms"
+                             "（XP3 段缓存 + MINIMIZE，跑在渲染线程的一帧里）",
+                             static_cast<long long>(aggressiveMs));
+            }
+        }
 #ifdef __APPLE__
         malloc_zone_pressure_relief(nullptr, 0);
 #endif
@@ -581,24 +602,30 @@ void tTVPSystemControl::SystemWatchTimerTimer() {
         LastCompactedTick = tick;
 
         // fire compact event
+        krkr::stall::MarkStage("定时器: COMPACT_IDLE（空闲清理，渲染线程内同步）");
         TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_IDLE);
     } else if(ContinuousEventCalling && tick - LastCompactedTick > 10000) {
         LastCompactedTick = tick;
+        krkr::stall::MarkStage("定时器: COMPACT_IDLE（连续事件期，同步）");
         TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_IDLE);
     }
 
+    krkr::stall::MarkStage("定时器: RunMemoryGovernor（含同步清理）");
     RunMemoryGovernor(tick);
 
     if(!ContinuousEventCalling && tick > LastRehashedTick + 1500) {
         // TJS2 object rehash
         LastRehashedTick = tick;
+        krkr::stall::MarkStage("定时器: TJSDoRehash（对象表重哈希，同步）");
         TJSDoRehash();
     } else if(ContinuousEventCalling && tick > LastRehashedTick + 10000) {
         // Periodically rehash TJS2 object tables even during continuous
         // events to prevent hash table fragmentation and memory waste.
         LastRehashedTick = tick;
+        krkr::stall::MarkStage("定时器: TJSDoRehash（连续事件期，同步）");
         TJSDoRehash();
     }
+    krkr::stall::MarkStage("定时器: SystemWatchTimerTimer 返回");
     // ensure modal window visible
     if(tick > LastShowModalWindowSentTick + 4100) {
         //	::PostMessage(Handle, WM_USER+0x32, 0, 0);

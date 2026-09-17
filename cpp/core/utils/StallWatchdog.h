@@ -26,8 +26,12 @@
 namespace krkr {
 namespace stall {
 
-/** 距上次推进超过这个时长即判定为"卡住"（毫秒）。 */
-constexpr int64_t kStallThresholdMs = 4000;
+/**
+ * 距上次推进超过这个时长即判定为"卡住"（毫秒）。
+ * 取 1500ms：真机实测正常帧 16–33ms、重载帧 150–450ms，故障帧 1000–3700ms
+ * （乃至 13s+ 的 ANR）。这个阈值能把"重载"与"卡死"分开。
+ */
+constexpr int64_t kStallThresholdMs = 1500;
 
 inline std::atomic<int64_t> g_lastProgressMs{ 0 };
 inline std::atomic<const char *> g_stage{ "尚未开始" };
