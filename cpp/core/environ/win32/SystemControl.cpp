@@ -3,6 +3,9 @@
 
 //---------------------------------------------------------------------------
 #include <algorithm>
+#include <chrono>
+#include <spdlog/spdlog.h>
+#include "../../utils/StallWatchdog.h"
 #include "SystemControl.h"
 #include "EventIntf.h"
 #include "MsgIntf.h"
@@ -258,8 +261,38 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
 
     if(pressure >= 3 && tick - LastCompactedTick >= 3000) {
         LastCompactedTick = tick;
+        // 这段是**同步**跑在渲染线程的一帧里（SystemWatchTimerTimer 由
+        // Application::Run 调用，整帧持有 g_registry_mutex）：XP3 段缓存清空 +
+        // COMPACT_LEVEL_MAX（TJS GC + 图形缓存 + 纹理回收）一起做。压力 3 时每
+        // 3 秒一次，正是"播 CG 视频（内存涨到压力 3）时长时间无响应"的嫌疑点。
+        // 这里只做**计时**，不改任何清理策略与阈值。
+        const auto compactStart = std::chrono::steady_clock::now();
+        krkr::stall::MarkStage("内存清理: XP3 段缓存（压力 3，渲染线程内同步）");
         TVPClearXP3SegmentCache();
+        const auto afterSeg = std::chrono::steady_clock::now();
+        krkr::stall::MarkStage(
+            "内存清理: COMPACT_MAX + TJS GC（压力 3，渲染线程内同步）");
         TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
+        const auto afterCompact = std::chrono::steady_clock::now();
+        const auto segMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               afterSeg - compactStart)
+                               .count();
+        const auto maxMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               afterCompact - afterSeg)
+                               .count();
+        if(segMs + maxMs >= 500) {
+            // 限频：压力 3 时这段每 3 秒跑一次，清理本身也可能长期偏慢，
+            // 不做限频会把日志刷满（每 3 秒一条）。
+            static uint32_t s_lastCompactWarnTick = 0;
+            if(tick - s_lastCompactWarnTick >= 15000 ||
+               s_lastCompactWarnTick == 0) {
+                s_lastCompactWarnTick = tick;
+                spdlog::warn("内存压力 3 的同步清理耗时 {}+{} ms"
+                             "（XP3 段缓存 + COMPACT_MAX，跑在渲染线程的一帧里）",
+                             static_cast<long long>(segMs),
+                             static_cast<long long>(maxMs));
+            }
+        }
 #ifdef __APPLE__
         malloc_zone_pressure_relief(nullptr, 0);
 #endif

@@ -12,6 +12,7 @@
 #include "tjsCommHead.h"
 
 #include <algorithm>
+#include "../../utils/StallWatchdog.h"
 #include "MsgIntf.h"
 #include "VideoOvlImpl.h"
 #include "DebugIntf.h"
@@ -207,9 +208,11 @@ void tTJSNI_VideoOverlay::Invalidate() {
 //---------------------------------------------------------------------------
 void tTJSNI_VideoOverlay::Open(const ttstr &_name) {
     // open
+    krkr::stall::MarkStage("movie: VideoOverlay::Open 入口（先 Close 旧片）");
 
     // first, close
     Close();
+    krkr::stall::MarkStage("movie: VideoOverlay::Open 已关旧片，开始建图");
 
     // check window
     if(!Window)
@@ -344,6 +347,7 @@ void tTJSNI_VideoOverlay::Open(const ttstr &_name) {
 }
 //---------------------------------------------------------------------------
 void tTJSNI_VideoOverlay::Close() {
+    krkr::stall::MarkStage("movie: VideoOverlay::Close 入口");
     if(VideoOverlay) {
         if(CachedOverlay) {
             CachedOverlay->Release();
@@ -399,6 +403,7 @@ void tTJSNI_VideoOverlay::Disconnect() {
 //---------------------------------------------------------------------------
 void tTJSNI_VideoOverlay::Play() {
     // start playing
+    krkr::stall::MarkStage("movie: VideoOverlay::Play 入口");
     if(VideoOverlay) {
         VideoOverlay->Play();
         ClearWndProcMessages();
@@ -406,10 +411,12 @@ void tTJSNI_VideoOverlay::Play() {
             SetStatusAsync(
                 ssPlay); // prevent onStatusChanged re-entering and freeing this
     }
+    krkr::stall::MarkStage("movie: VideoOverlay::Play 返回");
 }
 //---------------------------------------------------------------------------
 void tTJSNI_VideoOverlay::Stop() {
     // stop playing
+    krkr::stall::MarkStage("movie: VideoOverlay::Stop 入口");
     if(VideoOverlay) {
         VideoOverlay->Stop();
         ClearWndProcMessages();
@@ -417,6 +424,7 @@ void tTJSNI_VideoOverlay::Stop() {
             SetStatusAsync(
                 ssStop); // prevent onStatusChanged re-entering and freeing this
     }
+    krkr::stall::MarkStage("movie: VideoOverlay::Stop 返回");
 }
 //---------------------------------------------------------------------------
 void tTJSNI_VideoOverlay::Pause() {

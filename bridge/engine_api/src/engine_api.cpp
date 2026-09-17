@@ -59,6 +59,7 @@ extern "C" void krkr_GetSurfaceDimensions(uint32_t *, uint32_t *);
 // 日志去重/限频门闩。经 krkr2core 导出的 cpp/core 包含路径引入
 // （见 cpp/core/CMakeLists.txt 的 INTERFACE include）。
 #include "utils/LogUtil.h"
+#include "utils/StallWatchdog.h"
 #include "environ/EngineLoop.h"
 #include "environ/MainScene.h"
 #include "base/StorageIntf.h"
@@ -1151,6 +1152,10 @@ engine_result_t engine_create(const engine_create_desc_t *desc,
 
     *out_handle = handle;
     SetThreadError(nullptr);
+    // 卡死探针：看门狗线程只在"渲染线程 ≥4s 没有推进"时打一条 warn（状态边沿），
+    // 用于定位那些"停住且不再产生任何日志"的问题（真机上出过两次 ANR）。
+    krkr::stall::MarkStage("engine_create 完成");
+    krkr::stall::Start();
     return ENGINE_RESULT_OK;
 }
 
@@ -1312,6 +1317,9 @@ engine_result_t engine_destroy(engine_handle_t handle) {
         spdlog::default_logger()->flush();
     }
 
+    // 停掉卡死探针的看门狗线程。放在 registry 锁之外：看门狗写日志时可能要取
+    // g_registry_mutex，持锁 join 会锁死自己。
+    krkr::stall::Stop();
     delete impl;
     SetThreadError(nullptr);
     return ENGINE_RESULT_OK;
@@ -1733,6 +1741,11 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
         return result;
     }
 
+    // 卡死探针：先落一个"本帧已开始"的阶段。放在所有状态门之前 —— 启动期
+    // （engine startup is still running）与未打开状态的 tick 也会走到这里，
+    // 否则启动/暂停那些"合法地不渲染"的阶段会被看门狗误报成卡死。
+    krkr::stall::MarkStage("engine_tick: 开始");
+
     // 终止检查必须放在所有状态门之前：游戏可能在**启动期**就退出（启动脚本里的
     // `System.exit()`），此时 state 不是 kOpened、g_runtime_active 也可能已复位，
     // 若先撞上下面那些门就会返回 INVALID_STATE，宿主又把它当普通错误累计
@@ -1765,6 +1778,7 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
                                              "engine is not in opened state");
     }
     impl->tick_count += 1;
+    krkr::stall::MarkStage("engine_tick: 输入派发");
 
     while(!impl->input.pending_events.empty()) {
         const engine_input_event_t queued_event =
@@ -1957,6 +1971,7 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
         // （TVPDrawSceneOnce + 纹理回收 + 帧交付）两段，按固定间隔汇总一行。
         // 与壳侧的 5s 采样对齐，便于两份日志并排看。
         const auto update_start = std::chrono::steady_clock::now();
+        krkr::stall::MarkStage("engine_tick: Application::Run（脚本+合成+绘制）");
         ::Application->Run();
         const auto update_end = std::chrono::steady_clock::now();
         FramePerfAccumulate(impl, update_start, update_end);
@@ -1971,6 +1986,7 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
     // post 段：呈现 + 延迟纹理回收。与 update 段分开计时，才能区分
     // "场景/脚本慢" 与 "呈现/交付慢"。
     const auto post_start = std::chrono::steady_clock::now();
+    krkr::stall::MarkStage("engine_tick: 呈现（DrawSceneOnce/回收/交付）");
     ::TVPDrawSceneOnce(0);
 
     // Process deferred texture deletions. iTVPTexture2D::Release() uses
@@ -2144,6 +2160,8 @@ engine_result_t engine_pause(engine_handle_t handle) {
     impl->input.active_pointer_ids.clear();
     impl->input.pending_events.clear();
     impl->state = ToStateValue(EngineState::kPaused);
+    // 主动暂停期间没有 tick 是正常的：别让卡死探针误报。
+    krkr::stall::SetPaused(true);
     ClearHandleErrorLocked(impl);
     SetThreadError(nullptr);
     return ENGINE_RESULT_OK;
@@ -2183,6 +2201,7 @@ engine_result_t engine_resume(engine_handle_t handle) {
 
     Application->OnActivate();
     impl->state = ToStateValue(EngineState::kOpened);
+    krkr::stall::SetPaused(false);
     ClearHandleErrorLocked(impl);
     SetThreadError(nullptr);
     return ENGINE_RESULT_OK;

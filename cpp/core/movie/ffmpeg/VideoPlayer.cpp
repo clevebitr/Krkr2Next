@@ -1,6 +1,7 @@
 #include "VideoPlayer.h"
 #include <cmath>
 #include <algorithm>
+#include "../../utils/StallWatchdog.h"
 #include "DemuxFFmpeg.h"
 #include "VideoPlayerVideo.h"
 #include "VideoPlayerAudio.h"
@@ -198,6 +199,7 @@ BasePlayer::~BasePlayer() {
 }
 
 void BasePlayer::Play() {
+    krkr::stall::MarkStage("movie: BasePlayer::Play 入口");
     m_bStopStatus = false;
 
     if(!m_ThreadId)
@@ -205,13 +207,16 @@ void BasePlayer::Play() {
 
     if(GetSpeed() == 0)
         SetSpeed(1 /*m_newPlaySpeed*/);
+    krkr::stall::MarkStage("movie: BasePlayer::Play 返回");
 }
 
 void BasePlayer::Stop() {
+    krkr::stall::MarkStage("movie: BasePlayer::Stop 入口（SetSpeed/SeekTime）");
     m_bStopStatus = true;
     // pause and rewind
     SetSpeed(0);
     SeekTime(0);
+    krkr::stall::MarkStage("movie: BasePlayer::Stop 返回");
 }
 
 void BasePlayer::Pause() {
@@ -271,6 +276,7 @@ void BasePlayer::UpdateRenderInfo(CRenderInfo &info) {
 
 bool BasePlayer::OpenFromStream(IStream *stream, const tjs_char *streamname,
                                 const tjs_char *type, uint64_t size) {
+    krkr::stall::MarkStage("movie: BasePlayer::OpenFromStream 入口");
     if(IsRunning())
         CloseInputStream();
 
