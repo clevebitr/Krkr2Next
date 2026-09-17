@@ -31,7 +31,7 @@
  */
 
 #include "ncbind.hpp"
-#include "MsgIntf.h"
+#include "Platform.h"
 
 #include <map>
 #include <string>
@@ -137,6 +137,11 @@ bool PropInt(iTJSDispatch2 *obj, const tjs_char *name, tjs_int &out) {
 
 bool IsButtonClass(const ttstr &cls) {
     return cls == TJS_W("Button") || cls == TJS_W("BUTTON");
+}
+
+// tTJSVariant 没有 IsEmpty()：按"void 或空字符串"判断。
+bool VarEmpty(const tTJSVariant &v) {
+    return v.Type() == tvtVoid || ttstr(v).IsEmpty();
 }
 
 // 无状态的通用回调（常量、no-op）。签名与实例方法一致，NCB 只要求普通函数指针。
@@ -369,7 +374,7 @@ public:
         if(numparams >= 1 && param[0] && param[0]->Type() == tvtObject) {
             iTJSDispatch2 *it = param[0]->AsObjectNoAddRef();
             self->_items.push_back(*param[0]);
-            if(self->_text.IsEmpty())
+            if(VarEmpty(self->_text))
                 self->_text = PropText(it, TJS_W("text"), self->_text);
         }
         if(r)
@@ -419,10 +424,10 @@ public:
             labels.resize(3);
             ids.resize(3);
         }
-        const ttstr caption = self->_title.IsEmpty()
+        const ttstr caption = VarEmpty(self->_title)
             ? ttstr(TJS_W("Information"))
-            : self->_title;
-        const ttstr body = self->_text.IsEmpty() ? caption : self->_text;
+            : ttstr(self->_title);
+        const ttstr body = VarEmpty(self->_text) ? caption : ttstr(self->_text);
         const int idx = TVPShowSimpleMessageBox(body, caption, labels);
         const tjs_int id =
             (idx >= 0 && idx < static_cast<int>(ids.size())) ? ids[idx] : ids[0];
