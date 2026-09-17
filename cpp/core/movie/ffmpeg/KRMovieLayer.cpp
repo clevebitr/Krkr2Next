@@ -4,6 +4,10 @@
 #include "Application.h"
 #include "VideoOvlImpl.h"
 
+#include <chrono>
+
+#include <spdlog/spdlog.h>
+
 extern "C" {
 #include "libswscale/swscale.h"
 }
@@ -51,6 +55,9 @@ void VideoPresentLayer::OnContinuousCallback(tjs_uint64 tick) {
         BitmapPicture &picbuf = m_picture[m_curPicture];
         // check pts
         if(picbuf.pts > m_curpts) { // present in future
+            // 这条链路每 tick 最多呈现一帧，"跳过"次数偏高就说明呈现被引擎
+            // tick 卡住（而不是解码慢）—— 统计里必须区分开。
+            TVPMovieStatsNotePresent("layer", /*ptsNotYet=*/true);
             return;
         }
     }
@@ -64,6 +71,7 @@ void VideoPresentLayer::OnContinuousCallback(tjs_uint64 tick) {
         assert(m_usedPicture >= 0);
 #endif
     OnPlayEvent(KRMovieEvent::Update, nullptr);
+    TVPMovieStatsNotePresent("layer", /*ptsNotYet=*/false);
 }
 
 int VideoPresentLayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
@@ -85,6 +93,10 @@ int VideoPresentLayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
     uint8_t *data = (uint8_t *)TJSAlignedAlloc(width * height * 4, 4);
     int datasize = width * 4;
 
+    // 经典 layer 链路：每帧一次全画面 YUV→RGBA 软件转换，外加一次
+    // width*height*4 的堆分配（1080p 就是每帧 8MB 的分配/释放 churn）。
+    // 单独计时上报，才能判断"帧率低"是不是转换（含分配）造成的。
+    const auto convertStart = std::chrono::steady_clock::now();
     img_convert_ctx = sws_getCachedContext(
         img_convert_ctx, width, height, AV_PIX_FMT_YUV420P, width, height,
         AV_PIX_FMT_RGBA, /*sws_flags*/ SWS_FAST_BILINEAR, nullptr, nullptr,
@@ -92,6 +104,12 @@ int VideoPresentLayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
     assert(img_convert_ctx);
     int processed = sws_scale(img_convert_ctx, pic.data, pic.iLineSize, 0,
                               pic.iHeight, &data, &datasize);
+    TVPMovieStatsNoteDecode(
+        "layer",
+        static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - convertStart)
+                .count()));
 
     {
         std::lock_guard<std::mutex> lk(m_mtxPicture);
@@ -117,6 +135,18 @@ void MoviePlayerLayer::BuildGraph(tTJSNI_VideoOverlay *callbackwin,
                     std::forward<decltype(PH2)>(PH2));
     });
     m_pPlayer->OpenFromStream(stream, streamname, type, size);
+    // 开片时记一次片源自身参数：视频声明的帧率与尺寸是判断"卡"的基准线
+    // （例如片源 60fps 而引擎只跑 30fps，那就不是解码问题而是呈现节流）。
+    {
+        double fps = 0.0;
+        GetFPS(&fps);
+        long vw = 0, vh = 0;
+        GetVideoSize(&vw, &vh);
+        int frames = 0;
+        GetNumberOfFrame(&frames);
+        spdlog::info("Movie[layer]: 片源 fps={:.3f} 尺寸={}x{} 总帧数={}", fps,
+                     vw, vh, frames);
+    }
 }
 
 void MoviePlayerLayer::OnPlayEvent(KRMovieEvent msg, void *p) {

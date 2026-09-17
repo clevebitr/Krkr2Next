@@ -19,6 +19,22 @@ using OverlayNode = void;
 NS_KRMOVIE_BEGIN
 #define MAX_BUFFER_COUNT 4
 
+// ---------------------------------------------------------------------------
+// 电影链路的低频统计（每 5 秒汇总一行）
+//
+// 为什么需要：真机上「视频帧率偏低」至少有四个互相独立的可能来源 ——
+//   1) 解码跟不上（解码线程慢）；
+//   2) YUV→RGBA 逐帧软件转换慢（每帧一次全画面）；
+//   3) 呈现被引擎 tick 限制（每条链路每 tick 最多呈现一帧）；
+//   4) 图层上传 / 宿主提交慢。
+// 没有计数器只能靠猜。热路径上只做整数加法与两次 steady_clock::now()，
+// 输出被限到 5 秒一行（与 engine 侧 frame_perf 同节奏，便于并排对照）。
+// tag 用来区分链路："layer" = 画进 Layer 的经典路径（老游戏），
+// "overlay" = 宿主纹理共享路径（overlay 模式）。
+// ---------------------------------------------------------------------------
+void TVPMovieStatsNoteDecode(const char *tag, uint64_t convertUs);
+void TVPMovieStatsNotePresent(const char *tag, bool ptsNotYet);
+
 class TVPMoviePlayer : public iTVPVideoOverlay, public CBaseRenderer {
 public:
     ~TVPMoviePlayer() override;

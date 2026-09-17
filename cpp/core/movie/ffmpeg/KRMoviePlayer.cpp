@@ -1,6 +1,10 @@
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstring>
+#include <map>
+#include <mutex>
+#include <string>
 #include <thread>
 
 extern "C" {
@@ -29,6 +33,76 @@ extern bool TVPHostSubmitVideoOverlayFrame(const void *rgba, int width,
 extern void TVPHostClearVideoOverlayFrame();
 
 NS_KRMOVIE_BEGIN
+
+// ── 电影链路低频统计（声明见 KRMoviePlayer.h）───────────────────────────────
+// 两条链路（layer / overlay）共用一份表，按 tag 分开累计；每 5 秒各输出一行。
+namespace {
+    struct MovieStatsState {
+        uint64_t frames = 0;       // 解码后入队的帧数
+        uint64_t presents = 0;     // 真正呈现/提交的帧数
+        uint64_t futureSkips = 0;  // 因 pts 还没到而未呈现的次数
+        uint64_t convertUs = 0;    // YUV→RGBA 累计耗时
+        uint64_t convertMaxUs = 0; // 单帧转换耗时峰值
+        std::chrono::steady_clock::time_point windowStart{};
+    };
+
+    std::mutex g_movieStatsMutex;
+    std::map<std::string, MovieStatsState> g_movieStats;
+
+    // 只在持锁时调用。窗口到点就汇总输出并把计数清零。
+    void MovieStatsMaybeReportLocked(const char *tag, MovieStatsState &s) {
+        const auto now = std::chrono::steady_clock::now();
+        if(s.windowStart.time_since_epoch().count() == 0) {
+            s.windowStart = now;
+            return;
+        }
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            now - s.windowStart)
+                            .count();
+        if(ms < 5000)
+            return;
+        const double secs = static_cast<double>(ms) / 1000.0;
+        const double avgConvertMs =
+            s.frames ? static_cast<double>(s.convertUs) /
+                    static_cast<double>(s.frames) / 1000.0
+                     : 0.0;
+        spdlog::info("movie[{}]: 入队 {:.1f} 帧/秒，呈现 {:.1f} 帧/秒，"
+                     "pts未到跳过 {}，转换 avg={:.2f}ms max={:.2f}ms "
+                     "（窗口 {:.1f}s）",
+                     tag ? tag : "?", static_cast<double>(s.frames) / secs,
+                     static_cast<double>(s.presents) / secs, s.futureSkips,
+                     avgConvertMs,
+                     static_cast<double>(s.convertMaxUs) / 1000.0, secs);
+        s = MovieStatsState{};
+        s.windowStart = now;
+    }
+
+    MovieStatsState &MovieStatsLocked(const char *tag) {
+        return g_movieStats[tag ? tag : "?"];
+    }
+} // namespace
+
+void TVPMovieStatsNoteDecode(const char *tag, uint64_t convertUs) {
+    std::lock_guard<std::mutex> lk(g_movieStatsMutex);
+    MovieStatsState &s = MovieStatsLocked(tag);
+    ++s.frames;
+    s.convertUs += convertUs;
+    if(convertUs > s.convertMaxUs)
+        s.convertMaxUs = convertUs;
+    MovieStatsMaybeReportLocked(tag, s);
+}
+
+void TVPMovieStatsNotePresent(const char *tag, bool ptsNotYet) {
+    std::lock_guard<std::mutex> lk(g_movieStatsMutex);
+    MovieStatsState &s = MovieStatsLocked(tag);
+    if(ptsNotYet)
+        ++s.futureSkips;
+    else
+        ++s.presents;
+    MovieStatsMaybeReportLocked(tag, s);
+}
+
+
 
 TVPMoviePlayer::TVPMoviePlayer() { m_pPlayer = new BasePlayer(this); }
 
@@ -267,6 +341,9 @@ int TVPMoviePlayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
     img_convert_ctx = sws_getCachedContext(
         img_convert_ctx, srcWidth, srcHeight, AV_PIX_FMT_YUV420P, width, height,
         AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
+    // 逐帧软件转换是 overlay 链路里最重的 CPU 工作（每帧一次全画面），单独计时
+    // 上报，便于判断"帧率低"是不是它造成的。
+    const auto convertStart = std::chrono::steady_clock::now();
     int processed = 0;
     if(img_convert_ctx) {
         processed = sws_scale(img_convert_ctx, pic.data, pic.iLineSize, 0,
@@ -276,6 +353,12 @@ int TVPMoviePlayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
         std::memset(data, 0, static_cast<size_t>(width) * height * 4);
         ConvertYuv420ToRgba(pic, data, width, height, dstLineSize[0]);
     }
+    TVPMovieStatsNoteDecode(
+        "overlay",
+        static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - convertStart)
+                .count()));
 
     {
         std::lock_guard<std::mutex> lk(m_mtxPicture);
@@ -343,6 +426,7 @@ void VideoPresentOverlay::PresentPicture(float dt) {
     const bool submitted = TVPHostSubmitVideoOverlayFrame(
         pic.rgba, pic.width, pic.height, pic.width * 4, dest.left, dest.top,
         dest.right, dest.bottom);
+    TVPMovieStatsNotePresent("overlay", /*ptsNotYet=*/false);
     static std::atomic<int> s_submitLogs{ 0 };
     if(s_submitLogs.fetch_add(1) < 3)
         spdlog::info("VideoPresentOverlay: submitted {}x{} dest=({},{})({},{}"
