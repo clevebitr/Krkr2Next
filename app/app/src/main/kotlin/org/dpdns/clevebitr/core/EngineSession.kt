@@ -72,6 +72,11 @@ class EngineSession(
      * 此刻引擎处于"终止挂起"状态：不再渲染，但**什么都没拆**（所以可以取消）。
      */
     private val onGameExitRequested: () -> Unit = {},
+    /**
+     * 游戏**关掉自己的窗口**而退出（与 [onGameExitRequested] 区分）。**已切到主线程
+     * 回调**，只回调一次。宿主应直接离开游戏界面：窗口已经没了，"继续游戏"无从谈起。
+     */
+    private val onWindowClosed: () -> Unit = {},
 ) {
     companion object {
         private const val TAG = "KrKr2Next/Engine"
@@ -269,6 +274,18 @@ class EngineSession(
                             // 直接结束本帧：不再 post 下一帧，也不轮到
                             // pollStartupState —— 否则"启动期退出"会被它报成启动失败
                             // （onFatal），宿主会多弹一个错误框。
+                            return
+                        }
+                    } else if (rc == NativeEngine.RESULT_WINDOW_CLOSED) {
+                        // 游戏关掉了自己的窗口（不是脚本 System.exit()）。窗口已经
+                        // 没了，问用户"要不要继续"没有意义：撤销后只是在空场景上继续
+                        // 跑（真机实测画面彻底不动）。直接离开游戏界面，并且不再
+                        // 回调确认框。
+                        if (!gameTerminated) {
+                            gameTerminated = true
+                            running = false
+                            AppLog.i(TAG, "游戏关窗退出（engineTick 返回 WINDOW_CLOSED），直接收尾")
+                            postToMain { onWindowClosed() }
                             return
                         }
                     } else if (rc == NativeEngine.RESULT_STARTUP_PENDING) {

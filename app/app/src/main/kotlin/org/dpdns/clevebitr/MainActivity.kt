@@ -509,6 +509,13 @@ class MainActivity : ComponentActivity() {
                 AppLog.i(TAG, "game requested exit -> 弹确认框")
                 gameExitPrompt = true
             },
+            // 游戏关掉了自己的窗口：窗口已经没了，给"继续游戏"也是骗人的（撤销后只是
+            // 在空场景上继续跑）。直接收尾，不弹确认框。
+            onWindowClosed = {
+                AppLog.i(TAG, "game closed its window -> exitToLauncher")
+                Toast.makeText(this, "游戏已退出", Toast.LENGTH_SHORT).show()
+                exitToLauncher()
+            },
         )
         session = s
         startupState = NativeEngine.STARTUP_IDLE

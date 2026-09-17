@@ -387,6 +387,10 @@ void TVPAfterSystemUninit() {}
 
 //---------------------------------------------------------------------------
 bool TVPTerminated = false;
+// 终止是否由"游戏关掉了自己的窗口"引起（与脚本直接 System.exit() 区分开）：
+// 前者窗口已经没了，宿主即便确认"继续游戏"也只是在空场景上继续跑（实测就是卡死），
+// engine_tick 会用不同的结果码告诉宿主，见 ENGINE_RESULT_WINDOW_CLOSED。
+bool TVPTerminateWindowClosed = false;
 bool TVPTerminateOnWindowClose = true;
 bool TVPTerminateOnNoWindowStartup = true;
 int TVPTerminateCode = 0;
@@ -428,8 +432,11 @@ void TVPTerminateSync(int code) {
 //---------------------------------------------------------------------------
 void TVPMainWindowClosed() {
     // called from WindowIntf.cpp, caused by closing all window.
-    if(TVPTerminateOnWindowClose)
+    if(TVPTerminateOnWindowClose) {
+        // 记下"由窗口关闭引起"：宿主据此不提供"继续游戏"（窗口已经没了）。
+        TVPTerminateWindowClosed = true;
         TVPTerminateAsync();
+    }
 }
 //---------------------------------------------------------------------------
 
@@ -696,6 +703,7 @@ void TVPResetSysInitImplForRestart() {
     TVPCommandLineArgumentGeneration = 0;
 
     TVPTerminated = false;
+    TVPTerminateWindowClosed = false;
     TVPTerminateCode = 0;
 
     TVPProjectDirSelected = false;

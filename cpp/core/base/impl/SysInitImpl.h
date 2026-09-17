@@ -26,6 +26,7 @@ extern void TVPEnsureDataPathDirectory();
 extern bool TVPExecuteUserConfig();
 
 extern bool TVPTerminated;
+extern bool TVPTerminateWindowClosed;
 extern bool TVPTerminateOnWindowClose;
 extern bool TVPTerminateOnNoWindowStartup;
 extern int TVPTerminateCode;

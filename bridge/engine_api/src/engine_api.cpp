@@ -1752,6 +1752,12 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
     // —— 正是"点了退出游戏卡住 + 叠加层错误数每帧 +1"的另一条来路。
     // 只要运行期已终止，一律回答"游戏自己退了"，让宿主去收尾。
     if(TVPTerminated) {
+        // 关窗退出与脚本退出分开报：前者窗口已没，宿主不能再提供"继续游戏"。
+        if(TVPTerminateWindowClosed) {
+            return SetHandleErrorAndReturnLocked(
+                impl, ENGINE_RESULT_WINDOW_CLOSED,
+                "runtime terminated because the game closed its window");
+        }
         return SetHandleErrorAndReturnLocked(impl,
                                              ENGINE_RESULT_GAME_TERMINATED,
                                              "runtime has been terminated");
@@ -1890,8 +1896,14 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
 #endif
 
     if(TVPTerminated) {
-        // 本帧的输入派发里脚本调了 System.exit()（顶部那次检查在本帧之前跑过）。
-        // 与它同一个语义：游戏自己退了，交给宿主收尾，不算 tick 失败。
+        // 本帧的输入派发里脚本调了 System.exit()（顶部那次检查在本帧之前跑过），
+        // 或者本帧里游戏关掉了自己的窗口。两者都不是 tick 失败，但宿主处理不同
+        // （关窗的那条不能"继续游戏"）。
+        if(TVPTerminateWindowClosed) {
+            return SetHandleErrorAndReturnLocked(
+                impl, ENGINE_RESULT_WINDOW_CLOSED,
+                "runtime terminated because the game closed its window");
+        }
         return SetHandleErrorAndReturnLocked(impl,
                                              ENGINE_RESULT_GAME_TERMINATED,
                                              "runtime has been terminated");
@@ -2230,6 +2242,14 @@ engine_result_t engine_cancel_termination(engine_handle_t handle) {
         ClearHandleErrorLocked(impl);
         SetThreadError(nullptr);
         return ENGINE_RESULT_OK;
+    }
+
+    // 是"游戏关掉了自己的窗口"才终止的：窗口已经没了，撤销只会让引擎在空场景上
+    // 继续跑（真机实测就是画面彻底不动）。诚实拒绝，宿主应当直接退出。
+    if(TVPTerminateWindowClosed) {
+        SetHandleErrorLocked(impl,
+                             "cannot cancel: the game closed its window");
+        return ENGINE_RESULT_INVALID_STATE;
     }
 
     // 终止挂起期间引擎并没有拆掉任何东西（宿主模式下 TVPExitApplication 不结束

@@ -68,7 +68,19 @@ typedef enum engine_result_t {
      * INVALID_STATE，宿主就不会把正常启动的每一帧都记成失败 —— 真机上每次开游戏
      * 都会因此多出 300+ 个错误，叠加层的错误计数直接失去意义。
      */
-    ENGINE_RESULT_STARTUP_PENDING = -7
+    ENGINE_RESULT_STARTUP_PENDING = -7,
+    /*
+     * The game closed its own window, which terminates the runtime
+     * (`TVPTerminateOnWindowClose`). Distinct from ENGINE_RESULT_GAME_TERMINATED
+     * because the window is already gone: the host must NOT offer "keep playing"
+     * (cancelling would only resume ticking an empty scene — measured on device as
+     * a frozen game), it should just leave the game screen.
+     *
+     * 游戏关掉了自己的窗口（TVPTerminateOnWindowClose）。与 GAME_TERMINATED 分开是
+     * 因为窗口已经没了：宿主**不能**提供"继续游戏"（撤销后只是在空场景上继续跑，
+     * 真机实测就是卡死），应当直接离开游戏界面。
+     */
+    ENGINE_RESULT_WINDOW_CLOSED = -8
 } engine_result_t;
 
 typedef struct engine_create_desc_t {

@@ -146,6 +146,13 @@ object NativeEngine {
      */
     const val RESULT_STARTUP_PENDING = -7
 
+    /**
+     * 游戏**关掉了自己的窗口**而终止（宿主模式不结束进程）。与
+     * [RESULT_GAME_TERMINATED] 分开：窗口已经没了，宿主要直接离开游戏界面，
+     * **不能**提供"继续游戏"——撤销后只是在空场景上继续跑（真机实测画面彻底不动）。
+     */
+    const val RESULT_WINDOW_CLOSED = -8
+
     // ── 启动状态 ──────────────────────────────────────────────────────────
     const val STARTUP_IDLE = 0
     const val STARTUP_RUNNING = 1

@@ -850,6 +850,10 @@ public:
     void Close() override {
         closing_ = true;
         spdlog::debug("HostWindowLayer::Close called");
+        // 这是"游戏关窗退出"的那条路（实测 千恋万花 退出菜单走的就是它）：窗口
+        // 从此不再重绘，宿主即便在确认框里选"继续游戏"也只是在空场景上继续跑。
+        // 标记原因，engine_tick 会用 ENGINE_RESULT_WINDOW_CLOSED 告诉宿主。
+        TVPTerminateWindowClosed = true;
         TVPTerminateAsync(0);
     }
 
