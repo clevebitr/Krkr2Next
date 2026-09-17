@@ -754,6 +754,21 @@ static tjs_error Player_progress(tTJSVariant *, tjs_int count, tTJSVariant **p,
         return TJS_E_INVALIDPARAM;
     const bool finished =
         player->progress(static_cast<tjs_int>(p[0]->AsInteger()));
+    // 动画时钟探针（只记前 5 次 + 每 600 次一条心跳）：PSB 动画靠游戏每帧调
+    // `Player.progress(ms)` 推进时间线、再 `Player.draw(layer)` 出帧。真机实测
+    // `drawAnimated: drew N at tick=0` 每次都停在 0 —— 这条日志用来分清"游戏根本
+    // 没调 progress"（那就要插件自己每帧推进）与"调了但没生效"。
+    {
+        static std::atomic<uint64_t> s_progressCalls{ 0 };
+        const uint64_t n = s_progressCalls.fetch_add(1) + 1;
+        if(n <= 5 || (n % 600) == 0) {
+            auto lg = spdlog::get("plugin");
+            if(lg)
+                lg->info("MCP Player.progress: 第 {} 次 delta={}ms -> tick={}",
+                         n, static_cast<tjs_int>(p[0]->AsInteger()),
+                         player->getTickCount());
+        }
+    }
     // On motion end (non-looping), fire the game's onSync so the script can
     // advance / replay the next round (e.g. the title screen re-plays the
     // character entrance). Mirrors reference PlayerFrameProgress dispatch.
