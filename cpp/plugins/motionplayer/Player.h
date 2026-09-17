@@ -3257,11 +3257,14 @@ namespace motion {
                 static std::atomic<uint64_t> s_drawOntoLogs{ 0 };
                 const uint64_t n = s_drawOntoLogs.fetch_add(1);
                 if(logger && (n < 3 || (n % 300) == 0)) {
-                    // 状态取自实际上屏的那一层（resolveRealLayer 的结果 tempParent），
-                    // 而不是游戏传进来的包装对象。
+                    // 两个层都记：游戏传进来的包装对象与 resolveRealLayer 解析出的
+                    // 实际上屏层。真机实测包装对象报 visible=0，而画面此前是正常的，
+                    // 所以必须把两者分开看，否则会把"包装层不可见"误判成交付问题。
                     logger->info(
-                        "drawOnto: drew {} images onto capture target={} x{} {}",
+                        "drawOnto: drew {} images onto capture target={} x{} "
+                        "wrapped[{}] real[{}]",
                         drawn, static_cast<void *>(target), n + 1,
+                        DescribeLayerState(target),
                         DescribeLayerState(tempParent));
                 }
             } catch(const std::exception &e) {
