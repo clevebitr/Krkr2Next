@@ -243,18 +243,28 @@ void MotionAutoDriveHook::OnContinuousCallback(tjs_uint64 /*tick*/) {
             continue;
         }
 
-        // 每帧重绘：captureCanvas 那条交付自己每帧画（drawOnto），这里不重复；
-        // 游戏自己在最近 120ms 内画过的也跳过（那是它自己的驱动）。
-        if(player->captureActive() || player->manualDrawRecent())
+        // 每帧重绘。游戏自己在最近 120ms 内画过就让路（那是它自己的驱动）。
+        //
+        // capture 通道（游戏调用过 captureCanvas）**不能再无条件让路**：原实现认为
+        // "capture 交付自己每帧画（drawOnto）"，可真机实测游戏只在开播时调一次，
+        // 整段 SD 动效一条 drawOnto 日志都没有 —— 目标层于是永远停在第一帧，画面只剩
+        // UI（用户报的"Q版/SD 动效不显示"）。这里改成由我们补上每帧的 capture 交付
+        // （captureDrawTo 就是 drawOnto 的公开入口）。
+        if(player->manualDrawRecent())
             continue;
         if(auto *target = player->lastDrawTarget()) {
-            player->draw(target);
+            const bool capture = player->captureActive();
+            if(capture)
+                player->captureDrawTo(target);
+            else
+                player->draw(target);
             // 自动重绘探针：确认"每帧重绘"这条真的发生了（Q版/SD 动画只闪一帧时，
             // 有推进日志却没有这条，就说明重绘被让路逻辑吃掉了）。
             static std::atomic<uint64_t> s_redraws{ 0 };
             const uint64_t redrawCount = s_redraws.fetch_add(1) + 1;
             if((redrawCount <= 5 || (redrawCount % 300) == 0) && LOGGER)
-                LOGGER->info("MCP 自动驱动: 自动重绘 player={} tick={}（第 {} 次）",
+                LOGGER->info("MCP 自动驱动: 自动重绘[{}] player={} tick={}（第 {} 次）",
+                             capture ? "capture" : "direct",
                              static_cast<const void *>(player),
                              player->getTickCount(), redrawCount);
         }
