@@ -33,9 +33,6 @@ static const tjs_char *TVP_AUTOPATH_CACHE_MISS_MARKER = TJS_W("\x01");
 //---------------------------------------------------------------------------
 // current media ( ex. "http" "ftp" "file" )
 ttstr TVPCurrentMedia = TJS_W("file");
-// archive delimiter
-// this changes '>' from '#' since 2.19 beta 14
-tjs_char TVPArchiveDelimiter = '>';
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -795,121 +792,6 @@ bool TVPIsExistentStorageNoSearch(const ttstr &_name) {
 }
 //---------------------------------------------------------------------------
 
-//---------------------------------------------------------------------------
-// TVPExtractStorageExt
-//---------------------------------------------------------------------------
-ttstr TVPExtractStorageExt(const ttstr &name) {
-    // extract an extension from name.
-    // returned string will contain extension delimiter ( '.' ),
-    // except for missing extension of the input string. ( returns
-    // nullptr string when input string does not have an extension )
-
-    const tjs_char *s = name.c_str();
-    tjs_int slen = name.GetLen();
-    const tjs_char *p = s + slen;
-    p--;
-    while(p >= s) {
-        if(*p == TJS_W('\\'))
-            break;
-        if(*p == TJS_W('/'))
-            break;
-        if(*p == TVPArchiveDelimiter)
-            break;
-        if(*p == TJS_W('.')) {
-            // found extension delimiter
-            size_t extlen = (slen - (p - s));
-            return { p, extlen };
-        }
-
-        p--;
-    }
-
-    // not found
-    return {};
-}
-//---------------------------------------------------------------------------
-
-//---------------------------------------------------------------------------
-// TVPExtractStorageName
-//---------------------------------------------------------------------------
-ttstr TVPExtractStorageName(const ttstr &name) {
-    // extract "name"'s storage name ( excluding path ) and return it.
-    const tjs_char *s = name.c_str();
-    tjs_int slen = name.GetLen();
-    const tjs_char *p = s + slen;
-    p--;
-    while(p >= s) {
-        if(*p == TJS_W('\\'))
-            break;
-        if(*p == TJS_W('/'))
-            break;
-        if(*p == TVPArchiveDelimiter)
-            break;
-
-        p--;
-    }
-
-    p++;
-    if(p == s)
-        return name;
-    else
-        return { p, (size_t)(slen - (p - s)) };
-}
-//---------------------------------------------------------------------------
-
-//---------------------------------------------------------------------------
-// TVPExtractStoragePath
-//---------------------------------------------------------------------------
-ttstr TVPExtractStoragePath(const ttstr &name) {
-    // extract "name"'s path ( including last delimiter ) and return
-    // it.
-    const tjs_char *s = name.c_str();
-    tjs_int slen = name.GetLen();
-    const tjs_char *p = s + slen;
-    p--;
-    while(p >= s) {
-        if(*p == TJS_W('\\'))
-            break;
-        if(*p == TJS_W('/'))
-            break;
-        if(*p == TVPArchiveDelimiter)
-            break;
-
-        p--;
-    }
-
-    p++;
-    return { s, (size_t)(p - s) };
-}
-//---------------------------------------------------------------------------
-
-//---------------------------------------------------------------------------
-// TVPChopStorageExt
-//---------------------------------------------------------------------------
-extern ttstr TVPChopStorageExt(const ttstr &name) {
-    // chop storage's extension and return it.
-    const tjs_char *s = name.c_str();
-    tjs_int slen = name.GetLen();
-    const tjs_char *p = s + slen;
-    p--;
-    while(p >= s) {
-        if(*p == TJS_W('\\'))
-            break;
-        if(*p == TJS_W('/'))
-            break;
-        if(*p == TVPArchiveDelimiter)
-            break;
-        if(*p == TJS_W('.')) {
-            // found extension delimiter
-            return { s, (size_t)(p - s) };
-        }
-
-        p--;
-    }
-
-    // not found
-    return name;
-}
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------

@@ -37,7 +37,11 @@ set(BASE_HEADERS_DIR
 
 add_library(${PROJECT_NAME} STATIC ${BASE_SOURCE_FILES})
 target_include_directories(${PROJECT_NAME} PUBLIC ${BASE_HEADERS_DIR})
-target_link_libraries(${PROJECT_NAME} PUBLIC tjs2 PRIVATE core_visual_module core_plugin_module core_environ_module core_extension_module core_sound_module core_utils_module)
+# core_io_module：路径解析等已搬进 cpp/core/io（见该目录 CMakeLists 的依赖方向说明）。
+# 依赖是单向的 base -> io；io 不得反过来引用核心符号。
+# PUBLIC 只是为了让同层的其他模块（visual/plugin/environ）经 base 拿到 io 的符号，
+# 依赖方向本身仍是 base -> io。
+target_link_libraries(${PROJECT_NAME} PUBLIC tjs2 core_io_module PRIVATE core_visual_module core_plugin_module core_environ_module core_extension_module core_sound_module core_utils_module)
 
 find_package(uchardet CONFIG REQUIRED)
 find_package(unrar CONFIG REQUIRED)

@@ -6,6 +6,8 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/common)
 add_library(${PROJECT_NAME} INTERFACE)
 
 add_subdirectory(tjs2)
+# io 必须排在 base 之前：base 依赖 io（路径解析等已搬入 cpp/core/io）。
+add_subdirectory(io)
 add_subdirectory(base)
 add_subdirectory(compat)
 add_subdirectory(environ)
@@ -18,6 +20,7 @@ add_subdirectory(utils)
 
 target_link_libraries(${PROJECT_NAME} INTERFACE
         tjs2
+        core_io_module
         core_base_module
         core_compat_module
         core_environ_module
