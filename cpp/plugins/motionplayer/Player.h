@@ -322,9 +322,16 @@ namespace motion {
             const int visible = readInt(TJS_W("visible"), -1);
             const int opacity = readInt(TJS_W("opacity"), -1);
             const int count = readInt(TJS_W("count"), -1);
+            // 尺寸/位置也要记：真机出现过"层可见、opacity=255、也确实画进去了，画面却
+            // 什么都没有"，必须先排除"层是 0x0 或被摆在可视区外"。
+            const int width = readInt(TJS_W("width"), -1);
+            const int height = readInt(TJS_W("height"), -1);
+            const int left = readInt(TJS_W("left"), -1);
+            const int top = readInt(TJS_W("top"), -1);
             return "layer(visible=" + std::to_string(visible) + ",opacity=" +
                 std::to_string(opacity) + ",count=" + std::to_string(count) +
-                ")";
+                ",size=" + std::to_string(width) + "x" + std::to_string(height) +
+                ",pos=" + std::to_string(left) + "," + std::to_string(top) + ")";
         }
         void clear(iTJSDispatch2 *target, tjs_int color) {
             if(!target)
