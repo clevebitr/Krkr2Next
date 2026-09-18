@@ -490,7 +490,14 @@ void VideoPresentOverlay::PresentPicture(float dt) {
             return;
         }
         do {
-            m_picture[m_curPicture].MoveFrom(pic);
+            // MoveFrom 的方向是 `this ← source`。写反成
+            // `队列槽.MoveFrom(pic)` 会把**空的本地 pic** 拷进队列槽、顺手把槽里刚解出
+            // 的那帧像素释放掉，而 pic 依旧是空的（0x0 / rgba=null）—— 于是每一帧都
+            // 在 `!pic.rgba` 处被丢掉，overlay 模式电影就成了"有声音没画面"。
+            // 真机日志（2026-09-18 13:21:15.534）：
+            //   PresentPicture 进入（used=1 visible=1）
+            //   PresentPicture 取到空像素帧（rgba=null，0x0 pts=0）
+            pic.MoveFrom(m_picture[m_curPicture]);
             --m_usedPicture;
             if(++m_curPicture >= MAX_BUFFER_COUNT)
                 m_curPicture = 0;
