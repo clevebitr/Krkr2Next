@@ -427,11 +427,24 @@ bool tTVPApplication::StartApplication(ttstr path) {
         // TVPSearchPlacedPath 找不到。
         TVPAutoMountProjectXP3Archives();
 
+        // 补丁优先级必须在**第一次**解析 startup.tjs 之前生效。
+        //
+        // 为什么：本仓库的 auto path 表是"先注册者优先"，而挂载顺序里
+        // data.xp3 先于 patch.xp3 ⇒ 补丁层压不住原版，补丁包里的
+        // startup.tjs / 脚本 / 资源在第一次读取时会被原版抢先命中；
+        // 原来的调用点在 TVPInitializeStartupScript 之后，等于"补丁的启动
+        // 脚本永远读不到"。真机影响面：汉化/整合包（patch.xp3、patch_appendN.xp3）
+        // 的启动脚本与首屏资源。
+        //
+        // 安全性：TVPBoostAutoMountPaths 只把**补丁档案条目**插到第一条档案
+        // 条目之前，散装条目与非补丁档案都不动（见 StorageImpl.cpp 的实现注释）；
+        // 表里没有对应文件的查询照旧回落到后面的条目。
+        TVPBoostAutoMountPaths();
+
         spdlog::debug("StartApplication: TVPInitializeStartupScript...");
         spdlog::default_logger()->flush();
         TVPInitializeStartupScript();
 
-        TVPBoostAutoMountPaths();
         _project_startup = true;
         spdlog::info("StartApplication: completed successfully");
         spdlog::default_logger()->flush();

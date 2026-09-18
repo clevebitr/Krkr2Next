@@ -1035,6 +1035,18 @@ static void TVPInstallKagRuntimeDefaults() {
 // TVPExecuteStartupScript
 //---------------------------------------------------------------------------
 void TVPExecuteStartupScript() {
+    // 每局启动先把"默认读取编码"复位成 utf-8。
+    //
+    // 为什么：`Storages.setTextEncoding` 改的是**全局**默认读取编码，而它在同一
+    // 进程里跨游戏不重置（引擎只做 restart 级清理）。上一局的游戏设过 CP932 之类
+    // 之后，下一局没有显式声明的脚本会按错误编码解码 —— 表现是乱码但不报错。
+    // AetherKiri 在同一位置做同样的事。
+    try {
+        TVPSetDefaultReadEncoding(TJS_W("utf-8"));
+    } catch(...) {
+        spdlog::warn("Reset default read encoding failed");
+    }
+
     // 前置成员要在 patch.tjs 之前就位。单独捕获：它只是给补丁兜底，
     // 失败也绝不能阻断启动。
     try {
@@ -1219,6 +1231,13 @@ void TVPExecuteStartupScript() {
             ttstr patch = TVPGetAppPath() + "AfterStartup.tjs";
             if(TVPIsExistentStorageNoSearch(patch))
                 TVPExecuteStorage(patch);
+        } catch(...) {
+        }
+        // AfterStartup.tjs 之后**再补一次** KAG 运行时默认值：游戏的
+        // AfterStartup.tjs（或它加载的补丁）可能清掉/覆盖这批开关，AetherKiri
+        // 在同一位置也补第二次。这里只补"缺失的"，不覆盖游戏自己设过的值。
+        try {
+            TVPInstallKagRuntimeDefaults();
         } catch(...) {
         }
     }

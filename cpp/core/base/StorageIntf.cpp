@@ -1446,6 +1446,24 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ isExistentStorage) {
 }
 TJS_END_NATIVE_STATIC_METHOD_DECL(/*func. name*/ isExistentStorage)
 //----------------------------------------------------------------------
+// isExistentStorageNoSearchNoNormalize：只问"这个规范化后的名字是否原样存在"，
+// 不做 auto path 搜索、也不做路径规范化。KAG/krkgles 系脚本用它判断"当前目录下
+// 是否真有这个文件"，缺失会抛 Member does not exist 并中断调用方（AetherKiri
+// 有同名方法，底层就是引擎既有的 TVPIsExistentStorageNoSearchNoNormalize）。
+TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ isExistentStorageNoSearchNoNormalize) {
+    if(numparams < 1)
+        return TJS_E_BADPARAMCOUNT;
+
+    ttstr path = *param[0];
+
+    if(result)
+        *result = (tjs_int)TVPIsExistentStorageNoSearchNoNormalize(path);
+
+    return TJS_S_OK;
+}
+TJS_END_NATIVE_STATIC_METHOD_DECL(
+    /*func. name*/ isExistentStorageNoSearchNoNormalize)
+//----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ extractStorageExt) {
     if(numparams < 1)
         return TJS_E_BADPARAMCOUNT;

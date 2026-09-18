@@ -61,6 +61,13 @@ bool ncbAutoRegister::LoadModule(const ttstr &_name)
 	if (it != _internal_plugins.end()) {
         spdlog::trace("ncbAutoRegister::LoadModule('{}'): found internal module",
                       name.AsStdString());
+        // 一个 registrar 抛异常**不再中断**本模块其余条目，也不再把异常抛给
+        // 调用方（旧行为：一次抛异常会让其后所有模块都不再注册 —— 真机表现为
+        // "某个插件坏了，之后整批插件全部消失"，排查成本极高，见
+        // zcompat_plugin.cpp 的历史注释）。这里改成逐条隔离：记错误、继续跑，
+        // 最后用返回值告诉调用方"这个模块没完全注册成功"（Plugins.link 会拿到
+        // false），并且不写进已注册表，便于后续重试。
+        bool ok = true;
 		for (int line = 0; line < LINE_COUNT; ++line) {
             const auto &plugin_list = it->second.lists[line];
             for (auto i : plugin_list) {
@@ -70,17 +77,34 @@ bool ncbAutoRegister::LoadModule(const ttstr &_name)
                     name.AsStdString(), line, module.AsStdString());
                 try {
 				    i->Regist();
+                } catch(const TJS::eTJS &e) {
+                    ok = false;
+                    spdlog::error(
+                        "ncbAutoRegister::LoadModule('{}'): Regist threw at line={} entry='{}': {}",
+                        name.AsStdString(), line, module.AsStdString(),
+                        e.GetMessage().AsStdString());
+                } catch(const std::exception &e) {
+                    ok = false;
+                    spdlog::error(
+                        "ncbAutoRegister::LoadModule('{}'): Regist threw at line={} entry='{}': {}",
+                        name.AsStdString(), line, module.AsStdString(), e.what());
                 } catch(...) {
+                    ok = false;
                     spdlog::error(
                         "ncbAutoRegister::LoadModule('{}'): Regist threw at line={} entry='{}'",
                         name.AsStdString(), line, module.AsStdString());
-                    throw;
                 }
                 spdlog::trace(
                     "ncbAutoRegister::LoadModule('{}'): Regist end line={} entry='{}'",
                     name.AsStdString(), line, module.AsStdString());
 			}
 		}
+        if (!ok) {
+            spdlog::error(
+                "ncbAutoRegister::LoadModule('{}'): 部分条目注册失败，模块按未注册处理（返回 false，不写入已注册表）",
+                name.AsStdString());
+            return false;
+        }
 		TVPRegisteredPlugins.insert(name);
         spdlog::trace("ncbAutoRegister::LoadModule('{}'): regist complete",
                       name.AsStdString());
@@ -113,6 +137,7 @@ void ncbAutoRegister::LoadAllModules()
 			continue;
         spdlog::trace("ncbAutoRegister::LoadAllModules: register '{}'",
                       name.AsStdString());
+        bool ok = true;
 		for (int line = 0; line < LINE_COUNT; ++line) {
             const auto &plugin_list = kv.second.lists[line];
 			for (auto i : plugin_list) {
@@ -122,17 +147,37 @@ void ncbAutoRegister::LoadAllModules()
                     name.AsStdString(), line, module.AsStdString());
                 try {
 				    i->Regist();
+                } catch(const TJS::eTJS &e) {
+                    ok = false;
+                    spdlog::error(
+                        "ncbAutoRegister::LoadAllModules('{}'): Regist threw at line={} entry='{}': {}",
+                        name.AsStdString(), line, module.AsStdString(),
+                        e.GetMessage().AsStdString());
+                } catch(const std::exception &e) {
+                    ok = false;
+                    spdlog::error(
+                        "ncbAutoRegister::LoadAllModules('{}'): Regist threw at line={} entry='{}': {}",
+                        name.AsStdString(), line, module.AsStdString(), e.what());
                 } catch(...) {
+                    ok = false;
                     spdlog::error(
                         "ncbAutoRegister::LoadAllModules('{}'): Regist threw at line={} entry='{}'",
                         name.AsStdString(), line, module.AsStdString());
-                    throw;
                 }
                 spdlog::trace(
                     "ncbAutoRegister::LoadAllModules('{}'): Regist end line={} entry='{}'",
                     name.AsStdString(), line, module.AsStdString());
 			}
 		}
+        // 与 LoadModule 同样的策略：本条模块不写已注册表（下次还能重试），
+        // 但**继续**注册后面的模块 —— 旧行为是直接 throw，一次失败让其后整批
+        // 模块全部消失（见 LoadModule 注释）。
+        if (!ok) {
+            spdlog::error(
+                "ncbAutoRegister::LoadAllModules('{}'): 部分条目注册失败，跳过写入已注册表并继续后面的模块",
+                name.AsStdString());
+            continue;
+        }
 		TVPRegisteredPlugins.insert(name);
         spdlog::trace("ncbAutoRegister::LoadAllModules: module '{}' done",
                       name.AsStdString());
