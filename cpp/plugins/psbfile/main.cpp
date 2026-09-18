@@ -6,12 +6,17 @@
 //
 #include <spdlog/spdlog.h>
 #include <cassert>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "tjs.h"
 #include "ncbind.hpp"
 #include "PSBFile.h"
 #include "PSBHeader.h"
 #include "PSBMedia.h"
+#include "KAGParser.h"
 #include "PSBValue.h"
 #include "SystemControl.h"
 
@@ -48,15 +53,138 @@ static bool psbCacheInfoCallback(size_t &usedBytes, size_t &limitBytes) {
     return true;
 }
 
+//---------------------------------------------------------------------------
+// 编译场景（.scn）标签解析回调的**消费者**
+//
+// 移植自 AetherKiri `cpp/plugins/psbfile/main.cpp:84-190`（in-file 片段，见
+// compat/README.md §6）。作用：把 PSB 场景树里的 `*label` / `jumplabels` 收集成集合，
+// 供 `TVPRegisterCompiledScenarioLabelResolver` 注册的回调查询 —— 这类发行版把脚本编译进
+// PSB，脚本文本读不到，但 `[jump]`/`[call]` 的目标标签必须仍然能被解析。
+//
+// 缓存：按 `.scn` 存储名缓存标签集合（首次查询时解析一次）。与上游一致，不做失效
+// （场景包在运行期不变）。
+//---------------------------------------------------------------------------
+namespace {
+    using ScenarioLabelSet = std::unordered_set<std::string>;
+
+    std::string StripLeadingStar(std::string value) {
+        if(!value.empty() && value.front() == '*')
+            value.erase(value.begin());
+        return value;
+    }
+
+    void AddScenarioLabel(ScenarioLabelSet &labels, std::string value) {
+        value = StripLeadingStar(std::move(value));
+        if(!value.empty())
+            labels.insert(std::move(value));
+    }
+
+    std::shared_ptr<PSB::PSBDictionary>
+    AsDictionary(const std::shared_ptr<PSB::IPSBValue> &value) {
+        return std::dynamic_pointer_cast<PSB::PSBDictionary>(value);
+    }
+
+    std::shared_ptr<PSB::PSBList>
+    AsList(const std::shared_ptr<PSB::IPSBValue> &value) {
+        return std::dynamic_pointer_cast<PSB::PSBList>(value);
+    }
+
+    std::shared_ptr<PSB::PSBString>
+    AsString(const std::shared_ptr<PSB::IPSBValue> &value) {
+        return std::dynamic_pointer_cast<PSB::PSBString>(value);
+    }
+
+    void CollectJumpLabels(ScenarioLabelSet &labels,
+                           const std::shared_ptr<PSB::IPSBValue> &value) {
+        if(auto dict = AsDictionary(value)) {
+            for(const auto &[key, child] : *dict) {
+                AddScenarioLabel(labels, key);
+                if(auto text = AsString(child))
+                    AddScenarioLabel(labels, text->value);
+            }
+            return;
+        }
+
+        if(auto list = AsList(value)) {
+            for(const auto &child : *list) {
+                if(auto text = AsString(child))
+                    AddScenarioLabel(labels, text->value);
+            }
+        }
+    }
+
+    ScenarioLabelSet
+    CollectScenarioLabels(const std::shared_ptr<const PSB::PSBDictionary> &root) {
+        ScenarioLabelSet labels;
+        if(!root)
+            return labels;
+
+        auto scenes =
+            std::dynamic_pointer_cast<PSB::PSBList>((*root)["scenes"]);
+        if(!scenes)
+            return labels;
+
+        for(const auto &sceneValue : *scenes) {
+            auto scene = AsDictionary(sceneValue);
+            if(!scene)
+                continue;
+
+            if(auto label = AsString((*scene)["label"]))
+                AddScenarioLabel(labels, label->value);
+            CollectJumpLabels(labels, (*scene)["jumplabels"]);
+        }
+
+        return labels;
+    }
+
+    const ScenarioLabelSet *GetCachedScenarioLabels(const ttstr &storage) {
+        static std::unordered_map<std::string, ScenarioLabelSet> cache;
+
+        ttstr path = storage;
+        if(path.IsEmpty())
+            return nullptr;
+        if(TVPExtractStorageExt(path).AsLowerCase() != TJS_W(".scn"))
+            path += TJS_W(".scn");
+
+        const std::string key = path.AsStdString();
+        auto found = cache.find(key);
+        if(found != cache.end())
+            return &found->second;
+
+        PSB::PSBFile psb;
+        if(!psb.loadPSBFile(path))
+            return nullptr;
+
+        auto inserted = cache.emplace(key, CollectScenarioLabels(psb.getObjects()));
+        if(auto logger = LOGGER) {
+            logger->info("PSB scenario labels: path={} count={}", key,
+                         inserted.first->second.size());
+        }
+        return &inserted.first->second;
+    }
+
+    bool HasCompiledScenarioLabel(const ttstr &storage, const ttstr &label) {
+        const auto *labels = GetCachedScenarioLabels(storage);
+        if(!labels)
+            return false;
+
+        const std::string wanted = StripLeadingStar(label.AsStdString());
+        return labels->find(wanted) != labels->end();
+    }
+} // namespace
+
 void initPsbFile() {
     psbMedia = new PSBMedia();
     TVPRegisterStorageMedia(psbMedia);
     psbMedia->Release();
     TVPRegisterPSBCacheInfoCallback(psbCacheInfoCallback);
+    // 让解析器能问"编译场景里有没有这个标签"（见上面 CollectScenarioLabels 一节）。
+    TVPRegisterCompiledScenarioLabelResolver(HasCompiledScenarioLabel);
     LOGGER->info("initPsbFile");
 }
 
 void deInitPsbFile() {
+    TVPRegisterCompiledScenarioLabelResolver(nullptr);
     TVPRegisterPSBCacheInfoCallback(nullptr);
     if(psbMedia != nullptr) {
         psbMedia->clear();

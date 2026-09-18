@@ -240,7 +240,9 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 > | `cpp/core/tjs2/tjsObject.cpp`（`TJSCompatResolveStartupFallback` / `TJSCompatIsStartupNoOpFunction` / `TJSCompatResolveTouchImage` / `TJSCompatResolveTextRenderRenderCount`） | `AetherKiri/cpp/core/tjs2/tjsObject.cpp:41-76`、`:171-247`、`:368-402` | 11 个 no-op 函数、ShortCut 键表→`[]`、`archiveUniqueKey`/`inXP3archivePacked`/`lls*`/`developMode` 等常量、`touchImage`、`TextRender.renderCount`。**两处故意不照搬**：`CompoundStorageMedia`（本仓库已有 TJS 注入等价类）与 `kirikiriz`（本仓库按 SIGSEGV 记录取整数 0，上游取 1，回退值必须与注入值一致）；`kag.*` 运行时回退亦跳过（本仓库用 `kag_runtime_defaults.tjs` 等价实现） |
 > | `cpp/core/tjs2/tjsObjectExtendable.cpp`（`TJSIsStartupCompatWritableNameEx` + PropSet 重试） | `AetherKiri/cpp/core/tjs2/tjsObjectExtendable.cpp:9-19`、`:96-105` | 8 名启动期可写白名单；用户裁决两层都要，不设开关 |
 >
-> | `cpp/core/base/KAGParser.{h,cpp}`（`TVPRegisterCompiledScenarioLabelResolver` + `.scn` 容错 + `GoToLabel` 回调分支） | `AetherKiri/cpp/core/base/KAGParser.{h,cpp}:320-360`、`:405-427`、`:1394-1399` | C4 第一步。**未注册回调时行为与移植前逐字相同**。差别：上游在无回调时会顺手 `LoadModule("psbfile.dll")` 去激活它，本仓库不主动拉模块（psbfile 是内置模块、加载时机由引擎决定）。⚠️ 回调的**消费者**（psbfile 侧遍历 PSB 场景树收集 `*label`）尚未移植 ⇒ 目前只有"读不到脚本但存在 `.scn` 时不再抛异常"这一半生效 |
+> | `cpp/core/base/KAGParser.{h,cpp}`（`TVPRegisterCompiledScenarioLabelResolver` + `.scn` 容错 + `GoToLabel` 回调分支） | `AetherKiri/cpp/core/base/KAGParser.{h,cpp}:320-360`、`:405-427`、`:1394-1399` | C4 第一步。**未注册回调时行为与移植前逐字相同**。差别：上游在无回调时会顺手 `LoadModule("psbfile.dll")` 去激活它，本仓库不主动拉模块（psbfile 是内置模块、加载时机由引擎决定）。回调的消费者已同轮补齐（见下一行），C4 成对完成 |
+>
+> | `cpp/plugins/psbfile/main.cpp`（`CollectScenarioLabels` / `GetCachedScenarioLabels` / `HasCompiledScenarioLabel` + `initPsbFile`/`deInitPsbFile` 里注册与注销回调） | `AetherKiri/cpp/plugins/psbfile/main.cpp:84-190`、`:213-226` | C4 第二步（回调的消费者）：遍历 PSB 场景树的 `label` / `jumplabels` 收集标签集合，按 `.scn` 名缓存；与上游一致不做失效（场景包运行期不变）。缺这一步时回调是空的、`.scn` 容错只能让启动不抛，`[jump]` 仍找不到标签 |
 >
 > 新增**独立文件**的移植（如 `cpp/plugins/compat/aetherkiri/legacy_zlib_version.cpp`）仍按下面的规则登记。
 
