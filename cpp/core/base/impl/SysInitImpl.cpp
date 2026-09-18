@@ -9,6 +9,7 @@
 // System Initialization and Uninitialization
 //---------------------------------------------------------------------------
 #include "tjsCommHead.h"
+#include "io/IoPolicy.h"
 
 #include "FilePathUtil.h"
 // #include <delayimp.h>
@@ -216,6 +217,9 @@ void TVPBeforeSystemInit() {
             if(TJSObjectHashBitsLimit > 0)
                 TJSObjectHashBitsLimit = 0;
             TVPSegmentCacheLimit = 0;
+            // 同步告知 IO 组件：这是**显式覆盖**，优先级高于激活层的策略值
+            // （否则策略里的 1 MiB/256 MiB 会把这个"极低内存就关缓存"的决定盖掉）。
+            krkr::io::SetSegmentCacheLimitOverride(0);
             TVPFreeUnusedLayerCache = true; // in LayerIntf.cpp
         } else if(TVPTotalPhysMemory < 256 * 1024 * 1024) {
             // low memory

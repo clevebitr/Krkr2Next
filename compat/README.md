@@ -130,9 +130,11 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 >    **已接线**：auto-path 表 tie-break、缺分隔符自动修复、重复 addAutoPath 语义、
 >    补丁判定规则（子串 / 前缀+序号）、补丁优先级落点（队首 / 队尾）、`TVPGetAppPath()`
 >    的 '>' 剥离。
->    **未接线（明确标注）**：`xp3SegmentCacheBytes`（XP3Archive.cpp 里是静态初始化期定型的
->    全局，需"策略变更通知"或惰性计算，代码内留 TODO）、`archiveRoot`（包内根目录先/后）、
->    `mountSiblingsForArchiveProject`（档案工程挂兄弟 patch*.xp3，与 I3 一并处理）。
+>    **未接线（明确标注）**：`archiveRoot`（包内根目录先/后）与
+>    `mountSiblingsForArchiveProject`（档案工程挂兄弟 patch*.xp3）——两项都要先定 I3（是否让
+>    classic 层也挂兄弟补丁），故暂缓。`xp3SegmentCacheBytes` 已完成：淘汰判定改读
+>    `io::EffectiveSegmentCacheLimitBytes()`（显式覆盖 > 策略值），低内存路径
+>    （SysInitImpl 的"极低内存关缓存"）改为显式覆盖，两边意图都保住。
 > 6. ✅ 模块存在性查询改注入式：`io/IoModuleLocator.{h,cpp}`（`SetModuleLocator`/`HasModule`），
 >    `core/plugin` 在 `TVPLoadInternalPlugins()` 的 `AllRegist()` **之前**注入
 >    `ncbAutoRegister::HasModule`（注入前 io 返回 false = "注册表还没填充"，行为不变）。

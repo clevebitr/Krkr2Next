@@ -12,6 +12,7 @@
 #include "tjsCommHead.h"
 
 #include "XP3Archive.h"
+#include "IoPolicy.h"
 #include "XP3ArchiveCxDecoder.h"
 #include "MsgIntf.h"
 #include "DebugIntf.h"
@@ -838,9 +839,9 @@ tjs_int64 tTVPXP3Archive::ReadI64FromMem(const tjs_uint8 *mem) {
 //---------------------------------------------------------------------------
 #define TVP_SEGCACHE_ONE_LIMIT (1024 * 1024) // max size limit for each segment
 #define TVP_SEGCACHE_TOTAL_LIMIT (1024 * 1024) // total segment cache size（缺省 = 旧层口径）
-// TODO(M1.3): 段缓存总预算尚未按激活层策略取值。原因是本变量在静态初始化期就定型，
-// 而层激活发生在 engine_create（更晚）；要按层切换需要"策略变更通知"钩子（或改成惰性
-// 计算 + 区分脚本是否显式设过）。在那之前维持旧层的 1 MiB，AetherKiri 层的 256 MiB 暂不生效。
+// 注意：**淘汰判定已不读这个全局**（改读 io::EffectiveSegmentCacheLimitBytes()，见
+// TVPCheckSegmentCacheLimit）。这里保留它只为兼容既有声明/赋值点；显式覆盖要通过
+// io::SetSegmentCacheLimitOverride() 才生效。
 tjs_uint TVPSegmentCacheLimit = TVP_SEGCACHE_TOTAL_LIMIT;
 
 //---------------------------------------------------------------------------
@@ -956,7 +957,11 @@ static tTJSCriticalSection TVPSegmentCacheCS;
 static void TVPCheckSegmentCacheLimit() {
     tTJSCriticalSectionHolder cs_holder(TVPSegmentCacheCS);
 
-    while(TVPSegmentCacheTotalBytes > TVPSegmentCacheLimit) {
+    // 生效预算 = 显式覆盖（低内存路径/脚本）> 激活层策略（旧层 1 MiB / AetherKiri 层 256 MiB）。
+    // 见 io/IoPolicy.h 的说明：不能直接用静态初始化期定型的 TVPSegmentCacheLimit。
+    const tjs_uint limit = static_cast<tjs_uint>(
+        krkr::io::EffectiveSegmentCacheLimitBytes());
+    while(TVPSegmentCacheTotalBytes > limit) {
         // chop last segment
         tTVPSegmentCache::tIterator i;
         i = TVPSegmentCache.GetLast();

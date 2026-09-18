@@ -40,6 +40,30 @@ namespace krkr::io {
         return PolicyStorage();
     }
 
+    namespace {
+        bool g_segmentCacheOverrideSet = false;
+        unsigned long long g_segmentCacheOverrideBytes = 0;
+    } // namespace
+
+    void SetSegmentCacheLimitOverride(unsigned long long bytes) {
+        g_segmentCacheOverrideSet = true;
+        g_segmentCacheOverrideBytes = bytes;
+        if(auto logger = spdlog::get("core")) {
+            logger->info("io: XP3 段缓存预算被显式覆盖为 {} 字节（策略值不再生效）",
+                         bytes);
+        }
+    }
+
+    bool HasSegmentCacheLimitOverride() {
+        return g_segmentCacheOverrideSet;
+    }
+
+    unsigned long long EffectiveSegmentCacheLimitBytes() {
+        return g_segmentCacheOverrideSet
+                   ? g_segmentCacheOverrideBytes
+                   : ActiveStoragePolicy().xp3SegmentCacheBytes;
+    }
+
     void SetActiveStoragePolicy(const StoragePolicy &policy) {
         PolicyStorage() = policy;
         if(auto logger = spdlog::get("core")) {

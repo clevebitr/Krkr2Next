@@ -63,8 +63,7 @@ namespace krkr::io {
         bool mountSiblingsForArchiveProject = false;
 
         // XP3 段缓存预算（字节）：旧层 1 MiB，AetherKiri 256 MiB。
-        // ⚠️ 尚未接线：该值在 XP3Archive.cpp 里是静态初始化期定型的全局，而层激活发生在
-        // engine_create（更晚），要生效需要"策略变更通知"钩子或惰性计算（见那里的 TODO）。
+        // 生效规则：显式覆盖 > 本值（见 io/IoPolicy.h 的 EffectiveSegmentCacheLimitBytes）。
         unsigned long long xp3SegmentCacheBytes = 1ull << 20;
     };
 
