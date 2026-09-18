@@ -25,7 +25,7 @@
 #include "SysInitIntf.h"
 #include "XP3Archive.h"
 #include "TickCount.h"
-#include "ncbind.hpp"
+#include "IoModuleLocator.h"
 
 #define TVP_DEFAULT_ARCHIVE_CACHE_NUM 128
 #define TVP_DEFAULT_AUTOPATH_CACHE_NUM 256
@@ -1159,8 +1159,11 @@ bool TVPIsExistentStorage(const ttstr &name) {
     ttstr pure = TVPExtractStorageName(name);
     if(pure.GetLen() > 4) {
         ttstr ext = ttstr(pure.c_str() + pure.GetLen() - 4).AsLowerCase();
-        if(ext == TJS_W(".dll") || ext == TJS_W(".tpm"))
-            return ncbAutoRegister::HasModule(pure);
+        if(ext == TJS_W(".dll") || ext == TJS_W(".tpm")) {
+            // 模块存在性由**插件系统**回答，这里只查询注入点（见 IoModuleLocator.h）。
+            // 未注入时返回 false，与"注册表尚未填充"的历史语义一致。
+            return krkr::io::HasModule(pure);
+        }
     }
     return false;
 }

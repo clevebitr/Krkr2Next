@@ -9,6 +9,7 @@
 // "Plugins" class implementation / Service for plug-ins
 //---------------------------------------------------------------------------
 #include <set>
+#include "io/IoModuleLocator.h"
 #include <algorithm>
 #include <functional>
 
@@ -357,6 +358,10 @@ static void TVPSearchPluginsAt(std::vector<tTVPFoundPlugin> &list,
 }
 
 void TVPLoadInternalPlugins() {
+    // 把"内置插件表查询"注入给 IO 组件（`TVPIsExistentStorage("xxx.dll")` 用它回答）。
+    // 注入点必须在 AllRegist() 之前：注册表填充前后 HasModule 的返回值不同，而注入前
+    // io 侧返回 false —— 正好与"注册表还没填充"一致，所以行为不变（见 IoModuleLocator.h）。
+    krkr::io::SetModuleLocator(&ncbAutoRegister::HasModule);
     ncbAutoRegister::AllRegist();
     ncbAutoRegister::LoadAllModules();
 }

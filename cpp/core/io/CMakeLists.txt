@@ -7,6 +7,8 @@ add_library(${PROJECT_NAME} STATIC
     ${IO_PATH}/IoPath.cpp
     # 当前生效策略的注入点（io 不认识"层"，由 compat 注入）。
     ${IO_PATH}/IoPolicy.cpp
+    # 插件模块存在性查询的注入点（io 不直接依赖插件注册表）。
+    ${IO_PATH}/IoModuleLocator.cpp
     # 存储系统实现（原 cpp/core/base/StorageIntf.cpp，git mv 保留历史）。
     # 公开声明仍在 cpp/core/base/StorageIntf.h —— 约 200 个调用点不动，只换定义所在 TU。
     ${IO_PATH}/IoStorage.cpp
