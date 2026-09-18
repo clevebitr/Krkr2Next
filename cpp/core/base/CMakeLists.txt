@@ -3,20 +3,15 @@ project(core_base_module LANGUAGES CXX)
 
 set(BASE_PATH ${CMAKE_CURRENT_LIST_DIR})
 set(BASE_SOURCE_FILES
-    ${BASE_PATH}/7zArchive.cpp
     ${BASE_PATH}/BinaryStream.cpp
     ${BASE_PATH}/CharacterSet.cpp
     ${BASE_PATH}/EventIntf.cpp
     ${BASE_PATH}/ScriptMgnIntf.cpp
-    # StorageIntf.cpp 的实现已搬入 cpp/core/io/IoStorage.cpp（M1.2）。
+    # 存储与归档实现（StorageIntf/StorageImpl/XP3/ZIP/7z/TAR）已搬入 cpp/core/io/（M1.2/M1.4）。
     ${BASE_PATH}/SysInitIntf.cpp
     ${BASE_PATH}/SystemIntf.cpp
-    ${BASE_PATH}/TARArchive.cpp
     ${BASE_PATH}/TextStream.cpp
     ${BASE_PATH}/UtilStreams.cpp
-    ${BASE_PATH}/XP3Archive.cpp
-    ${BASE_PATH}/XP3ArchiveCxDecoder.cpp
-    ${BASE_PATH}/ZIPArchive.cpp
     ${BASE_PATH}/KAGParser.cpp
     ${BASE_PATH}/MsgIntf.cpp
 

@@ -12,6 +12,14 @@ add_library(${PROJECT_NAME} STATIC
     # cpp/core/base/impl/StorageImpl.cpp，git mv 保留历史）。声明仍在
     # cpp/core/base/impl/StorageImpl.h。
     ${IO_PATH}/IoStorageLocal.cpp
+    # 归档后端（原 cpp/core/base/{XP3Archive*,ZIPArchive,7zArchive,TARArchive}.cpp，git mv）。
+    # 归档知识与 IO 组件同处一地；它们仍会用到核心基础设施（消息常量、UtilStreams、
+    # TVPMmapAlloc），那是**基础设施回边**，不是 IO 知识外泄。
+    ${IO_PATH}/XP3Archive.cpp
+    ${IO_PATH}/XP3ArchiveCxDecoder.cpp
+    ${IO_PATH}/ZIPArchive.cpp
+    ${IO_PATH}/7zArchive.cpp
+    ${IO_PATH}/TARArchive.cpp
 )
 
 # 自身要能解析 `StoragePolicy.h` / 其他 core 头：cpp/core 与 cpp/core/base 必须在
@@ -35,11 +43,10 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 
 # 依赖方向（见 compat/README.md §2 与 IO 搬迁顺序）：
-#   core_base_module -> 本模块（存储公开 API 的实现已在本模块）
-#   本模块 -> core_base_module（仍需 TVPCreateFileMedia / TVPOpenArchive / 消息常量等）
-# 两者都是 STATIC 库，CMake 允许 STATIC 之间的环并在最终链接时重复它们（shared/可执行
-# 目标之间的环才会报错）。等到 M1.4/M1.5 把归档工厂与本地文件媒体也搬进来后，这条回边
-# 应当消失 —— 那是本组件"单一性"的验收点之一。
+#   core_base_module -> 本模块（存储/归档实现已在本模块）
+#   本模块 -> core_base_module：**只剩基础设施**（消息常量 MsgIntf、UtilStreams 的
+#   流基类、TVPMmapAlloc、CharacterSet 等），IO/归档知识本身**不再**依赖 base。
+# 两者都是 STATIC 库，CMake 允许 STATIC 之间的环并会在最终链接时重复它们。
 target_link_libraries(${PROJECT_NAME} PUBLIC
     tjs2
     core_base_module
@@ -51,4 +58,19 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     core_extension_module
     core_sound_module
     core_utils_module
+)
+
+# 归档后端需要的第三方依赖。**必须在本模块重复声明**：base 的这些依赖是 PRIVATE，
+# 编译期包含路径不会经 INTERFACE 传过来（`$<LINK_ONLY:...>` 只带链接），而
+# XP3Archive.cpp(<zlib.h>) / ZIPArchive.cpp(<minizip/ioapi.h>) / 7zArchive.cpp(<7zip/C/7z.h>)
+# 现在由本模块编译。
+find_package(ZLIB REQUIRED)
+find_package(zstd CONFIG REQUIRED)
+find_package(7zip CONFIG REQUIRED)
+find_package(unofficial-minizip CONFIG REQUIRED)
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    ZLIB::ZLIB
+    zstd::libzstd
+    7zip::7zip
+    unofficial::minizip::minizip
 )
