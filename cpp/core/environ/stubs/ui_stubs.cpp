@@ -84,6 +84,10 @@ static bool VideoOverlayFrameActive() {
     return s_videoOverlaySerial != 0;
 }
 
+// 供 engine_tick 查询（与 TVPHostSubmitVideoOverlayFrame 同一约定：本地 extern 声明，
+// 不新增头文件）。用途见 engine_tick 里的"overlay 电影必须每帧刷新主窗口"。
+bool TVPHostVideoOverlayFrameActive() { return VideoOverlayFrameActive(); }
+
 // 由 KRMoviePlayer.cpp 调用（本地 extern 声明，不新增头文件）。
 bool TVPHostSubmitVideoOverlayFrame(const void *rgba, int width, int height,
                                     int stride_bytes, int left, int top,

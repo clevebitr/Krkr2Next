@@ -64,6 +64,7 @@ extern "C" void krkr_GetSurfaceDimensions(uint32_t *, uint32_t *);
 #include "environ/MainScene.h"
 #include "base/StorageIntf.h"
 #include "base/SysInitIntf.h"
+#include "base/EventIntf.h"
 #include "base/ScriptMgnIntf.h"
 #include "base/impl/SysInitImpl.h"
 #include "base/impl/StorageImpl.h"
@@ -84,6 +85,10 @@ extern "C" void krkr_GetSurfaceDimensions(uint32_t *, uint32_t *);
 #include "engine_options.h"
 
 int TVPDrawSceneOnce(int interval);
+
+// overlay 电影是否有待呈现的帧（ui_stubs.cpp 导出：本地 extern 声明，与
+// TVPHostSubmitVideoOverlayFrame 同一约定）。
+bool TVPHostVideoOverlayFrameActive();
 
 // 模态对话框期间由 core 每帧回调的输入泵（定义见文件后半段，engine_create 里注册）。
 static void PumpModalInputOnTickThread();
@@ -2058,6 +2063,15 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
         // （TVPDrawSceneOnce + 纹理回收 + 帧交付）两段，按固定间隔汇总一行。
         // 与壳侧的 5s 采样对齐，便于两份日志并排看。
         const auto update_start = std::chrono::steady_clock::now();
+        // ── overlay 电影必须**每帧刷新主窗口** ──────────────────────────────
+        // 视频叠画挂在宿主窗口层的 PostBlit 里（HostWindowLayer::UpdateDrawBuffer
+        // → DrawVideoOverlay），只有窗口重绘时才会执行。而 KAG 播片时脚本正阻塞在
+        // 等片源上、窗口自己不会再请求重绘 —— 真机 2026-09-18 15:23:06 的探针实证：
+        // 视频开始后 DrawVideoOverlay 一共只被调用了 3 次（约 40ms）就再没有过，
+        // 画面停在最后一帧（用户看到"视频不播放"）。
+        // 所以只要还有待呈现的 overlay 帧，就主动给主窗口排一次重绘。
+        if(TVPMainWindow && TVPHostVideoOverlayFrameActive())
+            TVPPostWindowUpdate(TVPMainWindow);
         krkr::stall::MarkStage("engine_tick: Application::Run（脚本+合成+绘制）");
         ::Application->Run();
         const auto update_end = std::chrono::steady_clock::now();

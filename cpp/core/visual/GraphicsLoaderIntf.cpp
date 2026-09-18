@@ -29,6 +29,7 @@
 #include "ScriptMgnIntf.h"
 #include "RenderManager.h"
 #include "ConfigManager/LocaleConfigManager.h"
+#include <atomic>
 #include <mutex>
 #include <thread>
 #include <condition_variable>
@@ -1929,6 +1930,18 @@ int TVPLoadGraphic(iTVPBaseBitmap *dest, const ttstr &name, tjs_int32 keyidx,
     }
 
     // not found
+
+    // 判定性探针：所有图层/位图取图都经过这里（CG 鉴赏 cgview.tjs 换图也是）。
+    // 用户报"CG 鉴赏里的图不显示"时，这条能分清：脚本根本没请求图（KAG 兼容层/
+    // 脚本路径问题），还是请求了却加载失败（异常会紧跟其后）。前 8 次 + 每 120 次。
+    {
+        static std::atomic<uint64_t> s_loadGraphicLogs{ 0 };
+        const uint64_t loadGraphicIndex = s_loadGraphicLogs.fetch_add(1) + 1;
+        if(loadGraphicIndex <= 8 || (loadGraphicIndex % 120) == 0)
+            spdlog::info("TVPLoadGraphic: 第 {} 次 name={} mode={} des={}x{}",
+                         loadGraphicIndex, nname.AsStdString(),
+                         static_cast<int>(mode), desw, desh);
+    }
 
     // load into dest
     tTVPGraphicImageData *data = nullptr;
