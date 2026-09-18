@@ -6,6 +6,7 @@
 #include "StringUtil.h"
 #include "MsgIntf.h"
 #include "DebugIntf.h"
+#include <spdlog/spdlog.h>
 #include <vector>
 #include "ConfigManager/IndividualConfigManager.h"
 
