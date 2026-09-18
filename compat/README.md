@@ -115,7 +115,7 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 | # | 项 | 我们 | AetherKiri | 影响 | 建议 | 状态 |
 |---|---|---|---|---|---|---|
 | I1 | auto-path 表优先级语义 | **先注册者优先**（`StorageIntf.cpp:1079-1081/1106-1108`，为某发行版诱饵 startup.tjs 而做） | **后注册者优先**（= 上游语义，`StorageIntf.cpp:1705/1741/1772` + `tjsHashSearch.h:246-254`） | 极高：决定同名资源谁生效 | 收进 `IAutoPathPolicy::Tie()`：两层各自保持；**不做全局统一**（统一=改所有游戏行为） | 待裁决 |
-| I2 | 首次读 `startup.tjs` 时补丁层是否生效 | **不生效**：boost 在 startup 之后（`Application.cpp:432` vs `:434`），且 data.xp3 先挂载 + 先注册者优先 | **生效**：挂载阶段就按补丁名排序（`StorageImpl.cpp:1750-1763`）+ 后注册者优先 | 极高：汉化/整合补丁的 startup.tjs 可能被原版压住 | 在 `krkr2-classic` 层内**修**（把 boost 提到 startup 之前，或让挂载排序认补丁）；这是行为变更，需要你确认并逐游戏回归 | 待裁决 |
+| I2 | 首次读 `startup.tjs` 时补丁层是否生效 | **不生效**：boost 在 startup 之后（`Application.cpp:432` vs `:434`），且 data.xp3 先挂载 + 先注册者优先 | **生效**：挂载阶段就按补丁名排序（`StorageImpl.cpp:1750-1763`）+ 后注册者优先 | 极高：汉化/整合补丁的 startup.tjs 可能被原版压住 | 在 `krkr2-classic` 层内**修**（把 boost 提到 startup 之前，或让挂载排序认补丁）；这是行为变更，需要你确认并逐游戏回归 | 已实施（classic 层：boost 提前到 startup 之前） |
 | I3 | 档案工程启动（`.../data.xp3>`）时兄弟 `patch*.xp3` | **从不挂载**（两个挂载函数都在非 `/` 结尾时提前返回） | 扫父目录、挂兄弟、再挂被选中档案（`StorageImpl.cpp:1770-1791`） | 高：xp3 直启的补丁包失效 | 照搬 AK 的档案工程覆盖逻辑（对 classic 层是新增能力，风险中） | 待裁决 |
 | I4 | `TVPGetAppPath()` 是否去 `>` | 不去（档案工程返回 `.../data.xp3>`）⇒ `patch.tjs` 在包内找、临时文件会试图写进包 | 去 `>` 取父目录（`StorageImpl.cpp:627-635`） | 高：`patch.tjs`/`AfterStartup.tjs` 定位与临时文件位置 | 做成 `Config` 开关，按层取值；先不统一 | 待裁决 |
 | I5 | 缺尾部分隔符的路径 | **抛异常** `TVPMissingPathDelimiterAtLast` | `FixMissingPathDelimiter` 自动补 + info 日志 | 中：脚本传不规范路径时老层直接失败 | 收进 `IAutoPathPolicy::FixMissingDelimiter()`；AetherKiri 层开启 | 待裁决 |
@@ -124,8 +124,8 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 | I8 | XP3 v3 `hnfn` 真实文件名 | **缺失** | 有（`XP3Archive.cpp:402-604`） | 中：部分 v3 包文件名解析不到 | **两边都要**（格式能力，不是策略）：把 AK 的 `hnfn` 实现并入我们的 XP3 解析器 | 待裁决 |
 | I9 | XP3 诱饵头基点扫描 | **仅我们有**（`XP3Archive.cpp:235-278`，`nainiuniu5krkr.xp3` 案例） | 无 | 中 | 保留（并作为 XP3 provider 的能力保留） | 待裁决 |
 | I10 | XP3 段缓存上限 | 1 MiB（`XP3Archive.cpp:840`） | 256 MiB（`XP3Archive.cpp:785`） | 中：读大包性能 | 变成 `Config` 数值，按层或按设备内存取值 | 待裁决 |
-| I11 | 每局文本读编码复位 | 无 | `TVPSetDefaultReadEncoding("utf-8")`（`ScriptMgnIntf.cpp:4018`） | 中：上一局 `setTextEncoding` 可能泄漏到下一局 | 照搬（对 classic 层也是修 bug） | 待裁决 |
-| I12 | `Storages` 表面 | 缺 `addAutoToolsPath` / `addArchive` / `isExistentStorageNoSearchNoNormalize` / `archiveUniqueKey` | 有 | 中：部分脚本读不到 | 照搬（纯新增，兼容） | 待裁决 |
+| I11 | 每局文本读编码复位 | 无 | `TVPSetDefaultReadEncoding("utf-8")`（`ScriptMgnIntf.cpp:4018`） | 中：上一局 `setTextEncoding` 可能泄漏到下一局 | 照搬（对 classic 层也是修 bug） | 已实施 |
+| I12 | `Storages` 表面 | 缺 `addAutoToolsPath` / `addArchive` / `isExistentStorageNoSearchNoNormalize` / `archiveUniqueKey` | 有 | 中：部分脚本读不到 | 照搬（纯新增，兼容） | 部分实施（已补 isExistentStorageNoSearchNoNormalize；其余待做） |
 | I13 | 存储媒体 | `file/proxy/psb/psd/var/lzfs` | 另有 `arc`(PackinOne) / `mem` / `zip` | 中 | `arc`/`mem`/`zip` 各自归其层注册；先补**归属与冲突报告**（重名注册静默保留旧实例，注销按名字删） | 待裁决 |
 | I14 | `patch.tjs` 执行时机 | startup **之前**（与 krkr2/Kirikiroid2/PocketKrKr/KrKr2-Next 一致） | startup **之后**（注释说明是有意偏离） | 高：补丁能否改写框架 | classic 层保持现状；AetherKiri 层照搬（含全局可调用成员快照/恢复） | 待裁决 |
 | I15 | `plugin_load_mode` | 无（启动注册全部内置模块） | 默认只加载 `xp3filter/varfile/shrinkCopy`(+krkrgles)，`aether_all` 才全量 | 中高：影响启动期可见模块集合 | 作为层的配置项引入；classic 层保持"全量" | 待裁决 |
@@ -143,7 +143,7 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 | A4 | `TextRender.renderCount` / `touchImage` 合成 | 没有 | 有 | 随 A1/A2 一起移植 | 待裁决 |
 | A5 | `kag.*` 六个默认值 | 用 `kag_runtime_defaults.tjs` 注入（等价） | 内核回退返回 0 | 保持我们的实现 | 待裁决 |
 | B1 | GPU 伴生脚本注入方式 | 引擎选项 `ogldrawdevice_compat` 门控 + 首帧一次性钩子 | `TVPRegisterStorageResolver` + 惰性打开（打开 11 个 GPU 存储名时注入，无条件） | 保留我们的门控；把"惰性注入"作为 AetherKiri 层行为可选引入 | 待裁决 |
-| B2 | `KAGWindow`/`kag` 别名扇出 + 600-tick 重试 + 卸载清理 | 只写 `Window.<name>`；无重试；无 unregist 清理 | 三目标扇出 + prototype + 重试 + `PreUnregist` | 照搬（对 classic 层也是修"脚本晚加载就失效"） | 待裁决 |
+| B2 | `KAGWindow`/`kag` 别名扇出 + 600-tick 重试 + 卸载清理 | 只写 `Window.<name>`；无重试；无 unregist 清理 | 三目标扇出 + prototype + 重试 + `PreUnregist` | 照搬（对 classic 层也是修"脚本晚加载就失效"） | 已实施（4 目标扇出 + 每帧重试 600 帧 + 卸载摘钩） |
 | C1 | `taglist` 标签元数据 + `copyTag`（约 140 行） | 没有 | 有（KAGParserEx 文档化特性） | 移植（自包含、风险最低） | 待裁决 |
 | C2 | 明文行翻译（`TVPTransformText`/`PrefetchText`） | 没有 | 有（依赖 REF 独有 `utils/TextTransform.h`） | 暂不移植（本仓库无翻译功能） | 待裁决 |
 | C3 | `GetNextTag` 文本段聚合 + `TextTagQueue` | 没有（`return _GetNextTag()`） | 有（会改变 `kag.curLine/curPos` 与存档位置语义） | **按层开关**：AetherKiri 层启用，classic 层保持（存档兼容） | 待裁决 |
@@ -154,19 +154,19 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 | C8 | `kagparserex` 真实实现（109 行：按需安装核心 `KAGParser` + 标记 + 引用计数卸载） | 25 行空实现 | 有 | 照搬（便宜） | 待裁决 |
 | C9 | `MDKParser.dll`（4470 行，MIT） | 没有 | 有 | 延后（M6） | 待裁决 |
 | E1 | `patch.tjs` 执行时机 | startup **之前**（与 krkr2 全家一致） | startup **之后** + 晚 patch 韧性层（全局可调用成员快照/恢复、运行时注册表合并） | classic 层保持；AetherKiri 层照搬（**必须连韧性层一起**，否则更糟） | 待裁决 |
-| E2 | `kag` 默认值在 `AfterStartup.tjs` 之后是否再补一次 | 只补一次 | 补两次 | 照搬（便宜，且是修 bug） | 待裁决 |
+| E2 | `kag` 默认值在 `AfterStartup.tjs` 之后是否再补一次 | 只补一次 | 补两次 | 照搬（便宜，且是修 bug） | 已实施 |
 | E3 | 模块名注册不按链接序（`LoadAllModules` 按字母序遍历 map） | 同 | 同 | 引入层过滤时一并解决（同层内仍按字母序） | 待裁决 |
-| P3' | `k2compat_scripts.cpp`（2359 行 Krkr2Compat TJS，**当前是死代码**：无 target 编译、安装函数零调用） | 有资产未接线 | 完全没有 | 接线（放 classic 层，注意历史上执行它会黑屏，需按 PreRegist/PostRegist 时机接）或明确删除 | 待裁决 |
+| P3' | `k2compat_scripts.cpp`（2359 行 Krkr2Compat TJS，**当前是死代码**：无 target 编译、安装函数零调用） | 有资产未接线 | 完全没有 | 接线（放 classic 层，注意历史上执行它会黑屏，需按 PreRegist/PostRegist 时机接）或明确删除 | 已实施（同上） |
 
 ### 5.2 插件模拟层（M6）
 
 | # | 项 | 我们 | AetherKiri | 建议 | 状态 |
 |---|---|---|---|---|---|
-| P1 | 注册失败回滚 | **无**（一个 registrar 抛异常会中断其后所有模块） | 逐条回滚 | 照搬（对 classic 层也是修 bug） | 待裁决 |
-| P2 | 模块别名机制 | 无 `NCB_REGISTER_MODULE_ALIAS` | 有 | 照搬机制，用来给 `DrawDeviceD2D.dll`/`DrawDeviceD2Dm.dll` 之类建别名 | 待裁决 |
-| P3 | `k2compat_scripts.cpp`（2359 行 TJS） | **没被任何 target 编译、零调用**（死代码） | — | 先接线或先删除，二选一 | 待裁决 |
+| P1 | 注册失败回滚 | **无**（一个 registrar 抛异常会中断其后所有模块） | 逐条回滚 | 照搬（对 classic 层也是修 bug） | 已实施（逐条隔离 + 失败不写已注册表） |
+| P2 | 模块别名机制 | 无 `NCB_REGISTER_MODULE_ALIAS` | 有 | 照搬机制，用来给 `DrawDeviceD2D.dll`/`DrawDeviceD2Dm.dll` 之类建别名 | 已实施（NCB_REGISTER_MODULE_ALIAS） |
+| P3 | `k2compat_scripts.cpp`（2359 行 TJS） | **没被任何 target 编译、零调用**（死代码） | — | 先接线或先删除，二选一 | 已实施（编译进目标 + k2compat_scripts 选项门控 + 框架就绪后安装） |
 | P4 | 缺失模块（约 60 个） | — | `zlib/version/process/shellExecute/systemEx/stdio/httprequest/msdfrender/layerExSave/…` | 按"脚本真的会调"排序分批移植：先 `zlib`/`version`/`systemEx`/`stdio`/`process`，再 `layerExSave`/`msdfrender` | 待裁决 |
-| P5 | 部分覆盖（`layerExSave`/`textrender` 属性形状/`menu.MenuItem`/`csvParser` 注销/`DrawDeviceD2D` 规范名） | 见 `recon/plugin-compat-diff.md §2` | — | 逐条补齐；`textrender.renderDelay/renderOver` 必须改回只读属性（否则调用方无限重试） | 待裁决 |
+| P5 | 部分覆盖（`layerExSave`/`textrender` 属性形状/`menu.MenuItem`/`csvParser` 注销/`DrawDeviceD2D` 规范名） | 见 `recon/plugin-compat-diff.md §2` | — | 逐条补齐；`textrender.renderDelay/renderOver` 必须改回只读属性（否则调用方无限重试） | 部分实施（DrawDeviceD2D.dll 规范名已用别名补上；textrender/菜单等待做） |
 | P6 | 阻塞式实现（popen/curl/httpserv 无超时） | — | 有 | 移植时必须改成非阻塞或加超时；脚本线程即 EGL 线程 | 待裁决 |
 
 
