@@ -1,4 +1,5 @@
 #include "VideoPlayerAudio.h"
+#include "../../utils/StallWatchdog.h"
 #include "AEUtil.h"
 #include "FactoryCodec.h"
 #include "DemuxPacket.h"
@@ -219,7 +220,9 @@ void CVideoPlayerAudio::Process() {
         if(m_paused)
             priority = 1;
 
+        krkr::stall::MarkMovieStage("movie: 音频线程→等消息(Get)");
         MsgQueueReturnCode ret = m_messageQueue.Get(&pMsg, timeout, priority);
+        krkr::stall::MarkMovieStage("movie: 音频线程→解码/写音频设备");
 
         if(MSGQ_IS_ERROR(ret)) {
             //		CLog::Log(LOGERROR, "Got MSGQ_ABORT or
