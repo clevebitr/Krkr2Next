@@ -68,6 +68,7 @@ extern "C" void krkr_GetSurfaceDimensions(uint32_t *, uint32_t *);
 #include "base/ScriptMgnIntf.h"
 #include "base/impl/SysInitImpl.h"
 #include "base/impl/StorageImpl.h"
+#include "compat/CompatLayer.h"
 #include "extension/Extension.h"
 #include "visual/GraphicsLoaderIntf.h"
 #include "visual/ogl/ogl_common.h"
@@ -246,6 +247,11 @@ namespace {
          ENGINE_OGLDRAWDEVICE_COMPAT_KAG},
         {ENGINE_GAME_COMPAT_PROFILE_KRKRZ_OGL, 1,
          ENGINE_OGLDRAWDEVICE_COMPAT_OGL},
+        // AetherKiri 兼容层：唯一会切换**兼容层**（而不只是渲染选项）的档。
+        // ogldrawdevice_compat 取 kag —— AetherKiri 的 KAGWindow 接管是无条件行为，
+        // 在移动端对应既有的 kag 档；壳若显式传了 ogldrawdevice_compat，仍以显式值为准。
+        {ENGINE_GAME_COMPAT_PROFILE_AETHERKIRI, 1,
+         ENGINE_OGLDRAWDEVICE_COMPAT_KAG},
     };
 
     std::mutex g_compat_mutex;
@@ -342,6 +348,18 @@ namespace {
 
         g_compat_resolved_name = prof->name;
         g_compat_resolved_mode = prof->ogldrawdevice;
+
+        // 兼容层激活：只有显式具名档能切层（`aetherkiri`）；其余档（含 `auto` 判档到
+        // krkrz-*）一律保持缺省的旧版 krkr2 层 —— AetherKiri 层是新增代码路径，必须按
+        // 游戏显式开启。
+        //
+        // 现状：这里只登记"当前是哪一层"（并给后续迁移提供策略取值入口），IO/脚本/
+        // 插件注册的按层分派属于 M1.2–M1.6；未接通前不影响运行时行为。
+        if(g_compat_request != ENGINE_GAME_COMPAT_PROFILE_AUTO) {
+            krkr::compat::SetActiveLayerByName(prof->name);
+        } else {
+            krkr::compat::SetActiveLayer(krkr::compat::LayerId::Krkr2Classic);
+        }
         // 幂等：profile 与 game_root 是分两条选项下发的，第二条到达时会把同一份
         // 结论再解析一遍。真机日志里因此出现过**逐字重复**的两行
         // "compat profile: krkrz-kag v1 -> ..."。这里只对**日志**去重。

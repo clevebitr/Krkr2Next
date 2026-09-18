@@ -75,6 +75,17 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 | **M1.4** | 迁归档工厂与后端注册 | 无 | XP3/ZIP 打开与缓存行为不变 |
 | **M1.5** | TJS `Storages` 门面归位 | 无 | 脚本侧 `Storages.*` 可用性清单不变 |
 | **M1.6** | 层框架接线：`game_compat_profile` → 层激活；模块注册按层过滤 | 仅显式选 AetherKiri 层时 | 两层各自可用；缺省游戏行为不变 |
+
+> **已落地（2026-09-18）**：
+> - `cpp/core/io/StoragePolicy.h`：策略契约（tie-break / 补丁规则 / 优先级落点 / 包内根目录顺序 /
+>   缺分隔符修复 / app path 语义 / 档案工程兄弟挂载 / XP3 段缓存预算）。
+> - `cpp/core/compat/{CompatLayer.h,CompatLayer.cpp}` + `core_compat_module`：层注册表、两层各自的
+>   策略取值、`SetActiveLayer*/ActiveStoragePolicy()`。
+> - 引擎档：新增 `aetherkiri`（`engine_options.h`）；`ApplyCompatProfileLocked()` 解析后调用
+>   `SetActiveLayerByName()`，`auto` 与其余档一律保持旧层；壳侧 `RunMode.AETHERKIRI` 可逐游戏选择。
+> - 边界：策略**只登记取值**，尚未接到 `StorageIntf/StorageImpl` 的实现（M1.2–M1.6 的工作）；
+>   未接通前对运行时行为零影响。
+
 | **M2** | 层 A：TJS2 内核兼容读写（未定义全局回退 + 启动期可写白名单） | AetherKiri 层内 | 见 §5 清单 |
 | **M3** | 层 B：KAGWindow / krkrgles 脚本别名与绘制设备接管 | AetherKiri 层内 | 见 §5 清单 |
 | **M4** | 层 C：KAGParser / extkagparser / kagparserex 行为对齐 | AetherKiri 层内 | 见 §5 清单 |

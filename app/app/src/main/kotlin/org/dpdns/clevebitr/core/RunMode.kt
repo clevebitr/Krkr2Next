@@ -65,6 +65,21 @@ enum class RunMode(
         summary = "只挂 OGLDrawDevice，不起 GLESAdaptor（GLESAdaptor 会改变部分游戏的绘制路径）",
         compatProfile = "krkrz-ogl",
         oglDrawDeviceCompat = "ogl",
+    ),
+
+    /**
+     * AetherKiri 兼容层：唯一会切换**兼容层**（而不只是渲染选项）的模式。
+     *
+     * 缺省（[AUTO] 与其它模式）一律是旧版 krkr2 层；这一档才把整层行为切到
+     * AetherKiri 口径（脚本前奏、加载策略、插件注册集合，见 `compat/README.md`）。
+     * 属于实验档：旧层已跑通的游戏不要选，需要逐游戏回归。
+     */
+    AETHERKIRI(
+        key = "aetherkiri",
+        label = "AetherKiri 兼容层",
+        summary = "AetherKiri 口径的脚本/加载/插件行为（实验档，按游戏单独开）",
+        compatProfile = "aetherkiri",
+        oglDrawDeviceCompat = "kag",
     );
 
     companion object {

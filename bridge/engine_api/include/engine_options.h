@@ -72,6 +72,12 @@
  *   krkrz-gpu          v1  → ogldrawdevice_compat=alias
  *   krkrz-kag          v1  → ogldrawdevice_compat=kag
  *   krkrz-ogl          v1  → ogldrawdevice_compat=ogl
+ *   aetherkiri         v1  → ogldrawdevice_compat=kag，**并激活 AetherKiri 兼容层**
+ *
+ * `aetherkiri` 是唯一会**切换兼容层**的档（其余档只影响渲染侧选项，兼容层仍是缺省的
+ * 旧版 krkr2 层）。层的口径与逐条差异见 compat/README.md，注册表实现在
+ * `cpp/core/compat/CompatLayer.cpp`。缺省层 = `krkr2-classic`：AetherKiri 层是新增
+ * 代码路径，必须按游戏显式开启（`auto` 判档暂不切换层）。
  *
  * 档只映射到既有选项，插件与核心照旧只认选项。档的口径变化必须同时 +1 版本号，
  * 这样真机日志（`compat profile: <name> v<n> -> ...`）能区分"哪一版口径"。
@@ -99,6 +105,15 @@
 #define ENGINE_GAME_COMPAT_PROFILE_KRKRZ_GPU "krkrz-gpu"
 #define ENGINE_GAME_COMPAT_PROFILE_KRKRZ_KAG "krkrz-kag"
 #define ENGINE_GAME_COMPAT_PROFILE_KRKRZ_OGL "krkrz-ogl"
+
+/**
+ * AetherKiri 兼容层档（必须显式开启；见上面的兼容档说明）。
+ *
+ * 与其它档的区别：它会调用 `krkr::compat::SetActiveLayerByName("aetherkiri")`，把整层
+ * 行为（IO/加载策略、脚本前奏、插件注册集合）切到 AetherKiri 口径；其余档一律保持
+ * 缺省的旧版 krkr2 层。层还没接通的部分不产生运行时影响（见 compat/README.md）。
+ */
+#define ENGINE_GAME_COMPAT_PROFILE_AETHERKIRI "aetherkiri"
 
 /** Render pipeline selection ("opengl" or "software"). */
 #define ENGINE_OPTION_RENDERER "renderer"
