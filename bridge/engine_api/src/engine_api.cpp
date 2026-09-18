@@ -1748,6 +1748,8 @@ engine_result_t engine_set_log_file_path(const char *path) {
                                 EnsureNamedLogger("tjs2"),
                                 EnsureNamedLogger("plugin"));
         spdlog::info("engine_set_log_file_path: engine log -> {}", path);
+        // 卡死转储路径（<path>.stall）：日志锁被卡住时也能留下阶段信息。
+        krkr::stall::SetDumpPath(path);
         spdlog::default_logger()->flush();
         return ENGINE_RESULT_OK;
     } catch(const std::exception &e) {

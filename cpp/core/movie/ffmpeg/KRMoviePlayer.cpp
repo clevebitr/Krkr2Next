@@ -15,6 +15,7 @@ extern "C" {
 // 统计汇总在解锁后才输出：先在锁内 fmt::format 成字符串（见下方死锁说明）。
 #include <spdlog/fmt/fmt.h>
 #include "KRMoviePlayer.h"
+#include "../../utils/StallWatchdog.h"
 #include "VideoCodec.h"
 #include "CodecUtils.h"
 #include "AudioDevice.h"
@@ -170,8 +171,10 @@ TVPMoviePlayer::~TVPMoviePlayer() {
     //  所有者，而所有者此刻正在析构；延迟释放会让 BasePlayer 活得比所有者更久 →
     //  悬垂。当前阻塞点在临时文件删除上，见 VideoOvlImpl.cpp 的说明。）
     AbortPictureWait();
+    krkr::stall::MarkStage("movie: ~TVPMoviePlayer→删除播放器(join player+解码线程)");
     delete m_pPlayer;
     m_pPlayer = nullptr;
+    krkr::stall::MarkStage("movie: ~TVPMoviePlayer→播放器已销毁");
     if(img_convert_ctx)
         sws_freeContext(img_convert_ctx), img_convert_ctx = nullptr;
 }
@@ -589,6 +592,7 @@ void KRMovie::VideoPresentOverlay::Stop() {
 
 MoviePlayerOverlay::~MoviePlayerOverlay() {
     assert(std::this_thread::get_id() == TVPMainThreadID);
+    krkr::stall::MarkStage("movie: ~MoviePlayerOverlay→删除播放器");
     // 同步销毁：BasePlayer 的析构会经 m_pRenderer 回到所有者，延迟释放会造成悬垂
     // （详见 TVPMoviePlayer::~TVPMoviePlayer 的说明）。真正的阻塞点在临时文件删除，
     // 那里已改成后台执行。

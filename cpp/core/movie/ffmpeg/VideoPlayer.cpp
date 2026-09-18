@@ -193,6 +193,7 @@ BasePlayer::BasePlayer(CBaseRenderer *renderer) :
 }
 
 BasePlayer::~BasePlayer() {
+    krkr::stall::MarkMovieStage("movie: ~BasePlayer→CloseInputStream");
     CloseInputStream();
     DestroyPlayers();
     ::Application->RegisterActiveEvent(this, nullptr);
@@ -371,7 +372,9 @@ bool BasePlayer::CloseInputStream() {
     // wait for the main thread to finish up
     // since this main thread cleans up all other resources and
     // threads we are done after the StopThread call
+    krkr::stall::MarkMovieStage("movie: CloseInputStream→等 player 线程退出(join)");
     StopThread();
+    krkr::stall::MarkMovieStage("movie: CloseInputStream→player 线程已退出");
 
     m_HasVideo = false;
     m_HasAudio = false;

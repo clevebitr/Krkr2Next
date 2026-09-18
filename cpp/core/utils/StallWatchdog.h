@@ -20,6 +20,9 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <string>
 #include <thread>
 #include <spdlog/spdlog.h>
 
@@ -35,6 +38,14 @@ constexpr int64_t kStallThresholdMs = 1500;
 
 inline std::atomic<int64_t> g_lastProgressMs{ 0 };
 inline std::atomic<const char *> g_stage{ "尚未开始" };
+/**
+ * 影片相关线程（player/解码/音频）的阶段。这些线程卡住会通过 join 级联把渲染线程
+ * 也拖死，而它们的日志往往还没打印 —— 卡死时把两边阶段一起落盘才能定位。
+ */
+inline std::atomic<const char *> g_movieStage{ "movie: 未开始" };
+/** 卡死时额外落盘的文件（绕过 spdlog：日志锁本身可能被卡住的那条线程握着）。 */
+inline char g_dumpPathBuf[1024] = { 0 };
+inline std::atomic<bool> g_dumpPathSet{ false };
 inline std::atomic<bool> g_stop{ false };
 inline std::atomic<bool> g_running{ false };
 /** 宿主主动暂停引擎（切后台/进设置）时置位：此时没有 tick 是**预期**的，不能报警。 */
@@ -56,6 +67,48 @@ inline void MarkStage(const char *stage) {
     g_lastProgressMs.store(NowMs(), std::memory_order_relaxed);
 }
 
+/** 影片线程自己的阶段（不推进渲染线程心跳）。 */
+inline void MarkMovieStage(const char *stage) {
+    g_movieStage.store(stage, std::memory_order_relaxed);
+}
+
+/** 引擎日志路径设定后调用；卡死转储写到 <path>.stall（内部拷贝，路径可临时）。 */
+inline void SetDumpPath(const char *path) {
+    if(path == nullptr || path[0] == '\0') {
+        g_dumpPathSet.store(false, std::memory_order_relaxed);
+        return;
+    }
+    std::snprintf(g_dumpPathBuf, sizeof(g_dumpPathBuf), "%s", path);
+    g_dumpPathSet.store(true, std::memory_order_relaxed);
+}
+
+/**
+ * 卡死转储：用裸 FILE* 追加一行，绝不经过 spdlog（真机上出现过"日志一行都不再
+ * 增长"，说明日志锁被卡住的那条线程握着；那种情况下只有独立文件能留下证据）。
+ */
+inline void WriteDump(const char *reason, const char *renderStage,
+                      const char *movieStage, int64_t stalledMs) {
+    char path[1152];
+    if(g_dumpPathSet.load(std::memory_order_relaxed) && g_dumpPathBuf[0]) {
+        std::snprintf(path, sizeof(path), "%s.stall", g_dumpPathBuf);
+    } else {
+        std::snprintf(path, sizeof(path), "krkr_stall.stall");
+    }
+    FILE *f = std::fopen(path, "ab");
+    if(!f)
+        return;
+    const int64_t now = NowMs();
+    std::fprintf(f,
+                 "[stall] t=%lld stalled=%lldms reason=%s\n"
+                 "        render: %s\n"
+                 "        movie : %s\n",
+                 static_cast<long long>(now),
+                 static_cast<long long>(stalledMs), reason ? reason : "?",
+                 renderStage ? renderStage : "?", movieStage ? movieStage : "?");
+    std::fflush(f);
+    std::fclose(f);
+}
+
 inline void WatchdogLoop() {
     bool reported = false;
     while(!g_stop.load(std::memory_order_relaxed)) {
@@ -73,11 +126,22 @@ inline void WatchdogLoop() {
         if(stalledMs >= kStallThresholdMs) {
             if(!reported) {
                 reported = true;
+                const char *renderStage =
+                    g_stage.load(std::memory_order_relaxed);
+                const char *movieStage =
+                    g_movieStage.load(std::memory_order_relaxed);
+                // 先写独立转储文件（不依赖日志锁），再尝试常规日志。
+                WriteDump("render-thread-stall", renderStage, movieStage,
+                          stalledMs);
                 spdlog::warn("引擎卡死探针：渲染线程已 {:.1f}s 没有推进，"
-                             "最后阶段＝{}（卡死期间的日志不会再出现，"
-                             "看这一条定位）",
+                             "最后阶段＝{}（影片线程阶段＝{}）（卡死期间的日志"
+                             "不会再出现，看这一条定位；另有 {} .stall 转储）",
                              static_cast<double>(stalledMs) / 1000.0,
-                             g_stage.load(std::memory_order_relaxed));
+                             renderStage, movieStage,
+                             g_dumpPathSet.load(std::memory_order_relaxed) &&
+                                     g_dumpPathBuf[0]
+                                 ? g_dumpPathBuf
+                                 : "krkr_stall");
             }
         } else if(stalledMs < 1000) {
             reported = false; // 已恢复，重新武装

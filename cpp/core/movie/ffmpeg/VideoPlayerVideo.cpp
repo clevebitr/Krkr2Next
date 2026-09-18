@@ -1,4 +1,5 @@
 #include "VideoPlayerVideo.h"
+#include "../../utils/StallWatchdog.h"
 #include "Clock.h"
 
 extern "C" {
@@ -240,8 +241,10 @@ void CVideoPlayerVideo::Process() {
             iPriority = 1;
 
         CDVDMsg *pMsg;
+        krkr::stall::MarkMovieStage("movie: 解码线程→等消息(Get)");
         MsgQueueReturnCode ret =
             m_messageQueue.Get(&pMsg, iQueueTimeOut, iPriority);
+        krkr::stall::MarkMovieStage("movie: 解码线程→处理消息/解码");
 
         if(MSGQ_IS_ERROR(ret)) {
             //	CLog::Log(LOGERROR, "Got MSGQ_ABORT or MSGO_IS_ERROR
