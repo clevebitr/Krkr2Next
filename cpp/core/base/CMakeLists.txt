@@ -8,7 +8,7 @@ set(BASE_SOURCE_FILES
     ${BASE_PATH}/CharacterSet.cpp
     ${BASE_PATH}/EventIntf.cpp
     ${BASE_PATH}/ScriptMgnIntf.cpp
-    ${BASE_PATH}/StorageIntf.cpp
+    # StorageIntf.cpp 的实现已搬入 cpp/core/io/IoStorage.cpp（M1.2）。
     ${BASE_PATH}/SysInitIntf.cpp
     ${BASE_PATH}/SystemIntf.cpp
     ${BASE_PATH}/TARArchive.cpp
