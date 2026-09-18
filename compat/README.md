@@ -30,6 +30,23 @@ krkr2next.json（每游戏 GameConfig.EngineOverride.runMode）
 - 层的差异必须收敛成"具名 + 带版本号"的东西（沿用 `CompatProfile` 的做法），真机日志能看出
   用的是哪一层、哪一版口径。
 
+### 1.1 层专属模块与模块归属门（M1.6 起步）
+
+同一个 Windows 插件名被两层各自模拟时，**只有激活层注册**。实现：`cpp/core/compat/ModuleGate.{h,cpp}`
++ `ncbind` 注册前查询。规则保守——**未登记归属的模块一律放行**（旧层现状不受影响），只有显式登记的
+层专属模块会在层不匹配时被跳过并打一条 info。
+
+已登记归属（截至 2026-09-18）：
+
+| 模块 | 归属层 | 实现 |
+|---|---|---|
+| `zlib.dll` | aetherkiri | `cpp/plugins/compat/aetherkiri/legacy_zlib_version.cpp`（自 AetherKiri 片段移植） |
+| `version.dll` | aetherkiri | 同上 |
+
+新增层专属模块时：写实现 → 在文件里 `RegisterModuleOwner(name, LayerId::Xxx)` → 登记进
+`compat/upstream/aetherkiri_ports.json`（片段移植用 `partial-extract` 类别）→ 跑
+`python3 scripts/check_port_drift.py --update`。
+
 ## 2. 依赖方向与隔离（不变量）
 
 ```
