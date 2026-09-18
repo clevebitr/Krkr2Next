@@ -24,7 +24,7 @@ set(BASE_SOURCE_FILES
     ${BASE_PATH}/impl/FileSelector.cpp
     ${BASE_PATH}/impl/NativeEventQueue.cpp
     ${BASE_PATH}/impl/ScriptMgnImpl.cpp
-    ${BASE_PATH}/impl/StorageImpl.cpp
+    # impl/StorageImpl.cpp 的实现已搬入 cpp/core/io/IoStorageLocal.cpp（M1.2）。
     ${BASE_PATH}/impl/SysInitImpl.cpp
     ${BASE_PATH}/impl/SystemImpl.cpp
     ${BASE_PATH}/impl/MsgImpl.cpp

@@ -8,6 +8,10 @@ add_library(${PROJECT_NAME} STATIC
     # 存储系统实现（原 cpp/core/base/StorageIntf.cpp，git mv 保留历史）。
     # 公开声明仍在 cpp/core/base/StorageIntf.h —— 约 200 个调用点不动，只换定义所在 TU。
     ${IO_PATH}/IoStorage.cpp
+    # 本地文件媒体 / 归档打开 / 启动挂载 / 补丁优先级（原
+    # cpp/core/base/impl/StorageImpl.cpp，git mv 保留历史）。声明仍在
+    # cpp/core/base/impl/StorageImpl.h。
+    ${IO_PATH}/IoStorageLocal.cpp
 )
 
 # 自身要能解析 `StoragePolicy.h` / 其他 core 头：cpp/core 与 cpp/core/base 必须在

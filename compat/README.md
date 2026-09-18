@@ -85,23 +85,27 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 >   `SetActiveLayerByName()`，`auto` 与其余档一律保持旧层；壳侧 `RunMode.AETHERKIRI` 可逐游戏选择。
 > - 边界：策略**只登记取值**，尚未接到 `StorageIntf/StorageImpl` 的实现（M1.2–M1.6 的工作）；
 >   未接通前对运行时行为零影响。
-> - `cpp/core/io/` 已开张（目标 `core_io_module`，只链 tjs2）：`IoPath.cpp` 收编了
->   `TVPArchiveDelimiter` 的定义与 `TVPExtractStorageExt/Name/Path`、`TVPChopStorageExt`；
->   依赖方向固定为 `core_base_module -> core_io_module`，**反向引用会造成静态库循环**，
->   这是后续搬迁必须遵守的约束（见 `cpp/core/io/CMakeLists.txt` 注释）。
+> - `cpp/core/io/`（目标 `core_io_module`）现持有存储系统的**实现**：
+>   - `IoPath.cpp`：`TVPArchiveDelimiter` 定义 + `TVPExtractStorageExt/Name/Path`、`TVPChopStorageExt`；
+>   - `IoStorage.cpp`（原 `base/StorageIntf.cpp`，git mv）：媒体注册表、名字规范化、
+>     auto-path 表与放置路径搜索、`TVPCreateStream`、TJS `Storages` 门面；
+>   - `IoStorageLocal.cpp`（原 `base/impl/StorageImpl.cpp`，git mv）：本地文件媒体、
+>     归档打开、启动挂载（兄弟/工程 xp3）、补丁优先级。
+>   公开声明仍在 `cpp/core/base/StorageIntf.h` 与 `base/impl/StorageImpl.h`，约 200 个调用点
+>   一行未改（"稳定接口 + 实现归位"）。
+> - 依赖是**双向过渡态**：`base -> io`（存储 API 的实现）与 `io -> base`（归档工厂
+>   XP3Archive/ZIP/7z/TAR、消息常量、`TVPCreateFileMedia` 之外的核心设施）。两者都是
+>   STATIC 库，CMake 会在最终链接时重复它们（CI 35340472264 实证通过）。**回边必须在
+>   M1.4（归档工厂搬入 io）后消失**——那是本组件"单一性"的验收点。
 >
 > **IO 搬迁顺序（后续轮次按此执行，每步都要求行为等价 + CI 绿）**：
-> 1. 媒体注册表（`tTVPStorageMediaManager` + `TVPRegister/UnregisterStorageMedia` +
->    `TVPNormalizeStorageName`/`TVPSetCurrentDirectory`/`TVPGetLocalName`/
->    `TVPGetLocallyAccessibleName`）**必须与** `tTVPFileMedia`（本地文件媒体提供者，
->    含 NFC 规范化与大小写不敏感回退）**同一提交搬入**：前者构造时要 `TVPCreateFileMedia()`，
->    分开搬会让 io 反向依赖 base。搬完后 `StorageImpl.cpp` 只剩启动挂载与补丁优先级。
-> 2. auto-path 表与放置路径搜索（`TVPAutoPathList`/缓存/`TVPAddAutoPath`/
->    `TVPRebuildAutoPathTable`/`TVPGetPlacedPath`/`TVPSearchPlacedPath`/`TVPIsExistentStorage`/
->    `TVPCreateStream`）—— 依赖上一步的媒体注册表，以及 `TVPOpenArchive`（归档工厂，可先用
->    转发）。
-> 3. 归档工厂与后端（`tTVPArchive` + `TVPOpenArchive` + XP3/ZIP/7z/TAR 的注册）→ io。
-> 4. TJS `Storages` 门面（`tTJSNC_Storages`）→ io；`StorageIntf.h` 从此只剩声明 + 门面转发。
+> 1. ✅ 媒体注册表 + `tTVPFileMedia` + 本地文件流（`IoStorage.cpp` / `IoStorageLocal.cpp`）。
+> 2. ✅ auto-path 表与放置路径搜索、`TVPCreateStream`（同上）。
+> 3. ⬜ 归档工厂与后端（`tTVPArchive` + `TVPOpenArchive` 的创建者表 + `XP3Archive*`/
+>    `ZIPArchive`/`7zArchive`/`TARArchive`）→ io：**这一步做完，`io -> base` 的回边应当消失**。
+> 4. ✅ TJS `Storages` 门面（随 `IoStorage.cpp` 一起搬入）。
+> 5. ⬜ 把 `StoragePolicy`（`io/StoragePolicy.h`）真正接到挂载/补丁/规范化实现上，并按
+>    激活层取值（M1.3/M1.6）。
 
 | **M2** | 层 A：TJS2 内核兼容读写（未定义全局回退 + 启动期可写白名单） | AetherKiri 层内 | 见 §5 清单 |
 | **M3** | 层 B：KAGWindow / krkrgles 脚本别名与绘制设备接管 | AetherKiri 层内 | 见 §5 清单 |
