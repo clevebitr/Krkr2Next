@@ -905,6 +905,53 @@ namespace {
         return ENGINE_RESULT_OK;
     }
 
+    // ── 宿主输入的跨线程入口队列 ──────────────────────────────────────────
+    // **绝不碰 impl->mutex / g_registry_mutex**：engine_tick 把这两个锁按整帧持有，
+    // 模态对话框（HostWindowLayer::ShowWindowAsModal 的嵌套循环）期间可能持续几十
+    // 秒。宿主 UI 线程若在这里等锁，就是真机上的"弹窗点不动 + 卡死 + ANR"
+    // （app.log 实证：上次未正常退出 kind=ANR，模态循环 13:48:31 进入、13:48:38 被
+    // ANR 干掉）。所以入队只走这把独立互斥锁，派发一律在引擎线程做。
+    std::mutex g_input_queue_mutex;
+    std::deque<engine_input_event_t> g_input_queue;
+    constexpr size_t kMaxQueuedInputs = 512;
+    /// 当前可用作输入目标的句柄（原子，供跨线程比对；只为拒绝明显非法的句柄）。
+    std::atomic<engine_handle_t> g_input_target_handle{ nullptr };
+
+    void EnqueueInputEvent(const engine_input_event_t &event) {
+        std::lock_guard<std::mutex> lk(g_input_queue_mutex);
+        g_input_queue.push_back(event);
+        if(g_input_queue.size() > kMaxQueuedInputs)
+            g_input_queue.pop_front();
+    }
+
+    std::deque<engine_input_event_t> TakeQueuedInputEvents() {
+        std::deque<engine_input_event_t> out;
+        std::lock_guard<std::mutex> lk(g_input_queue_mutex);
+        out.swap(g_input_queue);
+        return out;
+    }
+
+    void DropQueuedInputEvents() { TakeQueuedInputEvents(); }
+
+    /// 引擎线程侧派发（tick 开头、或模态循环里的泵）。返回失败时把原因写进
+    /// out_error_message（可为空）。
+    engine_result_t DrainQueuedInputEvents(const char **out_error_message) {
+        std::deque<engine_input_event_t> queued = TakeQueuedInputEvents();
+        for(const engine_input_event_t &queued_event : queued) {
+            const char *dispatch_error = nullptr;
+            const engine_result_t rc =
+                DispatchInputEventNow(nullptr, queued_event, &dispatch_error);
+            if(rc != ENGINE_RESULT_OK) {
+                if(out_error_message != nullptr)
+                    *out_error_message = dispatch_error;
+                return rc;
+            }
+        }
+        if(out_error_message != nullptr)
+            *out_error_message = nullptr;
+        return ENGINE_RESULT_OK;
+    }
+
     engine_result_t OpenGameCore(engine_handle_t handle, engine_handle_s *impl,
                                  const char *game_root_path_utf8) {
         if(game_root_path_utf8 == nullptr || game_root_path_utf8[0] == '\0') {
@@ -1025,6 +1072,9 @@ namespace {
         g_runtime_active = true;
         g_runtime_owner = handle;
         g_runtime_started_once = true;
+        // 跨线程输入的句柄闸门（只做原子比对，绝不取锁，见 g_input_queue_mutex）。
+        g_input_target_handle.store(handle, std::memory_order_release);
+        DropQueuedInputEvents(); // 上一局的残留输入不能带进这一局
 
         impl->runtime_owner = true;
         impl->input.native_mouse_callbacks_disabled = true;
@@ -1034,7 +1084,7 @@ namespace {
         impl->frame.rgba.clear();
         impl->frame.ready = false;
         impl->input.active_pointer_ids.clear();
-        impl->input.pending_events.clear();
+        DropQueuedInputEvents();
         impl->state = ToStateValue(EngineState::kOpened);
         ClearHandleErrorLocked(impl);
         return ENGINE_RESULT_OK;
@@ -1197,6 +1247,11 @@ engine_result_t engine_destroy(engine_handle_t handle) {
             g_runtime_owner = nullptr;
             impl->runtime_owner = false;
         }
+        // 销毁后宿主再投递输入会被句柄闸门挡掉（也不会再排进队列里）。
+        engine_handle_t expected_input_handle = handle;
+        g_input_target_handle.compare_exchange_strong(
+            expected_input_handle, nullptr, std::memory_order_acq_rel);
+        DropQueuedInputEvents();
         if(g_runtime_startup_active && g_runtime_startup_owner == handle) {
             g_runtime_startup_active = false;
             g_runtime_startup_owner = nullptr;
@@ -1809,14 +1864,11 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
     impl->tick_count += 1;
     krkr::stall::MarkStage("engine_tick: 输入派发");
 
-    while(!impl->input.pending_events.empty()) {
-        const engine_input_event_t queued_event =
-            impl->input.pending_events.front();
-        impl->input.pending_events.pop_front();
-
+    // 派发宿主投递的输入（跨线程队列，见 DrainQueuedInputEvents 的说明）。
+    {
         const char *dispatch_error = nullptr;
         const engine_result_t dispatch_result =
-            DispatchInputEventNow(impl, queued_event, &dispatch_error);
+            DrainQueuedInputEvents(&dispatch_error);
         if(dispatch_result != ENGINE_RESULT_OK) {
             return SetHandleErrorAndReturnLocked(impl, dispatch_result,
                                                  dispatch_error != nullptr
@@ -2201,7 +2253,7 @@ engine_result_t engine_pause(engine_handle_t handle) {
 
     Application->OnDeactivate();
     impl->input.active_pointer_ids.clear();
-    impl->input.pending_events.clear();
+    DropQueuedInputEvents();
     impl->state = ToStateValue(EngineState::kPaused);
     // 主动暂停期间没有 tick 是正常的：别让卡死探针误报。
     krkr::stall::SetPaused(true);
@@ -2752,30 +2804,13 @@ engine_result_t engine_get_host_native_view(engine_handle_t handle,
 
 // 模态对话框（KAG 的 Window.showModal → HostWindowLayer::ShowWindowAsModal 的嵌套
 // 循环）期间 tick 线程被 core 占用：壳的帧回调排不进来，输入只能从 UI 线程投递。
-// core 每帧回调这里把队列派发掉 —— 此刻本线程就是 owner/tick 线程，impl->mutex 是
-// 递归锁，重入是安全的。
+// core 每帧回调这里把跨线程输入队列派发掉（本线程就是引擎线程，派发是安全的）。
 static void PumpModalInputOnTickThread() {
-    std::lock_guard<std::recursive_mutex> registry_guard(g_registry_mutex);
-    if(!g_runtime_active || g_runtime_owner == nullptr)
-        return;
-    engine_handle_s *impl = nullptr;
-    if(ValidateHandleLocked(g_runtime_owner, &impl) != ENGINE_RESULT_OK)
-        return;
-    std::lock_guard<std::recursive_mutex> guard(impl->mutex);
-    if(ValidateHandleThreadLocked(impl) != ENGINE_RESULT_OK)
-        return;
-    while(!impl->input.pending_events.empty()) {
-        const engine_input_event_t queued_event =
-            impl->input.pending_events.front();
-        impl->input.pending_events.pop_front();
-        const char *dispatch_error = nullptr;
-        if(DispatchInputEventNow(impl, queued_event, &dispatch_error) !=
-           ENGINE_RESULT_OK) {
-            // 模态期间派发失败不该打断对话框；记一条便于排查。
-            spdlog::warn("PumpModalInput: 输入派发失败 err={}",
-                         dispatch_error ? dispatch_error : "(unknown)");
-            break;
-        }
+    const char *dispatch_error = nullptr;
+    if(DrainQueuedInputEvents(&dispatch_error) != ENGINE_RESULT_OK) {
+        // 模态期间派发失败不该打断对话框；记一条便于排查。
+        spdlog::warn("PumpModalInput: 输入派发失败 err={}",
+                     dispatch_error ? dispatch_error : "(unknown)");
     }
 }
 
@@ -2791,27 +2826,15 @@ engine_result_t engine_send_input(engine_handle_t handle,
             "engine_input_event_t.struct_size is too small");
     }
 
-    std::lock_guard<std::recursive_mutex> registry_guard(g_registry_mutex);
-    engine_handle_s *impl = nullptr;
-    auto result = ValidateHandleLocked(handle, &impl);
-    if(result != ENGINE_RESULT_OK) {
-        return result;
-    }
-
-    std::lock_guard<std::recursive_mutex> guard(impl->mutex);
-    // **故意不校验 owner 线程**：输入只是往 impl->input.pending_events 入队（受
-    // impl->mutex 保护），真正的派发在 tick 线程做。模态对话框期间（KAG 的
-    // Window.showModal → HostWindowLayer::ShowWindowAsModal 的嵌套循环）tick 线程被
-    // core 占住，壳只能从 UI 线程投递；那些事件由注册给 core 的
-    // PumpModalInputOnTickThread 在模态循环里派发。
-    if(impl->state == ToStateValue(EngineState::kPaused)) {
-        return SetHandleErrorAndReturnLocked(impl, ENGINE_RESULT_INVALID_STATE,
-                                             "engine is paused");
-    }
-    if(impl->state != ToStateValue(EngineState::kOpened)) {
-        return SetHandleErrorAndReturnLocked(
-            impl, ENGINE_RESULT_INVALID_STATE,
-            "engine_open_game must succeed before engine_send_input");
+    // **不取 g_registry_mutex / impl->mutex**（整帧被 engine_tick 持有，模态对话框
+    // 期间可能持续几十秒 —— 在那上面等锁就是宿主 UI 线程的 ANR）。句柄只用原子
+    // 指针比对挡掉明显非法的调用，状态门（kOpened/kPaused）留给引擎线程在派发时
+    // 判断。见 g_input_queue_mutex 的说明。
+    if(handle == nullptr ||
+       handle != g_input_target_handle.load(std::memory_order_acquire)) {
+        return SetThreadErrorAndReturn(
+            ENGINE_RESULT_INVALID_STATE,
+            "engine handle is invalid or not the active runtime");
     }
 
     switch(event->type) {
@@ -2825,9 +2848,8 @@ engine_result_t engine_send_input(engine_handle_t handle,
         case ENGINE_INPUT_EVENT_BACK:
             break;
         default:
-            return SetHandleErrorAndReturnLocked(
-                impl, ENGINE_RESULT_NOT_SUPPORTED,
-                "unsupported input event type");
+            return SetThreadErrorAndReturn(ENGINE_RESULT_NOT_SUPPORTED,
+                                           "unsupported input event type");
     }
 
     if(event->type == ENGINE_INPUT_EVENT_POINTER_DOWN ||
@@ -2837,19 +2859,13 @@ engine_result_t engine_send_input(engine_handle_t handle,
         if(!IsFinitePointerValue(event->x) || !IsFinitePointerValue(event->y) ||
            !IsFinitePointerValue(event->delta_x) ||
            !IsFinitePointerValue(event->delta_y)) {
-            return SetHandleErrorAndReturnLocked(
-                impl, ENGINE_RESULT_INVALID_ARGUMENT,
+            return SetThreadErrorAndReturn(
+                ENGINE_RESULT_INVALID_ARGUMENT,
                 "pointer coordinates contain non-finite values");
         }
     }
 
-    impl->input.pending_events.push_back(*event);
-    constexpr size_t kMaxQueuedInputs = 512;
-    if(impl->input.pending_events.size() > kMaxQueuedInputs) {
-        impl->input.pending_events.pop_front();
-    }
-
-    ClearHandleErrorLocked(impl);
+    EnqueueInputEvent(*event);
     SetThreadError(nullptr);
     return ENGINE_RESULT_OK;
 }

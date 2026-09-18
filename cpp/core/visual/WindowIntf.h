@@ -319,6 +319,13 @@ extern bool TVPIsWindowRegistered(const tTJSNI_Window *window);
 extern tTJSNI_Window *TVPMainWindow; //  = nullptr; // main window
 extern void TVPResetWindowListForRestart();
 
+// 模态窗口（KAG 的 Window.showModal）：窗口层在进入/退出模态循环时登记，
+// 输入派发（EngineLoop）优先发给它 —— 本移植只有一张 surface，Win32 那种
+// "消息天然送到模态 HWND" 的行为要显式模拟，否则对话框点不动。
+extern void TVPAddModalWindow(tTJSNI_Window *window);
+extern void TVPRemoveModalWindow(tTJSNI_Window *window);
+extern tTJSNI_Window *TVPGetActiveModalWindow();
+
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------

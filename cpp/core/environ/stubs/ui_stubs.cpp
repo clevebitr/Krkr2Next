@@ -319,6 +319,16 @@ public:
         constexpr int64_t kModalMaxMs = 120000;
         const auto modalStart = std::chrono::steady_clock::now();
         modal_ = true;
+        // 登记为"当前模态窗口"：输入派发优先发给它（否则对话框点不动，而且
+        // 点击会落到主窗口、在 Conductor 阻塞时重入主窗口脚本）。RAII 保证
+        // 异常路径也会摘掉登记。
+        struct ModalWindowGuard {
+            explicit ModalWindowGuard(tTJSNI_Window *w) : win(w) {
+                TVPAddModalWindow(w);
+            }
+            ~ModalWindowGuard() { TVPRemoveModalWindow(win); }
+            tTJSNI_Window *win;
+        } modalWindowGuard(owner_);
         int frames = 0;
         while(modal_) {
             if(TVPTerminated)

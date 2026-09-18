@@ -33,6 +33,27 @@
 //---------------------------------------------------------------------------
 tTJSNI_Window *TVPMainWindow = nullptr; // main window
 static std::vector<tTJSNI_Window *> TVPWindowVector;
+
+//---------------------------------------------------------------------------
+// 模态窗口（KAG 的 Window.showModal）
+//---------------------------------------------------------------------------
+// Win32 上模态对话框是独立 HWND，鼠标消息天然送到它自己；本移植只有一张
+// surface，输入一律发给 TVPMainWindow —— 于是对话框"看得见、点不动"（真机
+// 2026-09-18 13:48 实证）。这里维护当前模态窗口，输入派发优先发给它，
+// 主窗口在模态期间不再接收输入（也避免了脚本在 Conductor 阻塞时被重入）。
+static tTJSNI_Window *TVPActiveModalWindow = nullptr;
+
+void TVPAddModalWindow(tTJSNI_Window *window) {
+    if(window)
+        TVPActiveModalWindow = window;
+}
+
+void TVPRemoveModalWindow(tTJSNI_Window *window) {
+    if(TVPActiveModalWindow == window)
+        TVPActiveModalWindow = nullptr;
+}
+
+tTJSNI_Window *TVPGetActiveModalWindow() { return TVPActiveModalWindow; }
 //---------------------------------------------------------------------------
 static void TVPRegisterWindowToList(tTJSNI_Window *window) {
     if(TVPMainWindow == nullptr && TVPWindowVector.size() == 0) {

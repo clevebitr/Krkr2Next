@@ -220,7 +220,11 @@ bool EngineLoop::HandleInputEvent(const EngineInputEvent &event) {
 }
 
 void EngineLoop::HandlePointerDown(const EngineInputEvent &event) {
-    auto *win = TVPMainWindow;
+    // 模态对话框期间输入必须发给模态窗口（见 WindowIntf.h 的 TVPAddModalWindow
+    // 说明）：发给主窗口既点不动对话框，又会在 Conductor 阻塞时重入主窗口脚本。
+    auto *win = TVPGetActiveModalWindow();
+    if(!win)
+        win = TVPMainWindow;
     if(!win)
         return;
 
@@ -283,7 +287,11 @@ void EngineLoop::HandlePointerDown(const EngineInputEvent &event) {
 }
 
 void EngineLoop::HandlePointerMove(const EngineInputEvent &event) {
-    auto *win = TVPMainWindow;
+    // 模态对话框期间输入必须发给模态窗口（见 WindowIntf.h 的 TVPAddModalWindow
+    // 说明）：发给主窗口既点不动对话框，又会在 Conductor 阻塞时重入主窗口脚本。
+    auto *win = TVPGetActiveModalWindow();
+    if(!win)
+        win = TVPMainWindow;
     if(!win)
         return;
 
@@ -299,7 +307,11 @@ void EngineLoop::HandlePointerMove(const EngineInputEvent &event) {
 }
 
 void EngineLoop::HandlePointerUp(const EngineInputEvent &event) {
-    auto *win = TVPMainWindow;
+    // 模态对话框期间输入必须发给模态窗口（见 WindowIntf.h 的 TVPAddModalWindow
+    // 说明）：发给主窗口既点不动对话框，又会在 Conductor 阻塞时重入主窗口脚本。
+    auto *win = TVPGetActiveModalWindow();
+    if(!win)
+        win = TVPMainWindow;
     if(!win)
         return;
 
@@ -348,7 +360,11 @@ void EngineLoop::HandlePointerUp(const EngineInputEvent &event) {
 }
 
 void EngineLoop::HandlePointerScroll(const EngineInputEvent &event) {
-    auto *win = TVPMainWindow;
+    // 模态对话框期间输入必须发给模态窗口（见 WindowIntf.h 的 TVPAddModalWindow
+    // 说明）：发给主窗口既点不动对话框，又会在 Conductor 阻塞时重入主窗口脚本。
+    auto *win = TVPGetActiveModalWindow();
+    if(!win)
+        win = TVPMainWindow;
     if(!win)
         return;
 
@@ -367,7 +383,11 @@ void EngineLoop::HandlePointerScroll(const EngineInputEvent &event) {
 }
 
 void EngineLoop::HandleKeyDown(const EngineInputEvent &event) {
-    auto *win = TVPMainWindow;
+    // 模态对话框期间输入必须发给模态窗口（见 WindowIntf.h 的 TVPAddModalWindow
+    // 说明）：发给主窗口既点不动对话框，又会在 Conductor 阻塞时重入主窗口脚本。
+    auto *win = TVPGetActiveModalWindow();
+    if(!win)
+        win = TVPMainWindow;
     if(!win)
         return;
 
@@ -389,7 +409,11 @@ void EngineLoop::HandleKeyDown(const EngineInputEvent &event) {
 }
 
 void EngineLoop::HandleKeyUp(const EngineInputEvent &event) {
-    auto *win = TVPMainWindow;
+    // 模态对话框期间输入必须发给模态窗口（见 WindowIntf.h 的 TVPAddModalWindow
+    // 说明）：发给主窗口既点不动对话框，又会在 Conductor 阻塞时重入主窗口脚本。
+    auto *win = TVPGetActiveModalWindow();
+    if(!win)
+        win = TVPMainWindow;
     if(!win)
         return;
 
@@ -405,7 +429,11 @@ void EngineLoop::HandleKeyUp(const EngineInputEvent &event) {
 }
 
 void EngineLoop::HandleTextInput(const EngineInputEvent &event) {
-    auto *win = TVPMainWindow;
+    // 模态对话框期间输入必须发给模态窗口（见 WindowIntf.h 的 TVPAddModalWindow
+    // 说明）：发给主窗口既点不动对话框，又会在 Conductor 阻塞时重入主窗口脚本。
+    auto *win = TVPGetActiveModalWindow();
+    if(!win)
+        win = TVPMainWindow;
     if(!win)
         return;
 
