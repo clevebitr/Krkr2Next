@@ -133,9 +133,11 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 >    **未接线（明确标注）**：`xp3SegmentCacheBytes`（XP3Archive.cpp 里是静态初始化期定型的
 >    全局，需"策略变更通知"或惰性计算，代码内留 TODO）、`archiveRoot`（包内根目录先/后）、
 >    `mountSiblingsForArchiveProject`（档案工程挂兄弟 patch*.xp3，与 I3 一并处理）。
-> 6. ⬜ `ncbind`（模块注册表）是 io 仍依赖的**层相关**设施之一：`TVPIsExistentStorage`
->    要回答 `.dll/.tpm` 是否存在（见 §5.1 I 系列与 `IModuleLocator` 的设想）。最终应改为
->    注入式查询（io 不认识插件注册表），这是"两层共用同一 IO 组件、互不重复实现"的关键一步。
+> 6. ✅ 模块存在性查询改注入式：`io/IoModuleLocator.{h,cpp}`（`SetModuleLocator`/`HasModule`），
+>    `core/plugin` 在 `TVPLoadInternalPlugins()` 的 `AllRegist()` **之前**注入
+>    `ncbAutoRegister::HasModule`（注入前 io 返回 false = "注册表还没填充"，行为不变）。
+>    io 源码现在不再 include 插件头、也不引用插件注册表符号（可用
+>    `grep -rn "ncbind\|ncbAutoRegister" cpp/core/io/` 复核）。
 
 | **M2** | 层 A：TJS2 内核兼容读写（未定义全局回退 + 启动期可写白名单） | AetherKiri 层内 | 见 §5 清单 |
 | **M3** | 层 B：KAGWindow / krkrgles 脚本别名与绘制设备接管 | AetherKiri 层内 | 见 §5 清单 |
