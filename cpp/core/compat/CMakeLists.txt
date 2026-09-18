@@ -5,6 +5,7 @@ set(COMPAT_PATH ${CMAKE_CURRENT_LIST_DIR})
 
 add_library(${PROJECT_NAME} STATIC
     ${COMPAT_PATH}/CompatLayer.cpp
+    ${COMPAT_PATH}/ModuleGate.cpp
 )
 
 # 自身要能解析 `io/StoragePolicy.h`：cpp/core 必须在本模块的包含路径里。

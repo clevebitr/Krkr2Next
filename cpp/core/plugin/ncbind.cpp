@@ -1,4 +1,5 @@
 #include "ncbind.hpp"
+#include "compat/ModuleGate.h"
 #include <set>
 #include <spdlog/spdlog.h>
 
@@ -80,6 +81,10 @@ bool ncbAutoRegister::LoadModule(const ttstr &_name)
         spdlog::info("ncbAutoRegister::LoadModule('{}'): 按模块别名解析到 '{}'",
                      requested.AsStdString(), name.AsStdString());
     }
+	// 层归属门：登记为其它层专属的模块在当前层不注册（见 compat/ModuleGate.h）。
+	if (!krkr::compat::AllowModuleLoad(name)) {
+		return false;
+	}
 	if (TVPRegisteredPlugins.find(name) != TVPRegisteredPlugins.end()) {
         spdlog::trace("ncbAutoRegister::LoadModule('{}'): already registered",
                       name.AsStdString());
@@ -175,6 +180,9 @@ void ncbAutoRegister::LoadAllModules()
 	for (auto &kv : _internal_plugins) {
 		const ttstr &name = kv.first;
 		if (TVPRegisteredPlugins.find(name) != TVPRegisteredPlugins.end())
+			continue;
+		// 层归属门：见 compat/ModuleGate.h（未登记归属的模块一律放行）。
+		if (!krkr::compat::AllowModuleLoad(name))
 			continue;
         spdlog::trace("ncbAutoRegister::LoadAllModules: register '{}'",
                       name.AsStdString());

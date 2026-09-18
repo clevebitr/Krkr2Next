@@ -39,6 +39,9 @@ target_sources(${PROJECT_NAME} PUBLIC
     # Krkr2Compat 纯 TJS 兼容层（k2compat.dll）。默认不执行，只有显式开启引擎
     # 选项 k2compat_scripts=1 时才在框架就绪后安装（见 zcompat_plugin.cpp）。
     zcompat/k2compat_scripts.cpp
+    # AetherKiri 层专属的插件模拟（层归属见 compat/ModuleGate.h；来源与改动见
+    # compat/upstream/aetherkiri_ports.json）。
+    compat/aetherkiri/legacy_zlib_version.cpp
     compatLegacyPlugins.cpp
 )
 
@@ -56,6 +59,9 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     ${KRKR2CORE_PATH}/utils/win32
     ${KRKR2CORE_PATH}/visual
 )
+
+find_package(ZLIB REQUIRED)
+target_link_libraries(${PROJECT_NAME} PRIVATE ZLIB::ZLIB)
 
 add_definitions(-D__STDC_CONSTANT_MACROS -DTJS_TEXT_OUT_CRLF)
 

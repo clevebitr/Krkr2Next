@@ -31,7 +31,8 @@
     "none": "与上游逐字节一致",
     "api-shim": "为适配本仓库的 API 差异做了改动（通常是 UpstreamCompat.h 相关）",
     "bridge-substituted": "上游的渲染/宿主桥接被替换为本仓库的实现",
-    "local-fix": "在本仓库做的独立修复，上游没有"
+    "local-fix": "在本仓库做的独立修复，上游没有",
+    "partial-extract": "只抽取了上游文件里的**部分**实现（片段移植）：upstream 字段指向来源文件，source_ref 记录片段范围；sha256_upstream_at_rev 记的是**整个上游文件**在该 rev 的哈希，用来提示'上游这个文件变了，请复核我抽的那段'。"
   },
   "ported": [
     {
@@ -65,6 +66,15 @@
       "reason": "变量持久化插件。可作为「API 兼容性」的活样本：能保持逐字节一致即说明插件层未分叉。",
       "sha256_local": "ee1ef347a657dabb15ca03be8581d271e338b2775a28dded9b5e82e411a0f026",
       "sha256_upstream_at_rev": "ee1ef347a657dabb15ca03be8581d271e338b2775a28dded9b5e82e411a0f026"
+    },
+    {
+      "local": "cpp/plugins/compat/aetherkiri/legacy_zlib_version.cpp",
+      "upstream": "cpp/plugins/compatLegacyPlugins.cpp",
+      "source_ref": "cpp/plugins/compatLegacyPlugins.cpp:199-331（zlib.dll 与 version.dll 两段）",
+      "modifications": "partial-extract",
+      "reason": "AetherKiri 兼容层插件 zlib.dll / version.dll：KRKRZ 系游戏会 link 这两个模块并直接调用 Zlib.compress/uncompress、Version.versionString。两种 local-fix：(1) Version.engine 返回本引擎名（上游写死 AetherKiri）；(2) 登记为 AetherKiri 层专属模块（本仓库的层机制，见 compat/ModuleGate.h）。",
+      "sha256_local": "2aea1b9d5ef204e3cb6517624c28d79fc26c59bf77a9f0df1ad61a0477544f09",
+      "sha256_upstream_at_rev": "7ef60c81e5d7c53c14c9ff4f1bde2d97776f0ccd781396bd050d8bec3335a4a9"
     }
   ],
   "not_ported": [
