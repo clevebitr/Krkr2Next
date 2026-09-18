@@ -85,6 +85,23 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 >   `SetActiveLayerByName()`，`auto` 与其余档一律保持旧层；壳侧 `RunMode.AETHERKIRI` 可逐游戏选择。
 > - 边界：策略**只登记取值**，尚未接到 `StorageIntf/StorageImpl` 的实现（M1.2–M1.6 的工作）；
 >   未接通前对运行时行为零影响。
+> - `cpp/core/io/` 已开张（目标 `core_io_module`，只链 tjs2）：`IoPath.cpp` 收编了
+>   `TVPArchiveDelimiter` 的定义与 `TVPExtractStorageExt/Name/Path`、`TVPChopStorageExt`；
+>   依赖方向固定为 `core_base_module -> core_io_module`，**反向引用会造成静态库循环**，
+>   这是后续搬迁必须遵守的约束（见 `cpp/core/io/CMakeLists.txt` 注释）。
+>
+> **IO 搬迁顺序（后续轮次按此执行，每步都要求行为等价 + CI 绿）**：
+> 1. 媒体注册表（`tTVPStorageMediaManager` + `TVPRegister/UnregisterStorageMedia` +
+>    `TVPNormalizeStorageName`/`TVPSetCurrentDirectory`/`TVPGetLocalName`/
+>    `TVPGetLocallyAccessibleName`）**必须与** `tTVPFileMedia`（本地文件媒体提供者，
+>    含 NFC 规范化与大小写不敏感回退）**同一提交搬入**：前者构造时要 `TVPCreateFileMedia()`，
+>    分开搬会让 io 反向依赖 base。搬完后 `StorageImpl.cpp` 只剩启动挂载与补丁优先级。
+> 2. auto-path 表与放置路径搜索（`TVPAutoPathList`/缓存/`TVPAddAutoPath`/
+>    `TVPRebuildAutoPathTable`/`TVPGetPlacedPath`/`TVPSearchPlacedPath`/`TVPIsExistentStorage`/
+>    `TVPCreateStream`）—— 依赖上一步的媒体注册表，以及 `TVPOpenArchive`（归档工厂，可先用
+>    转发）。
+> 3. 归档工厂与后端（`tTVPArchive` + `TVPOpenArchive` + XP3/ZIP/7z/TAR 的注册）→ io。
+> 4. TJS `Storages` 门面（`tTJSNC_Storages`）→ io；`StorageIntf.h` 从此只剩声明 + 门面转发。
 
 | **M2** | 层 A：TJS2 内核兼容读写（未定义全局回退 + 启动期可写白名单） | AetherKiri 层内 | 见 §5 清单 |
 | **M3** | 层 B：KAGWindow / krkrgles 脚本别名与绘制设备接管 | AetherKiri 层内 | 见 §5 清单 |
