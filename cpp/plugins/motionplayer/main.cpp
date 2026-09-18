@@ -998,9 +998,15 @@ static tjs_error Player_progress(tTJSVariant *, tjs_int count, tTJSVariant **p,
     if(!player || count < 1)
         return TJS_E_INVALIDPARAM;
     // 游戏自己在推进：自动驱动让路（见驱动注释）。
-    player->noteManualProgress();
-    const bool finished =
-        player->progress(static_cast<tjs_int>(p[0]->AsInteger()));
+    // ⚠️ 但 **delta=0 不算"在推进"**：时间线不会前进（_tickCount 不变），而自动驱动
+    // 会因为"最近有人调过 progress"而让路 —— 动画就永远停在 frame 0。真机实证
+    // （千恋万花 SD 动效）：同一个 player 两次 draw 相隔 1.1s，tick 仍然 = 0，画面
+    // 只有 UI。E-mote 的 progress(delta_ms) 里 delta=0 语义就是"时间没走"，忽略它
+    // 不会误伤：真在驱动时间线的游戏必然传非 0 值。
+    const tjs_int progressDeltaMs = static_cast<tjs_int>(p[0]->AsInteger());
+    if(progressDeltaMs != 0)
+        player->noteManualProgress();
+    const bool finished = player->progress(progressDeltaMs);
     // 动画时钟探针（只记前 5 次 + 每 600 次一条心跳）：PSB 动画靠游戏每帧调
     // `Player.progress(ms)` 推进时间线、再 `Player.draw(layer)` 出帧。真机实测
     // `drawAnimated: drew N at tick=0` 每次都停在 0 —— 这条日志用来分清"游戏根本
@@ -1013,8 +1019,7 @@ static tjs_error Player_progress(tTJSVariant *, tjs_int count, tTJSVariant **p,
             if(lg)
                 lg->info("MCP Player.progress: 第 {} 次 player={} delta={}ms -> "
                          "tick={}",
-                         n, static_cast<const void *>(player),
-                         static_cast<tjs_int>(p[0]->AsInteger()),
+                         n, static_cast<const void *>(player), progressDeltaMs,
                          player->getTickCount());
         }
     }

@@ -1,4 +1,5 @@
 #include "PSBFile.h"
+#include <atomic>
 
 #include <iostream>
 #include <memory>
@@ -521,9 +522,30 @@ namespace PSB {
             return false;
         }
 
-        if(_header.version > 3) {
-            LOGGER->critical("not support psb file format version > 3");
+        // 版本 4 是合法且**下面已有完整处理**的格式（extra chunk offsets/lengths，
+        // 见下方 `if(_header.version >= 4)`；PSBHeader.h 也照参考实现解析 v4 的
+        // 附加字段）。此前这条写成 `> 3` 直接拒收 —— NEKOPARA 4 的动态立绘（E-mote）
+        // 全是 v4 PSB，真机因此报：
+        //     [critical] not support psb file format version > 3
+        //     [error] emote load file: lzfs://./e-moteショコラ冬制服b.psb failed
+        // → 立绘全空。参考实现（AetherKiri psbfile/PSBFile.cpp）允许到 v4，这里
+        // 与之对齐。
+        if(_header.version > 4) {
+            LOGGER->critical("not support psb file format version > 4 (version={})",
+                             static_cast<int>(_header.version));
             return false;
+        }
+
+        // 版本探针（只在出现**新版本**时记一条）：v4 支持是否真的生效、游戏用的是
+        // 哪一版，一眼可见，不用再猜。
+        {
+            static std::atomic<int> s_maxLoggedVersion{ 0 };
+            const int version = static_cast<int>(_header.version);
+            if(version > s_maxLoggedVersion.load(std::memory_order_relaxed)) {
+                s_maxLoggedVersion.store(version, std::memory_order_relaxed);
+                LOGGER->info("PSB 版本 {} 首次出现（file={}）", version,
+                             filePath.AsStdString());
+            }
         }
 
         // Pre Load Strings
