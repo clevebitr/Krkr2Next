@@ -232,3 +232,28 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 - 改动移植文件后运行 `python3 scripts/check_port_drift.py --update` 更新哈希，否则校验失败；
   这是刻意的：漂移必须被显式承认。
 - 上游 rev 变更（`upstream.rev`）需要单独一轮同步，不与功能改动混在一起。
+
+## 7. 暂停点与恢复指引（2026-09-18 暂停）
+
+用户要求暂停。恢复时按下面的顺序继续，**每一步都要求 CI 绿**：
+
+1. **M2（A 块，已裁决：只给 AetherKiri 层开启）** —— 具体步骤已勘察完毕，可直接开工：
+   - 在 tjs2 内加一个开关（建议 `TJSSetCompatFallbacksEnabled(bool)`，声明放 `tjsObject.h`），
+     io/compat 不反向依赖 tjs2 以外的东西：由 `krkr::compat::SetActiveLayer()` 注入
+     （compat -> tjs2 是既有方向，不要反过来）。
+   - 移植 `AetherKiri/cpp/core/tjs2/tjsObject.cpp:249-308` 的
+     `TJSCompatGlobalFallbackName`（34 个名字，`LayerClass`→`Layer`）+ `TJSCompatResolveGlobalFallback`
+     （含 `thread_local resolving` 重入保护，**不能省**），调用点在本仓库
+     `cpp/core/tjs2/tjsObject.cpp` 的 `tTJSCustomObject::PropGet` 未命中分支
+     （对应 AK `:1797-1813`；本仓库 CallGetMissing 之后的 MEMBERNOTFOUND 处）。
+   - 余下三项（`TJSCompatResolveStartupFallback` / `KagRuntimeFallback` / `TextRenderRenderCount` /
+     `TouchImage`，AK `:41-247`、`:310-397`）随后同法移植。
+   - **A3 白名单**（8 个名字，`tjsObjectExtendable.cpp:9-19` + `:96-105` 的 PropSet 重试）已裁决
+     **两层都要**：它只有 17 行、无依赖，可独立先落。
+2. **M1 收尾的两项**（`archiveRoot`、`mountSiblingsForArchiveProject`）等用户对 **I3** 的裁决：
+   是否让 classic 层也在"档案工程启动（`.../data.xp3>`）"时挂载兄弟 `patch*.xp3`。
+3. **M4（C 块）**：C1 `taglist` + `copyTag`（两层）、C4 `.scn` 容错成对移植；C3
+   `GetNextTag` 文本段聚合**只给 AetherKiri 层**（会改 `kag.curLine/curPos` 与存档位置语义）。
+
+真机验证清单（每轮都可复用）：读档、动态立绘、`kag 档接管完成（…别名 N/4…）`、
+`io policy: tie-break=… patch-rule=…`、选 AetherKiri 档时的 `module gate:` 与 `Zlib`/`Version`。
