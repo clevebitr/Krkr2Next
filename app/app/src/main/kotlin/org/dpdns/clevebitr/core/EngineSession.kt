@@ -761,6 +761,14 @@ class EngineSession(
 
     /** 渲染线程：按固定间隔采样引擎统计，填 [cachedMemoryStats] / [rendererInfoCache]。 */
     private fun sampleEngineInfoIfDue(frameTimeNanos: Long) {
+        // ⚠️ **启动期绝不采样**（startup 还在 worker 线程里跑时）：
+        //  - engineGetRendererInfo 会 egl.MakeCurrent() + glGetString，而异步启动期间
+        //    EGL 上下文是 worker 线程 current 的 —— 从渲染线程抢过来会破坏 worker 的
+        //    GL 状态并把它卡死。真机 2026-09-18 14:17 的现象正是如此：千恋万花（KAG 档，
+        //    启动期要建 GL 纹理）卡在"正在打开游戏"直到 ANR，而 off 档的另一个游戏
+        //    （启动期不碰 GL）能正常进。
+        //  - engineGetMemoryStats 里的 autopath/PSB 缓存统计也会与 worker 的路径表重建抢锁。
+        if (lastReportedState != NativeEngine.STARTUP_SUCCEEDED) return
         if (lastEngineInfoSampleNanos != 0L &&
             frameTimeNanos - lastEngineInfoSampleNanos < ENGINE_INFO_SAMPLE_NANOS
         ) {
@@ -794,9 +802,12 @@ class EngineSession(
             )
         }
 
-        val written = NativeEngine.engineGetRendererInfo(h, rendererInfoBuffer)
-        if (written > 0) {
-            rendererInfoCache = String(rendererInfoBuffer, 0, written, Charsets.UTF_8)
+        // GL_RENDERER/GL_VERSION 是静态串：启动完成后取一次就够，不再每 500ms 动 EGL。
+        if (rendererInfoCache.isEmpty()) {
+            val written = NativeEngine.engineGetRendererInfo(h, rendererInfoBuffer)
+            if (written > 0) {
+                rendererInfoCache = String(rendererInfoBuffer, 0, written, Charsets.UTF_8)
+            }
         }
     }
 

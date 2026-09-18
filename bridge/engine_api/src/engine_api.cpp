@@ -3034,6 +3034,16 @@ engine_result_t engine_get_renderer_info(engine_handle_t handle,
             "engine_open_game must succeed before engine_get_renderer_info");
     }
 
+    // 异步启动期间 EGL 上下文是 worker 线程 current 的：这里若 MakeCurrent 就会把
+    // 上下文从 worker 手里抢走，破坏它的 GL 状态（真机 14:17 表现：KAG 档游戏卡在
+    // "正在打开游戏"直到 ANR）。宁可返回"启动期不可用"，让调用方启动完成后再问。
+    if(g_runtime_startup_active && g_runtime_startup_owner == handle) {
+        return SetHandleErrorAndReturnLocked(
+            impl, ENGINE_RESULT_STARTUP_PENDING,
+            "engine_get_renderer_info is unavailable while the async startup is "
+            "still running (EGL context belongs to the startup thread)");
+    }
+
     auto &egl = krkr::GetEngineEGLContext();
     if(!egl.IsValid()) {
         return SetHandleErrorAndReturnLocked(impl, ENGINE_RESULT_INVALID_STATE,
