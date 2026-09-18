@@ -741,10 +741,24 @@ static tjs_error Player_setEnableD3D(tTJSVariant *, tjs_int count,
     return TJS_S_OK;
 }
 
+// 取实例内部真正的 motion::Player。
+//
+// 两种实例都要支持：Motion.Player 本身就是 Player；Motion.EmotePlayer 是持有
+// Player 的壳层（NEKOPARA 4 的 system/AffineSourceMotion.tjs 用后者创建动态立
+// 绘）。Player_* 全套回调都经这里取实例，所以两条路径共用一份实现。
+static motion::Player *GetPlayerInstance(iTJSDispatch2 *objthis) {
+    if(auto *player =
+           ncbInstanceAdaptor<motion::Player>::GetNativeInstance(objthis))
+        return player;
+    if(auto *emote =
+           ncbInstanceAdaptor<motion::EmotePlayer>::GetNativeInstance(objthis))
+        return &emote->player();
+    return nullptr;
+}
+
 static tjs_error Player_setVariable(tTJSVariant *r, tjs_int count,
                                     tTJSVariant **p, iTJSDispatch2 *objthis) {
-    auto *player =
-        ncbInstanceAdaptor<motion::Player>::GetNativeInstance(objthis);
+    auto *player = GetPlayerInstance(objthis);
     if(!player || count < 2)
         return TJS_E_INVALIDPARAM;
     player->setVariable(ttstr(*p[0]), *p[1]);
@@ -755,17 +769,12 @@ static tjs_error Player_setVariable(tTJSVariant *r, tjs_int count,
 
 static tjs_error Player_getVariable(tTJSVariant *r, tjs_int count,
                                     tTJSVariant **p, iTJSDispatch2 *objthis) {
-    auto *player =
-        ncbInstanceAdaptor<motion::Player>::GetNativeInstance(objthis);
+    auto *player = GetPlayerInstance(objthis);
     if(!player || count < 1)
         return TJS_E_INVALIDPARAM;
     if(r)
         *r = player->getVariable(ttstr(*p[0]));
     return TJS_S_OK;
-}
-
-static motion::Player *GetPlayerInstance(iTJSDispatch2 *objthis) {
-    return ncbInstanceAdaptor<motion::Player>::GetNativeInstance(objthis);
 }
 
 static tjs_error Player_getPlaying(tTJSVariant *r, tjs_int, tTJSVariant **,
@@ -1181,63 +1190,349 @@ static tjs_error Player_draw(tTJSVariant *, tjs_int count, tTJSVariant **p,
     return TJS_S_OK;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 宽容回调：本引擎没有实现的 emote 成员一律"收下参数、返回空值"
+//
+// 为什么必须给成员而不能让它缺：TJS 里访问不存在的成员会抛
+// `Member "x" does not exist`，异常会打断调用它的整段脚本（NEKOPARA 4 的
+// createPlayer/removePlayer 就是这么把动态立绘与读档流程一起毁掉的）。返回空值
+// 最坏只是少一层差分表情/少一次物理抖动，脚本能继续跑。
+// ─────────────────────────────────────────────────────────────────────────────
+static tjs_error MotionPlayer_ignoreArgs(tTJSVariant *, tjs_int, tTJSVariant **,
+                                         iTJSDispatch2 *) {
+    return TJS_S_OK;
+}
+
+static tjs_error MotionPlayer_getVoid(tTJSVariant *r, tjs_int, tTJSVariant **,
+                                      iTJSDispatch2 *) {
+    if(r)
+        r->Clear();
+    return TJS_S_OK;
+}
+
+static tjs_error MotionPlayer_getFalse(tTJSVariant *r, tjs_int, tTJSVariant **,
+                                       iTJSDispatch2 *) {
+    if(r)
+        *r = tTJSVariant(false);
+    return TJS_S_OK;
+}
+
+static tjs_error MotionPlayer_getZero(tTJSVariant *r, tjs_int, tTJSVariant **,
+                                      iTJSDispatch2 *) {
+    if(r)
+        *r = tTJSVariant(static_cast<tjs_int>(0));
+    return TJS_S_OK;
+}
+
+static tjs_error MotionPlayer_getEmptyArray(tTJSVariant *r, tjs_int,
+                                            tTJSVariant **, iTJSDispatch2 *) {
+    if(r) {
+        if(iTJSDispatch2 *arr = TJSCreateArrayObject()) {
+            *r = tTJSVariant(arr);
+            arr->Release();
+        } else {
+            r->Clear();
+        }
+    }
+    return TJS_S_OK;
+}
+
+static motion::EmotePlayer *GetEmotePlayerInstance(iTJSDispatch2 *objthis) {
+    return ncbInstanceAdaptor<motion::EmotePlayer>::GetNativeInstance(objthis);
+}
+
+static tjs_error Player_getMaskMode(tTJSVariant *r, tjs_int, tTJSVariant **,
+                                    iTJSDispatch2 *objthis) {
+    auto *player = GetPlayerInstance(objthis);
+    if(r)
+        *r = tTJSVariant(player ? player->getMaskMode()
+                                : static_cast<tjs_int>(MaskModeAlpha));
+    return TJS_S_OK;
+}
+
+static tjs_error Player_setMaskMode(tTJSVariant *, tjs_int count,
+                                    tTJSVariant **p,
+                                    iTJSDispatch2 *objthis) {
+    auto *player = GetPlayerInstance(objthis);
+    if(!player || count < 1)
+        return TJS_E_INVALIDPARAM;
+    player->setMaskMode(static_cast<tjs_int>(p[0]->AsInteger()));
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_getHairScale(tTJSVariant *r, tjs_int, tTJSVariant **,
+                                          iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(r)
+        *r = tTJSVariant(e ? e->getHairScale() : 1.0);
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_setHairScale(tTJSVariant *, tjs_int count,
+                                          tTJSVariant **p,
+                                          iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(e && count >= 1)
+        e->setHairScale(static_cast<double>(p[0]->AsReal()));
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_getPartsScale(tTJSVariant *r, tjs_int,
+                                           tTJSVariant **,
+                                           iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(r)
+        *r = tTJSVariant(e ? e->getPartsScale() : 1.0);
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_setPartsScale(tTJSVariant *, tjs_int count,
+                                           tTJSVariant **p,
+                                           iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(e && count >= 1)
+        e->setPartsScale(static_cast<double>(p[0]->AsReal()));
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_getBustScale(tTJSVariant *r, tjs_int, tTJSVariant **,
+                                          iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(r)
+        *r = tTJSVariant(e ? e->getBustScale() : 1.0);
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_setBustScale(tTJSVariant *, tjs_int count,
+                                          tTJSVariant **p,
+                                          iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(e && count >= 1)
+        e->setBustScale(static_cast<double>(p[0]->AsReal()));
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_getBodyScale(tTJSVariant *r, tjs_int, tTJSVariant **,
+                                          iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(r)
+        *r = tTJSVariant(e ? e->getBodyScale() : 1.0);
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_setBodyScale(tTJSVariant *, tjs_int count,
+                                          tTJSVariant **p,
+                                          iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(e && count >= 1)
+        e->setBodyScale(static_cast<double>(p[0]->AsReal()));
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_getVisible(tTJSVariant *r, tjs_int, tTJSVariant **,
+                                        iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(r)
+        *r = tTJSVariant(e ? e->getVisible() : true);
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_setVisible(tTJSVariant *, tjs_int count,
+                                        tTJSVariant **p,
+                                        iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(e && count >= 1)
+        e->setVisible(p[0]->AsInteger() != 0);
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_getSmoothing(tTJSVariant *r, tjs_int, tTJSVariant **,
+                                          iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(r)
+        *r = tTJSVariant(e ? e->getSmoothing() : false);
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_setSmoothing(tTJSVariant *, tjs_int count,
+                                          tTJSVariant **p,
+                                          iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(e && count >= 1)
+        e->setSmoothing(p[0]->AsInteger() != 0);
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_getQueing(tTJSVariant *r, tjs_int, tTJSVariant **,
+                                       iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(r)
+        *r = tTJSVariant(e ? e->getQueing() : false);
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_setQueing(tTJSVariant *, tjs_int count,
+                                       tTJSVariant **p,
+                                       iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(e && count >= 1)
+        e->setQueing(p[0]->AsInteger() != 0);
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_getMotionKey(tTJSVariant *r, tjs_int, tTJSVariant **,
+                                          iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(r)
+        *r = tTJSVariant(e ? e->getMotionKey() : ttstr());
+    return TJS_S_OK;
+}
+
+static tjs_error EmotePlayer_setMotionKey(tTJSVariant *, tjs_int count,
+                                          tTJSVariant **p,
+                                          iTJSDispatch2 *objthis) {
+    auto *e = GetEmotePlayerInstance(objthis);
+    if(e && count >= 1)
+        e->setMotionKey(ttstr(*p[0]));
+    return TJS_S_OK;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Motion.Player 与 Motion.EmotePlayer 共用的成员表
+//
+// Motion.EmotePlayer 是"持有 Player"的壳层，GetPlayerInstance() 会把壳层内部的
+// Player 交出来，因此同一份回调、同一份成员表对两种实例都成立。用宏而不是复制
+// 两遍，避免两边漂移（NEKOPARA 4 的动态立绘走 EmotePlayer，千恋万花走 Player，
+// 两边必须同时具备 play/progress/draw/setVariable 这套接口）。
+// ─────────────────────────────────────────────────────────────────────────────
+#define MOTION_PLAYER_COMMON_MEMBERS()                                        \
+    NCB_PROPERTY_RAW_CALLBACK(useD3D, Player_getUseD3D, Player_setUseD3D,     \
+                              TJS_STATICMEMBER);                              \
+    NCB_PROPERTY_RAW_CALLBACK(enableD3D, Player_getEnableD3D,                 \
+                              Player_setEnableD3D, TJS_STATICMEMBER);         \
+    NCB_PROPERTY_RAW_CALLBACK_RO(playing, Player_getPlaying, 0);              \
+    NCB_PROPERTY_RAW_CALLBACK_RO(allplaying, Player_getAllplaying, 0);        \
+    NCB_PROPERTY_RAW_CALLBACK(motion, Player_getMotion, Player_setMotion, 0); \
+    NCB_PROPERTY_RAW_CALLBACK(chara, Player_getChara, Player_setChara, 0);    \
+    NCB_PROPERTY_RAW_CALLBACK(tickCount, Player_getTickCount,                 \
+                              Player_setTickCount, 0);                        \
+    NCB_PROPERTY_RAW_CALLBACK(lastTime, Player_getLastTime, Player_setLastTime, \
+                              0);                                             \
+    NCB_PROPERTY_RAW_CALLBACK(speed, Player_getSpeed, Player_setSpeed, 0);    \
+    NCB_PROPERTY_RAW_CALLBACK(completionType, Player_getCompletionType,       \
+                              Player_setCompletionType, 0);                   \
+    /* loopTime/animating: Yuzusoft canSync() 的同步查询属性，见 Player.h */   \
+    /* loopTime/animating: sync-query properties read by Yuzusoft canSync(). */\
+    NCB_PROPERTY_RAW_CALLBACK(loopTime, Player_getLoopTime, Player_setLoopTime, \
+                              0);                                             \
+    NCB_PROPERTY_RAW_CALLBACK(animating, Player_getAnimating,                 \
+                              Player_setAnimating, 0);                        \
+    /* outline/zpos: getOptions() 遍历的成员，缺失会抛错卡白屏。 */            \
+    /* outline/zpos: enumerated by getOptions(); missing members throw. */    \
+    NCB_PROPERTY_RAW_CALLBACK(outline, Player_getOutline, Player_setOutline, 0); \
+    NCB_PROPERTY_RAW_CALLBACK(zpos, Player_getZpos, Player_setZpos, 0);       \
+    NCB_PROPERTY_RAW_CALLBACK_RO(variableKeys, Player_getVariableKeys, 0);    \
+    /* emote 脚本会读的遮挡/同步/描边透传成员（宽容实现）。 */                 \
+    /* maskMode/sync/outline pass-through members used by emote scripts. */   \
+    NCB_PROPERTY_RAW_CALLBACK(maskMode, Player_getMaskMode, Player_setMaskMode, \
+                              0);                                             \
+    NCB_PROPERTY_RAW_CALLBACK_RO(syncWaiting, MotionPlayer_getFalse, 0);      \
+    NCB_PROPERTY_RAW_CALLBACK_RO(syncActive, MotionPlayer_getFalse, 0);       \
+    NCB_METHOD_RAW_CALLBACK(play, Player_play, 0);                            \
+    NCB_METHOD_RAW_CALLBACK(stop, Player_stop, 0);                            \
+    NCB_METHOD_RAW_CALLBACK(progress, Player_progress, 0);                    \
+    NCB_METHOD_RAW_CALLBACK(skip, MotionPlayer_ignoreArgs, 0);                \
+    NCB_METHOD_RAW_CALLBACK(skipToSync, Player_skipToSync, 0);                \
+    NCB_METHOD_RAW_CALLBACK(pass, MotionPlayer_ignoreArgs, 0);                \
+    NCB_METHOD_RAW_CALLBACK(releaseSyncWait, MotionPlayer_ignoreArgs, 0);     \
+    NCB_METHOD_RAW_CALLBACK(setDrawAffineTranslateMatrix,                     \
+                            Player_setDrawAffineTranslateMatrix, 0);          \
+    NCB_METHOD_RAW_CALLBACK(setCoord, Player_setCoord, 0);                    \
+    NCB_METHOD_RAW_CALLBACK(contains, Player_contains, 0);                    \
+    NCB_METHOD_RAW_CALLBACK(getCommandList, Player_getCommandList, 0);        \
+    NCB_METHOD_RAW_CALLBACK(getLayerMotion, Player_getLayerMotion, 0);        \
+    NCB_METHOD_RAW_CALLBACK(getLayerGetter, Player_getLayerGetter, 0);        \
+    NCB_METHOD_RAW_CALLBACK(clear, Player_clear, 0);                          \
+    NCB_METHOD_RAW_CALLBACK(draw, Player_draw, 0);                            \
+    NCB_METHOD_RAW_CALLBACK(setVariable, Player_setVariable, 0);              \
+    NCB_METHOD_RAW_CALLBACK(getVariable, Player_getVariable, 0);
+
 NCB_REGISTER_SUBCLASS_DELAY(Player) {
     NCB_CONSTRUCTOR(());
-    NCB_PROPERTY_RAW_CALLBACK(useD3D, Player_getUseD3D, Player_setUseD3D,
-                              TJS_STATICMEMBER);
-    NCB_PROPERTY_RAW_CALLBACK(enableD3D, Player_getEnableD3D,
-                              Player_setEnableD3D, TJS_STATICMEMBER);
-    NCB_PROPERTY_RAW_CALLBACK_RO(playing, Player_getPlaying, 0);
-    NCB_PROPERTY_RAW_CALLBACK_RO(allplaying, Player_getAllplaying, 0);
-    NCB_PROPERTY_RAW_CALLBACK(motion, Player_getMotion, Player_setMotion, 0);
-    NCB_PROPERTY_RAW_CALLBACK(chara, Player_getChara, Player_setChara, 0);
-    NCB_PROPERTY_RAW_CALLBACK(tickCount, Player_getTickCount,
-                              Player_setTickCount, 0);
-    NCB_PROPERTY_RAW_CALLBACK(lastTime, Player_getLastTime, Player_setLastTime,
-                              0);
-    NCB_PROPERTY_RAW_CALLBACK(speed, Player_getSpeed, Player_setSpeed, 0);
-    NCB_PROPERTY_RAW_CALLBACK(completionType, Player_getCompletionType,
-                              Player_setCompletionType, 0);
-    // loopTime/animating: Yuzusoft affinesourcemotion.tjs canSync()
-    // 读取它们做图层 备份/环境转换同步判断，缺失会抛 Member does not exist
-    // 卡白屏（千恋万花实证）。 loopTime/animating: read by canSync() for
-    // backup/env-transition sync; missing members freeze the scene white
-    // (verified on Senren Banka).
-    NCB_PROPERTY_RAW_CALLBACK(loopTime, Player_getLoopTime, Player_setLoopTime,
-                              0);
-    NCB_PROPERTY_RAW_CALLBACK(animating, Player_getAnimating,
-                              Player_setAnimating, 0);
-    // outline: getOptions() 遍历的成员之一（描边宽度），缺失同样抛错卡白屏。
-    // outline: member enumerated by getOptions() (stroke width); missing throws
-    // too.
-    NCB_PROPERTY_RAW_CALLBACK(outline, Player_getOutline, Player_setOutline, 0);
-    // zpos: getOptions() 遍历的另一成员（Z 序/深度），一并补齐。
-    // zpos: another getOptions() enumeration member (Z-order/depth).
-    NCB_PROPERTY_RAW_CALLBACK(zpos, Player_getZpos, Player_setZpos, 0);
-    // variableKeys: getOptions() 拷进选项字典的键名数组（只读，返回空数组）。
-    // variableKeys: key-name array copied into option dict by getOptions() (RO,
-    // empty).
-    NCB_PROPERTY_RAW_CALLBACK_RO(variableKeys, Player_getVariableKeys, 0);
-    NCB_METHOD_RAW_CALLBACK(play, Player_play, 0);
-    NCB_METHOD_RAW_CALLBACK(stop, Player_stop, 0);
-    NCB_METHOD_RAW_CALLBACK(progress, Player_progress, 0);
-    NCB_METHOD_RAW_CALLBACK(skipToSync, Player_skipToSync, 0);
-    NCB_METHOD_RAW_CALLBACK(setDrawAffineTranslateMatrix,
-                            Player_setDrawAffineTranslateMatrix, 0);
-    NCB_METHOD_RAW_CALLBACK(setCoord, Player_setCoord, 0);
-    NCB_METHOD_RAW_CALLBACK(contains, Player_contains, 0);
-    NCB_METHOD_RAW_CALLBACK(getCommandList, Player_getCommandList, 0);
-    NCB_METHOD_RAW_CALLBACK(getLayerMotion, Player_getLayerMotion, 0);
-    NCB_METHOD_RAW_CALLBACK(getLayerGetter, Player_getLayerGetter, 0);
-    NCB_METHOD_RAW_CALLBACK(clear, Player_clear, 0);
-    NCB_METHOD_RAW_CALLBACK(draw, Player_draw, 0);
-    NCB_METHOD_RAW_CALLBACK(setVariable, Player_setVariable, 0);
-    NCB_METHOD_RAW_CALLBACK(getVariable, Player_getVariable, 0);
+    MOTION_PLAYER_COMMON_MEMBERS();
 }
 
 NCB_REGISTER_SUBCLASS_DELAY(EmotePlayer) {
     NCB_CONSTRUCTOR((ResourceManager));
-    NCB_PROPERTY(useD3D, getUseD3D, setUseD3D);
+    // 与 Motion.Player 同一套播放/绘制/变量接口（见 GetPlayerInstance）。
+    MOTION_PLAYER_COMMON_MEMBERS();
+    // ── emote 壳层专有属性（本引擎只存储）──
+    NCB_PROPERTY_RAW_CALLBACK(hairScale, EmotePlayer_getHairScale,
+                              EmotePlayer_setHairScale, 0);
+    NCB_PROPERTY_RAW_CALLBACK(partsScale, EmotePlayer_getPartsScale,
+                              EmotePlayer_setPartsScale, 0);
+    NCB_PROPERTY_RAW_CALLBACK(bustScale, EmotePlayer_getBustScale,
+                              EmotePlayer_setBustScale, 0);
+    NCB_PROPERTY_RAW_CALLBACK(bodyScale, EmotePlayer_getBodyScale,
+                              EmotePlayer_setBodyScale, 0);
+    NCB_PROPERTY_RAW_CALLBACK(visible, EmotePlayer_getVisible,
+                              EmotePlayer_setVisible, 0);
+    NCB_PROPERTY_RAW_CALLBACK(smoothing, EmotePlayer_getSmoothing,
+                              EmotePlayer_setSmoothing, 0);
+    NCB_PROPERTY_RAW_CALLBACK(queing, EmotePlayer_getQueing,
+                              EmotePlayer_setQueing, 0);
+    NCB_PROPERTY_RAW_CALLBACK(motionKey, EmotePlayer_getMotionKey,
+                              EmotePlayer_setMotionKey, 0);
+    NCB_PROPERTY_RAW_CALLBACK_RO(module, MotionPlayer_getVoid, 0);
+    // ── emote 壳层专有方法：本引擎无 Timeline/物理/序列化，全部宽容实现 ──
+    // 说明：这些成员脚本会**无条件**调用，缺失即 `Member "x" does not exist`
+    // 异常并终止播放器/读档（NEKOPARA 4 实证），因此宁可返回空值也不缺成员。
+    NCB_METHOD_RAW_CALLBACK(create, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(initPhysics, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(assignState, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(show, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(hide, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(load, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(loadResource, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(unloadResource, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(unloadUnusedTextures, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(loadImages, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(loadSource, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(findSource, MotionPlayer_getVoid, 0);
+    NCB_METHOD_RAW_CALLBACK(setRot, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(setRotate, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(setScale, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(setMirror, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(setColor, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(moveVariable, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(startWind, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(stopWind, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(setOuterForce, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(getOuterForce, MotionPlayer_getVoid, 0);
+    NCB_METHOD_RAW_CALLBACK(serialize, MotionPlayer_getVoid, 0);
+    NCB_METHOD_RAW_CALLBACK(unserialize, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(clone, MotionPlayer_getVoid, 0);
+    NCB_METHOD_RAW_CALLBACK(getVariableFrameList, MotionPlayer_getEmptyArray, 0);
+    NCB_METHOD_RAW_CALLBACK(countVariables, MotionPlayer_getZero, 0);
+    NCB_METHOD_RAW_CALLBACK(getVariableLabelAt, MotionPlayer_getVoid, 0);
+    // Timeline（差分表情）：一律"没在播"，脚本据此跳过差分绘制而不抛错。
+    NCB_METHOD_RAW_CALLBACK(playTimeline, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(stopTimeline, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(fadeInTimeline, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(fadeOutTimeline, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(setTimelineBlendRatio, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(setTimeline, MotionPlayer_ignoreArgs, 0);
+    NCB_METHOD_RAW_CALLBACK(getMainTimelineLabelList, MotionPlayer_getEmptyArray,
+                            0);
+    NCB_METHOD_RAW_CALLBACK(getDiffTimelineLabelList, MotionPlayer_getEmptyArray,
+                            0);
+    NCB_METHOD_RAW_CALLBACK(getPlayingTimelineInfoList,
+                            MotionPlayer_getEmptyArray, 0);
+    NCB_METHOD_RAW_CALLBACK(getLoopTimeline, MotionPlayer_getFalse, 0);
+    NCB_METHOD_RAW_CALLBACK(isLoopTimeline, MotionPlayer_getFalse, 0);
+    NCB_METHOD_RAW_CALLBACK(getTimelinePlaying, MotionPlayer_getFalse, 0);
+    NCB_METHOD_RAW_CALLBACK(isTimelinePlaying, MotionPlayer_getFalse, 0);
+    NCB_METHOD_RAW_CALLBACK(getTimelineTotalFrameCount, MotionPlayer_getZero, 0);
 }
 
 static tjs_error ResourceManager_unload(tTJSVariant *, tjs_int count,
@@ -1461,12 +1756,53 @@ static iTJSDispatch2 *Create_NC_D3DAdaptor() {
 
 class Motion {
 public:
+    // 枚举常量统一走这个小宏：脚本把它们当**类上的静态成员**读
+    // （NEKOPARA 4 的 createPlayer 第 63 字节就是 `Motion.MaskModeAlpha`），缺失
+    // 即抛 `Member "x" does not exist` 并中断整段脚本。
+    // Enum constants are read as static members of the Motion class object by
+    // game scripts; a missing one throws and aborts the calling function.
+#define MOTION_INT_CONST(name, value)                                        \
+    static tjs_error name(tTJSVariant *r, tjs_int, tTJSVariant **,           \
+                          iTJSDispatch2 *) {                                 \
+        if(r)                                                                \
+            *r = tTJSVariant(static_cast<tjs_int>(value));                    \
+        return TJS_S_OK;                                                     \
+    }
+
     static tjs_error getPlayFlagForce(tTJSVariant *r, tjs_int, tTJSVariant **,
                                       iTJSDispatch2 *) {
         if(r)
             *r = tTJSVariant(static_cast<tjs_int>(1));
         return TJS_S_OK;
     }
+
+    MOTION_INT_CONST(getPlayFlagChain, 2)
+    MOTION_INT_CONST(getPlayFlagAsCan, 4)
+    MOTION_INT_CONST(getPlayFlagJoin, 8)
+    MOTION_INT_CONST(getPlayFlagStealth, 16)
+
+    MOTION_INT_CONST(getLayerTypeObj, 0)
+    MOTION_INT_CONST(getLayerTypeShape, 1)
+    MOTION_INT_CONST(getLayerTypeLayout, 2)
+    MOTION_INT_CONST(getLayerTypeMotion, 3)
+    MOTION_INT_CONST(getLayerTypeParticle, 4)
+    MOTION_INT_CONST(getLayerTypeCamera, 5)
+
+    // MaskModeStencil/Alpha：遮罩模式。NEKOPARA 4 的 affinesourcemotion.tjs
+    // 读 Motion.MaskModeAlpha 决定 maskMode（真机实证的致命缺失项）。
+    MOTION_INT_CONST(getMaskModeStencil, 0)
+    MOTION_INT_CONST(getMaskModeAlpha, 1)
+
+    MOTION_INT_CONST(getTimelinePlayFlagParallel, 1)
+    MOTION_INT_CONST(getTimelinePlayFlagSequential, 2)
+
+    MOTION_INT_CONST(getTransformOrderFlip, 0)
+    MOTION_INT_CONST(getTransformOrderAngle, 1)
+    MOTION_INT_CONST(getTransformOrderZoom, 2)
+    MOTION_INT_CONST(getTransformOrderSlant, 3)
+
+    MOTION_INT_CONST(getCoordinateRecutangularXY, 0)
+    MOTION_INT_CONST(getCoordinateRecutangularXZ, 1)
 
     static tjs_error getShapeTypePoint(tTJSVariant *r, tjs_int, tTJSVariant **,
                                        iTJSDispatch2 *) {
@@ -1542,12 +1878,60 @@ private:
     inline static bool _enableD3D;
 };
 
+#undef MOTION_INT_CONST
+
 NCB_REGISTER_CLASS(Motion) {
     NCB_PROPERTY_RAW_CALLBACK(enableD3D, Motion::getEnableD3D,
                               Motion::setEnableD3D, TJS_STATICMEMBER);
     NCB_PROPERTY_RAW_CALLBACK_RO(D3DAdaptor, Motion::getD3DAdaptor,
                                  TJS_STATICMEMBER);
     NCB_PROPERTY_RAW_CALLBACK_RO(PlayFlagForce, Motion::getPlayFlagForce,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(PlayFlagChain, Motion::getPlayFlagChain,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(PlayFlagAsCan, Motion::getPlayFlagAsCan,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(PlayFlagJoin, Motion::getPlayFlagJoin,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(PlayFlagStealth, Motion::getPlayFlagStealth,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(LayerTypeObj, Motion::getLayerTypeObj,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(LayerTypeShape, Motion::getLayerTypeShape,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(LayerTypeLayout, Motion::getLayerTypeLayout,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(LayerTypeMotion, Motion::getLayerTypeMotion,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(LayerTypeParticle, Motion::getLayerTypeParticle,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(LayerTypeCamera, Motion::getLayerTypeCamera,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(MaskModeStencil, Motion::getMaskModeStencil,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(MaskModeAlpha, Motion::getMaskModeAlpha,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(TimelinePlayFlagParallel,
+                                 Motion::getTimelinePlayFlagParallel,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(TimelinePlayFlagSequential,
+                                 Motion::getTimelinePlayFlagSequential,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(TransformOrderFlip, Motion::getTransformOrderFlip,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(TransformOrderAngle,
+                                 Motion::getTransformOrderAngle,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(TransformOrderZoom, Motion::getTransformOrderZoom,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(TransformOrderSlant,
+                                 Motion::getTransformOrderSlant,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(CoordinateRecutangularXY,
+                                 Motion::getCoordinateRecutangularXY,
+                                 TJS_STATICMEMBER);
+    NCB_PROPERTY_RAW_CALLBACK_RO(CoordinateRecutangularXZ,
+                                 Motion::getCoordinateRecutangularXZ,
                                  TJS_STATICMEMBER);
     NCB_PROPERTY_RAW_CALLBACK_RO(ShapeTypePoint, Motion::getShapeTypePoint,
                                  TJS_STATICMEMBER);

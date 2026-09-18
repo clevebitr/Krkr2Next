@@ -164,6 +164,17 @@ namespace motion {
         tjs_int getZpos() const { return _zpos; }
         void setZpos(tjs_int v) { _zpos = v; }
 
+        // maskMode：emote 脚本创建/恢复播放器时会读写它（原版
+        // Motion.MaskModeAlpha=1）。移动端只有 alpha 混合一条路径，stencil 遮罩
+        // 不支持，因此这里只记住取值，渲染仍走 alpha。缺这个成员会让
+        // createPlayer 直接抛 `Member "maskMode" does not exist`（NEKOPARA 4
+        // 实证）。 maskMode: read/written by emote scripts on player
+        // creation/restore (Motion.MaskModeAlpha = 1 upstream). The mobile
+        // renderer only does alpha blending, so the value is stored but rendering
+        // stays alpha. Missing it aborts createPlayer (verified on NEKOPARA 4).
+        tjs_int getMaskMode() const { return _maskMode; }
+        void setMaskMode(tjs_int v) { _maskMode = v; }
+
         // getOptions() also copies `_player.variableKeys` (array of
         // dynamic-variable key names) into the option dictionary; missing it
         // throws a fatal "Member variableKeys does not exist" (Senren Banka
@@ -4364,6 +4375,8 @@ namespace motion {
         bool _animating = false;
         tjs_int _outline = 0;
         tjs_int _zpos = 0;
+        // MaskModeAlpha（见 getMaskMode 注释）。/* MaskModeAlpha; see above. */
+        tjs_int _maskMode = 1;
         mutable std::string _pendingButtonName;
         tjs_real _coordX = 0;
         tjs_real _coordY = 0;
