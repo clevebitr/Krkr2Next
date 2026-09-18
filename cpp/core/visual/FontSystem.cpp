@@ -168,6 +168,27 @@ ttstr FontSystem::GetBeingFont(ttstr fonts) {
         static bool below_printed = false;
         std::vector<ttstr> list;
         TVPGetAllFontList(list);
+        // 字体探针（只打一次）：等宽/全角回退会挑"名字里含 mono/gothic/mincho/cjk"
+        // 的**第一个**字体 —— 真机上它挑了 "Noto Sans CJK HK"。用户报"字体渲染有点
+        // 问题"时，先要知道这台设备**都注册了哪些字体**（有没有 JP/SC 面），否则只能猜。
+        {
+            static bool list_printed = false;
+            if(!list_printed) {
+                list_printed = true;
+                std::string names;
+                for(const auto &n : list) {
+                    if(!names.empty())
+                        names += " | ";
+                    names += n.AsNarrowStdString();
+                    if(names.size() > 500) {
+                        names += " | …";
+                        break;
+                    }
+                }
+                spdlog::info("FontSystem: 已注册字体 {} 个 -> {}", list.size(),
+                             names);
+            }
+        }
         for(const auto &n : list) {
             std::string ln = n.AsNarrowStdString();
             std::string low;
