@@ -1308,6 +1308,97 @@ namespace TJS {
     }
 
     //---------------------------------------------------------------------------
+    // A 块兼容回退（未定义全局成员读取）
+    //
+    // 移植自 AetherKiri `cpp/core/tjs2/tjsObject.cpp:249-308`。作用：脚本在**类方法内部**
+    // 引用框架全局（`this.Storages` / `this.ltAlpha` / `this.clNone` …）或裸读未定义名字时，
+    // 原实现一律抛 `Member "x" does not exist` 并打断整段脚本；这里按**固定白名单**回退到
+    // 同名全局。
+    //
+    // 两个安全性质（决定了它不会掩盖拼写错误）：
+    //   1) 白名单固定 34 个名字（外加 `LayerClass` → `Layer` 的别名），不在表里就是原行为；
+    //   2) 回退失败时返回 false，调用方照旧返回 MEMBERNOTFOUND ⇒ 报错信息不变。
+    // `thread_local resolving` 是**必需**的重入保护：解析过程会再走 global 的 PropGet，
+    // 若再次未命中就会无限递归。
+    //
+    // 开关：缺省关闭（= 旧版 krkr2 层行为）。由 `krkr::compat::SetActiveLayer()` 在激活
+    // AetherKiri 层时打开（用户裁决：A 块只给 AetherKiri 层）。
+    //---------------------------------------------------------------------------
+    static bool TJSCompatFallbacksEnabledFlag = false;
+    static CompatGlobalGetterFn TJSCompatGlobalGetter = nullptr;
+
+    void TJSSetCompatGlobalGetter(CompatGlobalGetterFn fn) {
+        TJSCompatGlobalGetter = fn;
+    }
+
+    void TJSSetCompatFallbacksEnabled(bool enabled) {
+        TJSCompatFallbacksEnabledFlag = enabled;
+    }
+
+    bool TJSCompatFallbacksEnabled() {
+        return TJSCompatFallbacksEnabledFlag;
+    }
+
+    static const tjs_char *TJSCompatGlobalFallbackName(const tjs_char *membername) {
+        if(!membername)
+            return nullptr;
+        if(!TJS_strcmp(membername, TJS_W("LayerClass")))
+            return TJS_W("Layer");
+
+        static const tjs_char *const names[] = {
+            TJS_W("System"), TJS_W("Storages"), TJS_W("Scripts"),
+            TJS_W("Dictionary"), TJS_W("Debug"), TJS_W("Math"),
+            TJS_W("Plugins"), TJS_W("Window"), TJS_W("Layer"),
+            TJS_W("inSystemMenuStorages"), TJS_W("kagHookEntries"),
+            TJS_W("afterInitCallback"), TJS_W("COMMAND_SYNC"),
+            TJS_W("COMMAND_ASYNC"), TJS_W("COMMAND_WAIT"),
+            TJS_W("kirikiriz"), TJS_W("kirikiriz_generic"),
+            TJS_W("AffineSource"), TJS_W("AffineSourceBMPBase"),
+            TJS_W("AffineSourceImage"), TJS_W("AffineSourceBitmap"),
+            TJS_W("AffineSourceStand"), TJS_W("AffineSourceGLES"),
+            TJS_W("clNone"), TJS_W("ltBinder"), TJS_W("ltOpaque"),
+            TJS_W("ltAlpha"), TJS_W("ltAdditive"), TJS_W("ltSubtractive"),
+            TJS_W("omAlpha"), TJS_W("omAuto"), TJS_W("debugWindowEnabled")
+        };
+        for(const tjs_char *name : names) {
+            if(!TJS_strcmp(membername, name))
+                return name;
+        }
+        return nullptr;
+    }
+
+    static bool TJSCompatResolveGlobalFallback(const tjs_char *membername,
+                                               tTJSVariant *result) {
+        if(!result || !TJSCompatFallbacksEnabledFlag)
+            return false;
+        const tjs_char *globalName = TJSCompatGlobalFallbackName(membername);
+        if(!globalName)
+            return false;
+
+        static thread_local bool resolving = false;
+        if(resolving)
+            return false;
+
+        resolving = true;
+        iTJSDispatch2 *global =
+            TJSCompatGlobalGetter ? TJSCompatGlobalGetter() : nullptr;
+        if(!global) {
+            resolving = false;
+            return false;
+        }
+
+        try {
+            const bool ok = TJS_SUCCEEDED(
+                global->PropGet(0, globalName, nullptr, result, global));
+            resolving = false;
+            return ok;
+        } catch(...) {
+            resolving = false;
+            throw;
+        }
+    }
+
+    //---------------------------------------------------------------------------
     tjs_error tTJSCustomObject::PropGet(tjs_uint32 flag,
                                         const tjs_char *membername,
                                         tjs_uint32 *hint, tTJSVariant *result,
@@ -1332,6 +1423,11 @@ namespace TJS {
                 tTJSVariant value;
                 if(CallGetMissing(membername, value))
                     return TJSDefaultPropGet(flag, value, result, objthis);
+            }
+            // A 块兼容回退：未定义的框架全局名回退到同名全局（仅 AetherKiri 层开启，
+            // 见 TJSCompatResolveGlobalFallback 的说明）。
+            if(TJSCompatResolveGlobalFallback(membername, result)) {
+                return TJS_S_OK;
             }
         }
 

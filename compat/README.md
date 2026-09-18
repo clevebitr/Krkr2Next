@@ -227,6 +227,21 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 
 ## 6. 移植溯源规则
 
+> **在既有文件内部**做的片段移植（例如 A 块把 AetherKiri `tjsObject.cpp:249-308` 的回退函数
+> 搬进本仓库同名文件）：**不**登记进 `aetherkiri_ports.json`。原因是该清单是**文件级**哈希
+> 追踪，而这些核心文件我们自己也频繁修改，登记后每次改动都会报"本地漂移"，只会逼人盲跑
+> `--update`。这类移植改为**在代码落点写清来源与片段范围**（形如
+> `移植自 AetherKiri cpp/core/tjs2/tjsObject.cpp:249-308`），并在本节列出已移植片段清单。
+>
+> 已移植片段（in-file）：
+> | 本仓库位置 | 上游位置 | 说明 |
+> |---|---|---|
+> | `cpp/core/tjs2/tjsObject.cpp`（`TJSCompatGlobalFallbackName` / `TJSCompatResolveGlobalFallback`） | `AetherKiri/cpp/core/tjs2/tjsObject.cpp:249-308` | 34 名全局回退 + `LayerClass→Layer`；加开关（缺省关，AetherKiri 层开）与注入式 global getter |
+> | `cpp/core/tjs2/tjsObjectExtendable.cpp`（`TJSIsStartupCompatWritableNameEx` + PropSet 重试） | `AetherKiri/cpp/core/tjs2/tjsObjectExtendable.cpp:9-19`、`:96-105` | 8 名启动期可写白名单；用户裁决两层都要，不设开关 |
+>
+> 新增**独立文件**的移植（如 `cpp/plugins/compat/aetherkiri/legacy_zlib_version.cpp`）仍按下面的规则登记。
+
+
 - 从 AetherKiri 移植的文件必须登记进 `compat/upstream/aetherkiri_ports.json`，写明
   `modifications`（`none` / `api-shim` / `bridge-substituted` / `local-fix`）与理由。
 - 改动移植文件后运行 `python3 scripts/check_port_drift.py --update` 更新哈希，否则校验失败；

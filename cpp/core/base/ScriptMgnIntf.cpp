@@ -14,6 +14,7 @@
 #include "tjs.h"
 #include "tjsDebug.h"
 #include "tjsArray.h"
+#include "tjsObject.h"
 #include "ScriptMgnIntf.h"
 #include "StorageIntf.h"
 #include "DebugIntf.h"
@@ -1034,6 +1035,21 @@ static void TVPInstallKagRuntimeDefaults() {
 //---------------------------------------------------------------------------
 // TVPExecuteStartupScript
 //---------------------------------------------------------------------------
+namespace {
+    // 注入给 tjs2 的"全局对象查询"（A 块兼容回退用）。放在这里是因为只有 core/base 认识
+    // TVPGetScriptEngine；tjs2 侧保持不依赖核心（见 tjsObject.h 的说明）。
+    iTJSDispatch2 *TJSCompatGlobalGetterImpl() {
+        tTJS *engine = TVPGetScriptEngine();
+        return engine ? engine->GetGlobalNoAddRef() : nullptr;
+    }
+
+    struct TJSCompatGetterBootstrap {
+        TJSCompatGetterBootstrap() {
+            TJS::TJSSetCompatGlobalGetter(&TJSCompatGlobalGetterImpl);
+        }
+    } g_tjsCompatGetterBootstrap;
+} // namespace
+
 void TVPExecuteStartupScript() {
     // 每局启动先把"默认读取编码"复位成 utf-8。
     //

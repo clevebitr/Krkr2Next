@@ -19,6 +19,19 @@
 
 namespace TJS {
     //---------------------------------------------------------------------------
+    // A 块兼容回退（见 tjsObject.cpp 的实现注释）
+    //
+    // 开关缺省关闭（旧版 krkr2 层行为），由兼容层在激活 AetherKiri 层时打开。
+    // 全局对象查询用注入式（`TJSSetCompatGlobalGetter`），这样 tjs2 不必依赖 core/base ——
+    // 只链 tjs2 的目标（部分单测）不会因为这一条而拉进整个核心。
+    //---------------------------------------------------------------------------
+    void TJSSetCompatFallbacksEnabled(bool enabled);
+    bool TJSCompatFallbacksEnabled();
+
+    using CompatGlobalGetterFn = iTJSDispatch2 *(*)();
+    void TJSSetCompatGlobalGetter(CompatGlobalGetterFn fn);
+
+    //---------------------------------------------------------------------------
     // utility functions
     //---------------------------------------------------------------------------
     extern tjs_error TJSDefaultFuncCall(tjs_uint32 flag, tTJSVariant &targ,

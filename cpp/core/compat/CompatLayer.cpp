@@ -4,6 +4,7 @@
 #include "CompatLayer.h"
 
 #include "io/IoPolicy.h"
+#include "tjsObject.h"
 
 #include <cstring>
 #include <spdlog/spdlog.h>
@@ -94,6 +95,9 @@ namespace krkr::compat {
         // 而 io 侧的策略对象是函数局部静态，首次初始化可能是缺省值；这里保证"当前层"
         // 与"io 生效策略"始终一致。
         io::SetActiveStoragePolicy(StoragePolicyFor(id));
+        // A 块（TJS2 内核兼容回退）：用户裁决只给 AetherKiri 层开启。
+        // tjs2 侧不认识"层"，只认这个开关（见 tjsObject.h / tjsObject.cpp 的说明）。
+        TJS::TJSSetCompatFallbacksEnabled(id == LayerId::AetherKiri);
         if(g_active == id)
             return;
         g_active = id;
