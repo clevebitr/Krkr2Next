@@ -15,6 +15,7 @@
 #include <cstring>
 #include <filesystem>
 #include <algorithm>
+#include <cctype>
 #include <set>
 #include <sys/stat.h>
 #include <vector>
@@ -1777,36 +1778,63 @@ void TVPBoostAutoMountPaths() {
     extern std::vector<ttstr> TVPAutoPathList;
     extern bool AutoPathTableInit;
 
-    // 先摘掉这些路径，再把它们**插到队首**。
+    // 目标优先级（表语义：**列表靠前 = 优先**）：
+    //     散装文件（工程目录里的散装补丁） > 补丁档案 > 其它档案
     //
-    // 为什么是插队首而不是 push_back：本仓库的 auto-path 表是"同名 basename
-    // 先注册者 优先"（TVPRebuildAutoPathTable 里先 Find 再
-    // Add，理由见那里的注释），也就是
-    // **列表顺序即优先级、队首最高**。而工程目录自带的 xp3
-    // 是**补丁层**（汉化补丁、 patch_append 之类），必须压过 data.xp3
-    // 里的同名文件，所以它们要排在队首。
-    //
-    // 旧实现是 push_back，那是配合更早的表语义（后注册覆盖先注册 →
-    // 队尾最高）写的；
-    // 那个语义已经改成先到先得，这里必须跟着改，否则补丁层会掉到最低优先级、被原版
-    // 压住——表现就是"打了补丁却取到未打补丁的脚本/素材"。
-    std::vector<ttstr> boosted;
-    boosted.reserve(TVPAutoMountedPaths.size());
-    for(const auto &p : TVPAutoMountedPaths) {
+    // 旧实现把**所有**自动挂载条目整体插到队首，有两个反效果：
+    //   1) 档案条目排到了散装文件前面 —— 放在游戏目录里的散装补丁反而输给 data.xp3；
+    //   2) 档案之间保持挂载顺序（data.xp3 先于 patch.xp3 挂载），而表是"先注册者优先"
+    //      —— 于是**补丁层被原版压住**：真机现象就是"打了汉化补丁却读到原版脚本"
+    //      （用户 2026-09-18 报的 チート緊縛術 汉化补丁没加载，该目录恰好只有
+    //       data.xp3 + patch.xp3）。
+    // 现在只挪补丁档案：插到"第一条档案条目"之前；散装条目与非补丁档案都不动。
+    const auto isArchivePath = [](const ttstr &p) {
+        return p.AsStdString().find('>') != std::string::npos;
+    };
+    const auto isPatchArchivePath = [](const ttstr &p) {
+        std::string s = p.AsStdString();
+        const size_t sharp = s.find('>');
+        if(sharp != std::string::npos)
+            s.erase(sharp); // 只看档案名，不看档案内的目录名
+        for(char &c : s)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return s.find("patch") != std::string::npos;
+    };
+
+    std::vector<ttstr> patchEntries;
+    for(const auto &p : TVPAutoMountedPaths)
+        if(isPatchArchivePath(p))
+            patchEntries.push_back(p);
+    TVPAutoMountedPaths.clear();
+
+    if(patchEntries.empty()) {
+        // 没有补丁档案：现有顺序就是"散装 > 档案"，不需要动。
+        spdlog::info("TVPBoostAutoMountPaths: 无补丁档案，auto path 顺序不变"
+                     "（total {}）",
+                     TVPAutoPathList.size());
+        return;
+    }
+
+    for(const auto &p : patchEntries) {
         auto it = std::find(TVPAutoPathList.begin(), TVPAutoPathList.end(), p);
         if(it != TVPAutoPathList.end())
             TVPAutoPathList.erase(it);
-        boosted.push_back(p);
     }
-    TVPAutoPathList.insert(TVPAutoPathList.begin(), boosted.begin(),
-                           boosted.end());
-    TVPAutoMountedPaths.clear();
+
+    auto insertAt = TVPAutoPathList.end();
+    for(auto it = TVPAutoPathList.begin(); it != TVPAutoPathList.end(); ++it) {
+        if(isArchivePath(*it)) {
+            insertAt = it; // 第一条（非补丁）档案条目之前
+            break;
+        }
+    }
+    TVPAutoPathList.insert(insertAt, patchEntries.begin(), patchEntries.end());
 
     AutoPathTableInit = false;
     spdlog::info(
-        "TVPBoostAutoMountPaths: moved {} patch path(s) to the front of "
-        "auto path list (total {})",
-        boosted.size(), TVPAutoPathList.size());
+        "TVPBoostAutoMountPaths: moved {} patch archive path(s) ahead of other "
+        "archives (total {})",
+        patchEntries.size(), TVPAutoPathList.size());
 
     // 判定性探针：补丁层（汉化 patch.xp3 / patch_appendN.xp3）是否真的排在
     // data.xp3 之前 —— 表是"先注册者优先"，顺序错了就是"打了补丁却取到原版脚本"
