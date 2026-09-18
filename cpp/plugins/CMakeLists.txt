@@ -36,6 +36,9 @@ target_sources(${PROJECT_NAME} PUBLIC
     wfBasicEffectCompat.cpp
     wfTypicalDSPCompat.cpp
     zcompat/zcompat_plugin.cpp
+    # Krkr2Compat 纯 TJS 兼容层（k2compat.dll）。默认不执行，只有显式开启引擎
+    # 选项 k2compat_scripts=1 时才在框架就绪后安装（见 zcompat_plugin.cpp）。
+    zcompat/k2compat_scripts.cpp
     compatLegacyPlugins.cpp
 )
 

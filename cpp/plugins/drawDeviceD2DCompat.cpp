@@ -7,6 +7,15 @@
 #include <algorithm>
 #include <vector>
 
+// 规范名与历史名指向同一份实现。
+//
+// 为什么：D2D 时代的游戏写 `Plugins.link("DrawDeviceD2D.dll")`，而本仓库历史上只注册了
+// `DrawDeviceD2Dm.dll`（AetherKiri 里是同一个文件的两个名字）。别名机制让一次注册拥有两个
+// 查找名，且**不会**把同名 TJS 类注册两遍（那会触发 MEMBERENSURE 覆盖 + 卸载互相删除，
+// 见 compat/recon/plugin-compat-diff.md §3）。
+NCB_REGISTER_MODULE_ALIAS(TJS_W("DrawDeviceD2D.dll"),
+                          TJS_W("DrawDeviceD2Dm.dll"), drawdeviced2d);
+
 namespace {
 
     bool GetMemberVariant(iTJSDispatch2 *obj, const tjs_char *name,

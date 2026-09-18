@@ -10,10 +10,43 @@ ncbAutoRegister::_top[ncbAutoRegister::LINE_COUNT] = NCB_INNER_AUTOREGISTER_LINE
 
 std::map<ttstr, ncbAutoRegister::INTERNAL_PLUGIN_LISTS > ncbAutoRegister::_internal_plugins;
 
+namespace {
+    // 别名表：别名（小写）→ 规范模块名（小写）。注册顺序无关，只在查找时生效。
+    std::map<ttstr, ttstr> &ModuleAliasMap() {
+        static std::map<ttstr, ttstr> map;
+        return map;
+    }
+} // namespace
+
+void ncbAutoRegister::RegisterModuleAlias(NameT alias, NameT canonical) {
+    if(!alias || !canonical)
+        return;
+    ttstr a(alias), c(canonical);
+    a.ToLowerCase();
+    c.ToLowerCase();
+    if(a.IsEmpty() || c.IsEmpty() || a == c)
+        return;
+    ModuleAliasMap()[a] = c;
+}
+
+ttstr ncbAutoRegister::ResolveModuleAlias(const ttstr &name) {
+    ttstr lower(name);
+    lower.ToLowerCase();
+    const auto &map = ModuleAliasMap();
+    for(int hop = 0; hop < 4; ++hop) { // 限制跳数，防止别名成环时死循环
+        auto it = map.find(lower);
+        if(it == map.end())
+            break;
+        lower = it->second;
+    }
+    return lower;
+}
+
 void ncbAutoRegister::ResetModuleStateForRestart()
 {
 	TVPRegisteredPlugins.clear();
 	_internal_plugins.clear();
+    // 别名单不需要清（它们是静态注册期建立的，跨 restart 依然有效）。
 }
 
 // ---------------------------------------------------------------
@@ -40,7 +73,13 @@ static bool AliasTpmToDll(const ttstr &name, ttstr &out)
 
 bool ncbAutoRegister::LoadModule(const ttstr &_name)
 {
-	ttstr name = _name.AsLowerCase();
+	const ttstr requested = _name.AsLowerCase();
+	// 先过别名表：游戏写的插件名可能不是我们注册的规范名（见 RegisterModuleAlias）。
+	ttstr name = ResolveModuleAlias(requested);
+	if(name != requested) {
+        spdlog::info("ncbAutoRegister::LoadModule('{}'): 按模块别名解析到 '{}'",
+                     requested.AsStdString(), name.AsStdString());
+    }
 	if (TVPRegisteredPlugins.find(name) != TVPRegisteredPlugins.end()) {
         spdlog::trace("ncbAutoRegister::LoadModule('{}'): already registered",
                       name.AsStdString());
@@ -117,10 +156,12 @@ bool ncbAutoRegister::LoadModule(const ttstr &_name)
 
 bool ncbAutoRegister::HasModule(const ttstr &_name)
 {
-	ttstr name = _name.AsLowerCase();
+	// 与 LoadModule 保持同一套解析：模块别名 → `.tpm`/`.dll` 回退。
+	// 两者必须一致，否则 `Storages.isExistentStorage("xxx.dll")` 会说"不存在"而
+	// `Plugins.link("xxx.dll")` 却能成功（旧实现在 `.tpm` 回退上就踩过这个坑）。
+	ttstr name = ResolveModuleAlias(_name);
 	if (_internal_plugins.find(name) != _internal_plugins.end())
 		return true;
-    // 与 LoadModule 一致：`.tpm` 按同名 `.dll` 回退（见上面的说明）。
     ttstr alias;
     if (AliasTpmToDll(name, alias))
         return _internal_plugins.find(alias) != _internal_plugins.end();

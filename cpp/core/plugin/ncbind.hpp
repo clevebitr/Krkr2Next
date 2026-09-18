@@ -2129,6 +2129,19 @@ struct ncbAutoRegister {
 	static bool HasModule(const ttstr &_name);
 	static void LoadAllModules();
 	static void ResetModuleStateForRestart();
+
+	// 模块别名：把"游戏写的插件名"映射到"我们实际注册的模块名"。
+	//
+	// 为什么需要：同一个 Windows 插件在不同封装/发行版里会换名字（例如 D2D 时代游戏写
+	// `DrawDeviceD2D.dll`，而本仓库的实现在历史上只注册了 `DrawDeviceD2Dm.dll`），
+	// 另外 AetherKiri 还用别名把 `libegl/libglesv2` 指到 `krkrgles.dll`。没有别名机制
+	// 时只能靠"再写一份 registrar"，那会让同名 TJS 类被注册两次（`TJS_MEMBERENSURE`
+	// 覆盖 + 卸载互相删除，见 compat/recon/plugin-compat-diff.md §3）。
+	//
+	// 别名只在查找时生效：`LoadAllModules` 仍按**规范名**遍历，不会因为别名多加载一次。
+	static void RegisterModuleAlias(NameT alias, NameT canonical);
+	// 解析别名（不区分大小写）；没有别名时原样返回小写名。
+	static ttstr ResolveModuleAlias(const ttstr &name);
 protected:
 	virtual void Regist()   const = 0;
 	virtual void Unregist() const = 0;
@@ -2180,6 +2193,19 @@ protected:
 #define NCB_REGISTER_SUBCLASS(cls) \
 	NCB_TYPECONV_BOXING(cls); \
 	NCB_REGISTER_SUBCLASS_DELAY(cls)
+
+////////////////////////////////////////
+/// 模块别名注册器（见 ncbAutoRegister::RegisterModuleAlias 的注释）
+struct ncbModuleAliasAutoRegister {
+	ncbModuleAliasAutoRegister(ncbAutoRegister::NameT alias,
+	                           ncbAutoRegister::NameT canonical) {
+		ncbAutoRegister::RegisterModuleAlias(alias, canonical);
+	}
+};
+
+#define NCB_REGISTER_MODULE_ALIAS(alias, canonical, tag)                       \
+	static ncbModuleAliasAutoRegister ncbModuleAliasAutoRegister_ ## tag(       \
+	    alias, canonical)
 
 ////////////////////////////////////////
 template <class T>

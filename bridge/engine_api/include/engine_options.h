@@ -115,6 +115,19 @@
  */
 #define ENGINE_GAME_COMPAT_PROFILE_AETHERKIRI "aetherkiri"
 
+/**
+ * Krkr2Compat 内嵌脚本层（k2compat.dll）开关，默认关闭。
+ *
+ * 取值 `1`/`true`/`on`/`yes` 时才安装内嵌的 Krkr2Compat 纯 TJS 层
+ * （`cpp/plugins/zcompat/k2compat_scripts.cpp`），安装时机是**框架就绪后的第一帧**
+ * （不是插件注册期 —— 历史上在注册期执行会抛异常打断启动链，实测三款游戏全黑）。
+ *
+ * 为什么默认关：这套脚本层会定义 `Krkr2CompatUtils` 及其子模块（win32dialog/modeless/
+ * pad/console/inputstring/fontselect），与本仓库核心已有的同名能力可能重叠；只有确认
+ * 某款游戏需要它时才逐游戏开启。
+ */
+#define ENGINE_OPTION_K2COMPAT_SCRIPTS "k2compat_scripts"
+
 /** Render pipeline selection ("opengl" or "software"). */
 #define ENGINE_OPTION_RENDERER "renderer"
 

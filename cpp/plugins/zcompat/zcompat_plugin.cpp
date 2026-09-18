@@ -9,9 +9,10 @@
 //   - 功能已内建（核心类/渲染管线已有，link 即可用）：drawdeviceD3DZ /
 //     drawdeviceD3D（主 DrawBuffer 由 core/visual 合成）、kztouch（Window
 //     getTouchPoint 等触摸类已内建）、menu（MenuItem 核心类全局注册）。
-//   - 真实现（内嵌参考源码）：k2compat（Krkr2Compat 纯 TJS 兼容层内嵌执行）、
-//     lzfs（"lzfs://" 存储协议，见下方 LzfsStorageMedia；NEKOPARA 4 的 E-mote
-//     立绘动作文件靠它取 PSB）。
+//   - 真实现（内嵌参考源码）：lzfs（"lzfs://" 存储协议，见下方 LzfsStorageMedia；
+//     NEKOPARA 4 的 E-mote 立绘动作文件靠它取 PSB）。
+//   - 源码已内嵌、默认不执行（引擎选项门控）：k2compat（Krkr2Compat 纯 TJS 层，
+//     k2compat_scripts.cpp；只有 k2compat_scripts=1 时才在框架就绪后安装）。
 //   - 名字映射（已有实现复用）：motionplayer_nod3d → motionplayer.dll（在
 //     PluginImpl.cpp 的 TVPLoadPlugin 映射）。
 //   - 暂不可实现（源码不可得/桌面概念）：squirrel（VM 源码可得但待移植）、
@@ -21,10 +22,56 @@
 //---------------------------------------------------------------------------
 #include "ncbind.hpp"
 #include "StorageIntf.h"
+#include "SysInitIntf.h"
+#include "EventIntf.h"
 #include <spdlog/spdlog.h>
 
 // 挂名空回调：仅让 ncbAutoRegister::LoadModule 命中内部注册表返回成功。
 static void ZCompatStub() {}
+
+// k2compat_scripts.cpp 的安装入口（该 TU 与本文件同属 krkr2plugin 目标）。
+extern void TVPInstallK2CompatScripts();
+
+namespace {
+    // Krkr2Compat（k2compat.dll）内嵌 TJS 层：**默认不执行**。
+    //
+    // 历史（见下面 g_z_k2compat 的注释）：在插件注册期执行这套脚本会抛异常打断启动链，
+    // 当年实测三款游戏全黑，于是退回"只挂名"。现在的处理是：
+    //   1) 脚本源始终编译进产物（不再是"没有任何 target 编译的死代码"）；
+    //   2) 只有显式开启引擎选项 `k2compat_scripts=1` 才安装；
+    //   3) 安装时机推迟到**框架就绪后的第一帧**（连续事件钩子一次性触发），
+    //      而不是注册期 —— 这正是当年缺的那个时机。
+    class K2CompatInstallHook : public tTVPContinuousEventCallbackIntf {
+    public:
+        void OnContinuousCallback(tjs_uint64 /*tick*/) override {
+            TVPRemoveContinuousEventHook(this);
+            spdlog::info("K2Compat: 框架已就绪，安装内嵌 Krkr2Compat 脚本层");
+            TVPInstallK2CompatScripts();
+        }
+    };
+
+    K2CompatInstallHook g_k2compat_install_hook;
+
+    bool K2CompatEnabledByOption() {
+        tTJSVariant raw;
+        if(!TVPGetCommandLine(TJS_W("k2compat_scripts"), &raw))
+            return false;
+        ttstr v(raw);
+        v.ToLowerCase();
+        return v == TJS_W("1") || v == TJS_W("true") || v == TJS_W("on") ||
+               v == TJS_W("yes");
+    }
+
+    void ZCompatRegisterK2Compat() {
+        if(!K2CompatEnabledByOption()) {
+            spdlog::info("K2Compat: k2compat.dll 挂名（未开启 k2compat_scripts，"
+                         "不执行内嵌 Krkr2Compat 脚本层）");
+            return;
+        }
+        spdlog::info("K2Compat: 已开启 k2compat_scripts，等框架就绪后安装脚本层");
+        TVPAddContinuousEventHook(&g_k2compat_install_hook);
+    }
+} // namespace
 
 // drawdeviceD3DZ.dll —— Z 主画面 D3D drawdevice。移动端真形态是 core/visual
 // 渲染 管线（Kirikiroid2 RenderManager_ogl 直接合成 Z 主
@@ -45,15 +92,14 @@ static ncbCallbackAutoRegister g_z_kztouch(TJS_W("kztouch.dll"),
                                            ncbAutoRegister::PreRegist,
                                            &ZCompatStub, nullptr);
 
-// k2compat.dll —— krkr2→Z 兼容层：Krkr2Compat 纯 TJS 层（k2compat_scripts.cpp
-// 已内嵌）。
-// 当前挂名（不执行脚本）：该脚本若在插件注册/引擎启动时执行会抛异常打断启动链
-// （engine(22) 实测：LoadAllModules 时 k2compat/preseed 异常 →
-// 三游戏全黑），故回退挂名。 真实现待改走"游戏运行时显式
-// Plugins.link(k2compat.dll)"的时机（届时全局/类已就位）再放回。
+// k2compat.dll —— krkr2→Z 兼容层：Krkr2Compat 纯 TJS 层（k2compat_scripts.cpp 内嵌）。
+//
+// 默认只挂名，原因见上面 ZCompatRegisterK2Compat 的注释：在插件注册期执行这套脚本会抛
+// 异常打断启动链（engine(22) 实测：LoadAllModules 时 k2compat/preseed 异常 → 三款游戏
+// 全黑）。现在改为"源始终编译 + 引擎选项门控 + 框架就绪后一次性安装"。
 static ncbCallbackAutoRegister g_z_k2compat(TJS_W("k2compat.dll"),
                                             ncbAutoRegister::PreRegist,
-                                            &ZCompatStub, nullptr);
+                                            &ZCompatRegisterK2Compat, nullptr);
 
 // kagexopt.dll —— KAG 系统扩展（KAGEX 优化），挂名。
 static ncbCallbackAutoRegister g_z_kagexopt(TJS_W("kagexopt.dll"),
