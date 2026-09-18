@@ -837,7 +837,10 @@ tjs_int64 tTVPXP3Archive::ReadI64FromMem(const tjs_uint8 *mem) {
 // Compressed segment cache related
 //---------------------------------------------------------------------------
 #define TVP_SEGCACHE_ONE_LIMIT (1024 * 1024) // max size limit for each segment
-#define TVP_SEGCACHE_TOTAL_LIMIT (1024 * 1024) // total segment cache size
+#define TVP_SEGCACHE_TOTAL_LIMIT (1024 * 1024) // total segment cache size（缺省 = 旧层口径）
+// TODO(M1.3): 段缓存总预算尚未按激活层策略取值。原因是本变量在静态初始化期就定型，
+// 而层激活发生在 engine_create（更晚）；要按层切换需要"策略变更通知"钩子（或改成惰性
+// 计算 + 区分脚本是否显式设过）。在那之前维持旧层的 1 MiB，AetherKiri 层的 256 MiB 暂不生效。
 tjs_uint TVPSegmentCacheLimit = TVP_SEGCACHE_TOTAL_LIMIT;
 
 //---------------------------------------------------------------------------

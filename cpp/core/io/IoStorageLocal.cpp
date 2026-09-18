@@ -23,6 +23,7 @@
 
 #include "StorageImpl.h"
 #include "StorageIntf.h"
+#include "IoPolicy.h"
 #include "WindowImpl.h"
 #include "SysInitIntf.h"
 #include "DebugIntf.h"
@@ -601,7 +602,17 @@ static bool TVPAppPathCacheValid = false;
 
 ttstr TVPGetAppPath() {
     if(!TVPAppPathCacheValid) {
-        TVPAppPathCache = TVPExtractStoragePath(TVPProjectDir);
+        ttstr dir = TVPProjectDir;
+        // 档案工程（`.../data.xp3>`）下 TVPExtractStoragePath 会保留末尾的 '>'，
+        // 于是 `TVPGetAppPath() + "patch.tjs"` 变成"包里找 patch.tjs"、临时文件名也会
+        // 指向包内（写入会失败）。旧层（classic）保持这个历史行为；AetherKiri 层按策略
+        // 去掉 '>'，取档案所在目录（见 io/StoragePolicy.h 的 stripArchiveDelimiterInAppPath）。
+        if(krkr::io::ActiveStoragePolicy().stripArchiveDelimiterInAppPath) {
+            const tjs_int len = dir.GetLen();
+            if(len > 0 && dir.GetLastChar() == TVPArchiveDelimiter)
+                dir = ttstr(dir.c_str(), len - 1);
+        }
+        TVPAppPathCache = TVPExtractStoragePath(dir);
         TVPAppPathCacheValid = true;
     }
     return TVPAppPathCache;
@@ -1771,6 +1782,64 @@ void TVPAutoMountProjectXP3Archives() {
                        ttstr(TJS_W(" archive(s) in project dir")));
 }
 
+//---------------------------------------------------------------------------
+// 补丁档案名判定（AetherKiri 口径，见 compat/recon/io-loading-diff.md §2A）
+//
+//   patch                -> 序号 0
+//   patchN（纯数字）      -> 序号 N（越大越优先，配合"后注册者优先"）
+//   patchXXX（含非数字）  -> 具名补丁，序号 1000001（排在所有数字补丁之后）
+//   xxxpatch（以 patch 结尾）-> 具名补丁
+//   其它                  -> 不是补丁
+//
+// 与旧层的区别：旧层用"路径里含 patch 子串"，`unpatched.xp3`、`spatchcock.xp3`
+// 都会被当成补丁；这个规则不会。
+//---------------------------------------------------------------------------
+static bool TVPIsPatchArchiveNameSequenced(std::string name, int *sequence) {
+    for(char &c : name)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if(name.size() > 4 && name.compare(name.size() - 4, 4, ".xp3") == 0)
+        name.resize(name.size() - 4);
+
+    if(name == "patch") {
+        if(sequence)
+            *sequence = 0;
+        return true;
+    }
+
+    constexpr const char *kPrefix = "patch";
+    constexpr size_t kPrefixLen = 5;
+    const bool startsWithPatch = name.rfind(kPrefix, 0) == 0;
+    const bool endsWithPatch =
+        name.size() > kPrefixLen &&
+        name.compare(name.size() - kPrefixLen, kPrefixLen, kPrefix) == 0;
+
+    if(!startsWithPatch) {
+        if(!endsWithPatch)
+            return false;
+        if(sequence)
+            *sequence = 1000001;
+        return true;
+    }
+    if(name.size() == kPrefixLen)
+        return false;
+
+    int value = 0;
+    for(size_t i = kPrefixLen; i < name.size(); ++i) {
+        const unsigned char ch = static_cast<unsigned char>(name[i]);
+        if(!std::isdigit(ch)) {
+            // 具名补丁（patchAI / patch_data1080…）：压在数字补丁之上
+            if(sequence)
+                *sequence = 1000001;
+            return true;
+        }
+        value = std::min(value * 10 + (name[i] - '0'), 1000000);
+    }
+    if(sequence)
+        *sequence = value;
+    return true;
+}
+//---------------------------------------------------------------------------
+
 void TVPBoostAutoMountPaths() {
     if(TVPAutoMountedPaths.empty())
         return;
@@ -1791,11 +1860,22 @@ void TVPBoostAutoMountPaths() {
     const auto isArchivePath = [](const ttstr &p) {
         return p.AsStdString().find('>') != std::string::npos;
     };
-    const auto isPatchArchivePath = [](const ttstr &p) {
+    // 补丁判定规则按**激活层策略**选择（见 io/StoragePolicy.h）：
+    //   SubstringContainsPatch（旧层，缺省）：路径里含 "patch" 子串就算（历史行为）
+    //   PrefixPatchWithSequence（AetherKiri 层）：patch / patchN / patchXXX
+    const krkr::io::StoragePolicy &policy = krkr::io::ActiveStoragePolicy();
+    const bool sequencedRule =
+        policy.patchRule == krkr::io::PatchNameRule::PrefixPatchWithSequence;
+    const bool appendAtEnd =
+        policy.patchPriority == krkr::io::PatchPriorityEnd::AppendAtEnd;
+
+    const auto isPatchArchivePath = [sequencedRule](const ttstr &p) {
         std::string s = p.AsStdString();
         const size_t sharp = s.find('>');
         if(sharp != std::string::npos)
             s.erase(sharp); // 只看档案名，不看档案内的目录名
+        if(sequencedRule)
+            return TVPIsPatchArchiveNameSequenced(s, nullptr);
         for(char &c : s)
             c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         return s.find("patch") != std::string::npos;
@@ -1821,20 +1901,29 @@ void TVPBoostAutoMountPaths() {
             TVPAutoPathList.erase(it);
     }
 
-    auto insertAt = TVPAutoPathList.end();
-    for(auto it = TVPAutoPathList.begin(); it != TVPAutoPathList.end(); ++it) {
-        if(isArchivePath(*it)) {
-            insertAt = it; // 第一条（非补丁）档案条目之前
-            break;
+    if(appendAtEnd) {
+        // AetherKiri 层：表是"后注册者优先"，所以补丁档案要挪到**队尾**才算最高优先级。
+        TVPAutoPathList.insert(TVPAutoPathList.end(), patchEntries.begin(),
+                               patchEntries.end());
+    } else {
+        auto insertAt = TVPAutoPathList.end();
+        for(auto it = TVPAutoPathList.begin(); it != TVPAutoPathList.end();
+            ++it) {
+            if(isArchivePath(*it)) {
+                insertAt = it; // 第一条（非补丁）档案条目之前
+                break;
+            }
         }
+        TVPAutoPathList.insert(insertAt, patchEntries.begin(),
+                               patchEntries.end());
     }
-    TVPAutoPathList.insert(insertAt, patchEntries.begin(), patchEntries.end());
 
     AutoPathTableInit = false;
     spdlog::info(
-        "TVPBoostAutoMountPaths: moved {} patch archive path(s) ahead of other "
-        "archives (total {})",
-        patchEntries.size(), TVPAutoPathList.size());
+        "TVPBoostAutoMountPaths: moved {} patch archive path(s) to {} (rule={}, "
+        "total {})",
+        patchEntries.size(), appendAtEnd ? "end" : "front",
+        sequencedRule ? "prefix+seq" : "substring", TVPAutoPathList.size());
 
     // 判定性探针：补丁层（汉化 patch.xp3 / patch_appendN.xp3）是否真的排在
     // data.xp3 之前 —— 表是"先注册者优先"，顺序错了就是"打了补丁却取到原版脚本"

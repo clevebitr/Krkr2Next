@@ -12,8 +12,11 @@
 
 #include <algorithm>
 #include <stdexcept>
+#include <cstring>
 #include <memory>
 #include "StorageIntf.h"
+#include "IoPolicy.h"
+#include <spdlog/spdlog.h>
 #include "tjsUtils.h"
 #include "MsgIntf.h"
 #include "EventIntf.h"
@@ -75,6 +78,53 @@ ttstr TVPStringFromBMPUnicode(const tjs_uint16 *src, tjs_int maxlen) {
         return ret;
     }
     return (const tjs_char *)TVPTjsCharMustBeTwoOrFour;
+}
+//---------------------------------------------------------------------------
+
+//---------------------------------------------------------------------------
+// 缺尾部分隔符的路径：旧层抛异常，AetherKiri 层自动补齐并打日志。
+//
+// 为什么要有这个开关：脚本给的路径常常不带尾部分隔符（`Storages.addAutoPath("data.xp3")`），
+// 旧层直接抛 TVPMissingPathDelimiterAtLast 让整段脚本失败；AetherKiri 用
+// FixMissingPathDelimiter 修好并继续。补齐规则照 AetherKiri：先去尾部空白/引号，
+// 再按扩展名补 '>'（档案）或 '/'（目录）。
+//
+// 返回是否已把名字补成带分隔符的形式（策略关闭或名字为空时返回 false，调用方照旧抛）。
+//---------------------------------------------------------------------------
+static bool TVPRepairMissingDelimiter(ttstr &name) {
+    if(!krkr::io::ActiveStoragePolicy().autoRepairMissingDelimiter)
+        return false;
+
+    // 尾部空白与引号先去掉（AetherKiri 同款处理）
+    while(name.GetLen() > 0) {
+        const tjs_char c = name.GetLastChar();
+        if(c == TJS_W(' ') || c == TJS_W('\t') || c == TJS_W('\r') ||
+           c == TJS_W('\n') || c == TJS_W('"')) {
+            name = ttstr(name.c_str(), name.GetLen() - 1);
+        } else {
+            break;
+        }
+    }
+    if(name.GetLen() == 0)
+        return false;
+
+    std::string lowered = name.AsLowerCase().AsStdString();
+    const auto endsWith = [&lowered](const char *ext) {
+        const size_t n = std::strlen(ext);
+        return lowered.size() > n &&
+               lowered.compare(lowered.size() - n, n, ext) == 0;
+    };
+    const bool isArchive =
+        endsWith(".xp3") || endsWith(".tpm") || endsWith(".apk") || endsWith(".zip");
+
+    tjs_char delim[2] = { isArchive ? TVPArchiveDelimiter : TJS_W('/'), 0 };
+    name += ttstr(delim);
+
+    if(auto logger = spdlog::get("core")) {
+        logger->info("io: 脚本给的路径缺尾部分隔符，已自动补齐 -> {}",
+                     name.AsStdString());
+    }
+    return true;
 }
 //---------------------------------------------------------------------------
 
@@ -441,12 +491,15 @@ ttstr tTVPStorageMediaManager::NormalizeStorageName(const ttstr &name,
 
 //---------------------------------------------------------------------------
 void tTVPStorageMediaManager::SetCurrentDirectory(const ttstr &name) {
-    tjs_char ch = name.GetLastChar();
-    if(ch != TJS_W('/') && ch != TJS_W('\\') && ch != TVPArchiveDelimiter)
-        TVPThrowExceptionMessage(TVPMissingPathDelimiterAtLast);
+    ttstr work(name);
+    tjs_char ch = work.GetLastChar();
+    if(ch != TJS_W('/') && ch != TJS_W('\\') && ch != TVPArchiveDelimiter) {
+        if(!TVPRepairMissingDelimiter(work))
+            TVPThrowExceptionMessage(TVPMissingPathDelimiterAtLast);
+    }
 
     ttstr media, domain, path;
-    NormalizeStorageName(name, &media, &domain, &path);
+    NormalizeStorageName(work, &media, &domain, &path);
 
     tMediaRecord *rec = GetMediaRecord(media);
     rec->CurrentDomain = domain;
@@ -835,17 +888,27 @@ static bool TVPClearAutoPathCacheCallbackInit = false;
 void TVPAddAutoPath(const ttstr &name) {
     tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
 
-    tjs_char lastchar = name.GetLastChar();
+    ttstr work(name);
+    tjs_char lastchar = work.GetLastChar();
     if(lastchar != TVPArchiveDelimiter && lastchar != TJS_W('/') &&
-       lastchar != TJS_W('\\'))
-        TVPThrowExceptionMessage(TVPMissingPathDelimiterAtLast);
+       lastchar != TJS_W('\\')) {
+        if(!TVPRepairMissingDelimiter(work))
+            TVPThrowExceptionMessage(TVPMissingPathDelimiterAtLast);
+    }
 
-    ttstr normalized = TVPNormalizeStorageName(name);
+    ttstr normalized = TVPNormalizeStorageName(work);
 
     auto i =
         std::find(TVPAutoPathList.begin(), TVPAutoPathList.end(), normalized);
-    if(i == TVPAutoPathList.end())
+    if(i == TVPAutoPathList.end()) {
         TVPAutoPathList.push_back(normalized);
+    } else if(krkr::io::ActiveStoragePolicy().patchPriority ==
+              krkr::io::PatchPriorityEnd::AppendAtEnd) {
+        // AetherKiri 层：重新添加同一条 = 提升优先级（先删再 push_back）。
+        // 旧层（先注册者优先）保持"已存在就不动"，两者语义各自自洽。
+        TVPAutoPathList.erase(i);
+        TVPAutoPathList.push_back(normalized);
+    }
 
     TVPClearAutoPathCache();
 }
@@ -854,12 +917,15 @@ void TVPAddAutoPath(const ttstr &name) {
 void TVPRemoveAutoPath(const ttstr &name) {
     tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
 
-    tjs_char lastchar = name.GetLastChar();
+    ttstr work(name);
+    tjs_char lastchar = work.GetLastChar();
     if(lastchar != TVPArchiveDelimiter && lastchar != TJS_W('/') &&
-       lastchar != TJS_W('\\'))
-        TVPThrowExceptionMessage(TVPMissingPathDelimiterAtLast);
+       lastchar != TJS_W('\\')) {
+        if(!TVPRepairMissingDelimiter(work))
+            TVPThrowExceptionMessage(TVPMissingPathDelimiterAtLast);
+    }
 
-    ttstr normalized = TVPNormalizeStorageName(name);
+    ttstr normalized = TVPNormalizeStorageName(work);
 
     auto i =
         std::find(TVPAutoPathList.begin(), TVPAutoPathList.end(), normalized);
@@ -913,6 +979,13 @@ static tjs_uint TVPRebuildAutoPathTable() {
     // Kirikiroid2 没有这种自动挂载，auto-path 只有 data.xp3>，
     // 取到的是根目录那份。
 
+    // 同键冲突时谁生效由**激活层的策略**决定（见 IoPolicy.h / StoragePolicy.h）：
+    //   FirstRegisteredWins（旧版 krkr2 层，缺省）= 先出现的那条赢（历史行为）
+    //   LastRegisteredWins（AetherKiri 层）= 后出现的那条赢（上游 krkr2 语义，哈希表覆盖）
+    const krkr::io::StoragePolicy &policy = krkr::io::ActiveStoragePolicy();
+    const bool lastWins =
+        policy.tieBreak == krkr::io::AutoPathTieBreak::LastRegisteredWins;
+
     tjs_uint64 tick = TVPGetTickCount();
     TVPAddLog((const tjs_char *)TVPInfoRebuildingAutoPath);
 
@@ -956,9 +1029,8 @@ static tjs_uint TVPRebuildAutoPathTable() {
                             if(!TJS_strchr(name.c_str() + in_arc_name_len,
                                            TJS_W('/'))) {
                                 ttstr sname = TVPExtractStorageName(name);
-                                // 先到先得：见函数开头「同名 basename 只认
-                                // 先出现的那条」
-                                if(!TVPAutoPathTable.Find(sname)) {
+                                // 同键策略见函数开头（lastWins 时后写覆盖，即后注册者赢）
+                                if(lastWins || !TVPAutoPathTable.Find(sname)) {
                                     TVPAutoPathTable.Add(sname, path);
                                 }
                                 count++;
@@ -984,8 +1056,8 @@ static tjs_uint TVPRebuildAutoPathTable() {
 
             TVPStorageMediaManager.GetListAt(path, &lister);
             for(auto &i : lister.list) {
-                // 先到先得：见函数开头「同名 basename 只认先出现的那条」
-                if(!TVPAutoPathTable.Find(i)) {
+                // 同键策略见函数开头
+                if(lastWins || !TVPAutoPathTable.Find(i)) {
                     TVPAutoPathTable.Add(i, path);
                 }
                 count++;

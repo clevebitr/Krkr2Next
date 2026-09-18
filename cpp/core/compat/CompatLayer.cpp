@@ -3,6 +3,8 @@
 //
 #include "CompatLayer.h"
 
+#include "io/IoPolicy.h"
+
 #include <cstring>
 #include <spdlog/spdlog.h>
 
@@ -88,6 +90,10 @@ namespace krkr::compat {
     }
 
     void SetActiveLayer(LayerId id) {
+        // 策略注入必须**每次都做**（不能只在层变化时做）：本函数每次档解析都会被调用，
+        // 而 io 侧的策略对象是函数局部静态，首次初始化可能是缺省值；这里保证"当前层"
+        // 与"io 生效策略"始终一致。
+        io::SetActiveStoragePolicy(StoragePolicyFor(id));
         if(g_active == id)
             return;
         g_active = id;
