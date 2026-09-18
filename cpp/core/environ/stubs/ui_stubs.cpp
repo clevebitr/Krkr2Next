@@ -18,6 +18,8 @@
 #include <fstream>
 #include <cstring>
 #include <mutex>
+#include <chrono>
+#include <thread>
 
 #include "tjsCommHead.h"
 #include "tjsConfig.h"
@@ -33,8 +35,16 @@
 #include "VideoOvlImpl.h"
 // TVPPostWindowUpdate（BringToFront / ShowWindowAsModal 用它请求重绘）
 #include "EventIntf.h"
+// 关窗确认闸门与模态输入泵（krkr::host）在 SysInitImpl.h 里声明；
+// 卡死探针的阶段标记在下面这个头里 —— 模态循环每帧要刷心跳，否则会被看门狗
+// 当成"渲染线程 1.5s 没推进"误报。
+#include "../../utils/StallWatchdog.h"
 
 #include <GLES3/gl3.h>
+
+// TVPDrawSceneOnce 定义在 environ/EngineLoop.cpp、声明在 environ/MainScene.h；
+// 这里只留一个声明（模态循环每帧调它做呈现 + 节拍）。
+int TVPDrawSceneOnce(int interval);
 
 // 全局图层对象计数（诊断用，区分「引擎没建图层/没东西画」与「画了但没进源纹理」）
 extern tjs_int TVPGetLayerCount();
@@ -278,11 +288,20 @@ public:
 
     // 游戏内置对话框（退出确认等）走的就是 Window.showModal()。
     //
-    // 以前这里是 `spdlog::warn("...stub")`：既让窗口始终不可见（对话框画不出来），
-    // 又让每次弹窗都写一条 warning —— 真机上就表现为"引擎显示不了游戏自带弹窗，
-    // 而且错误日志一直涨"。宿主没有嵌套消息循环可用（渲染由壳的 frameCallback
-    // 驱动），所以"模态"在这里的可交付语义是：置为可见 + 排到最前 + 请求重绘，
-    // 让对话框真正出现在画面上；输入焦点仍由壳统一转发，不需要额外门闩。
+    // **必须阻塞脚本**：KAG 的标准写法是
+    //     var win = new YesNoDialogWindow(...);
+    //     win.showModal();          // Win32 上是嵌套消息循环，用户不点不返回
+    //     var res = win.result;     // 关闭后读结果
+    //     invalidate win;
+    // 一旦 showModal() 立即返回，脚本马上执行 `invalidate win` —— 真机
+    // 2026-09-18 13:20:09.768 就是 ShowModal 与 HostWindowLayer destroyed 同毫秒，
+    // 对话框连一帧都没画出来（用户看到的"游戏自带弹窗不显示"）。
+    //
+    // 这里按 Kirikiroid2 的 cocos2d 实现（MainScene.cpp）做同样的嵌套循环：
+    // 每帧调 Application::Run()（消息/脚本/合成/绘制）+ TVPDrawSceneOnce(30)
+    // （呈现 + 节拍），直到对话框自己 close()（Close() 里把 modal_ 置 false）。
+    // 输入来自宿主：engine_send_input 现在允许任意线程投递，模态循环每帧调
+    // PumpModalInput() 把它派发掉。
     void ShowWindowAsModal() override {
         visible_ = true;
         if(owner_)
@@ -291,14 +310,52 @@ public:
         // （老实现就是每条一次 warn，正是"错误日志一直涨"的来源）。
         if(!modal_logged_) {
             modal_logged_ = true;
-            spdlog::info("HostWindowLayer::ShowWindowAsModal: 置为可见并请求重绘"
-                         "（模态对话框由宿主正常合成）");
+            spdlog::info("HostWindowLayer::ShowWindowAsModal: 进入模态循环"
+                         "（阻塞脚本直到对话框关闭）");
         }
+
+        // 兜底上限：绝不能因为"对话框没人关"把渲染线程永久钉死（那时壳连
+        // 退出游戏都排不进来）。2 分钟足够读完任何确认框。
+        constexpr int64_t kModalMaxMs = 120000;
+        const auto modalStart = std::chrono::steady_clock::now();
+        modal_ = true;
+        int frames = 0;
+        while(modal_) {
+            if(TVPTerminated)
+                break;
+            if(owner_ && !TVPIsWindowRegistered(owner_))
+                break; // 窗口被脚本 invalidate 掉了，没有可等的对话框
+            krkr::host::PumpModalInput();
+            if(::Application)
+                ::Application->Run();
+            krkr::stall::MarkStage("host: 等待模态对话框（脚本阻塞在 showModal）");
+            const int remain = TVPDrawSceneOnce(30);
+            ++frames;
+            if(remain > 0)
+                std::this_thread::sleep_for(std::chrono::milliseconds(remain));
+            if(std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::steady_clock::now() - modalStart)
+                   .count() > kModalMaxMs) {
+                spdlog::warn("HostWindowLayer: 模态对话框 {}s 未被关闭，"
+                             "强制结束模态循环（帧数={}）",
+                             kModalMaxMs / 1000, frames);
+                break;
+            }
+        }
+        modal_ = false;
+        spdlog::info("HostWindowLayer::ShowWindowAsModal: 模态循环结束（帧数={}）",
+                     frames);
     }
 
     bool GetVisible() override { return visible_; }
 
-    void SetVisible(bool bVisible) override { visible_ = bVisible; }
+    void SetVisible(bool bVisible) override {
+        visible_ = bVisible;
+        // 脚本用 visible=false 收掉模态对话框（KAG 的另一条写法）：也要让
+        // ShowWindowAsModal 的嵌套循环退出，否则渲染线程会一直卡在里面。
+        if(!bVisible)
+            modal_ = false;
+    }
 
     const char *GetCaption() override { return caption_.c_str(); }
 
@@ -848,6 +905,20 @@ public:
     bool GetWindowActive() override { return active_; }
 
     void Close() override {
+        // ── 非主窗口（KAG 的对话框/关于窗口是独立 Window）──────────────
+        // 关掉对话框**与游戏退出无关**，而且必须走这里让模态循环退出：
+        // KAG 的按钮处理是 `result = true; close();`，模态循环靠 modal_ 收尾；
+        // 若把它当成"游戏关窗退出"（下面那条路），模态循环就永远等不到结束条件。
+        const bool isMain = !owner_ || owner_->IsMainWindow();
+        if(!isMain) {
+            closing_ = true;
+            visible_ = false;
+            modal_ = false; // 让 ShowWindowAsModal 的嵌套循环退出
+            if(owner_)
+                TVPPostWindowUpdate(owner_);
+            spdlog::debug("HostWindowLayer::Close: 子窗口（对话框）关闭，结束模态等待");
+            return;
+        }
         // 宿主要求"关窗前先问用户"时，这里**不拆窗口也不终止**：KAG 的退出菜单
         // （kag.close() → MainWindow.close() → Window.close()）唯一的下场就是这里，
         // 而用户要的正是"选继续就接着玩"。请求交给 engine_tick 用
@@ -1017,6 +1088,8 @@ private:
     bool visible_;
     /// showModal() 的诊断日志只记一次（边沿），避免游戏反复调用时刷日志。
     bool modal_logged_ = false;
+    /// 正在 ShowWindowAsModal 的嵌套循环里等用户操作；Close() 会把它置 false。
+    bool modal_ = false;
     std::string caption_;
     tjs_int width_;
     tjs_int height_;

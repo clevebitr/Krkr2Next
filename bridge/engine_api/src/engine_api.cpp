@@ -85,6 +85,9 @@ extern "C" void krkr_GetSurfaceDimensions(uint32_t *, uint32_t *);
 
 int TVPDrawSceneOnce(int interval);
 
+// 模态对话框期间由 core 每帧回调的输入泵（定义见文件后半段，engine_create 里注册）。
+static void PumpModalInputOnTickThread();
+
 extern "C" void TVPRegisterKrkrGLESPluginAnchor();
 #ifdef KRKR2_LIVE2D
 // krkrlive2d.cpp 仅在 cubism SDK
@@ -1127,6 +1130,9 @@ engine_result_t engine_create(const engine_create_desc_t *desc,
     // 宿主模式下"游戏关窗"不再直接终止：挂起后由壳弹确认框，再用
     // engine_resolve_window_close() 答复（见 krkr::host 的说明）。
     krkr::host::SetDeferWindowClose(true);
+    // 模态对话框期间 core 的嵌套循环会占住 tick 线程，宿主改从 UI 线程投递输入；
+    // core 每帧回调这里派发（见 PumpModalInputOnTickThread 的说明）。
+    krkr::host::SetModalInputPump(&PumpModalInputOnTickThread);
 
     auto *impl = new(std::nothrow) engine_handle_s();
     if(impl == nullptr) {
@@ -2744,6 +2750,35 @@ engine_result_t engine_get_host_native_view(engine_handle_t handle,
         "engine_get_host_native_view is not supported in headless mode");
 }
 
+// 模态对话框（KAG 的 Window.showModal → HostWindowLayer::ShowWindowAsModal 的嵌套
+// 循环）期间 tick 线程被 core 占用：壳的帧回调排不进来，输入只能从 UI 线程投递。
+// core 每帧回调这里把队列派发掉 —— 此刻本线程就是 owner/tick 线程，impl->mutex 是
+// 递归锁，重入是安全的。
+static void PumpModalInputOnTickThread() {
+    std::lock_guard<std::recursive_mutex> registry_guard(g_registry_mutex);
+    if(!g_runtime_active || g_runtime_owner == nullptr)
+        return;
+    engine_handle_s *impl = nullptr;
+    if(ValidateHandleLocked(g_runtime_owner, &impl) != ENGINE_RESULT_OK)
+        return;
+    std::lock_guard<std::recursive_mutex> guard(impl->mutex);
+    if(ValidateHandleThreadLocked(impl) != ENGINE_RESULT_OK)
+        return;
+    while(!impl->input.pending_events.empty()) {
+        const engine_input_event_t queued_event =
+            impl->input.pending_events.front();
+        impl->input.pending_events.pop_front();
+        const char *dispatch_error = nullptr;
+        if(DispatchInputEventNow(impl, queued_event, &dispatch_error) !=
+           ENGINE_RESULT_OK) {
+            // 模态期间派发失败不该打断对话框；记一条便于排查。
+            spdlog::warn("PumpModalInput: 输入派发失败 err={}",
+                         dispatch_error ? dispatch_error : "(unknown)");
+            break;
+        }
+    }
+}
+
 engine_result_t engine_send_input(engine_handle_t handle,
                                   const engine_input_event_t *event) {
     if(event == nullptr) {
@@ -2764,11 +2799,11 @@ engine_result_t engine_send_input(engine_handle_t handle,
     }
 
     std::lock_guard<std::recursive_mutex> guard(impl->mutex);
-    result = ValidateHandleThreadLocked(impl);
-    if(result != ENGINE_RESULT_OK) {
-        return result;
-    }
-
+    // **故意不校验 owner 线程**：输入只是往 impl->input.pending_events 入队（受
+    // impl->mutex 保护），真正的派发在 tick 线程做。模态对话框期间（KAG 的
+    // Window.showModal → HostWindowLayer::ShowWindowAsModal 的嵌套循环）tick 线程被
+    // core 占住，壳只能从 UI 线程投递；那些事件由注册给 core 的
+    // PumpModalInputOnTickThread 在模态循环里派发。
     if(impl->state == ToStateValue(EngineState::kPaused)) {
         return SetHandleErrorAndReturnLocked(impl, ENGINE_RESULT_INVALID_STATE,
                                              "engine is paused");

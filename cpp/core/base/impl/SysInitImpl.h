@@ -12,6 +12,8 @@
 #define SysInitImplH
 
 //---------------------------------------------------------------------------
+#include <functional>
+
 extern void TVPDumpHWException();
 
 extern void TVPInitializeBaseSystems();
@@ -59,6 +61,15 @@ bool WindowClosePending();
 void CancelWindowClose();
 /** 宿主选"退出游戏"（或兜底超时）：执行真正的关窗终止。 */
 void ConfirmWindowClose();
+
+// ── 模态对话框（KAG 的 Window.showModal）───────────────────────────────────
+// HostWindowLayer::ShowWindowAsModal 会阻塞脚本（嵌套循环），此时壳的渲染线程
+// 被占用，宿主只能从别的线程投递输入；而输入派发必须在引擎线程做，所以由
+// engine_api 注册一个"把宿主输入队列派发掉"的回调，模态循环每帧调用它。
+using ModalInputPump = std::function<void()>;
+void SetModalInputPump(ModalInputPump pump);
+/** 模态循环每帧调用：派发宿主在别的线程投递的输入（无回调时是空操作）。 */
+void PumpModalInput();
 } // namespace krkr::host
 
 //---------------------------------------------------------------------------

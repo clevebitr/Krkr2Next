@@ -43,6 +43,8 @@
 #include <thread>
 #include <atomic>
 #include <chrono>
+#include <mutex>
+#include <functional>
 
 #undef uint32_t
 
@@ -467,6 +469,28 @@ void ConfirmWindowClose() {
     // 这里直接按"关窗退出"处理，engine_tick 下一帧会报 WINDOW_CLOSED。
     TVPTerminateWindowClosed = true;
     TVPTerminateAsync(0);
+}
+
+// 模态对话框的输入泵（见头文件说明）。回调由 engine_api 注册；泵本身不持有
+// 任何引擎状态，只在引擎线程（模态循环所在线程）里被调用。
+namespace {
+std::mutex g_modalPumpMutex;
+ModalInputPump g_modalInputPump;
+} // namespace
+
+void SetModalInputPump(ModalInputPump pump) {
+    std::lock_guard<std::mutex> lk(g_modalPumpMutex);
+    g_modalInputPump = std::move(pump);
+}
+
+void PumpModalInput() {
+    ModalInputPump pump;
+    {
+        std::lock_guard<std::mutex> lk(g_modalPumpMutex);
+        pump = g_modalInputPump;
+    }
+    if(pump)
+        pump();
 }
 } // namespace krkr::host
 

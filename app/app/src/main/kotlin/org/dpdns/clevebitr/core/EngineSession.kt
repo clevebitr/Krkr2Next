@@ -221,7 +221,11 @@ class EngineSession(
     /** 累计 tick 失败次数，供限频日志带出"偶发还是彻底坏了"。只在渲染线程写。 */
     private var tickFailures = 0L
 
-    /** 累计输入被拒次数，同上。 */
+    /**
+     * 累计输入被拒次数。输入在调用线程（UI 线程）直接投递，读它的是渲染线程的
+     * 性能日志，所以必须是 volatile。
+     */
+    @Volatile
     private var sendFailures = 0L
 
     /** 上次上报过的启动状态，用于抑制重复上报（见 [pollStartupState]）。只在渲染线程写。 */
@@ -575,15 +579,13 @@ class EngineSession(
     // ── 输入 ──────────────────────────────────────────────────────────────
 
     /**
-     * 发送输入事件。**可在任意线程调用**——内部会切到渲染线程再调引擎。
+     * 发送输入事件。**可在任意线程调用**，直接在调用线程调引擎入队。
      *
-     * ⚠️ 为什么必须切线程：`engine_send_input` 在 C++ 侧用
-     * `ValidateHandleThreadLocked` 校验调用方必须是 `engine_create` 所在线程
-     * （即本类的渲染线程），否则返回 `ENGINE_RESULT_INVALID_STATE` 且**事件不入队**。
-     * 触摸来自 UI 线程、按键来自 `dispatchKeyEvent`（也在 UI 线程），若直接调用，
-     * 每一次输入都会被引擎丢弃，表现为游戏完全无响应。
-     *
-     * 切线程不会增加可感知延迟：引擎本来就是把事件排队到下一 tick 才派发。
+     * 引擎侧 `engine_send_input` 只把事件压进受互斥锁保护的队列（真正派发在
+     * tick 线程做），所以允许任意线程投递。**不能**再切到渲染线程：模态对话框
+     * （KAG 的 `Window.showModal()`）期间渲染线程被 core 的嵌套循环占住，
+     * 若还靠 `post{}` 排队，点击会一直卡在队列里 —— 对话框永远等不到用户操作。
+     * 见 `HostWindowLayer::ShowWindowAsModal` 与 `PumpModalInputOnTickThread`。
      *
      * @param keyCode **Windows VK 码**（见 [VkCodes]），不是 Android KEYCODE
      * @param x,y 视图坐标（物理像素）；不要乘 density
@@ -601,21 +603,20 @@ class EngineSession(
         unicodeCodepoint: Int = 0,
         timestampMicros: Long = System.nanoTime() / 1_000L,
     ) {
-        post {
-            if (handle == 0L) return@post
-            val rc = NativeEngine.engineSendInput(
-                handle, type, x, y, deltaX, deltaY, pointerId, button,
-                keyCode, modifiers, unicodeCodepoint, timestampMicros,
-            )
-            if (rc != NativeEngine.RESULT_OK &&
-                rc != NativeEngine.RESULT_STARTUP_PENDING
-            ) {
-                // 触摸是高频事件，输入若被持续拒绝会逐条刷屏——限频并带上次数。
-                // 启动期（STARTUP_PENDING）被拒是正常的，不计数也不记日志。
-                sendFailures++
-                AppLog.wLimited(TAG, "sendInput", 5_000L) {
-                    "engineSendInput failed x$sendFailures (最近一次 type=$type rc=$rc err=${lastError()})"
-                }
+        val h = handle
+        if (h == 0L || destroyed) return
+        val rc = NativeEngine.engineSendInput(
+            h, type, x, y, deltaX, deltaY, pointerId, button,
+            keyCode, modifiers, unicodeCodepoint, timestampMicros,
+        )
+        if (rc != NativeEngine.RESULT_OK &&
+            rc != NativeEngine.RESULT_STARTUP_PENDING
+        ) {
+            // 触摸是高频事件，输入若被持续拒绝会逐条刷屏——限频并带上次数。
+            // 启动期（STARTUP_PENDING）被拒是正常的，不计数也不记日志。
+            sendFailures++
+            AppLog.wLimited(TAG, "sendInput", 5_000L) {
+                "engineSendInput failed x$sendFailures (最近一次 type=$type rc=$rc err=${lastError()})"
             }
         }
     }
