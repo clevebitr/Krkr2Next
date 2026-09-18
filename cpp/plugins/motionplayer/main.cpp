@@ -5,6 +5,7 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+#include <set>
 #include <spdlog/spdlog.h>
 #include "tjs.h"
 #include "tjsDictionary.h"
@@ -185,12 +186,24 @@ void MotionAutoDriveHook::OnContinuousCallback(tjs_uint64 /*tick*/) {
     for(auto *player : players) {
         if(!player)
             continue;
-        // 门控探针（有玩家的头 10 次回调 + 之后每 600 次一条）：自动驱动"登记了、
-        // 钩子也在跑、却没有推进/重绘"时，只有这组状态能说明是被哪一道门拦住的。
-        if((call <= 10 || (call % 600) == 0) && LOGGER)
+        // 门控探针：① 每个玩家**首次**被钩子看到时记一条（每个 motion 一条，约
+        // 1~2 条/秒，SD/动效那段才看得到状态）；② 外加前 10 次回调 + 每 600 次一条
+        // 的常规采样。自动驱动"登记了、钩子也在跑、却既不推进也不重绘"时，只有这组
+        // 状态能说明是被哪一道门拦住的（真机 SD 动效只画一帧就是这种情况）。
+        bool firstSight = false;
+        {
+            static std::mutex s_seenMutex;
+            static std::set<motion::Player *> s_seen;
+            std::lock_guard<std::mutex> lk(s_seenMutex);
+            firstSight = s_seen.insert(player).second;
+            if(s_seen.size() > 4096)
+                s_seen.clear();
+        }
+        if((firstSight || call <= 10 || (call % 600) == 0) && LOGGER)
             LOGGER->info(
-                "MCP 自动驱动: 门控 player={} playing={} progressRecent={} "
+                "MCP 自动驱动: 门控{} player={} playing={} progressRecent={} "
                 "capture={} drawRecent={} hasTarget={} tick={}",
+                firstSight ? "(首次)" : "",
                 static_cast<const void *>(player),
                 player->autoProgressEligible() ? 1 : 0,
                 player->manualProgressRecent() ? 1 : 0,
@@ -199,6 +212,10 @@ void MotionAutoDriveHook::OnContinuousCallback(tjs_uint64 /*tick*/) {
                 player->lastDrawTarget() ? 1 : 0, player->getTickCount());
         // 游戏没在播 / 已经停了：摘掉登记。
         if(!player->autoProgressEligible()) {
+            if(LOGGER)
+                LOGGER->info("MCP 自动驱动: 摘除 player={}（playing=0，tick={}）",
+                             static_cast<const void *>(player),
+                             player->getTickCount());
             AutoDriveUnregister(player);
             continue;
         }

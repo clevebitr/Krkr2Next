@@ -166,8 +166,12 @@ TVPMoviePlayer::~TVPMoviePlayer() {
     // 关键顺序：先唤醒可能卡在"等空槽位"的解码线程，再删播放器。否则
     // delete m_pPlayer → CloseStream/StopThread 会去 join 那条线程，而它正因为
     // 队列满（游戏已停止消费）永远等不到空槽位 —— 渲染线程就此无限期挂住。
+    // （为什么**不**把它丢给后台线程：BasePlayer 的析构会经 m_pRenderer 回调它的
+    //  所有者，而所有者此刻正在析构；延迟释放会让 BasePlayer 活得比所有者更久 →
+    //  悬垂。当前阻塞点在临时文件删除上，见 VideoOvlImpl.cpp 的说明。）
     AbortPictureWait();
     delete m_pPlayer;
+    m_pPlayer = nullptr;
     if(img_convert_ctx)
         sws_freeContext(img_convert_ctx), img_convert_ctx = nullptr;
 }
@@ -585,6 +589,9 @@ void KRMovie::VideoPresentOverlay::Stop() {
 
 MoviePlayerOverlay::~MoviePlayerOverlay() {
     assert(std::this_thread::get_id() == TVPMainThreadID);
+    // 同步销毁：BasePlayer 的析构会经 m_pRenderer 回到所有者，延迟释放会造成悬垂
+    // （详见 TVPMoviePlayer::~TVPMoviePlayer 的说明）。真正的阻塞点在临时文件删除，
+    // 那里已改成后台执行。
     delete m_pPlayer;
     m_pPlayer = nullptr;
 }

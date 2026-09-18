@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include "../../utils/StallWatchdog.h"
+#include "../movie/ffmpeg/MoviePlayerJanitor.h"
 #include "MsgIntf.h"
 #include "VideoOvlImpl.h"
 #include "DebugIntf.h"
@@ -365,8 +366,19 @@ void tTJSNI_VideoOverlay::Close() {
         VideoOverlay = nullptr;
     }
     krkr::stall::MarkStage("movie: Close→清理临时存储/消息");
-    if(LocalTempStorageHolder)
-        delete LocalTempStorageHolder, LocalTempStorageHolder = nullptr;
+    if(LocalTempStorageHolder) {
+        // **绝不在渲染线程上删临时文件**：tTVPLocalTempStorageHolder 的析构会调
+        // TVPRemoveFile/TVPRemoveFolder —— 真正的文件系统删除。真机日志定位到的
+        // 卡死点正是这里：2026-09-18 15:50:51 播完 CG 视频后最后阶段＝
+        // "movie: Close→清理临时存储/消息"，之后 engine.log 一行都不再增长
+        // （连卡死看门狗都打不出日志），只能杀进程；此前同一阶段还有过
+        // 1.5~2.0s 的停顿。交给后台清理线程，渲染线程立刻返回。
+        krkr::movie::DeferredDestroyer<
+            tTVPLocalTempStorageHolder>::Instance().Defer(
+            LocalTempStorageHolder);
+        LocalTempStorageHolder = nullptr;
+    }
+    krkr::stall::MarkStage("movie: Close→清理窗口消息/状态");
     ClearWndProcMessages();
     SetStatus(ssUnload);
 
