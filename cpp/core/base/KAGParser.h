@@ -374,5 +374,18 @@ extern iTJSDispatch2 *TVPCreateNativeClass_KAGParser();
 extern void
 TVPClearScnearioCache(); // runtime-restart 时清空跨游戏残留的场景缓存
 
+// 编译场景（.scn / PSB 场景树）标签解析回调。
+//
+// 移植自 AetherKiri `cpp/core/base/KAGParser.{h,cpp}`（in-file 片段，见 compat/README.md §6）。
+// 用途：某些发行版把脚本编译进 PSB（同名 `.scn`），此时读脚本会失败而**标签仍在**
+// （由 psbfile 侧遍历场景树提供）。注册回调后：
+//   - `LoadScenario` 读不到脚本但存在 `.scn` 时，用合成的 "*\n" 缓冲继续，而不是抛异常；
+//   - `GoToLabel` 在标签缓存里找不到时，先问回调，再决定是否抛 TVPKAGLabelNotFound。
+// 未注册回调时行为与移植前**完全一致**（读失败照旧抛、标签找不到照旧抛）。
+typedef bool (*tTVPCompiledScenarioLabelResolver)(const ttstr &storage,
+                                                  const ttstr &label);
+TJS_EXP_FUNC_DEF(void, TVPRegisterCompiledScenarioLabelResolver,
+                 (tTVPCompiledScenarioLabelResolver resolver));
+
 
 #endif

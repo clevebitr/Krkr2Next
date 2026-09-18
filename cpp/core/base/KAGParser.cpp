@@ -67,6 +67,12 @@ const tjs_char *TVPUnknownMacroName = TJS_W("Unknown macro \"%1\"");
 #define TJS_NATIVE_SET_ClassID ClassID_KAGParser = TJS_NCM_CLASSID;
 static tjs_int32 ClassID_KAGParser = -1;
 
+// 编译场景容错的前置声明：实现在本文件后半（见「编译场景（.scn）标签解析回调」一节），
+// 但 tTVPScenarioCacheItem::LoadScenario 更早用到它。
+static bool TVPHasCompiledScenarioStorage(const ttstr &name);
+static bool TVPCompiledScenarioHasLabel(const ttstr &storage,
+                                        const ttstr &label);
+
 //---------------------------------------------------------------------------
 // tTVPScenarioCacheItem : Scenario Cache Item
 //---------------------------------------------------------------------------
@@ -120,7 +126,13 @@ void tTVPScenarioCacheItem::LoadScenario(const ttstr &name, bool isstring) {
         } catch(...) {
             if(stream)
                 stream->Destruct();
-            throw;
+            // 编译场景容错：读不到脚本但存在同名 `.scn` 时，用合成的 `*\n` 继续
+            // （标签由注册的解析回调提供），而不是直接抛。没有 `.scn` 时行为不变。
+            if(TVPHasCompiledScenarioStorage(name)) {
+                Buffer = TJS_W("*\n");
+            } else {
+                throw;
+            }
         }
         if(stream)
             stream->Destruct();
@@ -299,6 +311,48 @@ tTVPScenarioCacheItem *TVPGetScenario(const ttstr &storagename, bool isstring) {
     return item;
 }
 //---------------------------------------------------------------------------
+
+//---------------------------------------------------------------------------
+// 编译场景（.scn）标签解析回调
+//
+// 移植自 AetherKiri `cpp/core/base/KAGParser.cpp:320-360`（in-file 片段）。作用见头文件说明。
+// 与上游的差别：上游在没有回调时会顺手 `LoadModule("psbfile.dll")` 去激活它；本仓库的
+// psbfile 是编译进来的内置模块、加载时机由引擎决定，这里**不主动拉模块**（避免在解析器里
+// 引入插件加载副作用）。因此未注册回调时就是"没有回调"的行为。
+//---------------------------------------------------------------------------
+static tTVPCompiledScenarioLabelResolver TVPCompiledScenarioLabelResolver = nullptr;
+
+void TVPRegisterCompiledScenarioLabelResolver(
+    tTVPCompiledScenarioLabelResolver resolver) {
+    TVPCompiledScenarioLabelResolver = resolver;
+}
+
+static ttstr TVPGetCompiledScenarioStorageName(const ttstr &name) {
+    if(name.IsEmpty())
+        return ttstr();
+
+    ttstr path = name;
+    if(TVPExtractStorageExt(path).AsLowerCase() != TJS_W(".scn"))
+        path += TJS_W(".scn");
+    return path;
+}
+
+static bool TVPHasCompiledScenarioStorage(const ttstr &name) {
+    const ttstr path = TVPGetCompiledScenarioStorageName(name);
+    return !path.IsEmpty() && TVPIsExistentStorage(path);
+}
+
+static bool TVPCompiledScenarioHasLabel(const ttstr &storage,
+                                        const ttstr &label) {
+    if(storage.IsEmpty() || label.IsEmpty() || !TVPCompiledScenarioLabelResolver)
+        return false;
+
+    try {
+        return TVPCompiledScenarioLabelResolver(storage, label);
+    } catch(...) {
+        return false;
+    }
+}
 
 //---------------------------------------------------------------------------
 // tTJSNI_KAGParser : KAGParser TJS native instance
@@ -1078,6 +1132,13 @@ void tTJSNI_KAGParser::GoToLabel(const ttstr &name) {
         else
             CurPage.Clear();
         CurLine = newline->Line;
+        CurPos = 0;
+        LineBufferUsing = false;
+    } else if(TVPCompiledScenarioHasLabel(StorageName, name)) {
+        // 编译场景：标签不在脚本文本里，但解析回调认得它（见头文件说明）。
+        CurLabel = name;
+        CurPage.Clear();
+        CurLine = 0;
         CurPos = 0;
         LineBufferUsing = false;
     } else {
