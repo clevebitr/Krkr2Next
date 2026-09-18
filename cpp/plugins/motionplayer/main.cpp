@@ -43,9 +43,12 @@ namespace {
     std::vector<motion::Player *> g_autoDrivePlayers;
     MotionAutoDriveHook g_autoDriveHook;
     bool g_autoDriveHooked = false;
-    int64_t g_autoDriveLastMs = 0;
+    /// 上次推进的墙钟（脚本线程会重置、钩子在引擎线程读，所以用原子）。
+    std::atomic<int64_t> g_autoDriveLastMs{ 0 };
 
     std::atomic<uint64_t> g_autoDriveRegisters{ 0 };
+    /// 每次"（重）挂钩子" +1：钩子回调里据此打印一次"确认存活"。
+    std::atomic<uint64_t> g_autoDriveHookGen{ 0 };
 
     void AutoDriveRegister(motion::Player *player) {
         if(!player)
@@ -60,18 +63,29 @@ namespace {
                 added = true;
             }
             count = g_autoDrivePlayers.size();
-            if(!g_autoDriveHooked) {
+            // **无条件重挂**（新登记或有新玩家时）：TVPRemoveContinuousEventHook
+            // 只把已有条目置空、TVPAddContinuousEventHook 追加一条，派发时会压缩，
+            // 结果永远恰好一条活条目。这样即使 g_autoDriveHooked 与实际钩子表
+            // 不一致（真机 2026-09-18 13:20:27 之后：登记照常发生，钩子却再没被
+            // 回调过，SD 动画 tick 永远是 0），也能重新活过来。
+            if(!g_autoDriveHooked || added) {
+                TVPRemoveContinuousEventHook(&g_autoDriveHook);
                 TVPAddContinuousEventHook(&g_autoDriveHook);
                 g_autoDriveHooked = true;
                 g_autoDriveLastMs = 0; // 下一帧重新取基准，避免停顿时跳一大步
+                g_autoDriveHookGen.fetch_add(1, std::memory_order_relaxed);
             }
         }
         // 登记探针：确认"游戏确实调了 play/draw、我们把玩家登记进来了"。
         // 没有这条日志时，无法区分"没登记"与"钩子没跑"。
+        // 另外记录挂了几次钩子（代数）：代数在涨而"钩子确认存活"不出现，
+        // 就说明钩子挂了却不再被引擎回调。
         const uint64_t n = g_autoDriveRegisters.fetch_add(1) + 1;
-        if(added && (n <= 3 || (n % 200) == 0) && LOGGER)
-            LOGGER->info("MCP 自动驱动: 登记玩家 {}（表内 {} 个，第 {} 次登记）",
-                         static_cast<const void *>(player), count, n);
+        if(added && (n <= 5 || (n % 200) == 0) && LOGGER)
+            LOGGER->info("MCP 自动驱动: 登记玩家 {}（表内 {} 个，第 {} 次登记，"
+                         "钩子代数 {}）",
+                         static_cast<const void *>(player), count, n,
+                         g_autoDriveHookGen.load(std::memory_order_relaxed));
     }
 
     void AutoDriveUnregister(motion::Player *player) {
@@ -131,6 +145,19 @@ void MotionAutoDriveHook::OnContinuousCallback(tjs_uint64 /*tick*/) {
         std::lock_guard<std::mutex> lock(g_autoDriveMutex);
         players = g_autoDrivePlayers;
     }
+    // "钩子确认存活"：每次（重）挂后打印一次。真机上出现过"登记照常发生、钩子却
+    // 再没被回调过"的状态，只靠 first-3 计数看不出来（计数器跨重挂递增）。
+    {
+        static uint64_t s_provenGen = 0;
+        const uint64_t gen = g_autoDriveHookGen.load(std::memory_order_relaxed);
+        if(gen != s_provenGen) {
+            s_provenGen = gen;
+            if(LOGGER)
+                LOGGER->info("MCP 自动驱动: 钩子确认存活（代数 {}，回调第 {} 次，"
+                             "表内 {} 个玩家）",
+                             gen, hookCall, players.size());
+        }
+    }
     // 钩子调用探针：first 3 + every 600 —— 区分"钩子根本没被调用"与"调用了但表为空"。
     if(hookCall <= 3 || (hookCall % 600) == 0) {
         if(LOGGER)
@@ -142,14 +169,15 @@ void MotionAutoDriveHook::OnContinuousCallback(tjs_uint64 /*tick*/) {
 
     const int64_t now = AutoDriveNowMs();
     int64_t deltaMs = 16;
-    if(g_autoDriveLastMs != 0) {
-        deltaMs = now - g_autoDriveLastMs;
+    const int64_t lastMs = g_autoDriveLastMs.load(std::memory_order_relaxed);
+    if(lastMs != 0) {
+        deltaMs = now - lastMs;
         if(deltaMs < 0)
             deltaMs = 0;
         if(deltaMs > 100) // 卡顿后不要一次跳完，参考实现同样是 clamp
             deltaMs = 100;
     }
-    g_autoDriveLastMs = now;
+    g_autoDriveLastMs.store(now, std::memory_order_relaxed);
 
     const uint64_t call = g_autoDriveCalls.fetch_add(1) + 1;
     const bool heartbeat = (call == 1 || (call % 600) == 0);
@@ -939,8 +967,10 @@ static tjs_error Player_progress(tTJSVariant *, tjs_int count, tTJSVariant **p,
         if(n <= 5 || (n % 600) == 0) {
             auto lg = spdlog::get("plugin");
             if(lg)
-                lg->info("MCP Player.progress: 第 {} 次 delta={}ms -> tick={}",
-                         n, static_cast<tjs_int>(p[0]->AsInteger()),
+                lg->info("MCP Player.progress: 第 {} 次 player={} delta={}ms -> "
+                         "tick={}",
+                         n, static_cast<const void *>(player),
+                         static_cast<tjs_int>(p[0]->AsInteger()),
                          player->getTickCount());
         }
     }

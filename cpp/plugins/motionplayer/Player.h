@@ -3042,8 +3042,14 @@ namespace motion {
             if(!_motionTracks.empty()) {
                 int d = drawAnimated(realLayer, tempParent, logger);
                 if(logger)
-                    logger->info("drawAnimated: drew {} images at tick={}", d,
-                                 static_cast<tjs_int>(_tickCount));
+                    // 带上 player 指针：真机上同时存在多个 Player（片头 logo、
+                    // 角色 SD 动画…），只记 tick 无法判断"游戏在推另一个实例、
+                    // 画面这个没人推"。
+                    logger->info("drawAnimated: drew {} images at tick={} "
+                                 "(player={} playing={})",
+                                 d, static_cast<tjs_int>(_tickCount),
+                                 static_cast<const void *>(this),
+                                 _playing ? 1 : 0);
                 // M2 multi-layer: the motion node tree animates SOME layers
                 // (backdrop, text, confetti) while OTHER layers are STATIC
                 // elements that must still composite each frame (e.g. the
