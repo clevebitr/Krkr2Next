@@ -101,11 +101,19 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 > **IO 搬迁顺序（后续轮次按此执行，每步都要求行为等价 + CI 绿）**：
 > 1. ✅ 媒体注册表 + `tTVPFileMedia` + 本地文件流（`IoStorage.cpp` / `IoStorageLocal.cpp`）。
 > 2. ✅ auto-path 表与放置路径搜索、`TVPCreateStream`（同上）。
-> 3. ⬜ 归档工厂与后端（`tTVPArchive` + `TVPOpenArchive` 的创建者表 + `XP3Archive*`/
->    `ZIPArchive`/`7zArchive`/`TARArchive`）→ io：**这一步做完，`io -> base` 的回边应当消失**。
+> 3. ✅ 归档工厂与后端（`tTVPArchive` + `TVPOpenArchive` 的创建者表 + `XP3Archive*`/
+>    `ZIPArchive`/`7zArchive`/`TARArchive` + `tar.h`）→ io。
+>    **口径修正**：`io -> base` 的回边**不会归零**（也不该按"消失"验收），它现在只剩
+>    **基础设施**：`MsgIntf`（消息常量）、`UtilStreams`（流基类）、`TVPMmapAlloc`、
+>    `TickCount`/`Random`/`StringUtil`/`FilePathUtil`/`Platform`、`ncbind`（插件注册表，
+>    见下条）、`Application.h`/`WindowImpl.h`（进程级宿主）。验收口径应为：
+>    **IO/归档/挂载/路径的知识全部在 io 内，base 侧不再有这些实现**。
 > 4. ✅ TJS `Storages` 门面（随 `IoStorage.cpp` 一起搬入）。
 > 5. ⬜ 把 `StoragePolicy`（`io/StoragePolicy.h`）真正接到挂载/补丁/规范化实现上，并按
 >    激活层取值（M1.3/M1.6）。
+> 6. ⬜ `ncbind`（模块注册表）是 io 仍依赖的**层相关**设施之一：`TVPIsExistentStorage`
+>    要回答 `.dll/.tpm` 是否存在（见 §5.1 I 系列与 `IModuleLocator` 的设想）。最终应改为
+>    注入式查询（io 不认识插件注册表），这是"两层共用同一 IO 组件、互不重复实现"的关键一步。
 
 | **M2** | 层 A：TJS2 内核兼容读写（未定义全局回退 + 启动期可写白名单） | AetherKiri 层内 | 见 §5 清单 |
 | **M3** | 层 B：KAGWindow / krkrgles 脚本别名与绘制设备接管 | AetherKiri 层内 | 见 §5 清单 |
