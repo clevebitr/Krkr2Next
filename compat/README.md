@@ -237,6 +237,7 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 > | 本仓库位置 | 上游位置 | 说明 |
 > |---|---|---|
 > | `cpp/core/tjs2/tjsObject.cpp`（`TJSCompatGlobalFallbackName` / `TJSCompatResolveGlobalFallback`） | `AetherKiri/cpp/core/tjs2/tjsObject.cpp:249-308` | 34 名全局回退 + `LayerClass→Layer`；加开关（缺省关，AetherKiri 层开）与注入式 global getter |
+> | `cpp/core/tjs2/tjsObject.cpp`（`TJSCompatResolveStartupFallback` / `TJSCompatIsStartupNoOpFunction` / `TJSCompatResolveTouchImage` / `TJSCompatResolveTextRenderRenderCount`） | `AetherKiri/cpp/core/tjs2/tjsObject.cpp:41-76`、`:171-247`、`:368-402` | 11 个 no-op 函数、ShortCut 键表→`[]`、`archiveUniqueKey`/`inXP3archivePacked`/`lls*`/`developMode` 等常量、`touchImage`、`TextRender.renderCount`。**两处故意不照搬**：`CompoundStorageMedia`（本仓库已有 TJS 注入等价类）与 `kirikiriz`（本仓库按 SIGSEGV 记录取整数 0，上游取 1，回退值必须与注入值一致）；`kag.*` 运行时回退亦跳过（本仓库用 `kag_runtime_defaults.tjs` 等价实现） |
 > | `cpp/core/tjs2/tjsObjectExtendable.cpp`（`TJSIsStartupCompatWritableNameEx` + PropSet 重试） | `AetherKiri/cpp/core/tjs2/tjsObjectExtendable.cpp:9-19`、`:96-105` | 8 名启动期可写白名单；用户裁决两层都要，不设开关 |
 >
 > 新增**独立文件**的移植（如 `cpp/plugins/compat/aetherkiri/legacy_zlib_version.cpp`）仍按下面的规则登记。

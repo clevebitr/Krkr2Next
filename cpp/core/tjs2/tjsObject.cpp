@@ -12,6 +12,7 @@
 
 #include "tjsObject.h"
 #include "tjsUtils.h"
+#include "tjsArray.h"
 #include "tjsNative.h"
 #include "tjsHashSearch.h"
 #include "tjsGlobalStringMap.h"
@@ -1339,6 +1340,162 @@ namespace TJS {
         return TJSCompatFallbacksEnabledFlag;
     }
 
+    // 启动期名回退：11 个"框架函数在脚本里被无条件调用"的名字，缺失时当作 no-op（返回 1）。
+    // 移植自 AetherKiri `tjsObject.cpp:64-76`（列表）与 `:171-247`（其余回退项）。
+    static tjs_error TJSCompatStartupNoOpFunction(tTJSVariant *result, tjs_int,
+                                                  tTJSVariant **,
+                                                  iTJSDispatch2 *) {
+        if(result)
+            *result = static_cast<tjs_int>(1);
+        return TJS_S_OK;
+    }
+
+    static tjs_error TJSCompatTouchImage(tTJSVariant *result, tjs_int,
+                                         tTJSVariant **, iTJSDispatch2 *) {
+        if(result)
+            *result = static_cast<tjs_int>(0);
+        return TJS_S_OK;
+    }
+
+    static bool TJSCompatIsStartupNoOpFunction(const tjs_char *membername) {
+        return membername &&
+               (!TJS_strcmp(membername, TJS_W("bootStrap")) ||
+                !TJS_strcmp(membername, TJS_W("commitSavedata")) ||
+                !TJS_strcmp(membername, TJS_W("addDllDirectory")) ||
+                !TJS_strcmp(membername, TJS_W("KAGLayerConstructor")) ||
+                !TJS_strcmp(membername, TJS_W("KAGLayerFinalizer")) ||
+                !TJS_strcmp(membername, TJS_W("loadResolutionInfo")) ||
+                !TJS_strcmp(membername, TJS_W("parseArchiveIndex")) ||
+                !TJS_strcmp(membername, TJS_W("setDefaultDllDirectories")) ||
+                !TJS_strcmp(membername, TJS_W("checkSignature")) ||
+                !TJS_strcmp(membername, TJS_W("pathHash")));
+    }
+
+    static bool TJSCompatResolveTouchImage(const tjs_char *membername,
+                                           tTJSVariant *result) {
+        if(!TJSCompatFallbacksEnabledFlag || !membername || !result ||
+           TJS_strcmp(membername, TJS_W("touchImage")))
+            return false;
+        iTJSDispatch2 *method = TJSCreateNativeClassMethod(TJSCompatTouchImage);
+        if(!method)
+            return false;
+        *result = tTJSVariant(method, method);
+        method->Release();
+        return true;
+    }
+
+    static bool TJSCompatResolveStartupFallback(const tjs_char *membername,
+                                                tTJSVariant *result) {
+        if(!TJSCompatFallbacksEnabledFlag || !membername || !result)
+            return false;
+
+        if(TJSCompatIsStartupNoOpFunction(membername)) {
+            iTJSDispatch2 *method =
+                TJSCreateNativeClassMethod(TJSCompatStartupNoOpFunction);
+            if(!method)
+                return false;
+            *result = tTJSVariant(method, method);
+            method->Release();
+            return true;
+        }
+
+        if(!TJS_strcmp(membername, TJS_W("ShortCutInitialPadKeyMap")) ||
+           !TJS_strcmp(membername, TJS_W("ShortCutInitialGamePadKeyMap"))) {
+            iTJSDispatch2 *array = TJSCreateArrayObject();
+            if(!array)
+                return false;
+            *result = tTJSVariant(array, array);
+            array->Release();
+            return true;
+        }
+
+        // 注意：`CompoundStorageMedia` 与 `kirikiriz` 两项**故意不照搬上游取值**：
+        //   - `CompoundStorageMedia`：本仓库在 SystemImpl.cpp 里用 TJS 注入了一个等价类
+        //     （唯一键 `KrKr2Next.CompoundStorageMedia`），这里再合成一个原生类只会两套并存；
+        //   - `kirikiriz`：上游回退成 1，而本仓库 SystemImpl.cpp 明确用整数 0
+        //     （有 SIGSEGV 记录，见该文件注释）。回退值必须与注入值一致，否则"全局没建好"
+        //     时脚本会看到两个不同的答案。
+        if(!TJS_strcmp(membername, TJS_W("archiveUniqueKey"))) {
+            *result = TJS_W("KrKr2Next.CompoundStorageMedia");
+            return true;
+        }
+
+        if(!TJS_strcmp(membername, TJS_W("inXP3archivePacked"))) {
+            *result = static_cast<tjs_int>(1);
+            return true;
+        }
+
+        if(!TJS_strcmp(membername, TJS_W("llsDllLoadDir"))) {
+            *result = static_cast<tjs_int>(0x00000100);
+            return true;
+        }
+        if(!TJS_strcmp(membername, TJS_W("llsApplicationDir"))) {
+            *result = static_cast<tjs_int>(0x00000200);
+            return true;
+        }
+        if(!TJS_strcmp(membername, TJS_W("llsUserDirs"))) {
+            *result = static_cast<tjs_int>(0x00000400);
+            return true;
+        }
+        if(!TJS_strcmp(membername, TJS_W("llsSystem32"))) {
+            *result = static_cast<tjs_int>(0x00000800);
+            return true;
+        }
+        if(!TJS_strcmp(membername, TJS_W("llsDefaultDirs"))) {
+            *result = static_cast<tjs_int>(0x00001000);
+            return true;
+        }
+
+        if(!TJS_strcmp(membername, TJS_W("kirikiriz")) ||
+           !TJS_strcmp(membername, TJS_W("kirikiriz_generic")) ||
+           !TJS_strcmp(membername, TJS_W("debugWindowEnabled")) ||
+           !TJS_strcmp(membername, TJS_W("developMode"))) {
+            *result = static_cast<tjs_int>(0);
+            return true;
+        }
+
+        return false;
+    }
+
+    // TextRender.renderCount：TextRenderBase 上被脚本轮询的属性，缺失时抛异常并中断渲染循环。
+    // 移植自 AetherKiri `tjsObject.cpp:368-402`：优先向对象自身问 `calcShowCount`，失败给 0。
+    static bool TJSCompatIsTextRenderObject(iTJSDispatch2 *target,
+                                            iTJSDispatch2 *objthis) {
+        iTJSDispatch2 *dispatch = objthis ? objthis : target;
+        return dispatch &&
+               dispatch->IsInstanceOf(0, nullptr, nullptr, TJS_W("TextRender"),
+                                      dispatch) == TJS_S_TRUE;
+    }
+
+    static bool TJSCompatResolveTextRenderRenderCount(
+        const tjs_char *membername, tTJSVariant *result, iTJSDispatch2 *target,
+        iTJSDispatch2 *objthis) {
+        if(!TJSCompatFallbacksEnabledFlag || !membername ||
+           TJS_strcmp(membername, TJS_W("renderCount")) ||
+           !TJSCompatIsTextRenderObject(target, objthis))
+            return false;
+
+        if(!result)
+            return true;
+
+        iTJSDispatch2 *dispatch = objthis ? objthis : target;
+        if(dispatch) {
+            tTJSVariant elapsed(static_cast<tjs_int>(0x3fffffff));
+            tTJSVariant *args[1] = { &elapsed };
+            tTJSVariant count;
+            if(TJS_SUCCEEDED(dispatch->FuncCall(0, TJS_W("calcShowCount"),
+                                                nullptr, &count, 1, args,
+                                                dispatch)) &&
+               count.Type() != tvtVoid) {
+                *result = count;
+                return true;
+            }
+        }
+
+        *result = static_cast<tjs_int>(0);
+        return true;
+    }
+
     static const tjs_char *TJSCompatGlobalFallbackName(const tjs_char *membername) {
         if(!membername)
             return nullptr;
@@ -1424,9 +1581,21 @@ namespace TJS {
                 if(CallGetMissing(membername, value))
                     return TJSDefaultPropGet(flag, value, result, objthis);
             }
-            // A 块兼容回退：未定义的框架全局名回退到同名全局（仅 AetherKiri 层开启，
-            // 见 TJSCompatResolveGlobalFallback 的说明）。
+            // A 块兼容回退（仅 AetherKiri 层开启，见各函数的说明）。
+            // 顺序照上游：touchImage → 启动名 → 全局名 → TextRender.renderCount。
+            // 上游还有一项 `kag.*` 运行时默认值回退，本仓库已用
+            // `kag_runtime_defaults.tjs` 脚本注入实现等价效果，故不重复。
+            if(TJSCompatResolveTouchImage(membername, result)) {
+                return TJS_S_OK;
+            }
+            if(TJSCompatResolveStartupFallback(membername, result)) {
+                return TJS_S_OK;
+            }
             if(TJSCompatResolveGlobalFallback(membername, result)) {
+                return TJS_S_OK;
+            }
+            if(TJSCompatResolveTextRenderRenderCount(membername, result, this,
+                                                     objthis)) {
                 return TJS_S_OK;
             }
         }
