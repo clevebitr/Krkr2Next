@@ -1807,4 +1807,18 @@ void TVPBoostAutoMountPaths() {
         "TVPBoostAutoMountPaths: moved {} patch path(s) to the front of "
         "auto path list (total {})",
         boosted.size(), TVPAutoPathList.size());
+
+    // 判定性探针：补丁层（汉化 patch.xp3 / patch_appendN.xp3）是否真的排在
+    // data.xp3 之前 —— 表是"先注册者优先"，顺序错了就是"打了补丁却取到原版脚本"
+    // （用户报的"汉化补丁没有正常加载"）。只打启动这一次，列出前 8 条。
+    {
+        constexpr size_t kShow = 8;
+        std::string head;
+        for(size_t i = 0; i < TVPAutoPathList.size() && i < kShow; ++i) {
+            if(!head.empty())
+                head += " | ";
+            head += TVPAutoPathList[i].AsStdString();
+        }
+        spdlog::info("TVPBoostAutoMountPaths: 队首 {} 条 = {}", kShow, head);
+    }
 }

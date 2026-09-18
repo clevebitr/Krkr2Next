@@ -904,8 +904,44 @@ public:
                                            -1.f, 1.f,  1.f, 1.f };
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, kUnitQuad);
+        // 判定性探针：真机上"engine 侧 submitted ok=1、画面却没有视频"时，必须分清
+        //   画之前/之后的中心像素不同 -> 视频**确实落进 framebuffer**（问题在之后被
+        //   别的绘制覆盖，例如 KAG 档的 krkrgles 呈现）；
+        //   像素没变 -> 这次绘制本身没生效（program/FBO/viewport 引起的）。
+        // 只记前 3 次 + 每 120 次一条；每个像素 1 次 glReadPixels，可忽略。
+        static std::atomic<int> s_videoDrawLogs{ 0 };
+        const int drawLogIndex = s_videoDrawLogs.fetch_add(1) + 1;
+        const bool logDraw = (drawLogIndex <= 3 || (drawLogIndex % 120) == 0);
+        unsigned char pxBefore[4] = { 0, 0, 0, 0 };
+        GLint probeX = 0, probeY = 0;
+        if(logDraw) {
+            GLint vp[4] = { 0, 0, 0, 0 };
+            glGetIntegerv(GL_VIEWPORT, vp);
+            probeX = vp[0] + vp[2] / 2;
+            probeY = vp[1] + vp[3] / 2;
+            glReadPixels(probeX, probeY, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE,
+                         pxBefore);
+        }
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
         glDisableVertexAttribArray(0);
+        if(logDraw) {
+            unsigned char pxAfter[4] = { 0, 0, 0, 0 };
+            GLint fbo = 0;
+            GLint vp[4] = { 0, 0, 0, 0 };
+            const GLenum err = glGetError();
+            glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
+            glGetIntegerv(GL_VIEWPORT, vp);
+            glReadPixels(probeX, probeY, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE,
+                         pxAfter);
+            spdlog::info("DrawVideoOverlay: 第 {} 次 serial={} dest=({},{})({},{}"
+                         ") scene={}x{} fbo={} vp=({},{},{},{}) err=0x{:x} "
+                         "画前=({},{},{},{}) 画后=({},{},{},{})",
+                         drawLogIndex, s_videoOverlaySerial, dest.left, dest.top,
+                         dest.right, dest.bottom, sceneW, sceneH, fbo, vp[0],
+                         vp[1], vp[2], vp[3], static_cast<unsigned>(err),
+                         pxBefore[0], pxBefore[1], pxBefore[2], pxBefore[3],
+                         pxAfter[0], pxAfter[1], pxAfter[2], pxAfter[3]);
+        }
         glBindTexture(GL_TEXTURE_2D, 0);
         glUseProgram(0);
     }
