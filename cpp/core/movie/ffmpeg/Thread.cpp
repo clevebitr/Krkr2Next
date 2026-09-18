@@ -34,10 +34,27 @@ void CThread::StopThread(bool bWait /*= true*/) {
     m_bStop = true;
     m_StopEvent.notify_all();
     if(m_ThreadId && bWait) {
+        if(IsCurrentThread()) {
+            // 从线程自己里调（OnExit→CloseStream 路径）不能 join 自己：
+            // std::thread::join() 会抛 system_error(EDEADLK)，在 entry() 里没人接就是
+            // std::terminate。只置 m_bStop，循环自然退出。
+            return;
+        }
         m_ThreadId->join();
         delete m_ThreadId;
         m_ThreadId = nullptr;
     }
+}
+
+bool CThread::WaitForExit(unsigned int milliseconds) {
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(milliseconds);
+    while(m_bRunning.load(std::memory_order_acquire)) {
+        if(std::chrono::steady_clock::now() >= deadline)
+            return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    return true;
 }
 
 void CThread::Sleep(unsigned int milliseconds) {

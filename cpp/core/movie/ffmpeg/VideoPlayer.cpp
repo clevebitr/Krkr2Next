@@ -196,7 +196,8 @@ BasePlayer::~BasePlayer() {
     krkr::stall::MarkMovieStage("movie: ~BasePlayer→CloseInputStream");
     CloseInputStream();
     DestroyPlayers();
-    ::Application->RegisterActiveEvent(this, nullptr);
+    if(::Application)
+        ::Application->RegisterActiveEvent(this, nullptr); // 引擎已销毁时不再回调
 }
 
 void BasePlayer::Play() {

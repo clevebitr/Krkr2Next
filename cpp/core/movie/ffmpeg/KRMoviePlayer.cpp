@@ -180,10 +180,26 @@ TVPMoviePlayer::~TVPMoviePlayer() {
 }
 
 void TVPMoviePlayer::Release() {
-    if(RefCount == 1)
+    if(RefCount == 1) {
+        // **先有界确认影片线程能退出，再销毁**。
+        // 销毁链路（~TVPMoviePlayer → ~BasePlayer → CloseInputStream → StopThread）
+        // 里的 join 没有上界：影片线程可能卡在文件读取/音频设备写入里永不返回，
+        // 级联下去会把渲染线程永久钉死（真机 16:51 的 engine.log.stall 实证：
+        //     render: movie: ~MoviePlayerOverlay→删除播放器
+        //     movie : movie: CloseInputStream→等 player 线程退出(join)）。
+        // 退不出去时**宁可泄漏整个影片对象**（什么都不释放，线程还在用它），也绝不
+        // 让渲染线程卡住 —— 泄漏一个影片对象，换来的是游戏还能继续玩。
+        constexpr unsigned kTeardownWaitMs = 4000;
+        if(m_pPlayer && !m_pPlayer->WaitForExit(kTeardownWaitMs)) {
+            spdlog::error("movie: 影片线程 {}ms 未退出，放弃销毁并泄漏该影片对象"
+                          "（渲染线程绝不 join 它；否则整机卡死，只能杀进程）",
+                          kTeardownWaitMs);
+            return; // 故意不 delete：对象与线程都继续存活
+        }
         delete this;
-    else
+    } else {
         RefCount--;
+    }
 }
 
 void TVPMoviePlayer::SetPosition(uint64_t tick) { m_pPlayer->SeekTime(tick); }

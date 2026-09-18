@@ -22,6 +22,16 @@ public:
 
     void StopThread(bool bWait = true);
 
+    /**
+     * 有界等待线程自己退出（entry() 末尾把 m_bRunning 置 false）。
+     *
+     * 为什么需要：StopThread() 里的 join() 没有上界，而影片线程可能卡在文件读取/
+     * 音频设备写入里永不返回，级联下去会把调用它的**渲染线程**永久钉死（真机
+     * 16:51 的 engine.log.stall：render 停在"~MoviePlayerOverlay→删除播放器"，
+     * 影片侧停在"CloseInputStream→等 player 线程退出(join)"）。
+     */
+    bool WaitForExit(unsigned int milliseconds);
+
     void Sleep(unsigned int milliseconds);
 
     bool IsCurrentThread();
