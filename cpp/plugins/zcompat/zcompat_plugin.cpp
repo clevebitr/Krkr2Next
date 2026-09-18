@@ -9,15 +9,19 @@
 //   - 功能已内建（核心类/渲染管线已有，link 即可用）：drawdeviceD3DZ /
 //     drawdeviceD3D（主 DrawBuffer 由 core/visual 合成）、kztouch（Window
 //     getTouchPoint 等触摸类已内建）、menu（MenuItem 核心类全局注册）。
-//   - 真实现（内嵌参考源码）：k2compat（Krkr2Compat 纯 TJS 兼容层内嵌执行）。
+//   - 真实现（内嵌参考源码）：k2compat（Krkr2Compat 纯 TJS 兼容层内嵌执行）、
+//     lzfs（"lzfs://" 存储协议，见下方 LzfsStorageMedia；NEKOPARA 4 的 E-mote
+//     立绘动作文件靠它取 PSB）。
 //   - 名字映射（已有实现复用）：motionplayer_nod3d → motionplayer.dll（在
 //     PluginImpl.cpp 的 TVPLoadPlugin 映射）。
 //   - 暂不可实现（源码不可得/桌面概念）：squirrel（VM 源码可得但待移植）、
-//     multiimage（闭源）、win32ole/lzfs/PackinOne/extNagano/pkutil/xpzdec/
+//     multiimage（闭源）、win32ole/PackinOne/extNagano/pkutil/xpzdec/
 //     yuzuex（桌面/工具/私有），挂名消除 Failed 噪音，属"先可 link，再实现"
 //     的中间态，游戏若实际调用对应类会抛「类不存在」。
 //---------------------------------------------------------------------------
 #include "ncbind.hpp"
+#include "StorageIntf.h"
+#include <spdlog/spdlog.h>
 
 // 挂名空回调：仅让 ncbAutoRegister::LoadModule 命中内部注册表返回成功。
 static void ZCompatStub() {}
@@ -80,10 +84,86 @@ static ncbCallbackAutoRegister g_z_yuzuex(TJS_W("yuzuex.dll"),
                                           ncbAutoRegister::PreRegist,
                                           &ZCompatStub, nullptr);
 
-// lzfs.dll —— LZ 文件系统归档支持，挂名。
+// lzfs.dll —— "LZ 文件系统"存储协议（真实现，非挂名）。
+//
+// NEKOPARA 4（官中 KRKR 版）的动态立绘是 E-mote，动作文件通过它自己的存储协议取：
+//     lzfs://./e-moteショコラ冬制服a.psb
+// 此前本插件只是挂名（让 Plugins.link 不报 Failed），于是存储系统在
+// `NormalizeStorageName` 阶段就回答
+//     Not supported media type "lzfs"
+// → 所有 e-mote*.psb 打不开 → 立绘全空（真机 2026-09-18 16:48 的 script exception
+// 实证）。这里按参考实现（AetherKiri compatLegacyPlugins.cpp 的 LzfsStorageMedia）
+// 注册一个同名存储媒体，把 "媒体名://<域>/<内层路径>" 的内层路径交回引擎的普通
+// 存储解析 —— 散装文件、auto-path、XP3 内条目都照常命中。
+namespace {
+
+/** 从 "域/内层路径" 取出内层路径（去掉域与开头的 ./ 或 .\）。 */
+ttstr LzfsInnerPath(const ttstr &name) {
+    const tjs_char *raw = name.c_str();
+    const tjs_char *slash = TJS_strchr(raw, TJS_W('/'));
+    ttstr path = slash ? ttstr(slash + 1) : name;
+    while(path.GetLen() >= 2 && path[0] == TJS_W('.') &&
+          (path[1] == TJS_W('/') || path[1] == TJS_W('\\'))) {
+        path = ttstr(path.c_str() + 2);
+    }
+    return path;
+}
+
+class LzfsStorageMedia : public iTVPStorageMedia {
+public:
+    void AddRef() override { ++ref_count_; }
+
+    void Release() override {
+        if(ref_count_ == 1)
+            delete this;
+        else
+            --ref_count_;
+    }
+
+    void GetName(ttstr &name) override { name = TJS_W("lzfs"); }
+
+    void NormalizeDomainName(ttstr &) override {}
+
+    void NormalizePathName(ttstr &) override {}
+
+    bool CheckExistentStorage(const ttstr &name) override {
+        return !TVPGetPlacedPath(LzfsInnerPath(name)).IsEmpty();
+    }
+
+    tTJSBinaryStream *Open(const ttstr &name, tjs_uint32 flags) override {
+        const ttstr inner = LzfsInnerPath(name);
+        if(auto lg = spdlog::get("plugin"))
+            lg->info("lzfs: 打开 {} -> {}", name.AsStdString(),
+                     inner.AsStdString());
+        return TVPCreateStream(inner, flags);
+    }
+
+    void GetListAt(const ttstr &, iTVPStorageLister *) override {}
+
+    void GetLocallyAccessibleName(ttstr &name) override {
+        name = TVPGetLocallyAccessibleName(LzfsInnerPath(name));
+    }
+
+private:
+    ~LzfsStorageMedia() override = default;
+    tjs_int ref_count_ = 1;
+};
+
+void ZCompatRegisterLzfs() {
+    // Register 按媒体名去重（同名已注册直接返回），所以重复 link 不会叠加。
+    static LzfsStorageMedia *media = nullptr;
+    if(media == nullptr)
+        media = new LzfsStorageMedia(); // 进程级存活：存储管理器持引用
+    TVPRegisterStorageMedia(media);
+    if(auto lg = spdlog::get("plugin"))
+        lg->info("lzfs: 已注册 lzfs:// 存储协议（E-mote 立绘等靠它取 PSB）");
+}
+
+} // namespace
+
 static ncbCallbackAutoRegister g_z_lzfs(TJS_W("lzfs.dll"),
                                         ncbAutoRegister::PreRegist,
-                                        &ZCompatStub, nullptr);
+                                        &ZCompatRegisterLzfs, nullptr);
 
 // win32ole.dll —— OLE 自动化（桌面概念，移动端无意义），挂名避免启动报错。
 static ncbCallbackAutoRegister g_z_win32ole(TJS_W("win32ole.dll"),
