@@ -109,8 +109,13 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 >    见下条）、`Application.h`/`WindowImpl.h`（进程级宿主）。验收口径应为：
 >    **IO/归档/挂载/路径的知识全部在 io 内，base 侧不再有这些实现**。
 > 4. ✅ TJS `Storages` 门面（随 `IoStorage.cpp` 一起搬入）。
-> 5. ⬜ 把 `StoragePolicy`（`io/StoragePolicy.h`）真正接到挂载/补丁/规范化实现上，并按
->    激活层取值（M1.3/M1.6）。
+> 5. 🟡 `StoragePolicy` 已接到实现上（M1.3，`io/IoPolicy.{h,cpp}` 注入点 + compat 侧注入）。
+>    **已接线**：auto-path 表 tie-break、缺分隔符自动修复、重复 addAutoPath 语义、
+>    补丁判定规则（子串 / 前缀+序号）、补丁优先级落点（队首 / 队尾）、`TVPGetAppPath()`
+>    的 '>' 剥离。
+>    **未接线（明确标注）**：`xp3SegmentCacheBytes`（XP3Archive.cpp 里是静态初始化期定型的
+>    全局，需"策略变更通知"或惰性计算，代码内留 TODO）、`archiveRoot`（包内根目录先/后）、
+>    `mountSiblingsForArchiveProject`（档案工程挂兄弟 patch*.xp3，与 I3 一并处理）。
 > 6. ⬜ `ncbind`（模块注册表）是 io 仍依赖的**层相关**设施之一：`TVPIsExistentStorage`
 >    要回答 `.dll/.tpm` 是否存在（见 §5.1 I 系列与 `IModuleLocator` 的设想）。最终应改为
 >    注入式查询（io 不认识插件注册表），这是"两层共用同一 IO 组件、互不重复实现"的关键一步。
