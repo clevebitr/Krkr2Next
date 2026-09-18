@@ -185,6 +185,18 @@ void MotionAutoDriveHook::OnContinuousCallback(tjs_uint64 /*tick*/) {
     for(auto *player : players) {
         if(!player)
             continue;
+        // 门控探针（有玩家的头 10 次回调 + 之后每 600 次一条）：自动驱动"登记了、
+        // 钩子也在跑、却没有推进/重绘"时，只有这组状态能说明是被哪一道门拦住的。
+        if((call <= 10 || (call % 600) == 0) && LOGGER)
+            LOGGER->info(
+                "MCP 自动驱动: 门控 player={} playing={} progressRecent={} "
+                "capture={} drawRecent={} hasTarget={} tick={}",
+                static_cast<const void *>(player),
+                player->autoProgressEligible() ? 1 : 0,
+                player->manualProgressRecent() ? 1 : 0,
+                player->captureActive() ? 1 : 0,
+                player->manualDrawRecent() ? 1 : 0,
+                player->lastDrawTarget() ? 1 : 0, player->getTickCount());
         // 游戏没在播 / 已经停了：摘掉登记。
         if(!player->autoProgressEligible()) {
             AutoDriveUnregister(player);
