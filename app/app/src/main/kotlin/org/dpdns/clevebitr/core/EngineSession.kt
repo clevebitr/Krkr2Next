@@ -117,8 +117,8 @@ class EngineSession(
         /** 分位数窗口的样本上限：1 秒 @240fps 也才 240 个，512 足够且不会增长。 */
         private const val PERF_SAMPLE_CAPACITY = 512
 
-        /** 渲染器信息的缓存时长；它是一次 C 调用加字符串解码，别每帧问。 */
-        private const val RENDERER_INFO_CACHE_MS = 1_000L
+        /** 引擎统计（内存/渲染器）的采样间隔：叠加层按 4Hz 读缓存，采样 2Hz 足够。 */
+        private const val ENGINE_INFO_SAMPLE_NANOS = 500_000_000L
 
         /** 渲染器信息缓冲区大小（当前实现返回几十字节的 key=value 串）。 */
         private const val RENDERER_INFO_BUFFER_SIZE = 1024
@@ -214,9 +214,19 @@ class EngineSession(
     /** 渲染器信息的缓存与取用时间戳；方法带同步，故缓冲区可以复用。 */
     @Volatile
     private var rendererInfoCache: String = ""
-    @Volatile
-    private var rendererInfoFetchedAtMs: Long = 0L
     private val rendererInfoBuffer = ByteArray(RENDERER_INFO_BUFFER_SIZE)
+
+    /**
+     * 引擎统计的**采样缓存**：`engineGetMemoryStats` / `engineGetRendererInfo` 会拿
+     * 引擎帧锁，而帧锁在模态对话框（`Window.showModal`）与 CG 视频这类长帧期间可能
+     * 被持有几秒到几十秒。叠加层是按 4Hz 从 UI 线程轮询的 —— 主线程在那把锁上等
+     * 超过 5s 就是系统 ANR（真机 2026-09-18 两次：模态 13:48:31 进入、13:48:38 被判
+     * ANR；CG 视频 13:49:2x 同样）。所以改成**渲染线程定期采样、UI 线程只读缓存**。
+     */
+    @Volatile
+    private var cachedMemoryStats: MemoryStats? = null
+    private var lastEngineInfoSampleNanos = 0L
+    private val memoryStatsScratch = LongArray(NativeEngine.MEMORY_STATS_FIELDS)
 
     /** 累计 tick 失败次数，供限频日志带出"偶发还是彻底坏了"。只在渲染线程写。 */
     private var tickFailures = 0L
@@ -276,6 +286,8 @@ class EngineSession(
                 val rc = NativeEngine.engineTick(handle, deltaMs.toInt())
                 tickMs = (System.nanoTime() - tickStartNanos) / 1_000_000f
                 logPerfIfDue(tickStartNanos)
+                // 引擎统计采样（渲染线程）：UI 线程只读缓存，绝不自己去拿引擎帧锁。
+                sampleEngineInfoIfDue(frameTimeNanos)
                 if (rc != NativeEngine.RESULT_OK) {
                     if (rc == NativeEngine.RESULT_GAME_TERMINATED) {
                         // 游戏自己要求退出（TJS `System.exit()`）。这**不是**错误：
@@ -737,54 +749,63 @@ class EngineSession(
         return text
     }
 
-    /** 读一次内存统计；句柄未起来或引擎未运行返回 null。可从任意线程调用。 */
+    /**
+     * 内存统计快照。**只读渲染线程采样好的缓存**：直接调引擎 API 会拿引擎帧锁，
+     * 模态对话框/CG 视频这类长帧期间主线程会阻塞到 ANR（见 [cachedMemoryStats]）。
+     * 句柄未起来或还没采到返回 null。可从任意线程调用。
+     */
     fun memoryStats(): MemoryStats? {
-        val h = handle
-        if (h == 0L) return null
-        val out = LongArray(NativeEngine.MEMORY_STATS_FIELDS)
-        if (NativeEngine.engineGetMemoryStats(h, out) < out.size) return null
-        return MemoryStats(
-            selfUsedMb = out[0],
-            systemFreeMb = out[1],
-            systemTotalMb = out[2],
-            graphicCacheBytes = out[3],
-            graphicCacheLimitBytes = out[4],
-            xp3SegmentCacheBytes = out[5],
-            psbCacheBytes = out[6],
-            psbCacheEntries = out[7],
-            psbCacheEntryLimit = out[8],
-            psbCacheHits = out[9],
-            psbCacheMisses = out[10],
-            archiveCacheEntries = out[11],
-            archiveCacheLimit = out[12],
-            autopathCacheEntries = out[13],
-            autopathCacheLimit = out[14],
-            autopathTableEntries = out[15],
-        )
+        if (handle == 0L) return null
+        return cachedMemoryStats
     }
 
-    /**
-     * 渲染器信息（key=value 串，含 backend / fallback 等）。带 1 秒缓存：它是 C 调用
-     * 加字符串解码，没必要每帧问；叠加层按 4Hz 轮询时最多每秒命中一次真实调用。
-     * 同步是为了复用那个缓冲区（JNI 写入与解码不能被打断）。
-     */
-    @Synchronized
-    fun rendererInfo(): String {
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (rendererInfoCache.isNotEmpty() &&
-            now - rendererInfoFetchedAtMs < RENDERER_INFO_CACHE_MS
+    /** 渲染线程：按固定间隔采样引擎统计，填 [cachedMemoryStats] / [rendererInfoCache]。 */
+    private fun sampleEngineInfoIfDue(frameTimeNanos: Long) {
+        if (lastEngineInfoSampleNanos != 0L &&
+            frameTimeNanos - lastEngineInfoSampleNanos < ENGINE_INFO_SAMPLE_NANOS
         ) {
-            return rendererInfoCache
+            return
         }
+        lastEngineInfoSampleNanos = frameTimeNanos
+
         val h = handle
-        if (h == 0L) return ""
+        if (h == 0L) return
+
+        if (NativeEngine.engineGetMemoryStats(h, memoryStatsScratch) >=
+            memoryStatsScratch.size
+        ) {
+            cachedMemoryStats = MemoryStats(
+                selfUsedMb = memoryStatsScratch[0],
+                systemFreeMb = memoryStatsScratch[1],
+                systemTotalMb = memoryStatsScratch[2],
+                graphicCacheBytes = memoryStatsScratch[3],
+                graphicCacheLimitBytes = memoryStatsScratch[4],
+                xp3SegmentCacheBytes = memoryStatsScratch[5],
+                psbCacheBytes = memoryStatsScratch[6],
+                psbCacheEntries = memoryStatsScratch[7],
+                psbCacheEntryLimit = memoryStatsScratch[8],
+                psbCacheHits = memoryStatsScratch[9],
+                psbCacheMisses = memoryStatsScratch[10],
+                archiveCacheEntries = memoryStatsScratch[11],
+                archiveCacheLimit = memoryStatsScratch[12],
+                autopathCacheEntries = memoryStatsScratch[13],
+                autopathCacheLimit = memoryStatsScratch[14],
+                autopathTableEntries = memoryStatsScratch[15],
+            )
+        }
+
         val written = NativeEngine.engineGetRendererInfo(h, rendererInfoBuffer)
         if (written > 0) {
             rendererInfoCache = String(rendererInfoBuffer, 0, written, Charsets.UTF_8)
-            rendererInfoFetchedAtMs = now
         }
-        return rendererInfoCache
     }
+
+    /**
+     * 渲染器信息（key=value 串，含 backend / fallback 等）。**只读渲染线程采样好的
+     * 缓存**（见 [sampleEngineInfoIfDue]）：从 UI 线程直接调引擎 API 会在模态对话框/
+     * 长帧期间被引擎帧锁挡住 —— 那就是叠加层开着时的 ANR 来源。可从任意线程调用。
+     */
+    fun rendererInfo(): String = rendererInfoCache
 
     private fun post(block: () -> Unit) {
         val h = handler
