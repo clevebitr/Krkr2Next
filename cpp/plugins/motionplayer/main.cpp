@@ -190,15 +190,22 @@ void MotionAutoDriveHook::OnContinuousCallback(tjs_uint64 /*tick*/) {
             AutoDriveUnregister(player);
             continue;
         }
-        // 游戏自己在驱动：让路（见文件上方说明）。
-        if(player->manualProgressRecent())
-            continue;
 
-        const bool finished = player->progress(static_cast<tjs_int>(deltaMs));
-        if(heartbeat && LOGGER)
-            LOGGER->info("MCP 自动驱动: 推进 {}ms -> tick={} finished={}",
-                         static_cast<int>(deltaMs), player->getTickCount(),
-                         finished ? 1 : 0);
+        // 时间线推进：游戏自己在最近 120ms 内推过就让路（避免把时间线推快）。
+        // ⚠️ 只让"推进"，**不能让每帧重绘也跟着让路**：真机 2026-09-18 的 SD/片头
+        // 动画里游戏每帧调 Player.progress（Player.progress 探针计数已过 600），却
+        // 只在开播时调一次 draw（drawAnimated 每个 motion 只有一条、tick 恒为 0）——
+        // 结果是"只闪一帧"。这里改成：推进可以让路，重绘照旧每帧做。
+        bool finished = false;
+        if(!player->manualProgressRecent()) {
+            finished = player->progress(static_cast<tjs_int>(deltaMs));
+            if(heartbeat && LOGGER)
+                LOGGER->info("MCP 自动驱动: 推进 {}ms -> tick={} finished={} "
+                             "(player={})",
+                             static_cast<int>(deltaMs), player->getTickCount(),
+                             finished ? 1 : 0,
+                             static_cast<const void *>(player));
+        }
 
         // 动画播完并且是脚本在等 onSync 的情形：由脚本自己处理（我们不冒充脚本
         // 事件），把登记摘掉，避免空转。
@@ -213,6 +220,14 @@ void MotionAutoDriveHook::OnContinuousCallback(tjs_uint64 /*tick*/) {
             continue;
         if(auto *target = player->lastDrawTarget()) {
             player->draw(target);
+            // 自动重绘探针：确认"每帧重绘"这条真的发生了（Q版/SD 动画只闪一帧时，
+            // 有推进日志却没有这条，就说明重绘被让路逻辑吃掉了）。
+            static std::atomic<uint64_t> s_redraws{ 0 };
+            const uint64_t redrawCount = s_redraws.fetch_add(1) + 1;
+            if((redrawCount <= 5 || (redrawCount % 300) == 0) && LOGGER)
+                LOGGER->info("MCP 自动驱动: 自动重绘 player={} tick={}（第 {} 次）",
+                             static_cast<const void *>(player),
+                             player->getTickCount(), redrawCount);
         }
     }
 }
