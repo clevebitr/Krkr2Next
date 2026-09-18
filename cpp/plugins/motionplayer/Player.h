@@ -3042,14 +3042,17 @@ namespace motion {
             if(!_motionTracks.empty()) {
                 int d = drawAnimated(realLayer, tempParent, logger);
                 if(logger)
-                    // 带上 player 指针：真机上同时存在多个 Player（片头 logo、
-                    // 角色 SD 动画…），只记 tick 无法判断"游戏在推另一个实例、
-                    // 画面这个没人推"。
+                    // 带上 player 指针与两层状态：真机上同时存在多个 Player（片头
+                    // logo、角色 SD 动画…），只记 tick 无法判断"游戏在推另一个实例、
+                    // 画面这个没人推"；层状态则区分"画进了不可见/零尺寸的层"与
+                    // "层没问题、交付链路没上屏"。
                     logger->info("drawAnimated: drew {} images at tick={} "
-                                 "(player={} playing={})",
+                                 "(player={} playing={}) wrapped[{}] real[{}]",
                                  d, static_cast<tjs_int>(_tickCount),
                                  static_cast<const void *>(this),
-                                 _playing ? 1 : 0);
+                                 _playing ? 1 : 0,
+                                 DescribeLayerState(target),
+                                 DescribeLayerState(tempParent));
                 // M2 multi-layer: the motion node tree animates SOME layers
                 // (backdrop, text, confetti) while OTHER layers are STATIC
                 // elements that must still composite each frame (e.g. the
