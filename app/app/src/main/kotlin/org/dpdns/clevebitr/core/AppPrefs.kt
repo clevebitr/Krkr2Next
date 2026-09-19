@@ -34,6 +34,9 @@ object AppPrefs {
     /** 上次浏览到的目录，下次启动回到这里。 */
     private const val KEY_LAST_DIR = "ui.last_dir"
 
+    /** 收藏目录的顺序表（换行分隔，见 [favoriteDirs]）。 */
+    private const val KEY_FAV_DIRS_ORDER = "ui.fav_dirs"
+
     /** 主题档位（`system` / `light` / `dark`）。默认跟随系统。 */
     private const val KEY_THEME = "ui.theme"
 
@@ -98,6 +101,39 @@ object AppPrefs {
 
     fun setLastDir(context: Context, path: String) =
         prefs(context).edit().putString(KEY_LAST_DIR, path).apply()
+
+    // ── 文件浏览器：收藏目录 ───────────────────────────────────────────────
+    //
+    // 为什么放在壳偏好而不是游戏库里：它描述的是"用户的存储位置"，与具体游戏记录无关；
+    // 放在这里也意味着"换游戏/清库"不会丢收藏。
+    // 顺序：SharedPreferences 的字符串集合**不保证顺序**，所以另存一份有序列表
+    // （`ui.fav_dirs_order`）用于展示；集合本身只用于 O(1) 判重。
+
+    /** 收藏的目录（按加入顺序）。 */
+    fun favoriteDirs(context: Context): List<String> =
+        prefs(context).getString(KEY_FAV_DIRS_ORDER, "")
+            ?.split('\n')
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?: emptyList()
+
+    /**
+     * 切换某目录的收藏状态，返回切换后是否已收藏。
+     *
+     * 用"分隔符拼接的单个字符串"而不是 `putStringSet`：后者无序，展示时会跳来跳去；
+     * 目录路径里不会出现换行，用它做分隔符最省事（不需要转义）。
+     */
+    fun toggleFavoriteDir(context: Context, path: String): Boolean {
+        val current = favoriteDirs(context)
+        val next = if (path in current) current - path else current + path
+        prefs(context).edit().putString(KEY_FAV_DIRS_ORDER, next.joinToString("\n")).apply()
+        return path in next
+    }
+
+    fun removeFavoriteDir(context: Context, path: String) {
+        val next = favoriteDirs(context) - path
+        prefs(context).edit().putString(KEY_FAV_DIRS_ORDER, next.joinToString("\n")).apply()
+    }
 
     // ── 主题 ──────────────────────────────────────────────────────────────
 
