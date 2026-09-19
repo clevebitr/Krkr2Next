@@ -1644,7 +1644,19 @@ void TVPAutoMountSiblingXP3Archives() {
         tjs_char delimStr[2] = { TVPArchiveDelimiter, 0 };
         ttstr archiveBase = archivePath + ttstr(delimStr);
 
+        // 包内目录条目的处理顺序由策略决定（见 io/StoragePolicy.h 的 archiveRoot）：
+        //   旧层 RootFirst：字典序，根目录 "" 天然最先（历史行为）；
+        //   AetherKiri 层 RootLast：把根目录留到最后，避免 tools/startup.tjs 之类
+        //   嵌套目录遮住包根的同名文件（上游 ArchiveAutoPathOrder.h 的理由）。
+        const bool rootLast = krkr::io::ActiveStoragePolicy().archiveRoot ==
+                              krkr::io::ArchiveRootOrder::RootLast;
+        for(auto pass = 0; pass < (rootLast ? 2 : 1); ++pass) {
         for(const auto &d : dirPaths) {
+            if(rootLast) {
+                const bool isRoot = d.empty();
+                if((pass == 0 && isRoot) || (pass == 1 && !isRoot))
+                    continue;
+            }
             ttstr dirStr(reinterpret_cast<const tjs_char *>(d.c_str()),
                          static_cast<tjs_int>(d.size()));
             ttstr autoPath = archiveBase + dirStr;
@@ -1654,6 +1666,7 @@ void TVPAutoMountSiblingXP3Archives() {
                     TVPNormalizeStorageName(autoPath));
             } catch(...) {
             }
+        }
         }
 
         TVPAddImportantLog(
@@ -1757,7 +1770,19 @@ void TVPAutoMountProjectXP3Archives() {
 
         tjs_char delimStr[2] = { TVPArchiveDelimiter, 0 };
         ttstr archiveBase = archivePath + ttstr(delimStr);
+        // 包内目录条目的处理顺序由策略决定（见 io/StoragePolicy.h 的 archiveRoot）：
+        //   旧层 RootFirst：字典序，根目录 "" 天然最先（历史行为）；
+        //   AetherKiri 层 RootLast：把根目录留到最后，避免 tools/startup.tjs 之类
+        //   嵌套目录遮住包根的同名文件（上游 ArchiveAutoPathOrder.h 的理由）。
+        const bool rootLast = krkr::io::ActiveStoragePolicy().archiveRoot ==
+                              krkr::io::ArchiveRootOrder::RootLast;
+        for(auto pass = 0; pass < (rootLast ? 2 : 1); ++pass) {
         for(const auto &d : dirPaths) {
+            if(rootLast) {
+                const bool isRoot = d.empty();
+                if((pass == 0 && isRoot) || (pass == 1 && !isRoot))
+                    continue;
+            }
             ttstr dirStr(reinterpret_cast<const tjs_char *>(d.c_str()),
                          static_cast<tjs_int>(d.size()));
             ttstr autoPath = archiveBase + dirStr;
@@ -1767,6 +1792,7 @@ void TVPAutoMountProjectXP3Archives() {
                     TVPNormalizeStorageName(autoPath));
             } catch(...) {
             }
+        }
         }
 
         TVPAddImportantLog(

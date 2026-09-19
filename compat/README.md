@@ -130,9 +130,9 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 >    **已接线**：auto-path 表 tie-break、缺分隔符自动修复、重复 addAutoPath 语义、
 >    补丁判定规则（子串 / 前缀+序号）、补丁优先级落点（队首 / 队尾）、`TVPGetAppPath()`
 >    的 '>' 剥离。
->    **未接线（明确标注）**：`archiveRoot`（包内根目录先/后）与
->    `mountSiblingsForArchiveProject`（档案工程挂兄弟 patch*.xp3）——两项都要先定 I3（是否让
->    classic 层也挂兄弟补丁），故暂缓。`xp3SegmentCacheBytes` 已完成：淘汰判定改读
+>    **未接线（明确标注）**：`mountSiblingsForArchiveProject`（档案工程挂兄弟 patch*.xp3）——
+>    这一项要先定 I3（是否让 classic 层也挂兄弟补丁）。`archiveRoot`（包内根目录先/后）
+>    已完成：两处挂载循环按策略分两遍处理，RootLast 时根目录留到最后。`xp3SegmentCacheBytes` 已完成：淘汰判定改读
 >    `io::EffectiveSegmentCacheLimitBytes()`（显式覆盖 > 策略值），低内存路径
 >    （SysInitImpl 的"极低内存关缓存"）改为显式覆盖，两边意图都保住。
 > 6. ✅ 模块存在性查询改注入式：`io/IoModuleLocator.{h,cpp}`（`SetModuleLocator`/`HasModule`），
@@ -288,6 +288,6 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 | C6 KAG 运行时补丁层（27 文本补丁 + 11 类包装） | ~1500 行 | **前提是 patch.tjs 晚执行**（E1）；需按游戏逐条摘 |
 | C7 `ExtKAGParser` | ~4700 行 | 需先改 `ExtKAGParser.hpp` 保护宏、定 `paramMacros`/`copyTag` 缺失、与 `kagparserex` 空壳互斥 |
 | E1 `patch.tjs` 分两层 | 中等（含晚 patch 韧性层） | 无（已裁决），但影响面大，需逐游戏回归 |
-| M1 最后两个策略开关（`archiveRoot`、`mountSiblingsForArchiveProject`） | 小 | **等用户裁决 I3**（是否让 classic 层在档案工程直启时挂兄弟 `patch*.xp3`） |
+| M1 最后一个策略开关（`mountSiblingsForArchiveProject`） | 小 | **等用户裁决 I3**（是否让 classic 层在档案工程直启时挂兄弟 `patch*.xp3`）；`archiveRoot` 已完成 |
 | M6 插件模拟层（约 60 个缺失模块 + 部分覆盖项） | ~3450 行（分批） | 无阻塞，按"脚本真的会调"排序分批；`compat/recon/plugin-compat-diff.md` 有清单 |
 | B1 GPU 伴生脚本惰性注入 | 中等 | 无阻塞（可选） |
