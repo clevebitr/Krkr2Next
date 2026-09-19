@@ -1,5 +1,5 @@
 //
-// AetherKiri 兼容层插件：fpslimit.dll 与 layeredwindow.dll
+// AetherKiri 兼容层插件：fpslimit.dll / layeredwindow.dll / kztouch.dll / dmmcloud.dll
 //
 // 来源：AetherKiri（rev 见 compat/upstream/aetherkiri_ports.json）
 //   - fpslimit.dll      → `cpp/plugins/compatSystemPlugins.cpp:832-846`
@@ -89,8 +89,73 @@ namespace {
 NCB_PRE_REGIST_CALLBACK(registerLayeredWindowCompat);
 NCB_POST_UNREGIST_CALLBACK(unregisterLayeredWindowCompat);
 
+
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("kztouch.dll")
+
 //---------------------------------------------------------------------------
-// 层归属登记（见 compat/ModuleGate.h）：两个模块都只在 AetherKiri 层注册。
+// kztouch.dll —— KiriKiri Z 的触摸控件开关
+//
+// 纯状态桩（上游同款）：真机触摸由核心的 Window.getTouchPoint 等提供，这里只需让
+// `KZTouch` 类存在、`available` 为 true，游戏按 available 决定走触摸 UI 分支。
+// 来源 AetherKiri `compatLegacyPlugins.cpp:334-356`。
+//---------------------------------------------------------------------------
+class KZTouch {
+public:
+    bool getEnabled() const { return enabled_; }
+    void setEnabled(bool value) { enabled_ = value; }
+    bool getAvailable() const { return true; }
+    void enable() { enabled_ = true; }
+    void disable() { enabled_ = false; }
+    void reset() { enabled_ = true; }
+
+private:
+    bool enabled_ = true;
+};
+
+NCB_REGISTER_CLASS(KZTouch) {
+    Constructor();
+    NCB_PROPERTY(enabled, getEnabled, setEnabled);
+    NCB_PROPERTY_RO(available, getAvailable);
+    NCB_METHOD(enable);
+    NCB_METHOD(disable);
+    NCB_METHOD(reset);
+}
+
+#undef NCB_MODULE_NAME
+#define NCB_MODULE_NAME TJS_W("dmmcloud.dll")
+
+//---------------------------------------------------------------------------
+// dmmcloud.dll —— DMM 云存档/购买（桌面商店概念）
+//
+// 移动端没有对应服务：`available=false`、登录/购买一律失败、`logout` 成功、`userId` 空。
+// 上游同款桩；至少让走 DMM 分支的游戏能 link 成功并按"不可用"降级。
+// 来源 AetherKiri `compatLegacyPlugins.cpp:359-381`。
+//---------------------------------------------------------------------------
+class DMMCloud {
+public:
+    bool getAvailable() const { return false; }
+    bool initialize(const tjs_char * = nullptr) { return false; }
+    bool login(const tjs_char * = nullptr, const tjs_char * = nullptr) {
+        return false;
+    }
+    bool logout() { return true; }
+    bool purchase(const tjs_char * = nullptr) { return false; }
+    ttstr getUserId() const { return ttstr(); }
+};
+
+NCB_REGISTER_CLASS(DMMCloud) {
+    Constructor();
+    NCB_PROPERTY_RO(available, getAvailable);
+    NCB_PROPERTY_RO(userId, getUserId);
+    NCB_METHOD(initialize);
+    NCB_METHOD(login);
+    NCB_METHOD(logout);
+    NCB_METHOD(purchase);
+}
+
+//---------------------------------------------------------------------------
+// 层归属登记（见 compat/ModuleGate.h）：本文件里的模块都只在 AetherKiri 层注册。
 //---------------------------------------------------------------------------
 namespace {
     struct AetherKiriOwnershipForMiscSystem {
@@ -99,6 +164,10 @@ namespace {
                                               krkr::compat::LayerId::AetherKiri);
             krkr::compat::RegisterModuleOwner(
                 "layeredwindow.dll", krkr::compat::LayerId::AetherKiri);
+            krkr::compat::RegisterModuleOwner("kztouch.dll",
+                                              krkr::compat::LayerId::AetherKiri);
+            krkr::compat::RegisterModuleOwner("dmmcloud.dll",
+                                              krkr::compat::LayerId::AetherKiri);
         }
     } g_aetherkiri_ownership_misc_system;
 } // namespace
