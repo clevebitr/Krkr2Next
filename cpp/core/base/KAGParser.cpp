@@ -1775,6 +1775,9 @@ parse_start:
                 DicObj->PropSetByVS(TJS_MEMBERENSURE,
                                     __eol_name.AsVariantStringNoAddRef(),
                                     &true_val, DicObj);
+                // 合成标签也带 taglist（只有标签名本身，无属性）：
+                // `[tag *]` 展开与 copyTag 依赖这份元数据判"哪些成员是属性"。
+                TVPSetKagTagList(DicObj, {});
                 if(RecordingMacro)
                     RecordingMacroStr += TJS_W("[r eol=true]");
                 CurLine++;
@@ -1831,6 +1834,7 @@ parse_start:
                     DicObj->PropSetByVS(TJS_MEMBERENSURE,
                                         text_name.AsVariantStringNoAddRef(),
                                         pCachedVal, DicObj);
+                    TVPSetKagTagList(DicObj, { ttstr(TJS_W("text")) });
 
                     if(RecordingMacro) {
                         if(ch == TJS_W('['))
@@ -1844,6 +1848,7 @@ parse_start:
                     DicObj->PropSetByVS(TJS_MEMBERENSURE,
                                         __tag_name.AsVariantStringNoAddRef(),
                                         &r_val, DicObj);
+                    TVPSetKagTagList(DicObj, {});
                     if(RecordingMacro)
                         RecordingMacroStr += TJS_W("[r]");
                 }
