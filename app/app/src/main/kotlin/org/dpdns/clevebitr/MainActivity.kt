@@ -523,6 +523,7 @@ class MainActivity : ComponentActivity() {
         val s = EngineSession(
             writablePath = path,
             cachePath = cacheDir.absolutePath,
+            logContext = applicationContext,
             fpsLimit = resolved.fpsLimit,
             fontFallbackMode = resolved.fontFallbackMode,
             oglDrawDeviceCompat = resolved.oglDrawDeviceCompat,

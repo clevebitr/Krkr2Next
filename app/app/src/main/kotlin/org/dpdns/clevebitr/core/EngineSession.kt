@@ -28,6 +28,11 @@ import android.view.Surface
 class EngineSession(
     private val writablePath: String,
     private val cachePath: String,
+    /**
+     * 仅用于给**每个游戏**分配独立引擎日志（`logs/games/<安全名>-<短哈希>/engine-<时间戳>.log`）。
+     * 传 applicationContext；为 null 时退回进程级 `engine.log`（老行为），不影响开游戏。
+     */
+    private val logContext: android.content.Context? = null,
     /** 引擎帧率上限；0 = 不限速，跟随 vsync。 */
     private val fpsLimit: Int = 0,
     /**
@@ -421,9 +426,36 @@ class EngineSession(
         }
     }
 
+    /**
+     * 把引擎日志切到**这个游戏自己的文件**。
+     *
+     * 为什么在这里做：日志路径此前只在 Application 启动时设过一次，于是所有游戏的引擎日志
+     * 都写进同一份 `engine.log`（多游戏混在一起，排查时要靠时间戳人工切分）。
+     * `engine_set_log_file_path` 本身支持重复调用（内部先摘旧 sink），所以在 openGame 里
+     * 切换是安全的：切换之后本局的引擎日志（含兼容档、挂载、脚本异常）都落在这个游戏
+     * 目录下。
+     *
+     * 失败一律降级：算不出路径、建不出文件、native 返回非 0 —— 都保持原路径继续开游戏。
+     */
+    private fun switchEngineLogToGame(gameRootPath: String) {
+        val ctx = logContext ?: return
+        try {
+            val log = LogFiles.gameEngineLog(ctx, gameRootPath)
+            log.parentFile?.mkdirs()
+            // 与 Application 里同样的理由：先由 Java 侧把文件建出来，native 新建文件在
+            // 真机上会间歇性 ENOENT，而"打开已存在文件"稳定成功。
+            if (!log.isFile) log.createNewFile()
+            val rc = NativeEngine.engineSetLogFilePath(log.absolutePath)
+            AppLog.i(TAG, "engine log -> ${log.absolutePath} (rc=$rc)")
+        } catch (t: Throwable) {
+            AppLog.w(TAG, "切换每游戏引擎日志失败，继续用原路径", t)
+        }
+    }
+
     /** 异步打开游戏。进度通过 [onStartupStateChanged] 回调。 */
     fun openGame(gameRootPath: String, startupScript: String? = null) {
         post {
+            switchEngineLogToGame(gameRootPath)
             lastFrameNanos = 0L
             tickFailures = 0L
             gameTerminated = false

@@ -77,6 +77,56 @@ object LogFiles {
 
     fun engineLog(context: Context): File = File(logsDir(context), ENGINE_LOG_NAME)
 
+    // ── 每游戏日志 ─────────────────────────────────────────────────────────
+    //
+    // 为什么需要：引擎日志此前只有一份进程级 `engine.log`，而 `engine_set_log_file_path`
+    // 是**可以重复调用**的（内部会先摘掉旧 sink，见 engine_api.cpp 的
+    // DetachFileSinkFromLoggers）。所以开游戏时把它切到该游戏自己的文件即可，
+    // 多个游戏不再混在一个文件里。
+    //
+    // 目录结构：`logs/games/<安全名>-<路径短哈希>/engine-<时间戳>.log`
+    //   - 安全名：取游戏目录的叶子名，剔掉路径分隔符与控制字符，限长（中文名照常保留）；
+    //   - 短哈希：同一叶子名的不同路径（如两个目录都叫 `game`）不会互相覆盖；
+    //   - 时间戳：同一游戏多次启动各自一份，便于对照"这次跑的是什么状态"。
+
+    /** 每游戏日志子目录名。 */
+    const val GAME_LOG_DIR_NAME = "games"
+
+    private fun sanitizeGameName(raw: String): String {
+        val leaf = raw.trimEnd('/', '\\').substringAfterLast('/').substringAfterLast('\\')
+        val cleaned = leaf.map { ch ->
+            when {
+                ch.isLetterOrDigit() || ch == '.' || ch == '_' || ch == '-' -> ch
+                ch == ' ' -> '_'
+                else -> '_'
+            }
+        }.joinToString("")
+        val trimmed = cleaned.trim('_', '.').ifEmpty { "game" }
+        return if (trimmed.length > 48) trimmed.take(48) else trimmed
+    }
+
+    private fun pathTag(raw: String): String = try {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        md.digest(raw.toByteArray(Charsets.UTF_8)).take(4).joinToString("") { "%02x".format(it) }
+    } catch (t: Throwable) {
+        // 摘要算不出来也不能挡住开游戏：退回"路径长度 + 无哈希"。
+        "n${raw.length}"
+    }
+
+    /** 该游戏的日志目录（不创建）。 */
+    fun gameLogDir(context: Context, gameRootPath: String): File {
+        val name = "${sanitizeGameName(gameRootPath)}-${pathTag(gameRootPath)}"
+        return File(File(logsDir(context), GAME_LOG_DIR_NAME), name)
+    }
+
+    /**
+     * 该游戏本轮的引擎日志文件：`<gameLogDir>/engine-<时间戳>.log`（不创建）。
+     */
+    fun gameEngineLog(context: Context, gameRootPath: String): File {
+        val stamp = synchronized(this) { this.stamp.format(java.util.Date()) }
+        return File(gameLogDir(context, gameRootPath), "engine-$stamp.log")
+    }
+
     fun appLog(context: Context): File = File(logsDir(context), APP_LOG_NAME)
 
     fun crashDir(context: Context): File = File(logsDir(context), CRASH_DIR_NAME)
@@ -168,14 +218,27 @@ object LogFiles {
     fun pruneTotal(context: Context, protected: Collection<String>) {
         try {
             val dir = logsDir(context)
-            val files = dir.listFiles { f -> f.isFile }?.sortedBy { it.lastModified() } ?: return
-            var total = files.sumOf { it.length() }
+            // 统计范围含 `games/` 子树：每游戏日志也占配额，否则它们会无上限增长
+            // （目录上限的意义就在"日志总量不失控"）。顶层文件与子树一视同仁，
+            // 统一按 mtime 升序删。
+            val files = ArrayList<File>()
+            dir.listFiles { f -> f.isFile }?.let { files.addAll(it) }
+            File(dir, GAME_LOG_DIR_NAME).listFiles { f -> f.isDirectory }?.forEach { gameDir ->
+                gameDir.listFiles { f -> f.isFile }?.let { files.addAll(it) }
+            }
+            val ordered = files.sortedBy { it.lastModified() }
+            var total = ordered.sumOf { it.length() }
             if (total <= DIR_TOTAL_LIMIT_BYTES) return
-            for (f in files) {
+            for (f in ordered) {
                 if (total <= DIR_TOTAL_LIMIT_BYTES) break
                 if (f.name in protected) continue
                 val len = f.length()
                 if (f.delete()) total -= len
+            }
+            // 删空的游戏目录顺手收掉，避免目录树里堆一片空壳。
+            File(dir, GAME_LOG_DIR_NAME).listFiles { f -> f.isDirectory }?.forEach { gameDir ->
+                val left = gameDir.listFiles()
+                if (left != null && left.isEmpty()) gameDir.delete()
             }
         } catch (e: Exception) {
             Log.w(TAG, "pruneTotal failed", e)
