@@ -75,6 +75,24 @@
       "reason": "AetherKiri 兼容层插件 zlib.dll / version.dll：KRKRZ 系游戏会 link 这两个模块并直接调用 Zlib.compress/uncompress、Version.versionString。两种 local-fix：(1) Version.engine 返回本引擎名（上游写死 AetherKiri）；(2) 登记为 AetherKiri 层专属模块（本仓库的层机制，见 compat/ModuleGate.h）。",
       "sha256_local": "2aea1b9d5ef204e3cb6517624c28d79fc26c59bf77a9f0df1ad61a0477544f09",
       "sha256_upstream_at_rev": "7ef60c81e5d7c53c14c9ff4f1bde2d97776f0ccd781396bd050d8bec3335a4a9"
+    },
+    {
+      "local": "cpp/plugins/compat/aetherkiri/legacy_system_misc.cpp",
+      "upstream": "cpp/plugins/compatSystemPlugins.cpp",
+      "source_ref": "cpp/plugins/compatSystemPlugins.cpp:832-846（fpslimit.dll）",
+      "modifications": "partial-extract",
+      "reason": "AetherKiri 层插件 fpslimit.dll：System.fpslimit 属性（纯状态桩，不改引擎限速）。local-fix：登记为 AetherKiri 层专属模块。",
+      "sha256_local": "d1d998320ac1b7bf31d09e532ec23f394309d5df02b18b970fd0d68734098f90",
+      "sha256_upstream_at_rev": "b2973dab017fd549473a5b1587c086512526fbcca81d260805ba5aba9a84aba6"
+    },
+    {
+      "local": "cpp/plugins/compat/aetherkiri/legacy_system_misc.cpp",
+      "upstream": "cpp/plugins/compatLegacyPlugins.cpp",
+      "source_ref": "cpp/plugins/compatLegacyPlugins.cpp:617-657（layeredwindow.dll）",
+      "modifications": "partial-extract",
+      "reason": "AetherKiri 层插件 layeredwindow.dll：全局函数 layeredwindow(...) 返回 true（移动端 Layer 合成由宿主负责）。local-fix：登记为 AetherKiri 层专属模块 + 日志文案。",
+      "sha256_local": "d1d998320ac1b7bf31d09e532ec23f394309d5df02b18b970fd0d68734098f90",
+      "sha256_upstream_at_rev": "7ef60c81e5d7c53c14c9ff4f1bde2d97776f0ccd781396bd050d8bec3335a4a9"
     }
   ],
   "not_ported": [

@@ -42,6 +42,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     # AetherKiri 层专属的插件模拟（层归属见 compat/ModuleGate.h；来源与改动见
     # compat/upstream/aetherkiri_ports.json）。
     compat/aetherkiri/legacy_zlib_version.cpp
+    compat/aetherkiri/legacy_system_misc.cpp
     compatLegacyPlugins.cpp
 )
 

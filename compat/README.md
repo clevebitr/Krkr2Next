@@ -42,6 +42,8 @@ krkr2next.json（每游戏 GameConfig.EngineOverride.runMode）
 |---|---|---|
 | `zlib.dll` | aetherkiri | `cpp/plugins/compat/aetherkiri/legacy_zlib_version.cpp`（自 AetherKiri 片段移植） |
 | `version.dll` | aetherkiri | 同上 |
+| `fpslimit.dll` | aetherkiri | `cpp/plugins/compat/aetherkiri/legacy_system_misc.cpp`（`System.fpslimit`） |
+| `layeredwindow.dll` | aetherkiri | 同上（`layeredwindow()` 返回 true） |
 
 新增层专属模块时：写实现 → 在文件里 `RegisterModuleOwner(name, LayerId::Xxx)` → 登记进
 `compat/upstream/aetherkiri_ports.json`（片段移植用 `partial-extract` 类别）→ 跑
