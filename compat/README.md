@@ -192,25 +192,25 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 
 | # | 项 | 我们 | AetherKiri | 建议 | 状态 |
 |---|---|---|---|---|---|
-| A1 | 未定义全局成员读取回退（34 个名字，`tjsObject.cpp:249-308`） | 没有，一律抛 `Member "x" does not exist` | 有（白名单式，失败行为不变；带 `thread_local` 重入保护） | 移植，**按层开关**（会改变当前"抛异常"的游戏行为） | 待裁决 |
-| A2 | 启动名回退（11 个 no-op 函数 + 数组/整数/类，`tjsObject.cpp:171-247`） | 没有 | 有 | 同 A1 | 待裁决 |
-| A3 | 启动期可写白名单（8 个名字，`tjsObjectExtendable.cpp:9-19/96-105`） | 没有（靠 C++ 侧 `krkrgles.cpp:3254-3256` 绕开） | 有 | 移植（固定白名单，风险低）⇒ 让脚本侧 `Window.OGLDrawDevice = X` 生效 | 待裁决 |
-| A4 | `TextRender.renderCount` / `touchImage` 合成 | 没有 | 有 | 随 A1/A2 一起移植 | 待裁决 |
+| A1 | 未定义全局成员读取回退（34 个名字，`tjsObject.cpp:249-308`） | 没有，一律抛 `Member "x" does not exist` | 有（白名单式，失败行为不变；带 `thread_local` 重入保护） | 移植，**按层开关**（会改变当前"抛异常"的游戏行为） | 已实施（只给 AetherKiri 层；开关 `TJSSetCompatFallbacksEnabled`） |
+| A2 | 启动名回退（11 个 no-op 函数 + 数组/整数/类，`tjsObject.cpp:171-247`） | 没有 | 有 | 同 A1 | 已实施（同上，同一开关） |
+| A3 | 启动期可写白名单（8 个名字，`tjsObjectExtendable.cpp:9-19/96-105`） | 没有（靠 C++ 侧 `krkrgles.cpp:3254-3256` 绕开） | 有 | 移植（固定白名单，风险低）⇒ 让脚本侧 `Window.OGLDrawDevice = X` 生效 | 已实施（两层都开，按裁决） |
+| A4 | `TextRender.renderCount` / `touchImage` 合成 | 没有 | 有 | 随 A1/A2 一起移植 | 已实施（随 A1/A2，同一开关） |
 | A5 | `kag.*` 六个默认值 | 用 `kag_runtime_defaults.tjs` 注入（等价） | 内核回退返回 0 | 保持我们的实现 | 待裁决 |
-| B1 | GPU 伴生脚本注入方式 | 引擎选项 `ogldrawdevice_compat` 门控 + 首帧一次性钩子 | `TVPRegisterStorageResolver` + 惰性打开（打开 11 个 GPU 存储名时注入，无条件） | 保留我们的门控；把"惰性注入"作为 AetherKiri 层行为可选引入 | 待裁决 |
+| B1 | GPU 伴生脚本注入方式 | 引擎选项 `ogldrawdevice_compat` 门控 + 首帧一次性钩子 | `TVPRegisterStorageResolver` + 惰性打开（打开 11 个 GPU 存储名时注入，无条件） | 保留我们的门控；把"惰性注入"作为 AetherKiri 层行为可选引入 | 待做（保留门控；惰性注入可按需引入） |
 | B2 | `KAGWindow`/`kag` 别名扇出 + 600-tick 重试 + 卸载清理 | 只写 `Window.<name>`；无重试；无 unregist 清理 | 三目标扇出 + prototype + 重试 + `PreUnregist` | 照搬（对 classic 层也是修"脚本晚加载就失效"） | 已实施（4 目标扇出 + 每帧重试 600 帧 + 卸载摘钩） |
-| C1 | `taglist` 标签元数据 + `copyTag`（约 140 行） | 没有 | 有（KAGParserEx 文档化特性） | 移植（自包含、风险最低） | 待裁决 |
+| C1 | `taglist` 标签元数据 + `copyTag`（约 140 行） | 没有 | 有（KAGParserEx 文档化特性） | 移植（自包含、风险最低） | 待做（依赖 `taglist` helper 块 ~130 行 + `CopyTag`/`CloneTag` ~110 行 + 调用点；下一轮起做） |
 | C2 | 明文行翻译（`TVPTransformText`/`PrefetchText`） | 没有 | 有（依赖 REF 独有 `utils/TextTransform.h`） | 暂不移植（本仓库无翻译功能） | 待裁决 |
-| C3 | `GetNextTag` 文本段聚合 + `TextTagQueue` | 没有（`return _GetNextTag()`） | 有（会改变 `kag.curLine/curPos` 与存档位置语义） | **按层开关**：AetherKiri 层启用，classic 层保持（存档兼容） | 待裁决 |
-| C4 | `.scn` 编译场景容错 + 标签解析回调（含 psbfile 侧标签收集） | 没有 | 有（成对实现） | 移植（成对，否则回调无消费者） | 待裁决 |
+| C3 | `GetNextTag` 文本段聚合 + `TextTagQueue` | 没有（`return _GetNextTag()`） | 有（会改变 `kag.curLine/curPos` 与存档位置语义） | **按层开关**：AetherKiri 层启用，classic 层保持（存档兼容） | 待做（只给 AetherKiri 层） |
+| C4 | `.scn` 编译场景容错 + 标签解析回调（含 psbfile 侧标签收集） | 没有 | 有（成对实现） | 移植（成对，否则回调无消费者） | 已实施（两层；含 psbfile 侧标签收集，成对完成） |
 | C5 | 每帧 KAG 修复（`envclear` 环境复位、`[endtrans]` 无 trans 等待） | 没有 | 有（`EngineLoop` tick 钩子 + `ScriptMgnIntf` 实现） | 移植到 AetherKiri 层 | 待裁决 |
 | C6 | KAG 运行时补丁层（27 个文本补丁 + 11 个类包装，约 1500 行） | 没有 | 有 | **不整体照搬**：其前提是"patch.tjs 在 startup 之后"，与我们的顺序相反；按游戏逐条摘 | 待裁决 |
 | C7 | `ExtKAGParser`（第二个解析器，约 4700 行） | 只有空壳注册名 | 有（含 `goToLine`/`localvar`/`fuzzyReturn` 等） | 延后；移植前必须改 `ExtKAGParser.hpp` 的 `KAGParserH` 保护宏并决定 `paramMacros`/`copyTag` 缺失 | 待裁决 |
 | C8 | `kagparserex` 真实实现（109 行：按需安装核心 `KAGParser` + 标记 + 引用计数卸载） | 25 行空实现 | 有 | 照搬（便宜） | 待裁决 |
 | C9 | `MDKParser.dll`（4470 行，MIT） | 没有 | 有 | 延后（M6） | 待裁决 |
-| E1 | `patch.tjs` 执行时机 | startup **之前**（与 krkr2 全家一致） | startup **之后** + 晚 patch 韧性层（全局可调用成员快照/恢复、运行时注册表合并） | classic 层保持；AetherKiri 层照搬（**必须连韧性层一起**，否则更糟） | 待裁决 |
+| E1 | `patch.tjs` 执行时机 | startup **之前**（与 krkr2 全家一致） | startup **之后** + 晚 patch 韧性层（全局可调用成员快照/恢复、运行时注册表合并） | classic 层保持；AetherKiri 层照搬（**必须连韧性层一起**，否则更糟） | 待做（classic 保持现状；AetherKiri 层需连韧性层一起移植） |
 | E2 | `kag` 默认值在 `AfterStartup.tjs` 之后是否再补一次 | 只补一次 | 补两次 | 照搬（便宜，且是修 bug） | 已实施 |
-| E3 | 模块名注册不按链接序（`LoadAllModules` 按字母序遍历 map） | 同 | 同 | 引入层过滤时一并解决（同层内仍按字母序） | 待裁决 |
+| E3 | 模块名注册不按链接序（`LoadAllModules` 按字母序遍历 map） | 同 | 同 | 引入层过滤时一并解决（同层内仍按字母序） | 已缓解（`LoadAllModules` 现在会跳过非本层模块；同层内仍按字母序） |
 | P3' | `k2compat_scripts.cpp`（2359 行 Krkr2Compat TJS，**当前是死代码**：无 target 编译、安装函数零调用） | 有资产未接线 | 完全没有 | 接线（放 classic 层，注意历史上执行它会黑屏，需按 PreRegist/PostRegist 时机接）或明确删除 | 已实施（同上） |
 
 ### 5.2 插件模拟层（M6）
@@ -277,3 +277,17 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 
 真机验证清单（每轮都可复用）：读档、动态立绘、`kag 档接管完成（…别名 N/4…）`、
 `io policy: tie-break=… patch-rule=…`、选 AetherKiri 档时的 `module gate:` 与 `Zlib`/`Version`。
+
+### 5.4 剩余工作与阻塞项（2026-09-18 汇总）
+
+| 项 | 规模 | 阻塞 |
+|---|---|---|
+| C1 `taglist` + `copyTag` | ~250 行（helper 块 + CloneTag/CopyTag + 6 处调用点） | 无（已裁决两层都要），下一轮起做 |
+| C3 `GetNextTag` 文本段聚合 | ~230 行 + 头文件成员 | 无（已裁决只给 AetherKiri 层） |
+| C5 每帧 KAG 修复（`envclear` 复位、`[endtrans]` 无 trans 等待） | ~120 行 + `EngineLoop` tick 钩子 | 依赖 C6 的部分前提（KAG 运行时对象形态） |
+| C6 KAG 运行时补丁层（27 文本补丁 + 11 类包装） | ~1500 行 | **前提是 patch.tjs 晚执行**（E1）；需按游戏逐条摘 |
+| C7 `ExtKAGParser` | ~4700 行 | 需先改 `ExtKAGParser.hpp` 保护宏、定 `paramMacros`/`copyTag` 缺失、与 `kagparserex` 空壳互斥 |
+| E1 `patch.tjs` 分两层 | 中等（含晚 patch 韧性层） | 无（已裁决），但影响面大，需逐游戏回归 |
+| M1 最后两个策略开关（`archiveRoot`、`mountSiblingsForArchiveProject`） | 小 | **等用户裁决 I3**（是否让 classic 层在档案工程直启时挂兄弟 `patch*.xp3`） |
+| M6 插件模拟层（约 60 个缺失模块 + 部分覆盖项） | ~3450 行（分批） | 无阻塞，按"脚本真的会调"排序分批；`compat/recon/plugin-compat-diff.md` 有清单 |
+| B1 GPU 伴生脚本惰性注入 | 中等 | 无阻塞（可选） |
