@@ -1291,6 +1291,147 @@ bool tTJSNI_KAGParser::SkipCommentOrLabel() {
 }
 
 //---------------------------------------------------------------------------
+// taglist：标签字典上的**隐藏**元数据（[标签名, 属性名...]）
+//
+// 移植自 AetherKiri `cpp/core/base/KAGParser.cpp:113-245`（in-file 片段，见
+// compat/README.md §6）。作用：KAGParserEx 文档化特性 —— 宏参数在 `[tag *]` 展开时
+// 需要知道"原标签的属性顺序与来源"，而 `Dictionary.assign` **会跳过隐藏成员**，
+// 所以 taglist 必须在拷贝后显式重设；枚举属性名时也要把 `tagname/taglist/runLine/
+// runLineStr/runCount` 这些解析器运行时成员排除掉。
+//---------------------------------------------------------------------------
+void TVPSetKagTagList(iTJSDispatch2 *tag,
+                      const std::vector<ttstr> &attribute_names) {
+    if(!tag)
+        return;
+
+    static ttstr __taglist_name(TJS_W("taglist"));
+    static ttstr __tag_name(TJS_W("tagname"));
+
+    iTJSDispatch2 *array = TJSCreateArrayObject();
+    if(!array)
+        return;
+
+    try {
+        tjs_int index = 0;
+        tTJSVariant tag_name(__tag_name);
+        array->PropSetByNum(TJS_MEMBERENSURE, index++, &tag_name, array);
+
+        for(const auto &name : attribute_names) {
+            tTJSVariant value(name);
+            array->PropSetByNum(TJS_MEMBERENSURE, index++, &value, array);
+        }
+
+        tTJSVariant taglist(array, array);
+        // taglist is parser metadata. Native queue/copy code still needs to
+        // address it directly, but game-side dictionary enumeration must not
+        // mistake it for a tag parameter.
+        tag->PropSetByVS(TJS_MEMBERENSURE | TJS_HIDDENMEMBER,
+                         __taglist_name.AsVariantStringNoAddRef(), &taglist,
+                         tag);
+    } catch(...) {
+        array->Release();
+        throw;
+    }
+
+    array->Release();
+}
+bool TVPHasKagTagList(iTJSDispatch2 *tag) {
+    if(!tag)
+        return false;
+
+    tTJSVariant value;
+    if(TJS_FAILED(tag->PropGet(0, TJS_W("taglist"), nullptr, &value, tag)))
+        return false;
+    return value.Type() != tvtVoid;
+}
+
+bool TVPIsKagRuntimeTagMember(const ttstr &name) {
+    return name == TJS_W("tagname") || name == TJS_W("taglist") ||
+           name == TJS_W("runLine") || name == TJS_W("runLineStr") ||
+           name == TJS_W("runCount");
+}
+
+std::vector<ttstr> TVPGetKagTagListAttributeNames(iTJSDispatch2 *tag) {
+    std::vector<ttstr> names;
+    if(!tag)
+        return names;
+
+    tTJSVariant taglist;
+    if(TJS_FAILED(
+           tag->PropGet(0, TJS_W("taglist"), nullptr, &taglist, tag)) ||
+       taglist.Type() != tvtObject)
+        return names;
+
+    iTJSDispatch2 *array = taglist.AsObjectNoAddRef();
+    if(!array)
+        return names;
+
+    tTJSVariant count_value;
+    if(TJS_FAILED(array->PropGet(0, TJS_W("count"), nullptr, &count_value,
+                                 array)))
+        return names;
+
+    const tjs_int count = static_cast<tjs_int>(count_value);
+    for(tjs_int index = 0; index < count; ++index) {
+        tTJSVariant name_value;
+        if(TJS_FAILED(
+               array->PropGetByNum(0, index, &name_value, array)) ||
+           name_value.Type() == tvtVoid)
+            continue;
+
+        ttstr name(name_value);
+        if(TVPIsKagRuntimeTagMember(name) ||
+           std::find(names.begin(), names.end(), name) != names.end())
+            continue;
+        names.push_back(name);
+    }
+
+    return names;
+}
+
+class TVPKagTagListEnumCaller : public tTJSDispatch {
+public:
+    explicit TVPKagTagListEnumCaller(std::vector<ttstr> &names)
+        : Names(names) {}
+
+    tjs_error FuncCall(tjs_uint32, const tjs_char *, tjs_uint32 *,
+                       tTJSVariant *result, tjs_int numparams,
+                       tTJSVariant **param, iTJSDispatch2 *) override {
+        if(numparams > 1) {
+            const tTVInteger memberflag = param[1]->AsInteger();
+            if(!(memberflag & TJS_HIDDENMEMBER)) {
+                ttstr name(*param[0]);
+                if(!TVPIsKagRuntimeTagMember(name))
+                    Names.push_back(name);
+            }
+        }
+        if(result)
+            *result = true;
+        return TJS_S_OK;
+    }
+
+private:
+    std::vector<ttstr> &Names;
+};
+
+std::vector<ttstr> TVPCollectKagTagMemberNames(iTJSDispatch2 *tag) {
+    std::vector<ttstr> names;
+    if(!tag)
+        return names;
+
+    TVPKagTagListEnumCaller *caller = new TVPKagTagListEnumCaller(names);
+    tTJSVariantClosure closure(caller);
+    tag->EnumMembers(TJS_IGNOREPROP | TJS_ENUM_NO_VALUE, &closure, nullptr);
+    caller->Release();
+
+    std::sort(names.begin(), names.end(),
+              [](const ttstr &lhs, const ttstr &rhs) {
+                  return lhs.AsStdString() < rhs.AsStdString();
+              });
+    names.erase(std::unique(names.begin(), names.end()), names.end());
+    return names;
+}
+//---------------------------------------------------------------------------
 void tTJSNI_KAGParser::PushMacroArgs(iTJSDispatch2 *args) {
     iTJSDispatch2 *dsp;
     if(MacroArgs.size() > MacroArgStackDepth) {
@@ -1307,6 +1448,11 @@ void tTJSNI_KAGParser::PushMacroArgs(iTJSDispatch2 *args) {
     tTJSVariant src(args, args);
     tTJSVariant *psrc = &src;
     DicAssign->FuncCall(0, nullptr, nullptr, nullptr, 1, &psrc, dsp);
+
+    // `Dictionary.assign` 会跳过隐藏成员，而 taglist 正是隐藏的解析器元数据 ——
+    // 显式重设一次，`[tag *]` 展开时才拿得到属性顺序（上游同款处理）。
+    if(TVPHasKagTagList(args))
+        TVPSetKagTagList(dsp, TVPGetKagTagListAttributeNames(args));
 }
 
 //---------------------------------------------------------------------------
@@ -2256,8 +2402,16 @@ parse_start:
                         LineBufferUsing = true;
 
                         // push macro arguments
-                        if(ismacro)
+                        if(ismacro) {
+                            // 先把"本标签的属性顺序"记进隐藏元数据 taglist，
+                            // PushMacroArgs 才能把它带到宏参数字典上（见文件上方说明）。
+                            std::vector<ttstr> tag_list_names;
+                            tag_list_names.reserve(parsed_attributes.size());
+                            for(const auto &entry : parsed_attributes)
+                                tag_list_names.push_back(entry.Name);
+                            TVPSetKagTagList(DicObj, tag_list_names);
                             PushMacroArgs(DicObj);
+                        }
 
                         break;
                     } else if(tagkind == tag_jump) {

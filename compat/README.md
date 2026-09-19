@@ -282,7 +282,7 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 
 | 项 | 规模 | 阻塞 |
 |---|---|---|
-| C1 `taglist` + `copyTag` | ~250 行（helper 块 + CloneTag/CopyTag + 6 处调用点） | 无（已裁决两层都要），下一轮起做 |
+| C1 `taglist` + `copyTag` | ~250 行；**已完成** helper 块 + `[macro]` 记录 + `PushMacroArgs` 重设 | 无（已裁决两层都要）；剩余：`[tag *]` 重同步（~25 行）、合成标签的 taglist（4 处）、`copyTag`/`CloneTag` + 注册（~110 行） |
 | C3 `GetNextTag` 文本段聚合 | ~230 行 + 头文件成员 | 无（已裁决只给 AetherKiri 层） |
 | C5 每帧 KAG 修复（`envclear` 复位、`[endtrans]` 无 trans 等待） | ~120 行 + `EngineLoop` tick 钩子 | 依赖 C6 的部分前提（KAG 运行时对象形态） |
 | C6 KAG 运行时补丁层（27 文本补丁 + 11 类包装） | ~1500 行 | **前提是 patch.tjs 晚执行**（E1）；需按游戏逐条摘 |
