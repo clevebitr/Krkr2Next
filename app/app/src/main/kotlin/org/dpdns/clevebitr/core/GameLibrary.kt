@@ -28,6 +28,15 @@ data class LibraryGame(
     /** 封面文件名（`covers/` 下），空 = 没有封面。 */
     val coverFile: String = "",
     val notes: String = "",
+    /** 收藏：库页置顶/筛选用。与"分组"独立——收藏是布尔，分组是标签。 */
+    val favorite: Boolean = false,
+    /**
+     * 分组名（便签式标签，空 = 未分组）。
+     *
+     * 为什么是单个字符串而不是集合：用户的心智模型是"这个游戏属于哪一类"（如"待玩"、
+     * "已通关"），多标签会立刻退化成难用的树；需要更细的维度时用已有的 `tags`（刮削标签）。
+     */
+    val group: String = "",
     val addedAt: Long = 0L,
     val lastPlayedAt: Long = 0L,
     val playCount: Int = 0,
@@ -54,6 +63,9 @@ data class LibraryGame(
         if (description.isNotEmpty()) put(KEY_DESCRIPTION, description)
         if (coverFile.isNotEmpty()) put(KEY_COVER, coverFile)
         if (notes.isNotEmpty()) put(KEY_NOTES, notes)
+        // 只在非缺省时写：库文件保持"只写用户真正改过的项"的风格，便于人工比对 diff。
+        if (favorite) put(KEY_FAVORITE, true)
+        if (group.isNotEmpty()) put(KEY_GROUP, group)
         put(KEY_ADDED_AT, addedAt)
         put(KEY_LAST_PLAYED_AT, lastPlayedAt)
         put(KEY_PLAY_COUNT, playCount)
@@ -95,6 +107,8 @@ data class LibraryGame(
         const val KEY_ADDED_AT = "addedAt"
         const val KEY_LAST_PLAYED_AT = "lastPlayedAt"
         const val KEY_PLAY_COUNT = "playCount"
+        const val KEY_FAVORITE = "favorite"
+        const val KEY_GROUP = "group"
 
         /**
          * 从 JSON 读一条。**缺 path 或缺 title 就返回 null**（这两项没有合理默认值），
@@ -120,6 +134,8 @@ data class LibraryGame(
                 description = json.optString(KEY_DESCRIPTION, ""),
                 coverFile = json.optString(KEY_COVER, ""),
                 notes = json.optString(KEY_NOTES, ""),
+                favorite = json.optBoolean(KEY_FAVORITE, false),
+                group = json.optString(KEY_GROUP, ""),
                 addedAt = json.optLong(KEY_ADDED_AT, 0L),
                 lastPlayedAt = json.optLong(KEY_LAST_PLAYED_AT, 0L),
                 playCount = json.optInt(KEY_PLAY_COUNT, 0),
@@ -265,6 +281,26 @@ class GameLibrary(context: Context) {
         title.isBlank() || developer.isBlank() || vndbId.isBlank() ||
             released.isBlank() || description.isBlank() || coverFile.isBlank() ||
             tags.isEmpty() || notes.isBlank()
+
+    /**
+     * 切换收藏状态。返回切换后的值（id 不存在返回 null）。
+     *
+     * 只改库文件；不碰游戏目录（与 [remove] 同样是"纯库操作"）。
+     */
+    fun toggleFavorite(id: String): Boolean? {
+        val updated = update(id) { it.copy(favorite = !it.favorite) } ?: return null
+        return updated.favorite
+    }
+
+    /** 设置分组名（空串 = 取消分组）。返回是否更新成功。 */
+    fun setGroup(id: String, group: String): Boolean =
+        update(id) { it.copy(group = group.trim()) } != null
+
+    /** 库里出现过的分组名（去重、按名称排序），供库页做筛选条。 */
+    fun groups(): List<String> {
+        ensureLoaded()
+        return items.map { it.group }.filter { it.isNotBlank() }.distinct().sorted()
+    }
 
     fun remove(id: String): Boolean {
         ensureLoaded()
