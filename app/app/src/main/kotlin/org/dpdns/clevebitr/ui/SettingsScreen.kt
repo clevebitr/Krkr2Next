@@ -8,26 +8,24 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
-import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,7 +46,6 @@ import org.dpdns.clevebitr.core.LogFiles
 
 private const val TAG = "KrKr2Next/Settings"
 
-/** 叠加层三档的用户可见名字；值与 AetherKiri 的 off/summary/detail 一致。 */
 /** 主题三档。值即 `AppPrefs.THEME_MODES`。 */
 private val THEME_CHOICES = listOf(
     "system" to "跟随系统",
@@ -56,31 +54,16 @@ private val THEME_CHOICES = listOf(
 )
 
 /**
- * 引擎字体回退策略。两种解析器实现都保留，遇到缺字（黑方块）时切到另一种对比：
- *  - 自动：按字面/字形能力自选
- *  - 原版：原版派系的单一 fallback 字面实现
- *  - 链式：AetherKiri 派系的多字面逐字回退实现
+ * 设置页：**全局默认值**与调试开关。
+ *
+ * 分界很清楚——这里改的是"所有游戏默认怎么跑"，某个游戏要单独一套就去它的
+ * 「游戏设置」页（`GameSettingsScreen`）；只读信息（作者/仓库/协议/版本）在
+ * 「关于」页。三类内容混在一页时，用户分不清哪个开关会影响别的游戏。
+ *
+ * 设置项都服务于"把问题现场原样带出来"：日志怎么收、怎么导出、引擎跑多快、
+ * 画面上叠什么。
  */
-private val FONT_FALLBACK_CHOICES = listOf(
-    "auto" to "自动",
-    "legacy" to "原版",
-    "chain" to "链式",
-)
-
-/**
- * krkrz 的 OGLDrawDevice 兼容档位。krkrgles 系游戏（吉里吉里Z）会先看
- * `Window.OGLDrawDevice` 在不在，再决定要不要加载 GPU 层脚本；缺了它游戏不报错、
- * 只是静静降级：
- *  - 关闭：不提供（保持既有行为）
- *  - 仅 OGL：只挂 Window.OGLDrawDevice（避开 GLESAdaptor 带来的 captureCanvas 切换）
- *  - 别名：挂 Window.OGLDrawDevice + Window.GLESAdaptor
- *  - 接管：再接管 KAGWindow_createDrawDevice（KAG 系作品的立绘/背景动态走这条）
- */
-/** 游戏兼容档：`auto` 之外都是直接指定（见 `engine_options.h`）。 */
-/**
- * 设置页。目前只有调试相关的东西——这是给排障用的壳，设置项也都服务于
- * "把问题现场原样带出来"：日志怎么收、怎么导出、引擎跑多快、画面上叠什么。
- */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     logDirPath: String,
@@ -108,11 +91,11 @@ fun SettingsScreen(
      */
     gameCompatProfile: String = "auto",
     onGameCompatProfileChanged: (String) -> Unit = {},
-    /** 当前有游戏在跑：引擎档位改动要重启游戏才生效，界面上要说清并给出重启入口。 */
+    /**
+     * 当前有游戏在跑。引擎档位都是"下次开游戏生效"，页面上要写清这一点——用户改完
+     * 发现画面没变时，得知道这不是没生效而是还没重启。
+     */
     runningGame: Boolean = false,
-    onRestartGame: (() -> Unit)? = null,
-    /** 打开「关于」页（作者/仓库/技术栈/协议/版本）。为 null 时不显示该入口。 */
-    onOpenAbout: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -123,22 +106,37 @@ fun SettingsScreen(
     var fpsLimit by remember { mutableStateOf(AppPrefs.fpsLimit(context)) }
     var fontMode by remember { mutableStateOf(fontFallbackMode) }
     var runMode by remember { mutableStateOf(AppPrefs.runMode(context)) }
-    var compatProfile by remember { mutableStateOf(gameCompatProfile) }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
-            }
-            Text(text = "设置", style = MaterialTheme.typography.titleLarge)
-        }
-
+    Scaffold(
+        modifier = modifier,
+        topBar = {
+            TopAppBar(
+                title = { Text("设置") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+            )
+        },
+    ) { scaffoldPadding ->
+        // 宽屏（平板/横屏）下限制正文宽度并与内容居中：设置项都是"标签 + 一排单选"，
+        // 拉满 1000dp 时标签与选项会隔着半个屏幕，读起来要来回扫。
+        val wide = LocalConfiguration.current.screenWidthDp >= 600
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+            modifier = scaffoldPadding.let {
+                Modifier
+                    .padding(it)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+            },
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (wide) Modifier.widthIn(max = 640.dp) else Modifier),
+            ) {
             SectionTitle("外观")
 
             // 主题：写进壳的偏好并**立刻**回调给 Activity 换肤（不用退出重进）。
@@ -206,6 +204,15 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
+
+            if (runningGame) {
+                Text(
+                    text = "正在游戏中：引擎兼容与字体回退都是**下次启动游戏**生效，改完退出重进即可。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
 
             SectionTitle("调试")
 
@@ -288,22 +295,15 @@ fun SettingsScreen(
                     }
                 },
             )
-
-            // 关于：只读信息（作者/仓库/技术栈/协议/版本）单独一页，不混在可调项里。
-            if (onOpenAbout != null) {
-                SectionTitle("其它")
-                ListItem(
-                    headlineContent = { Text("关于") },
-                    supportingContent = {
-                        Text(
-                            text = "作者、仓库地址、技术栈、开源协议与版本号",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    },
-                    trailingContent = { Icon(Icons.Filled.ChevronRight, contentDescription = null) },
-                    modifier = Modifier.fillMaxWidth().clickable { onOpenAbout() },
-                )
-            }
+            Text(
+                text = "引擎日志**按游戏分开**：每个游戏在 games/ 下有自己的一份，" +
+                    "文件名为 engine-<时间戳>.log，最近几轮的现场都在那里。" +
+                    "分享日志会带上最近玩过的几个游戏各自最新的一份。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+            RecentGameLogs()
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -349,12 +349,41 @@ fun SettingsScreen(
                 },
             )
 
-            TextButton(
-                onClick = onBack,
-                modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 24.dp),
-            ) { Text("返回") }
+            Column(modifier = Modifier.padding(bottom = 24.dp)) {}
+            }
         }
     }
+}
+
+/**
+ * 最近玩过的游戏各自的日志落点。
+ *
+ * 为什么要在设置页列出来：引擎日志按游戏分开之后，"日志在哪"不再是一个固定路径，
+ * 而排障时第一个问题恰恰是"这个游戏那份在哪"。这里直接列出**最近一次**的路径，
+ * 用户能照着找，也能整段复制。
+ */
+@Composable
+private fun RecentGameLogs() {
+    val context = LocalContext.current
+    val entries = remember { LogFiles.recentGameLogs(context, limit = 3) }
+    if (entries.isEmpty()) return
+    ListItem(
+        headlineContent = { Text("最近玩过的游戏日志") },
+        supportingContent = {
+            SelectionContainer {
+                Column {
+                    entries.forEach { (game, log) ->
+                        Text(
+                            text = "${game.substringAfterLast('/')}：${log.absolutePath}",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        },
+    )
 }
 
 private val FPS_OPTIONS = listOf(
@@ -371,25 +400,3 @@ private fun SectionTitle(text: String) {
         modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 4.dp),
     )
 }
-
-@Composable
-private fun SwitchRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    ListItem(
-        headlineContent = { Text(title) },
-        supportingContent = {
-            Text(text = subtitle, style = MaterialTheme.typography.bodySmall)
-        },
-        trailingContent = { Switch(checked = checked, onCheckedChange = onCheckedChange) },
-        modifier = Modifier.fillMaxWidth(),
-    )
-}
-
-/**
- * 标题 + 说明 + 一排单选按钮。三档以上的枚举用它，比 SegmentedButton 好放长中文标签
- * （后者等宽分格，长标签会被挤成两行）。
- */

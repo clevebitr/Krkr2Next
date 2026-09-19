@@ -53,9 +53,11 @@ import org.dpdns.clevebitr.core.resolve
 import org.dpdns.clevebitr.ui.GameScreen
 import org.dpdns.clevebitr.ui.KrKr2NextTheme
 import org.dpdns.clevebitr.ui.MessageBoxDialog
+import org.dpdns.clevebitr.ui.Routes
 import org.dpdns.clevebitr.ui.SettingsScreen
 import org.dpdns.clevebitr.ui.ShellNavHost
 import org.dpdns.clevebitr.ui.ShellNavParams
+import org.dpdns.clevebitr.ui.ShellScaffold
 import org.dpdns.clevebitr.ui.resolveDarkTheme
 
 /**
@@ -147,7 +149,13 @@ class MainActivity : ComponentActivity() {
         if (previous.kind != CrashTracker.ExitKind.CLEAN) {
             AppLog.w(TAG, "上次未正常退出：${previous.kind} / ${previous.detail}")
             if (previous.kind != CrashTracker.ExitKind.JAVA_CRASH) {
-                recoveryNotice = previous.detail ?: "上次未正常退出"
+                // 引擎日志现在是**按游戏分份**的（logs/games/<游戏>/），只说"日志目录"
+                // 等于让用户去一棵目录树里翻。把上一局是哪个游戏一并说出来。
+                val lastGame = LogFiles.lastGame(this)
+                recoveryNotice = listOfNotNull(
+                    previous.detail ?: "上次未正常退出",
+                    lastGame?.let { "上一局游戏：$it" },
+                ).joinToString("\n")
             }
         }
         AppLog.i(TAG, "onCreate (recovery=$previous)")
@@ -187,17 +195,13 @@ class MainActivity : ComponentActivity() {
                         ShellScaffold(navController = navController) {
                         ShellNavHost(
                             navController = navController,
-                            params = navParams(
-                                // 启动器里的设置页：返回就是弹栈
-                                settingsContent = {
-                                    SettingsContent(
-                                        onBack = { navController.popBackStack() },
-                                        // 只有启动器侧的设置页能开"关于"：游戏内设置是覆盖层，
-                                        // 导航到别的目的地会销毁游戏页的 SurfaceView（见 Nav.kt 顶部说明）。
-                                        onOpenAbout = { navController.navigate(Routes.ABOUT) },
-                                    )
-                                },
-                            ),
+                            params = navParams(),
+                            // 启动器里的设置页：返回就是弹栈。设置页本身不再放「关于」
+                            // 入口——关于已经是导航条上的顶层目的地，两条路去同一页只会
+                            // 让返回栈多一种走法。
+                            settingsContent = {
+                                SettingsContent(onBack = { navController.popBackStack() })
+                            },
                         )
                         }
                     } else {
@@ -337,7 +341,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /** 导航图需要的状态与回调。每次重组都会新建，成本只是几个引用。 */
-    private fun navParams(settingsContent: @Composable () -> Unit): ShellNavParams =
+    private fun navParams(): ShellNavParams =
         ShellNavParams(
             games = games,
             coversDir = coversDir,
@@ -361,6 +365,8 @@ class MainActivity : ComponentActivity() {
             },
             onRemoveFromLibrary = ::removeFromLibrary,
             onSaveGame = ::saveGame,
+            onToggleFavorite = ::toggleFavorite,
+            onSetGroup = ::setGroup,
             onApplyScrape = ::applyScrape,
             loadGameConfig = { game ->
                 val config = GameConfigStore.load(this, game.dir)
@@ -368,18 +374,15 @@ class MainActivity : ComponentActivity() {
                     GameConfigStore.isWritable(game.dir)
                 config to inGameDir
             },
-            settingsContent = settingsContent,
         )
 
     /** 设置页内容。启动器与游戏内共用同一个 Composable，行为不会分叉。 */
     @Composable
-    private fun SettingsContent(onBack: () -> Unit, onOpenAbout: (() -> Unit)? = null) {
-        val activePath = gamePath
+    private fun SettingsContent(onBack: () -> Unit) {
         SettingsScreen(
             logDirPath = logDirPath,
             onBack = onBack,
             onShareLogs = ::shareLogs,
-            onOpenAbout = onOpenAbout,
             overlayConfig = overlayConfig,
             onOverlayConfigChanged = { updated ->
                 overlayConfig = updated
@@ -394,22 +397,9 @@ class MainActivity : ComponentActivity() {
             onOglDrawDeviceCompatChanged = { oglDrawDeviceCompat = it },
             gameCompatProfile = gameCompatProfile,
             onGameCompatProfileChanged = { gameCompatProfile = it },
-            // 「可靠 + 看得见」：档位改完不重启就不生效，所以这里直接给一键重启
-            runningGame = activePath != null,
-            onRestartGame = activePath?.let { path -> { restartGame(path) } },
+            // 有游戏在跑时页面自己会说明"这些档位下次开游戏才生效"
+            runningGame = gamePath != null,
         )
-    }
-
-    /**
-     * 用**当前游戏目录**重开一局。
-     *
-     * 引擎在插件注册时读运行模式，所以换档必须重开会话；而让用户自己"退出→再点进来"
-     * 既慢又容易点错游戏。这里复用同一条启动路径（[launchPath]），
-     * 顺带把库里的 lastPlayed/playCount 也正常记一次。
-     */
-    private fun restartGame(path: String) {
-        AppLog.i(TAG, "restartGame path=$path（运行模式改动需要重开会话）")
-        launchPath(path)
     }
 
     private fun shareLogs() {
@@ -429,11 +419,14 @@ class MainActivity : ComponentActivity() {
 
     private fun refreshLibrary() {
         val all = library.games()
-        games = when (librarySort) {
+        val sorted = when (librarySort) {
             "title" -> all.sortedBy { it.title.lowercase() }
             "added" -> all.sortedByDescending { it.addedAt }
             else -> all.sortedByDescending { it.lastPlayedAt }
         }
+        // 收藏置顶：收藏的意义就是"别让它沉下去"，所以它是所有排序之上的第一关键字。
+        // 用 stable 分区而不是再排一次，免得打乱用户选的那种排序。
+        games = sorted.filter { it.favorite } + sorted.filterNot { it.favorite }
     }
 
     /** @return 是否真的新增（调用方据此统计批量扫描的结果）。 */
@@ -451,6 +444,24 @@ class MainActivity : ComponentActivity() {
             AppLog.i(TAG, "移出游戏库：${game.path}")
             refreshLibrary()
         }
+    }
+
+    /**
+     * 切换收藏 / 设置分组。
+     *
+     * 两者都只改库记录，**不碰游戏目录里的 `krkr2next.json`**：它们描述的是"我的库怎么
+     * 组织"，不是"这个游戏怎么跑"；写进游戏目录会让同一份文件在两台设备上互相打架。
+     */
+    private fun toggleFavorite(game: LibraryGame) {
+        val now = library.toggleFavorite(game.id) ?: return
+        AppLog.i(TAG, "收藏 ${if (now) "开" else "关"}：${game.title}")
+        refreshLibrary()
+    }
+
+    private fun setGroup(game: LibraryGame, group: String) {
+        if (!library.setGroup(game.id, group)) return
+        AppLog.i(TAG, "分组：${game.title} -> ${group.ifBlank { "（无）" }}")
+        refreshLibrary()
     }
 
     private fun saveGame(game: LibraryGame, config: GameConfig) {

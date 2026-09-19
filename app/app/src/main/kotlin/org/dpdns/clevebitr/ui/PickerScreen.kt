@@ -14,21 +14,30 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -157,6 +166,8 @@ private fun BrowserBody(
         mutableStateOf(AppPrefs.lastDir(context)?.takeIf { File(it).isDirectory } ?: storageRoot)
     }
     var showJump by remember { mutableStateOf(false) }
+    // 收藏目录：捷径条与跳转对话框共用同一份。存的是绝对路径（见 AppPrefs.favoriteDirs）。
+    var favorites by remember { mutableStateOf(AppPrefs.favoriteDirs(context)) }
 
     // 扫描状态。scanned/cancelRequested 用 remember 而不是 State：它们只在协程里读写，
     // 每改一次都触发重组没有必要；进度显示只依赖 scannedDirs。
@@ -217,6 +228,29 @@ private fun BrowserBody(
                 actions = {
                     if (inLibrary(currentDir)) {
                         Icon(Icons.Filled.Check, contentDescription = "已在库中")
+                    }
+                    // 收藏当前目录：存的是"位置"而不是"游戏"，所以与"加入库"是两件事
+                    // ——常在几棵目录树之间来回找游戏时，收藏比逐级点进去快得多。
+                    val favored = currentPath in favorites
+                    IconButton(
+                        onClick = {
+                            AppPrefs.toggleFavoriteDir(context, currentPath)
+                            favorites = AppPrefs.favoriteDirs(context)
+                        },
+                    ) {
+                        Icon(
+                            imageVector = if (favored) {
+                                Icons.Filled.Star
+                            } else {
+                                Icons.Filled.StarBorder
+                            },
+                            contentDescription = if (favored) "取消收藏此目录" else "收藏此目录",
+                            tint = if (favored) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
                     }
                     IconButton(
                         enabled = parentPath != null,
@@ -307,6 +341,50 @@ private fun BrowserBody(
                 )
             }
 
+            // 收藏目录捷径：一行横向滚动。收藏的目录会随 ROM 变化（外置卡换挂载点、
+            // 用户改目录名）而失效，所以点进去之前先判存在性；失效的项顺手移除。
+            if (favorites.isNotEmpty()) {
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(favorites, key = { it }) { path ->
+                        val dir = File(path)
+                        val exists = dir.isDirectory
+                        AssistChip(
+                            onClick = {
+                                if (exists) {
+                                    currentPath = path
+                                } else {
+                                    AppLog.w(TAG, "收藏目录已失效：$path")
+                                    AppPrefs.removeFavoriteDir(context, path)
+                                    favorites = AppPrefs.favoriteDirs(context)
+                                }
+                            },
+                            label = {
+                                Text(
+                                    text = dir.name.ifEmpty { path },
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Filled.Star,
+                                    contentDescription = null,
+                                    tint = if (exists) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.error
+                                    },
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 if (subDirs.isEmpty()) {
                     item(key = "__empty__") {
@@ -354,6 +432,11 @@ private fun BrowserBody(
         PathJumpDialog(
             initialPath = currentPath,
             rootPath = storageRoot,
+            favorites = favorites,
+            onToggleFavorite = { path ->
+                AppPrefs.removeFavoriteDir(context, path)
+                favorites = AppPrefs.favoriteDirs(context)
+            },
             onDismiss = { showJump = false },
             onJump = { target ->
                 AppLog.i(TAG, "jump to $target")
@@ -417,11 +500,17 @@ private fun BrowserBody(
 /**
  * 手动跳转。存在的意义是**回到存储根目录之外**：逐级返回只能向上走，一旦用户在
  * 深层目录里迷路，或者要去的路径不在当前这棵子树里，就只能靠输入。
+ *
+ * [favorites] 是收藏目录：输入路径慢且容易打错，常去的地方点一下就到。收藏在对话框里
+ * 也能直接增删，用户不必先跳过去再点顶栏的星标。
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PathJumpDialog(
     initialPath: String,
     rootPath: String,
+    favorites: List<String>,
+    onToggleFavorite: (String) -> Unit,
     onDismiss: () -> Unit,
     onJump: (String) -> Unit,
 ) {
@@ -468,6 +557,45 @@ private fun PathJumpDialog(
                         modifier = Modifier.padding(top = 4.dp),
                     )
                 }
+                if (favorites.isNotEmpty()) {
+                    Text(
+                        text = "收藏的目录",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                    )
+                    // 不用 LazyRow：对话框里的收藏数量是个位数，FlowRow 直接排完更省事，
+                    // 也不用在外层再套一个可滚动容器。
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        favorites.forEach { path ->
+                            AssistChip(
+                                onClick = { submit(path) },
+                                label = {
+                                    Text(
+                                        text = File(path).name.ifEmpty { path },
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                },
+                                trailingIcon = {
+                                    IconButton(
+                                        onClick = { onToggleFavorite(path) },
+                                        modifier = Modifier.size(18.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Close,
+                                            contentDescription = "取消收藏",
+                                            modifier = Modifier.size(14.dp),
+                                        )
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = { TextButton(onClick = { submit(text) }) { Text("跳转") } },
@@ -479,6 +607,7 @@ private fun PathJumpDialog(
         },
     )
 }
+
 
 @Composable
 private fun PermissionRequest(modifier: Modifier, onRequest: () -> Unit) {

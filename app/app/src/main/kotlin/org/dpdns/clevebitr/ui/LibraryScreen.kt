@@ -12,33 +12,44 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -60,9 +72,15 @@ import org.dpdns.clevebitr.core.LibraryGame
  * （见 `PickerScreen`）。这样"玩哪个游戏"不再依赖"记住它在哪个目录里"。
  *
  * 交互取舍：
- * - 单击卡片 = 启动。玩家九成时间只做这一件事，不该再进一层详情页。
- * - 长按 = 出菜单（详情/刮削/移出库），与 Android 列表的习惯一致。
+ * - 单击卡片 = 进**详情页**（[onOpenDetail]）。启动是详情页里最显眼的那个按钮。
+ *   此前单击直接启动，代价是"改一项配置"与"看一眼简介"都必须先长按出菜单，
+ *   而配置恰恰是遇到跑不动的游戏时最常做的事；把启动放进详情页，两个动作都只差一屏。
+ * - 长按 / 右上角按钮 = 出菜单（启动/详情/刮削/收藏/分组/移出库）。
+ * - 封面左上角的星标 = 收藏，库页置顶。
  * - 封面缺失时显示占位块而不是默认图：默认图会让"没刮到"和"刮到了但图挂了"看起来一样。
+ *
+ * 分组是**便签式**的单个标签（见 `LibraryGame.group`）：筛选条上按现分组平铺，
+ * 不在库页里做树形结构。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,11 +93,35 @@ fun LibraryScreen(
     onOpenDetail: (LibraryGame) -> Unit,
     onScrape: (LibraryGame) -> Unit,
     onRemove: (LibraryGame) -> Unit,
+    onToggleFavorite: (LibraryGame) -> Unit,
+    /**
+     * 改分组。**对话框由调用方（导航层）统一提供**：详情页也能改分组，两处必须是同一个
+     * 对话框、同一套建议值，否则用户会在两个页面看到两种行为。
+     */
+    onEditGroup: (LibraryGame) -> Unit,
     onAddGame: () -> Unit,
-    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var sortMenuOpen by remember { mutableStateOf(false) }
+    // 筛选只影响显示，不落盘：它是"这一眼想看什么"，不是用户的长期设置。
+    var onlyFavorites by remember { mutableStateOf(false) }
+    var groupFilter by remember { mutableStateOf<String?>(null) }
+
+    val groups = remember(games) {
+        games.map { it.group }.filter { it.isNotBlank() }.distinct().sorted()
+    }
+    // 分组被改空之后筛选条上不该再留着它，否则筛出来永远是空列表。用副作用而不是
+    // 直接在组合里赋值：组合可能被丢弃重来，副作用才是有保证的写入时机。
+    LaunchedEffect(groups) {
+        if (groupFilter != null && groupFilter !in groups) groupFilter = null
+    }
+
+    val shown = remember(games, onlyFavorites, groupFilter) {
+        games.filter { game ->
+            (!onlyFavorites || game.favorite) && (groupFilter == null || game.group == groupFilter)
+        }
+    }
+    val favoriteCount = remember(games) { games.count { it.favorite } }
 
     Scaffold(
         modifier = modifier,
@@ -106,9 +148,6 @@ fun LibraryScreen(
                             }
                         }
                     }
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "设置")
-                    }
                 },
             )
         },
@@ -126,26 +165,80 @@ fun LibraryScreen(
                 modifier = Modifier.padding(padding).fillMaxSize(),
             )
         } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 150.dp),
-                modifier = Modifier.padding(padding).fillMaxSize(),
-                contentPadding = PaddingValues(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(games, key = { it.id }) { game ->
-                    LibraryCard(
-                        game = game,
-                        coversDir = coversDir,
-                        onLaunch = { onLaunch(game) },
-                        onOpenDetail = { onOpenDetail(game) },
-                        onScrape = { onScrape(game) },
-                        onRemove = { onRemove(game) },
-                    )
+            Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+                // 筛选条：收藏 + 分组。一个分组都没有、也没有收藏时不占高度。
+                if (groups.isNotEmpty() || favoriteCount > 0) {
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        item(key = "__all__") {
+                            FilterChip(
+                                selected = !onlyFavorites && groupFilter == null,
+                                onClick = {
+                                    onlyFavorites = false
+                                    groupFilter = null
+                                },
+                                label = { Text("全部 ${games.size}") },
+                            )
+                        }
+                        if (favoriteCount > 0) {
+                            item(key = "__fav__") {
+                                FilterChip(
+                                    selected = onlyFavorites,
+                                    onClick = { onlyFavorites = !onlyFavorites },
+                                    label = { Text("收藏 $favoriteCount") },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Filled.Favorite,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(0.dp),
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                        items(groups, key = { "g:$it" }) { group ->
+                            FilterChip(
+                                selected = groupFilter == group,
+                                onClick = {
+                                    groupFilter = if (groupFilter == group) null else group
+                                },
+                                label = { Text(group) },
+                            )
+                        }
+                    }
+                }
+
+                if (shown.isEmpty()) {
+                    FilteredEmpty(modifier = Modifier.fillMaxSize())
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 150.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(shown, key = { it.id }) { game ->
+                            LibraryCard(
+                                game = game,
+                                coversDir = coversDir,
+                                onLaunch = { onLaunch(game) },
+                                onOpenDetail = { onOpenDetail(game) },
+                                onScrape = { onScrape(game) },
+                                onRemove = { onRemove(game) },
+                                onToggleFavorite = { onToggleFavorite(game) },
+                                onEditGroup = { onEditGroup(game) },
+                            )
+                        }
+                    }
                 }
             }
         }
     }
+
 }
 
 /** 排序键 → 中文标签。键名与 `AppPrefs.LIBRARY_SORTS` 一一对应。 */
@@ -155,7 +248,10 @@ private val SORT_LABELS = listOf(
     "added" to "按加入时间",
 )
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+/** 库页给"新分组"的常用建议。分组是自由文本，这几个只是省打字。 */
+private val GROUP_SUGGESTIONS = listOf("在玩", "待玩", "已通关", "搁置")
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LibraryCard(
     game: LibraryGame,
@@ -164,13 +260,15 @@ private fun LibraryCard(
     onOpenDetail: () -> Unit,
     onScrape: () -> Unit,
     onRemove: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onEditGroup: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onLaunch, onLongClick = { menuOpen = true }),
+            .combinedClickable(onClick = onOpenDetail, onLongClick = { menuOpen = true }),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
         ),
@@ -205,6 +303,53 @@ private fun LibraryCard(
                     }
                 }
             }
+
+            // 收藏星标：左上角。收藏是"置顶"的语义，按钮直接标在卡片上比埋进菜单好找。
+            IconButton(
+                onClick = onToggleFavorite,
+                modifier = Modifier.align(Alignment.TopStart),
+            ) {
+                Icon(
+                    imageVector = if (game.favorite) {
+                        Icons.Filled.Favorite
+                    } else {
+                        Icons.Filled.FavoriteBorder
+                    },
+                    contentDescription = if (game.favorite) "取消收藏" else "收藏",
+                    // 封面颜色不可控：底色半透明圆 + 白/深描边图标比纯色图标更稳
+                    tint = if (game.favorite) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.White
+                    },
+                )
+            }
+
+            // 分组便签：右下角压一行，不占标题空间
+            if (game.group.isNotBlank()) {
+                SuggestionChip(
+                    onClick = onEditGroup,
+                    label = {
+                        Text(
+                            text = game.group,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    icon = {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Label,
+                            contentDescription = null,
+                            modifier = Modifier.padding(0.dp),
+                        )
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 6.dp, bottom = 6.dp),
+                )
+            }
+
             // 右上角的"更多"按钮：长按也能出菜单，但按钮更易发现（长按没有视觉提示）
             Box(modifier = Modifier.align(Alignment.TopEnd)) {
                 IconButton(onClick = { menuOpen = true }) {
@@ -225,10 +370,31 @@ private fun LibraryCard(
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text("详情与配置") },
+                    text = { Text("详情") },
                     onClick = {
                         menuOpen = false
                         onOpenDetail()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text(if (game.favorite) "取消收藏" else "收藏") },
+                    leadingIcon = {
+                        Icon(
+                            if (game.favorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                            contentDescription = null,
+                        )
+                    },
+                    onClick = {
+                        menuOpen = false
+                        onToggleFavorite()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text(if (game.group.isBlank()) "设置分组" else "分组：${game.group}") },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null) },
+                    onClick = {
+                        menuOpen = false
+                        onEditGroup()
                     },
                 )
                 DropdownMenuItem(
@@ -250,6 +416,59 @@ private fun LibraryCard(
             }
         }
     }
+}
+
+/**
+ * 分组编辑器。
+ *
+ * 用对话框而不是新页面：一个自由文本字段加几个建议值，页面级别的导航太重。
+ * 已有分组以 chip 形式给出，是因为"把两个游戏放进同一组"靠手打容易打错一个字，
+ * 然后就变成两个组了。
+ */
+@Composable
+internal fun GroupEditorDialog(
+    game: LibraryGame,
+    knownGroups: List<String>,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var text by remember(game.id) { mutableStateOf(game.group) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("分组") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("分组名（留空 = 不分组）") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                val suggestions = (knownGroups + GROUP_SUGGESTIONS).distinct()
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    suggestions.take(4).forEach { group ->
+                        AssistChip(
+                            onClick = { text = group },
+                            label = { Text(group, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(text.trim()) }) {
+                Text("保存")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
 }
 
 /**
@@ -284,6 +503,27 @@ internal fun CoverImage(file: File?, title: String, modifier: Modifier = Modifie
                 )
             }
         }
+    }
+}
+
+/** 筛选之后空了：库不是空的，别让用户以为记录丢了。 */
+@Composable
+private fun FilteredEmpty(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "没有符合条件的游戏",
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            text = "换一个分组，或者取消筛选。",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
     }
 }
 
