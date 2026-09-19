@@ -1455,6 +1455,73 @@ void tTJSNI_KAGParser::PushMacroArgs(iTJSDispatch2 *args) {
         TVPSetKagTagList(dsp, TVPGetKagTagListAttributeNames(args));
 }
 
+
+//---------------------------------------------------------------------------
+// tag 字典克隆（taglist 一节的最后一块）
+//
+// 移植自 AetherKiri `cpp/core/base/KAGParser.cpp:3054-3211`。去掉了上游那段环境变量门控的
+// trace 日志（本仓库没有对应的诊断开关），其余语义逐条保留：
+//   - 单参且是对象：把它当 source 拷过来；
+//   - 单参且不是对象：当作显式 tagname；
+//   - 两参：`(tagname, source)`；
+//   - 拷贝后若目标没有 taglist，用可见成员名补一份（属性顺序信息）。
+//---------------------------------------------------------------------------
+iTJSDispatch2 *tTJSNI_KAGParser::CopyTag(tjs_int numparams,
+                                         tTJSVariant **param) {
+    iTJSDispatch2 *dest = TJSCreateDictionaryObject();
+    if(!dest)
+        return nullptr;
+
+    try {
+        tjs_int source_index = -1;
+        bool has_explicit_tag_name = false;
+
+        if(numparams >= 2) {
+            has_explicit_tag_name = param[0] && param[0]->Type() != tvtVoid;
+            if(param[1] && param[1]->Type() == tvtObject)
+                source_index = 1;
+        } else if(numparams >= 1 && param[0]) {
+            if(param[0]->Type() == tvtObject)
+                source_index = 0;
+            else if(param[0]->Type() != tvtVoid)
+                has_explicit_tag_name = true;
+        }
+
+        if(source_index >= 0) {
+            tTJSVariant *assign_args[1] = { param[source_index] };
+            tjs_error hr = DicAssign->FuncCall(0, nullptr, nullptr, nullptr, 1,
+                                               assign_args, dest);
+            if(TJS_FAILED(hr))
+                TJSThrowFrom_tjs_error(hr);
+        }
+
+        if(has_explicit_tag_name) {
+            static ttstr __tag_name(TJSMapGlobalStringMap(TJS_W("tagname")));
+            dest->PropSetByVS(TJS_MEMBERENSURE,
+                              __tag_name.AsVariantStringNoAddRef(), param[0],
+                              dest);
+        }
+
+        if(!TVPHasKagTagList(dest)) {
+            const std::vector<ttstr> names = TVPCollectKagTagMemberNames(dest);
+            TVPSetKagTagList(dest, names);
+        }
+    } catch(...) {
+        dest->Release();
+        throw;
+    }
+
+    return dest;
+}
+
+iTJSDispatch2 *tTJSNI_KAGParser::CloneTag(iTJSDispatch2 *source) {
+    if(!source)
+        return nullptr;
+    tTJSVariant source_value(source, source);
+    tTJSVariant *params[] = { &source_value };
+    return CopyTag(1, params);
+}
+
 //---------------------------------------------------------------------------
 void tTJSNI_KAGParser::PopMacroArgs() {
     if(MacroArgStackDepth == 0)
@@ -2844,6 +2911,24 @@ iTJSDispatch2 *TVPCreateNativeClass_KAGParser() {
         return TJS_S_OK;
     }
     TJS_END_NATIVE_METHOD_DECL(/*func. name*/ getNextTag)
+    //----------------------------------------------------------------------
+    TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ copyTag) {
+        TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
+                                /*var. type*/ tTJSNI_KAGParser);
+
+        iTJSDispatch2 *dsp = _this->CopyTag(numparams, param);
+        if(result) {
+            if(dsp)
+                *result = tTJSVariant(dsp, dsp);
+            else
+                result->Clear();
+        }
+        if(dsp)
+            dsp->Release();
+
+        return TJS_S_OK;
+    }
+    TJS_END_NATIVE_METHOD_DECL(/*func. name*/ copyTag)
     //----------------------------------------------------------------------
     TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ assign) {
         TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,

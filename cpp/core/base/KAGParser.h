@@ -368,6 +368,13 @@ public:
 
     void SetMultiLineTagEnabled(bool b) { MultiLineTagEnabled = b; }
     bool GetMultiLineTagEnabled() const { return MultiLineTagEnabled; }
+
+    // tag 字典克隆。移植自 AetherKiri `KAGParser.{h,cpp}`（in-file 片段，见 §6）：
+    //   CopyTag(numparams, param) 支持 `(source)` 与 `(tagname, source)` 两种形态；
+    //   拷贝后若没有 taglist，按可见成员名补一份（见 KAGParser.cpp 的 taglist 一节）。
+    //   CloneTag(source) 是给解析器内部用的单参包装（C3 文本段聚合会用到）。
+    iTJSDispatch2 *CopyTag(tjs_int numparams, tTJSVariant **param);
+    iTJSDispatch2 *CloneTag(iTJSDispatch2 *source);
 };
 
 extern iTJSDispatch2 *TVPCreateNativeClass_KAGParser();
