@@ -179,6 +179,12 @@ class MainActivity : ComponentActivity() {
                     val path = gamePath
                     if (activeSession == null || path == null) {
                         val navController = rememberNavController()
+                        // 启动器外层套一个自适应导航条：
+                        //   - 手机（窄）：底部 NavigationBar；
+                        //   - 平板/横屏（>= 600dp）：左侧 NavigationRail。
+                        // 目的地在 Nav 图里，导航条只负责"跳到顶层页"，所以用
+                        // navigate + popUpTo(start) 避免返回栈越堆越深。
+                        ShellScaffold(navController = navController) {
                         ShellNavHost(
                             navController = navController,
                             params = navParams(
@@ -193,6 +199,7 @@ class MainActivity : ComponentActivity() {
                                 },
                             ),
                         )
+                        }
                     } else {
                         Box(modifier = Modifier.fillMaxSize()) {
                             GameScreen(

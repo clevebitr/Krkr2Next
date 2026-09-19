@@ -4,6 +4,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -15,6 +31,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import java.io.File
 import org.dpdns.clevebitr.core.GameConfig
@@ -186,5 +203,81 @@ private fun MissingGame(onBack: () -> Unit, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodyMedium,
         )
         TextButton(onClick = onBack) { Text("返回") }
+    }
+}
+
+/**
+ * 启动器外层的自适应导航条。
+ *
+ * 为什么需要：库 / 添加游戏 / 设置 / 关于 是**四个平级顶层页**，此前只能从库页里的按钮
+ * 逐层进去，平板与横屏下更是浪费了整块侧边空间。这里按窗口宽度分两种形态：
+ *   - 窄（手机竖屏）：底部 [NavigationBar]；
+ *   - 宽（平板、横屏，>= [WIDE_LAYOUT_MIN_DP]）：左侧 [NavigationRail]。
+ *
+ * 导航语义：点顶层项 = 跳到该目的地并把返回栈收敛到起点，避免"库→设置→库→设置…"越堆越深
+ * （用户连点几次后按返回要按很多下才退出应用）。
+ */
+private const val WIDE_LAYOUT_MIN_DP = 600
+
+@Composable
+fun ShellScaffold(
+    navController: NavHostController,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val backStack by navController.currentBackStackEntryAsState()
+    val currentRoute = backStack?.destination?.route
+
+    val items = listOf(
+        Triple(Routes.LIBRARY, "游戏库", Icons.Filled.Home),
+        Triple(Routes.PICKER, "添加游戏", Icons.Filled.Add),
+        Triple(Routes.SETTINGS, "设置", Icons.Filled.Settings),
+        Triple(Routes.ABOUT, "关于", Icons.Filled.Info),
+    )
+
+    fun go(route: String) {
+        if (currentRoute == route) return
+        navController.navigate(route) {
+            // 顶层页之间横跳：回到栈底再进，栈里始终只有"起点 + 当前页"。
+            popUpTo(Routes.LIBRARY) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    val wide = LocalConfiguration.current.screenWidthDp >= WIDE_LAYOUT_MIN_DP
+
+    if (wide) {
+        Row(modifier = modifier.fillMaxSize()) {
+            NavigationRail {
+                items.forEach { (route, label, icon) ->
+                    NavigationRailItem(
+                        selected = currentRoute == route,
+                        onClick = { go(route) },
+                        icon = { Icon(icon, contentDescription = label) },
+                        label = { Text(label) },
+                    )
+                }
+            }
+            Box(modifier = Modifier.weight(1f)) { content() }
+        }
+    } else {
+        Scaffold(
+            modifier = modifier,
+            bottomBar = {
+                NavigationBar {
+                    items.forEach { (route, label, icon) ->
+                        NavigationBarItem(
+                            selected = currentRoute == route,
+                            onClick = { go(route) },
+                            icon = { Icon(icon, contentDescription = label) },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+            },
+        ) { padding ->
+            Box(modifier = Modifier.fillMaxSize().padding(padding)) { content() }
+        }
     }
 }
