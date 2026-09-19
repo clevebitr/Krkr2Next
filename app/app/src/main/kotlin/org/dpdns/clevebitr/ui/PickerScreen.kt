@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.PlayArrow
@@ -183,12 +184,45 @@ private fun BrowserBody(
 
     Scaffold(
         modifier = modifier,
+        // 只留**一个**顶栏：返回 / 可点路径（跳转）/ 上一级 / 已在库标记。
+        // 旧实现是"TopAppBar 写标题 + 内容区再插一行路径"，两行都在讲位置，信息重复又占高度。
         topBar = {
             TopAppBar(
-                title = { Text("添加游戏") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                title = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showJump = true }
+                            .padding(vertical = 4.dp),
+                    ) {
+                        Text(
+                            text = currentDir.name.ifEmpty { "存储根目录" },
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = currentPath,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                },
+                actions = {
+                    if (inLibrary(currentDir)) {
+                        Icon(Icons.Filled.Check, contentDescription = "已在库中")
+                    }
+                    IconButton(
+                        enabled = parentPath != null,
+                        onClick = { parentPath?.let { currentPath = it } },
+                    ) {
+                        Icon(Icons.Filled.ArrowUpward, contentDescription = "上一级")
                     }
                 },
             )
@@ -265,40 +299,6 @@ private fun BrowserBody(
         },
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(
-                    enabled = parentPath != null,
-                    onClick = { parentPath?.let { currentPath = it } },
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                    Text("上一级", modifier = Modifier.padding(start = 4.dp))
-                }
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { showJump = true }
-                        .padding(horizontal = 4.dp),
-                ) {
-                    Text(
-                        text = currentPath,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "点此跳转到其他目录",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (inLibrary(currentDir)) {
-                    Icon(Icons.Filled.Check, contentDescription = "已在库中")
-                }
-            }
-
             GameEntry.hint(verdict)?.let { text ->
                 Text(
                     text = text,
