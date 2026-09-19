@@ -365,13 +365,22 @@ fun GameDetailScreen(
                 Text("保存")
             }
 
+            // 移出游戏库 = **只删记录**（GameLibrary.remove 只改库文件，不碰游戏目录）。
+            // 按钮下面必须把这点写出来：否则用户会以为这是"卸载/删除游戏"，
+            // 真删文件是不可逆的，而这里恰恰不会删。
             TextButton(
                 onClick = onRemove,
-                modifier = Modifier.padding(start = 8.dp, bottom = 24.dp),
+                modifier = Modifier.padding(start = 8.dp, top = 4.dp),
             ) {
                 Icon(Icons.Filled.Delete, contentDescription = null)
                 Text("移出游戏库", modifier = Modifier.padding(start = 6.dp))
             }
+            Text(
+                text = "只从游戏库移除，不会删除游戏文件；需要时可再次添加。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            )
 
             // 底部留白：最后一个按钮贴着导航栏不好按
             Column(modifier = Modifier.height(24.dp)) {}
