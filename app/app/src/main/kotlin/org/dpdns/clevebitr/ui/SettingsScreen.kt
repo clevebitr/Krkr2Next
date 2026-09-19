@@ -17,6 +17,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
@@ -72,7 +74,7 @@ private val FONT_FALLBACK_CHOICES = listOf(
  *  - 关闭：不提供（保持既有行为）
  *  - 仅 OGL：只挂 Window.OGLDrawDevice（避开 GLESAdaptor 带来的 captureCanvas 切换）
  *  - 别名：挂 Window.OGLDrawDevice + Window.GLESAdaptor
- *  - 接管：再接管 KAGWindow_createDrawDevice（千恋万花实测可加载立绘/背景动态）
+ *  - 接管：再接管 KAGWindow_createDrawDevice（KAG 系作品的立绘/背景动态走这条）
  */
 /** 游戏兼容档：`auto` 之外都是直接指定（见 `engine_options.h`）。 */
 /**
@@ -109,6 +111,8 @@ fun SettingsScreen(
     /** 当前有游戏在跑：引擎档位改动要重启游戏才生效，界面上要说清并给出重启入口。 */
     runningGame: Boolean = false,
     onRestartGame: (() -> Unit)? = null,
+    /** 打开「关于」页（作者/仓库/技术栈/协议/版本）。为 null 时不显示该入口。 */
+    onOpenAbout: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -284,6 +288,22 @@ fun SettingsScreen(
                     }
                 },
             )
+
+            // 关于：只读信息（作者/仓库/技术栈/协议/版本）单独一页，不混在可调项里。
+            if (onOpenAbout != null) {
+                SectionTitle("其它")
+                ListItem(
+                    headlineContent = { Text("关于") },
+                    supportingContent = {
+                        Text(
+                            text = "作者、仓库地址、技术栈、开源协议与版本号",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    },
+                    trailingContent = { Icon(Icons.Filled.ChevronRight, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { onOpenAbout() },
+                )
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),

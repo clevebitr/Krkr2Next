@@ -183,7 +183,14 @@ class MainActivity : ComponentActivity() {
                             navController = navController,
                             params = navParams(
                                 // 启动器里的设置页：返回就是弹栈
-                                settingsContent = { SettingsContent(onBack = { navController.popBackStack() }) },
+                                settingsContent = {
+                                    SettingsContent(
+                                        onBack = { navController.popBackStack() },
+                                        // 只有启动器侧的设置页能开"关于"：游戏内设置是覆盖层，
+                                        // 导航到别的目的地会销毁游戏页的 SurfaceView（见 Nav.kt 顶部说明）。
+                                        onOpenAbout = { navController.navigate(Routes.ABOUT) },
+                                    )
+                                },
                             ),
                         )
                     } else {
@@ -359,12 +366,13 @@ class MainActivity : ComponentActivity() {
 
     /** 设置页内容。启动器与游戏内共用同一个 Composable，行为不会分叉。 */
     @Composable
-    private fun SettingsContent(onBack: () -> Unit) {
+    private fun SettingsContent(onBack: () -> Unit, onOpenAbout: (() -> Unit)? = null) {
         val activePath = gamePath
         SettingsScreen(
             logDirPath = logDirPath,
             onBack = onBack,
             onShareLogs = ::shareLogs,
+            onOpenAbout = onOpenAbout,
             overlayConfig = overlayConfig,
             onOverlayConfigChanged = { updated ->
                 overlayConfig = updated

@@ -150,8 +150,8 @@ object AppPrefs {
      *
      * 各档必须逐游戏试：`Window.OGLDrawDevice` 是闸门（挂上才会加载
      * `GPULayer.tjs` / `GPUAffineLayer.tjs`）；`Window.GLESAdaptor` 会把一部分游戏
-     * （千恋万花）切进 motionplayer 的 `captureCanvas` 路径而 UI 出问题（用 `ogl` 避开）；
-     * `kag` 能让千恋万花正常，但对 G2 会把主机 FBO 弄成 INCOMPLETE、连回想页都黑。
+     * 会切进 motionplayer 的 `captureCanvas` 路径而 UI 出问题（用 `ogl` 避开）；
+     * `kag` 对 KAG 系作品正常，但会让另一类 krkrz 作品把主机 FBO 弄成 INCOMPLETE、连回想页都黑。
      *
      * 引擎在插件注册时读一次，所以"下次开游戏生效"。
      */

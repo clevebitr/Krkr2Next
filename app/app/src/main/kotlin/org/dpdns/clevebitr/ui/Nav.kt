@@ -33,6 +33,7 @@ object Routes {
     const val LIBRARY = "library"
     const val PICKER = "picker"
     const val SETTINGS = "settings"
+    const val ABOUT = "about"
     const val GAME_ID = "gameId"
     const val DETAIL = "detail/{$GAME_ID}"
     const val SCRAPE = "scrape/{$GAME_ID}"
@@ -113,6 +114,10 @@ fun ShellNavHost(
 
         composable(Routes.SETTINGS) {
             params.settingsContent()
+        }
+
+        composable(Routes.ABOUT) {
+            AboutScreen(onBack = { navController.popBackStack() })
         }
 
         composable(

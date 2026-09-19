@@ -54,7 +54,7 @@ enum class RunMode(
     KAG(
         key = "kag",
         label = "KAG 接管",
-        summary = "在 GPU 之上接管 KAGWindow 的绘制设备；G2/千恋万花实测可用",
+        summary = "在 GPU 之上接管 KAGWindow 的绘制设备；KAG 系作品用这一档",
         compatProfile = "krkrz-kag",
         oglDrawDeviceCompat = "kag",
     ),
