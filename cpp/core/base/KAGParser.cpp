@@ -2593,6 +2593,34 @@ parse_start:
                         tTJSVariant *args[2] = { &src, &clear };
                         DicAssign->FuncCall(0, nullptr, nullptr, nullptr, 2,
                                             args, DicObj);
+
+                        // `[tag *]` 展开：宏参数里的名字要按**原标签的属性顺序**
+                        // 重新同步回 parsed_attributes（值以宏字典为准）。
+                        // 名单来自隐藏元数据 taglist；宏字典若没有 taglist（旧存档/
+                        // 手写宏），退化为枚举它的可见成员名。上游同款处理。
+                        std::vector<ttstr> macro_names =
+                            TVPGetKagTagListAttributeNames(dsp);
+                        if(macro_names.empty() && !TVPHasKagTagList(dsp))
+                            macro_names = TVPCollectKagTagMemberNames(dsp);
+
+                        for(const auto &name : macro_names) {
+                            tTJSVariant value;
+                            if(TJS_FAILED(DicObj->PropGet(0, name.c_str(),
+                                                          nullptr, &value,
+                                                          DicObj)))
+                                continue;
+
+                            auto existing = std::find_if(
+                                parsed_attributes.begin(),
+                                parsed_attributes.end(),
+                                [&](const tAttrEntry &entry) {
+                                    return entry.Name == name;
+                                });
+                            if(existing != parsed_attributes.end())
+                                existing->Value = value;
+                            else
+                                parsed_attributes.push_back({ name, value });
+                        }
                     }
                     tTJSVariant tag_val(tagname);
                     DicObj->PropSetByVS(TJS_MEMBERENSURE,
