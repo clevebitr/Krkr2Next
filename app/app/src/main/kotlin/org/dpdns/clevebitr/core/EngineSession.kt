@@ -440,6 +440,12 @@ class EngineSession(
     private fun switchEngineLogToGame(gameRootPath: String) {
         val ctx = logContext ?: return
         try {
+            // 先剪枝再建本轮的文件：每游戏日志按启动轮次切份，只留最近几轮，
+            // 否则"每个游戏单独一份日志"会退化成"每个游戏留一堆没人看的旧现场"。
+            LogFiles.pruneGameLogs(ctx, gameRootPath)
+            // 记下这一局是哪个游戏：Application 启动与崩溃处理器都在"没有会话"的时刻跑，
+            // 只有磁盘上这条记录能告诉它们上一局跑的是什么（异常提示与默认分享范围要用）。
+            LogFiles.setLastGame(ctx, gameRootPath)
             val log = LogFiles.gameEngineLog(ctx, gameRootPath)
             log.parentFile?.mkdirs()
             // 与 Application 里同样的理由：先由 Java 侧把文件建出来，native 新建文件在

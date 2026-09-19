@@ -250,6 +250,12 @@ object CrashTracker {
             pw.println("abi: ${Build.SUPPORTED_ABIS.joinToString()}")
             pw.println("屏幕: ${screenDescription(context)}")
             pw.println("日志目录: ${LogFiles.logsDir(context).absolutePath}")
+            // 崩溃报告与引擎日志分居两处（引擎那份是按游戏切的），把这一局的落点也写上，
+            // 否则拿到报告的人只有壳侧日志，得再去猜引擎日志在哪。
+            LogFiles.lastGame(context)?.let { game ->
+                pw.println("上局游戏: $game")
+                pw.println("上局引擎日志: ${LogFiles.lastGameLogs(context).firstOrNull()?.absolutePath ?: "（无）"}")
+            }
             pw.println("引擎库: ${org.dpdns.clevebitr.KrKr2NextApplication.engineLibraryLoaded}")
             pw.println()
             pw.println("--- 调用栈 ---")

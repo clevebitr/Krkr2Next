@@ -49,8 +49,23 @@ object LogFiles {
     /** 会话标记文件名，用于下次启动判断上次是不是正常退出。 */
     const val SESSION_MARKER_NAME = "session.txt"
 
+    /** 记录"最后一个开过的游戏目录"的文件，见 [lastGame] / [setLastGame]。 */
+    const val LAST_GAME_NAME = "last-game.txt"
+
     private const val APP_LOG_LIMIT_BYTES = 2L * 1024 * 1024
     private const val APP_LOG_BACKUPS = 3
+
+    /**
+     * 每游戏日志保留的**启动次数**（每次开游戏一份 `engine-<时间戳>.log`）。
+     *
+     * 每游戏日志不是"一个不断增长的流"，而是"每个游戏每次启动一份现场"：一次启动一份，
+     * 排障时要对比的正是"这次和上次哪里不一样"。留太多会让目录无限膨胀，只留最近
+     * [GAME_LOG_BACKUPS] 份既能对照，又不会把存储吃掉。
+     */
+    private const val GAME_LOG_BACKUPS = 3
+
+    /** 分享时每游戏最多带几份（最新的）。再多收件方也读不动。 */
+    private const val SHARE_PER_GAME = 1
 
     /** 目录总量上限，含引擎那 4MiB×3。超出按 mtime 从最旧的开始删。 */
     private const val DIR_TOTAL_LIMIT_BYTES = 32L * 1024 * 1024
@@ -92,6 +107,9 @@ object LogFiles {
     /** 每游戏日志子目录名。 */
     const val GAME_LOG_DIR_NAME = "games"
 
+    /** 每游戏日志的文件名前缀（`engine-<时间戳>.log`）。 */
+    const val GAME_LOG_PREFIX = "engine-"
+
     private fun sanitizeGameName(raw: String): String {
         val leaf = raw.trimEnd('/', '\\').substringAfterLast('/').substringAfterLast('\\')
         val cleaned = leaf.map { ch ->
@@ -124,7 +142,105 @@ object LogFiles {
      */
     fun gameEngineLog(context: Context, gameRootPath: String): File {
         val stamp = synchronized(this) { this.stamp.format(java.util.Date()) }
-        return File(gameLogDir(context, gameRootPath), "engine-$stamp.log")
+        return File(gameLogDir(context, gameRootPath), "$GAME_LOG_PREFIX$stamp.log")
+    }
+
+    /**
+     * 只留该游戏最近 [GAME_LOG_BACKUPS] 份引擎日志，返回删掉的份数。
+     *
+     * 在**写出新一轮日志之前**调用：保留数就是"含本轮在内"的数量，所以这里是
+     * `backups - 1`。按文件名里的时间戳排序而不是 mtime——mtime 会被"打开旧文件"
+     * 之类的外部动作改掉，文件名里的时间戳是写入时就定下的。
+     */
+    fun pruneGameLogs(context: Context, gameRootPath: String, backups: Int = GAME_LOG_BACKUPS): Int {
+        return try {
+            val dir = gameLogDir(context, gameRootPath)
+            val files = dir.listFiles { f -> f.isFile && f.name.startsWith(GAME_LOG_PREFIX) }
+                ?.sortedByDescending { it.name } ?: return 0
+            var deleted = 0
+            files.drop((backups - 1).coerceAtLeast(0)).forEach { if (it.delete()) deleted++ }
+            deleted
+        } catch (e: Exception) {
+            Log.w(TAG, "pruneGameLogs failed", e)
+            0
+        }
+    }
+
+    /**
+     * 该游戏全部引擎日志文件（新 → 旧）。
+     *
+     * 按名字前缀过滤：这个目录将来可能放进别的东西（比如游戏自己吐的崩溃报告），
+     * 而排序取"最新一份"的调用方（[recentGameLogs]、[collectForSharing]）必须拿到日志，
+     * 不是随便一个新文件。
+     */
+    fun gameLogFiles(context: Context, gameRootPath: String): List<File> =
+        gameLogDir(context, gameRootPath)
+            .listFiles { f -> f.isFile && f.name.startsWith(GAME_LOG_PREFIX) }
+            ?.sortedByDescending { it.name }
+            ?: emptyList()
+
+    /**
+     * 最近一次开过的游戏目录（`logs/last-game.txt`），没有则 null。
+     *
+     * 为什么要落盘：`Application.onCreate` 与崩溃处理器都在"还没有游戏会话"的时刻运行，
+     * 只有磁盘上这条记录能告诉它们"上一局是哪个游戏"——异常退出的提示因此能指明游戏，
+     * 分享日志也能默认带上那个游戏那一轮。
+     *
+     * 只存路径，不存标题：标题属于游戏库，日志层不该依赖库文件。
+     */
+    fun lastGame(context: Context): String? = try {
+        val f = File(logsDir(context), LAST_GAME_NAME)
+        if (f.isFile) f.readText().trim().takeIf { it.isNotEmpty() } else null
+    } catch (e: Exception) {
+        Log.w(TAG, "read last-game failed", e)
+        null
+    }
+
+    /**
+     * 记下"这一局跑的是哪个游戏"。开游戏时调用（见 `EngineSession.switchEngineLogToGame`）。
+     *
+     * 写失败不报错：它只影响提示与默认分享范围，不能挡住开游戏。
+     */
+    fun setLastGame(context: Context, gameRootPath: String) {
+        try {
+            File(logsDir(context), LAST_GAME_NAME).writeText(gameRootPath + "\n")
+        } catch (e: Exception) {
+            Log.w(TAG, "write last-game failed", e)
+        }
+    }
+
+    /** 上次那个游戏的日志文件（新 → 旧）；没有记录时是空表。 */
+    fun lastGameLogs(context: Context): List<File> =
+        lastGame(context)?.let { gameLogFiles(context, it) } ?: emptyList()
+
+    /**
+     * 最近改动过的几个**游戏日志目录**及其最新一份日志（新 → 旧），供设置页展示
+     * "日志在哪"。
+     *
+     * 为什么按目录 mtime 排而不是只认 `last-game.txt`：这份列表要能在指针文件缺失
+     * （首次升级、写失败）时照样工作。游戏日志目录里只有日志文件，最后一次写入时间
+     * 就是"最后一次玩它"的近似值——这个用途只需要近似。
+     *
+     * 目录名是 `<安全名>-<路径哈希>`，从名字反查不到游戏路径，所以第一项返回目录名
+     * （比返回空串有用：用户能拿它去 games/ 下面对号）。
+     */
+    fun recentGameLogs(context: Context, limit: Int = 3): List<Pair<String, File>> {
+        return try {
+            File(logsDir(context), GAME_LOG_DIR_NAME)
+                .listFiles { f -> f.isDirectory }
+                ?.sortedByDescending { it.lastModified() }
+                ?.mapNotNull { gameDir ->
+                    val newest = gameDir.listFiles { f ->
+                        f.isFile && f.name.startsWith(GAME_LOG_PREFIX)
+                    }?.maxByOrNull { it.name } ?: return@mapNotNull null
+                    gameDir.name to newest
+                }
+                ?.take(limit)
+                ?: emptyList()
+        } catch (e: Exception) {
+            Log.w(TAG, "recentGameLogs failed", e)
+            emptyList()
+        }
     }
 
     fun appLog(context: Context): File = File(logsDir(context), APP_LOG_NAME)
@@ -214,6 +330,10 @@ object LogFiles {
      * [protected] 是**当前正在写**的文件名，必须跳过——删掉引擎正在写的那个文件，
      * spdlog 的 sink 会失去落点（它按已打开的文件描述符写，删掉后写入的是已 unlink
      * 的 inode，日志就凭空消失了）。
+     *
+     * 另外**最后一个开过的游戏那一轮日志永不删**：每游戏日志按启动轮次切份，正在写的
+     * 那份文件名（`engine-<时间戳>.log`）与 [protected] 里的固定名字对不上，只按名字
+     * 保护会把它当"最旧的一份"删掉——而那恰好是用户要拿去排障的那一份。
      */
     fun pruneTotal(context: Context, protected: Collection<String>) {
         try {
@@ -226,12 +346,14 @@ object LogFiles {
             File(dir, GAME_LOG_DIR_NAME).listFiles { f -> f.isDirectory }?.forEach { gameDir ->
                 gameDir.listFiles { f -> f.isFile }?.let { files.addAll(it) }
             }
+            val currentGameDir = lastGame(context)?.let { gameLogDir(context, it).absolutePath }
             val ordered = files.sortedBy { it.lastModified() }
             var total = ordered.sumOf { it.length() }
             if (total <= DIR_TOTAL_LIMIT_BYTES) return
             for (f in ordered) {
                 if (total <= DIR_TOTAL_LIMIT_BYTES) break
                 if (f.name in protected) continue
+                if (currentGameDir != null && f.parentFile?.absolutePath == currentGameDir) continue
                 val len = f.length()
                 if (f.delete()) total -= len
             }
@@ -281,24 +403,56 @@ object LogFiles {
     }
 
     /**
-     * 清空日志目录（含崩溃报告），返回删掉的文件数。
+     * 清空日志目录（含崩溃报告与**每游戏日志**），返回删掉的文件数。
      *
-     * **只应在没有游戏在跑的时候调用**：引擎正持着 `engine.log` 的 fd，删掉它只是
-     * 解除链接，引擎会继续往那个已 unlink 的 inode 写——日志看上去"消失了"，
-     * 直到下次重启引擎才重新建文件。设置页只在启动器里可达，正是这个前提。
+     * **只应在没有游戏在跑的时候调用**：引擎正持着当前那份 `engine-*.log` 的 fd，删掉
+     * 它只是解除链接，引擎会继续往那个已 unlink 的 inode 写——日志看上去"消失了"，
+     * 直到下次开游戏才重新建文件。设置页只在启动器里可达，正是这个前提。
+     *
+     * 每游戏日志必须一起清：只把顶层清干净、`games/` 原样留着，用户会以为"清空没生效"。
      */
     fun clearAll(context: Context): Int {
         var deleted = 0
         listOf(logsDir(context), crashDir(context)).forEach { dir ->
-            dir.listFiles { f -> f.isFile }?.forEach { if(it.delete()) deleted++ }
+            dir.listFiles { f -> f.isFile }?.forEach { if (it.delete()) deleted++ }
         }
+        // `games/<游戏>/` 下的每游戏日志：先删文件，空目录顺手收掉。
+        File(logsDir(context), GAME_LOG_DIR_NAME)
+            .listFiles { f -> f.isDirectory }
+            ?.forEach { gameDir ->
+                gameDir.listFiles { f -> f.isFile }?.forEach { if (it.delete()) deleted++ }
+                if (gameDir.listFiles()?.isEmpty() == true) gameDir.delete()
+            }
+        // 指针文件已被上面删掉；这里只是保证状态一致（否则分享会指向一个空目录）。
+        File(logsDir(context), LAST_GAME_NAME).delete()
         return deleted
     }
 
-    /** 分享日志时带上目录里的全部内容（app.log 及其轮转份、engine.log 系列、崩溃报告）。 */
+    /**
+     * 分享日志时带上的文件集合：顶层全部（app.log 及轮转份、engine.log 系列、
+     * logcat.log、崩溃报告）+ **每个游戏最近 [SHARE_PER_GAME] 份**引擎日志。
+     *
+     * 每游戏日志按启动轮次切份，把某个游戏的历史全带上会变成几十兆，收件方也读不动；
+     * 一轮一份足够定位问题。最近开过的那个游戏排在最前。
+     */
     fun collectForSharing(context: Context): List<File> {
         val dir = logsDir(context)
         val out = ArrayList<File>()
+        val lastGame = lastGame(context)
+        val lastGameDir = lastGame?.let { gameLogDir(context, it).absolutePath }
+
+        lastGame?.let { out.addAll(gameLogFiles(context, it).take(SHARE_PER_GAME)) }
+        // 目录名带路径短哈希，无法从名字反查游戏；按 mtime 取最近改动过的几个游戏目录，
+        // 这样即使 last-game.txt 没写成功，"刚玩过的那个"也一定在名单里。
+        File(dir, GAME_LOG_DIR_NAME).listFiles { f -> f.isDirectory }
+            ?.sortedByDescending { it.lastModified() }
+            ?.forEach { gameDir ->
+                if (gameDir.absolutePath == lastGameDir) return@forEach
+                gameDir.listFiles { f -> f.isFile }
+                    ?.sortedByDescending { it.name }
+                    ?.take(SHARE_PER_GAME)
+                    ?.let { out.addAll(it) }
+            }
         dir.listFiles { f -> f.isFile }?.let { out.addAll(it) }
         crashDir(context).listFiles { f -> f.isFile }?.let { out.addAll(it) }
         return out
