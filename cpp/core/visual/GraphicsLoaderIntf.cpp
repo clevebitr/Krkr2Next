@@ -53,6 +53,12 @@ void TVPLoadHeaderPVRv3(void *formatdata, tTJSBinaryStream *src,
 
 #include "LoadAMV.h"
 
+#if defined(KRKR_RENDER_PROBE)
+// 格式分派落到“不支持”分支的次数（探针用）。TVPLoadGraphic 用前后差值把
+// 资源名打出来——那条 warning 本身没有名字，限频日志又常常刚好跳过它。
+static std::atomic<uint64_t> g_unsupportedFormatFallbacks{ 0 };
+#endif
+
 static void TVPLoadGraphicRouter(void *formatdata, void *callbackdata,
                                  tTVPGraphicSizeCallback sizecallback,
                                  tTVPGraphicScanLineCallback scanlinecallback,
@@ -96,6 +102,9 @@ static void TVPLoadGraphicRouter(void *formatdata, void *callbackdata,
         }
 #undef CALL_LOAD_FUNC
     }
+#if defined(KRKR_RENDER_PROBE)
+    g_unsupportedFormatFallbacks.fetch_add(1, std::memory_order_relaxed);
+#endif
     spdlog::warn("Unsupported image format (header {:02x}{:02x}{:02x}{:02x}), "
                  "generating 1x1 transparent fallback",
                  header[0], header[1], header[2], header[3]);
@@ -1968,6 +1977,12 @@ int TVPLoadGraphic(iTVPBaseBitmap *dest, const ttstr &name, tjs_int32 keyidx,
             if(bits)
                 memset(bits, 0, 4);
         } else {
+#if defined(KRKR_RENDER_PROBE)
+            // 探针：记录本次加载是否落到“格式不支持”的 1x1 占位分支，
+            // 以便把资源名与那条无名字的 warning 对应起来。
+            const uint64_t probeFmtFallbacksBefore =
+                g_unsupportedFormatFallbacks.load(std::memory_order_relaxed);
+#endif
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
             TVPDecodeArena::Instance().Begin();
 #endif
@@ -1980,6 +1995,13 @@ int TVPLoadGraphic(iTVPBaseBitmap *dest, const ttstr &name, tjs_int32 keyidx,
             }
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
             TVPDecodeArena::Instance().End();
+#endif
+#if defined(KRKR_RENDER_PROBE)
+            if(g_unsupportedFormatFallbacks.load(std::memory_order_relaxed) !=
+               probeFmtFallbacksBefore) {
+                spdlog::info("probe: 图片格式不支持 -> 1x1 占位 name={} ext={}",
+                             nname.AsStdString(), ext.AsStdString());
+            }
 #endif
         }
 

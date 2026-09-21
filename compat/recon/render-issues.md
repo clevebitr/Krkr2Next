@@ -94,6 +94,17 @@ probe: AMV payload first32=CEA1DB873E1CF0CFFC8C9A563FE7EE2FFFD0C57EA94102C49EA7B
 **背景（保留）**：`tjsInterCodeExec.cpp` 有一段**上游没有**的原生栈保护（256KB 余量），
 把原本的 SIGSEGV 转成了脚本异常；它只是兜底，不是修复。
 
+**残留问题（2026-09-22 真机：递归已消失、游戏可正常打开）**：
+- **某张图加载失败**：`Unsupported image format (header 504b0304)`（`PK\x03\x04` = ZIP），
+  引擎给 1×1 透明占位；紧跟在 `KAGParser, animation.ks, animation_1.ks` 之后出现两次。
+  `PackinOne.dll` 按 `aetherkiri_ports.json` 是刻意未移植（功能已由
+  fstat/dirlist/addFont/saveStruct 覆盖），而 `compat/README.md` 的 **I13** 已列出
+  `arc`(PackinOne) 存储媒体**未实现、待裁决**；G2 的整包镜像正是 PackinOne 格式。
+  资源名已在探针里捕获（见下），待下一轮日志确认是否 `arc://` 路径。
+- `live2d.tjs`（引擎虚拟伴生脚本）第 17/18 行报 `Member "KAGWindow" does not exist`
+  （KAGWindow 此时尚未建立）；`krkrlive2d` 的 `[probe]` 一条未出现 ⇒ Live2D 从未被驱动。
+- 卡死探针仍报 1.9s：`Application::Run: SystemWatchTimerTimer`。
+
 ---
 
 ## 3. 千恋万花（`KRKR汉化高压_千恋万花`）— 多个独立问题

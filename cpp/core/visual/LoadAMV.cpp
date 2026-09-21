@@ -356,8 +356,37 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
         int decW = 0, decH = 0;
         std::vector<unsigned char> rgbPixels;
         if(!DecodeJpegWithQT(payloadStart, colorSize, dqtSeg, TJPF_RGBA, 4,
-                             decW, decH, rgbPixels))
+                             decW, decH, rgbPixels)) {
+#if defined(KRKR_RENDER_PROBE)
+            // 探针：载荷不以 SOI 开头时，试着从首个 FFD8 起解码，判定
+            // “前缀只需跳过”还是“数据本身不是 JPEG（被加密或其它变体）”。
+            {
+                size_t off = 0;
+                bool found = false;
+                for(size_t i = 0; i + 1 < payloadLen; i++) {
+                    if(payloadStart[i] == 0xFF &&
+                       payloadStart[i + 1] == 0xD8) {
+                        off = i;
+                        found = true;
+                        break;
+                    }
+                }
+                if(found) {
+                    int pw = 0, ph = 0;
+                    std::vector<unsigned char> tmp;
+                    const bool ok = TryDecodeJpeg(payloadStart + off,
+                                                  payloadLen - off, TJPF_RGBA,
+                                                  4, pw, ph, tmp);
+                    spdlog::info(
+                        "probe: AMV retry-from-SOI off={} len={} ok={} {}x{}",
+                        off, payloadLen - off, ok ? 1 : 0, pw, ph);
+                } else {
+                    spdlog::info("probe: AMV retry-from-SOI 未找到 FFD8");
+                }
+            }
+#endif
             TVPThrowExceptionMessage(TJS_W("AMV: color JPEG decode failed"));
+        }
 
         int copyW = std::min(decW, imgW);
         int copyH = std::min(decH, imgH);
