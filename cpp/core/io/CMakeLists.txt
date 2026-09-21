@@ -9,6 +9,8 @@ add_library(${PROJECT_NAME} STATIC
     ${IO_PATH}/IoPolicy.cpp
     # 插件模块存在性查询的注入点（io 不直接依赖插件注册表）。
     ${IO_PATH}/IoModuleLocator.cpp
+    # 虚拟文件（伴生脚本等）的泛型提供点：io 只留注册表，具体名字由 compat 层注册。
+    ${IO_PATH}/IoVirtualFile.cpp
     # 存储系统实现（原 cpp/core/base/StorageIntf.cpp，git mv 保留历史）。
     # 公开声明仍在 cpp/core/base/StorageIntf.h —— 约 200 个调用点不动，只换定义所在 TU。
     ${IO_PATH}/IoStorage.cpp

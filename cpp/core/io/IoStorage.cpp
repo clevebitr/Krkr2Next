@@ -26,6 +26,7 @@
 #include "XP3Archive.h"
 #include "TickCount.h"
 #include "IoModuleLocator.h"
+#include "IoVirtualFile.h"
 
 #define TVP_DEFAULT_ARCHIVE_CACHE_NUM 128
 #define TVP_DEFAULT_AUTOPATH_CACHE_NUM 256
@@ -810,7 +811,12 @@ static tTVPAtExit TVPClearArchiveCacheAtExit(TVP_ATEXIT_PRI_SHUTDOWN,
 //---------------------------------------------------------------------------
 // TVPIsExistentStorageNoSearch
 //---------------------------------------------------------------------------
-bool TVPIsExistentStorageNoSearchNoNormalize(const ttstr &name) {
+// 只查**物理存储**（不看虚拟文件 provider）。
+//
+// 拆出来的原因：虚拟文件的 open 路径需要判断"物理文件是否真的不存在"（存在则
+// 真实优先），而公开的 TVPIsExistentStorageNoSearchNoNormalize 现在会把虚拟文件
+// 也算成存在——两者不能互相调用，否则就是"虚拟文件自己证明自己存在"。
+static bool TVPIsRealStorageNoSearchNoNormalize(const ttstr &name) {
     // does name contain > ?
     tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
 
@@ -836,6 +842,14 @@ bool TVPIsExistentStorageNoSearchNoNormalize(const ttstr &name) {
     }
 
     return TVPStorageMediaManager.CheckExistentStorage(name);
+}
+
+bool TVPIsExistentStorageNoSearchNoNormalize(const ttstr &name) {
+    if(TVPIsRealStorageNoSearchNoNormalize(name))
+        return true;
+    // 虚拟文件（伴生脚本等）：物理存储缺失时才接管。provider 内部再进 io 查询
+    // 时会被重入保护挡住，因此这里不会递归。
+    return krkr::io::IsVirtualFile(name);
 }
 
 //---------------------------------------------------------------------------
@@ -1188,6 +1202,16 @@ static tTJSBinaryStream *_TVPCreateStream(const ttstr &_name,
         if(access >= 1)
             TVPRemoveFromStorageCache(_name);
         TVPThrowExceptionMessage(TVPCannotOpenStorage, _name);
+    }
+
+    // 虚拟文件（伴生脚本等）：只在**物理文件缺失**时接管。
+    // TVPGetPlacedPath 已优先物理存储，所以能走到这里且物理不存在的，就是虚拟文件。
+    if(access == TJS_BS_READ && !TVPIsRealStorageNoSearchNoNormalize(name)) {
+        if(tTJSBinaryStream *virtual_stream = krkr::io::OpenVirtualFile(name)) {
+            if(access >= 1)
+                TVPRemoveFromStorageCache(_name);
+            return virtual_stream;
+        }
     }
 
     // does name contain > ?

@@ -111,6 +111,15 @@
       "reason": "AetherKiri 层插件 systemEx.dll / registory.dll / stdio.dll / javascript.dll / messenger.dll / msgreceiver.dll / tasktray.dll / adjustMonitor.dll：脚本常调、但宿主无法真实提供的 Windows 系统面。本批只取纯桩子集，故意不含 process/shellExecute/httprequest（P6：不得阻塞持有 EGL 的脚本线程）。systemEx 只取 writeEnvValue/urlencode/urldecode/confirm/waitForAppLock，故意不注册 readEnvValue/expandEnvString（本仓库 windowEx.cpp 已有实现，避免同层覆盖）。local-fix：去掉上游日志里的平台名；登记为 AetherKiri 层专属模块。",
       "sha256_local": "1777d496e065944784705367cfafecc6a39365b6e747278b772df4889ba1bdbd",
       "sha256_upstream_at_rev": "b2973dab017fd549473a5b1587c086512526fbcca81d260805ba5aba9a84aba6"
+    },
+    {
+      "local": "cpp/core/compat/AetherKiriCompanions.cpp",
+      "upstream": "cpp/core/base/StorageIntf.cpp",
+      "source_ref": "cpp/core/base/StorageIntf.cpp:368-403（谓词）、:406-438（打开器）、:1299-1305/1832-1865/2023-2035/2178-2210（消费点）；GPU 占位脚本本体来自 cpp/core/base/impl/GpuCompatScript.h",
+      "modifications": "partial-extract",
+      "reason": "AetherKiri 层的伴生脚本虚拟文件：GPU 占位脚本（11 名，含 live2d.tjs）、motion_<asset>.psb/.mtn.tjs → %[\"storage\" => …]、*emo 虚拟存储。上游把这套逻辑直接写在 StorageIntf.cpp 里（io 层因此耦合了发行版知识）；本仓库改为 io 只提供泛型注册点 cpp/core/io/IoVirtualFile.*，由 compat 层注册 provider（见 compat/README.md §2）。local-fix：provider 只在 ActiveLayer()==AetherKiri 时生效；每个名字只打一条命中日志。gfxEffect / logwindow / D3DEmote 三类伴生脚本本轮未移（分别依赖模块存在性检查、~90 行内嵌脚本、36KB 生成 blob）。",
+      "sha256_local": "cd8bb584193324e01c9824891b56e5a5feacf57307604ba28d77e81f67d76b57",
+      "sha256_upstream_at_rev": "de2300aadb7e05e087fa6f539ae721f2478647afeef45b5f9a1ddc2c86d278c4"
     }
   ],
   "not_ported": [

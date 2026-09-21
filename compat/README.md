@@ -70,7 +70,9 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 - `cpp/core/io/` **不得**包含任何具体层、具体游戏或具体发行版的知识；它只认"媒体提供者
   注册表、挂载表与排序策略、路径解析、归档后端"这些抽象。
 - 层实现**不得**各自实现挂载、路径解析、归档打开、auto-path 排序；一律经 `cpp/core/io/`
-  的接口。层能贡献的只有：媒体提供者、挂载项、排序策略、脚本前奏、模块注册集合。
+  的接口。层能贡献的只有：媒体提供者、挂载项、排序策略、脚本前奏、**虚拟文件
+  （伴生脚本）**、模块注册集合。虚拟文件经 `io/IoVirtualFile.{h,cpp}` 的泛型注册点贡献
+  （provider 只产出内容，io 负责包成流，且**物理文件优先**）；io 不认识 provider 具体是谁。
 - `cpp/core/base/StorageIntf.h` 的既有公开 API（`TVPCreateStream` / `TVPGetPlacedPath` /
   `TVPRegisterStorageMedia` / `TVPNormalizeStorageName` …）**签名与行为保持不变**，作为门面
   继续服务既有调用方（当前 23 个文件用 `TVPCreateStream`、11 个用 `TVPIsExistentStorage`）。
@@ -209,7 +211,7 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 | A3 | 启动期可写白名单（8 个名字，`tjsObjectExtendable.cpp:9-19/96-105`） | 没有（靠 C++ 侧 `krkrgles.cpp:3254-3256` 绕开） | 有 | 移植（固定白名单，风险低）⇒ 让脚本侧 `Window.OGLDrawDevice = X` 生效 | 已实施（两层都开，按裁决） |
 | A4 | `TextRender.renderCount` / `touchImage` 合成 | 没有 | 有 | 随 A1/A2 一起移植 | 已实施（随 A1/A2，同一开关） |
 | A5 | `kag.*` 六个默认值 | 用 `kag_runtime_defaults.tjs` 注入（等价） | 内核回退返回 0 | 保持我们的实现 | 待裁决 |
-| B1 | GPU 伴生脚本注入方式 | 引擎选项 `ogldrawdevice_compat` 门控 + 首帧一次性钩子 | `TVPRegisterStorageResolver` + 惰性打开（打开 11 个 GPU 存储名时注入，无条件） | 保留我们的门控；把"惰性注入"作为 AetherKiri 层行为可选引入 | 待做（保留门控；惰性注入可按需引入） |
+| B1 | GPU 伴生脚本注入方式 | 引擎选项 `ogldrawdevice_compat` 门控 + 首帧一次性钩子 | `TVPRegisterStorageResolver` + 惰性打开（打开 11 个 GPU 存储名时注入，无条件） | 保留我们的门控；把"惰性注入"作为 AetherKiri 层行为可选引入 | **部分实施（2026-09-21）**：`io/IoVirtualFile.*` 泛型注册点 + `compat/AetherKiriCompanions.cpp` 提供 GPU 占位脚本（11 名，含 `live2d.tjs`）、`motion_<asset>.psb/.mtn.tjs`、`*emo` 虚拟存储，只在 AetherKiri 层生效；gfxEffect / logwindow / D3DEmote 未移 |
 | B2 | `KAGWindow`/`kag` 别名扇出 + 600-tick 重试 + 卸载清理 | 只写 `Window.<name>`；无重试；无 unregist 清理 | 三目标扇出 + prototype + 重试 + `PreUnregist` | 照搬（对 classic 层也是修"脚本晚加载就失效"） | 已实施（4 目标扇出 + 每帧重试 600 帧 + 卸载摘钩） |
 | C1 | `taglist` 标签元数据 + `copyTag`（约 140 行） | 没有 | 有（KAGParserEx 文档化特性） | 移植（自包含、风险最低） | 已实施（两层；helper 块 + `[macro]`/`[tag *]` 重同步 + `CopyTag`/`CloneTag` + native 注册） |
 | C2 | 明文行翻译（`TVPTransformText`/`PrefetchText`） | 没有 | 有（依赖 REF 独有 `utils/TextTransform.h`） | 暂不移植（本仓库无翻译功能） | 待裁决 |

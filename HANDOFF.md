@@ -28,7 +28,7 @@
 | 块 | 内容 | 状态 |
 |---|---|---|
 | A | TJS2 内核兼容读写：未定义全局回退(34 名) + 启动名回退 + `touchImage`/`renderCount` 合成 + 8 名启动期**写**白名单 | ✅ 完成 |
-| B | KAGWindow / krkrgles 脚本别名与绘制设备接管 | 🟡 B2：4 目标扇出 + 每帧重试 600 帧 + 卸载摘钩 + **drawDevice/gpuDrawDevice/nativeDrawDevice 契约与核心全局镜像**（2026-09-21，非覆盖语义）；B1（GPU 伴生脚本替换）未做 |
+| B | KAGWindow / krkrgles 脚本别名与绘制设备接管 | 🟡 B2：4 目标扇出 + 每帧重试 600 帧 + 卸载摘钩 + **drawDevice/gpuDrawDevice/nativeDrawDevice 契约与核心全局镜像**（2026-09-21）；B1：**伴生脚本虚拟替换部分实施**（GPU 占位脚本 11 名 / motion-parameter / split-emote，2026-09-21），gfxEffect/logwindow/D3DEmote 未移 |
 | C | KAGParser / extkagparser / kagparserex 行为对齐 | 🟡 **C1 ✅、C4 ✅**；C3/C5/C6/C7 未做 |
 | D | 插件模拟层（旧 Windows 插件全量照搬，分批） | 🟡 已移 6 个 AetherKiri 层专属模块 + 本批 8 个（systemEx/registory/stdio/javascript/messenger/msgreceiver/tasktray/adjustMonitor）；其余约 50 个缺失模块待分批 |
 | E | 启动与资源加载顺序（startup/patch/auto-path/插件解析） | 🟡 I 系列大部分已做；`patch.tjs` 分两层（E1）未做 |
@@ -114,7 +114,7 @@
 | C6 KAG 运行时补丁层（27 文本补丁 + 11 类包装） | ~1500 行 | 前提是 patch.tjs 晚执行（E1） |
 | C7 `ExtKAGParser`（第二解析器） | ~4700 行 | 先改 `ExtKAGParser.hpp` 的 `KAGParserH` 保护宏、定 `paramMacros`/`copyTag` 缺失、与 `kagparserex` 空壳互斥 |
 | E1 `patch.tjs` 分两层（含韧性层） | 中 | 无（已裁决），影响面大需逐游戏回归 |
-| B1 GPU 伴生脚本惰性注入 | 中 | 无（可选） |
+| B1 伴生脚本虚拟替换（GPU 占位脚本 / motion-parameter / split-emote） | 中 | **部分实施（2026-09-21）**：`io/IoVirtualFile.*` + `compat/AetherKiriCompanions.cpp`；gfxEffect/logwindow/D3DEmote 未移 |
 | M6 其余插件（约 50 个缺失 + 部分覆盖项） | ~3300 行 | 无；清单见 `compat/recon/plugin-compat-diff.md`；本批已落地 systemEx/registory/stdio/javascript/messenger/msgreceiver/tasktray/adjustMonitor |
 | 壳：目录收藏交互打磨、平板双栏（列表-详情）、库页/详情页 MD3 细节 | 小-中 | 无 |
 
@@ -159,7 +159,8 @@ gh api "repos/clevebitr/Krkr2Next/actions/runs/$RID/artifacts" --jq '.artifacts[
 | 渲染层对照证据（兼容层↔渲染耦合、`ogl/` 相对上游的功能差异、未覆盖的 ES2-only 路径） | `compat/recon/render-diff.md` |
 | 移植溯源清单（含 `partial-extract` 类别） | `compat/upstream/aetherkiri_ports.json` |
 | IO 组件 | `cpp/core/io/`（`StoragePolicy.h` 策略契约；`IoPolicy.*` 注入点；`IoModuleLocator.*` 模块查询注入） |
-| 兼容层框架 | `cpp/core/compat/`（`CompatLayer.*` 层注册表 + 策略注入；`ModuleGate.*` 模块归属门） |
+| 兼容层框架 | `cpp/core/compat/`（`CompatLayer.*` 层注册表 + 策略注入；`ModuleGate.*` 模块归属门；`AetherKiriCompanions.*` 伴生脚本 provider） |
+| 虚拟文件注册点 | `cpp/core/io/IoVirtualFile.{h,cpp}`（provider 只产出内容，io 包成流且物理文件优先） |
 | 层专属插件 | `cpp/plugins/compat/aetherkiri/`（`legacy_zlib_version.cpp`、`legacy_system_misc.cpp`） |
 | 壳 UI | `app/app/src/main/kotlin/org/dpdns/clevebitr/ui/`（`Nav.kt` 路由+导航条、`LibraryScreen`、`GameDetailScreen`、`GameSettingsScreen`、`PickerScreen`、`SettingsScreen`、`AboutScreen`） |
 | 每游戏日志 | `app/.../core/LogFiles.kt`（`gameLogDir`/`gameEngineLog`）、`core/EngineSession.kt`（`switchEngineLogToGame`） |

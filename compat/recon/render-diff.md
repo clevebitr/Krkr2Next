@@ -16,10 +16,11 @@
    （渲染闸门），KAGWindow 接管则由激活的 AetherKiri 层在 krkrgles post-regist 安装。
    层本身（IO 策略 / TJS 回退 / 模块门）**不碰**渲染器。
    > 变更记录（2026-09-19）：旧的 `kag` 渲染档与 `krkrz-kag` 兼容档已删除，能力归本层。
-3. **AetherKiri 的脚本级 GPU 兼容机制没有移植**：伴生脚本替换（`GpuCompatScript.h` 经
-   `StorageIntf` 提供）、`drawDevice`/`gpuDrawDevice`/`nativeDrawDevice` 别名、核心全局镜像到
-   `KAGWindow`/`kag`/`KAGWorldPlugin`。KN 的 `kag` 档只做了其中的一部分（`KrkrOglKagScript` +
-   两个类别名）。见 §3。
+3. **AetherKiri 的脚本级 GPU 兼容机制已部分移植**：伴生脚本替换（GPU 占位脚本 /
+   motion-parameter / split-emote）经 `io/IoVirtualFile` + `compat/AetherKiriCompanions.cpp`
+   落地，仅在 AetherKiri 层生效；`drawDevice`/`gpuDrawDevice`/`nativeDrawDevice` 别名与核心
+   全局镜像已由 `krkrgles` 的 AetherKiri 层分支补上（见 §3.2）；`gfxEffect`/`logwindow`/
+   `D3DEmote` 伴生脚本未移（见 §3.1）。
 4. 因此"**AetherKiri 层渲染问题**"应拆成两类分别定位：
    - (a) `kag` 档本身的已知缺陷（`krkrgles.cpp` 注释已记：对 G2 有 `FBO incomplete 0x8CD6`）；
    - (b) `kag` 档下 AetherKiri 游戏需要的**脚本级 GPU 兼容缺失**（本仓库 `kag` 不是 AetherKiri
@@ -130,7 +131,7 @@
 
 AetherKiri 让 GPU 系游戏能渲染，靠的是**两套脚本侧机制**；KN 都没有完整移植。
 
-### 3.1 GPU 伴生脚本的虚拟替换（KN 完全缺失）
+### 3.1 GPU 伴生脚本的虚拟替换（**部分实施 2026-09-21**）
 
 - AK `StorageIntf.cpp` 在存储层内置：
   - 谓词 `TVPIsGpuCompanionScript`（11 个名字：`gpulayer.tjs`、`gpuaffinelayer.tjs`、`d3d.tjs`、
@@ -141,10 +142,19 @@ AetherKiri 让 GPU 系游戏能渲染，靠的是**两套脚本侧机制**；KN 
   - `TVPNormalizeStorageName` 直接返回规范化名（`:2023-2026`）
   - `_TVPCreateStream` 在读且真实文件不存在时返回内嵌 `TVP_GPU_COMPAT_SCRIPT`（`:2178-2184`）
   - 脚本本体：`AK/cpp/core/base/impl/GpuCompatScript.h`
-- KN **没有** `TVPRegisterStorageResolver`，也没有伴生脚本谓词（`grep` 为空）。缺这个时：
-  - 游戏若**不带**这些脚本，KAG 代码 `Scripts.evalStorage("GPU...")` 会拿不到内容；
-  - 真实脚本存在时照常加载，进而在 KN 上抛 `mixinclass.tjs(1) [(function) missing]`
-    （见 `KN/cpp/plugins/krkrgles.cpp:3136-3144` 注释），因为 KN 没有 Canvas/Texture/ShaderProgram。
+- 另有 `TVPGetMotionParameterCompanionInfo`（`motion_<asset>.psb/.mtn.tjs` →
+  `%["storage" => "<asset>.psb"]`，E-mote 动作解析的关键）与 `TVPIsSplitEmoteVirtualStorage`
+  （`*emo.psb/.mtn/.mt` → 空流），消费点同上。
+- **KN 已实施（2026-09-21）**：`io/IoVirtualFile.{h,cpp}` 提供泛型虚拟文件注册点（provider 只
+  产出内容，io 包成流，且**物理文件优先**）；`compat/AetherKiriCompanions.cpp` 注册 provider，
+  覆盖 GPU 占位脚本（11 名）+ motion-parameter + split-emote，**只在 AetherKiri 层生效**，
+  每个名字打一条命中日志（`compat companion: 虚拟提供 …`）。
+- **未移**：`gfxEffect`（`gfx_fire.tjs`/`gfx_flash.tjs`，需模块存在性检查）、
+  `logwindow.tjs`（~90 行内嵌 KAGEX LogWindow 类）、`motion.tjs`/`d3demote.tjs`
+  （需 36KB 生成 blob `D3DEmote.tjs`）。
+- 注意：**真实文件存在时仍加载真实脚本**（与上游一致），所以走真 GPU 层脚本的作品仍会因
+  KN 没有 Canvas/Texture/ShaderProgram 而抛 `mixinclass.tjs [(function) missing]`——这不是
+  伴生脚本能修的，属于渲染器能力差。
 
 ### 3.2 `drawDevice` 别名成员
 
