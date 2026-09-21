@@ -1420,6 +1420,19 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ isExistentStorage) {
 
     ttstr path = *param[0];
 
+#if defined(KRKR_RENDER_PROBE)
+    // 诊断 diffimage2.tjs 的递归：脚本把本方法包了一层；若包装被无限递归，
+    // 每层都会用同一个 ".dref" 名字回调到这里——重复实参就是证据。
+    {
+        static thread_local int s_probeCalls = 0;
+        if(s_probeCalls < 64) {
+            ++s_probeCalls;
+            spdlog::info("probe: Storages.isExistentStorage({}) #{}",
+                         path.AsStdString(), s_probeCalls);
+        }
+    }
+#endif
+
     if(result)
         *result = (tjs_int)TVPIsExistentStorage(path);
 

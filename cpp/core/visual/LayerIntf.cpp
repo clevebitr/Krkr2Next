@@ -8213,6 +8213,18 @@ tTJSNC_Layer::tTJSNC_Layer() : tTJSNativeClass(TJS_W("Layer")) {
         if(numparams < 1)
             return TJS_E_BADPARAMCOUNT;
         ttstr name(*param[0]);
+#if defined(KRKR_RENDER_PROBE)
+        // 诊断 diffimage2.tjs 的递归：脚本把本方法包了一层并自递归；若递归点
+        // 在这里，日志里会看到重复的实参。
+        {
+            static thread_local int s_probeCalls = 0;
+            if(s_probeCalls < 64) {
+                ++s_probeCalls;
+                spdlog::info("probe: Layer.loadImages({}) #{}",
+                             name.AsStdString(), s_probeCalls);
+            }
+        }
+#endif
         tjs_uint32 key = clNone; // TODO Intfなのに固有値が
         if(numparams >= 2 && param[1]->Type() != tvtVoid)
             key = (tjs_uint32)param[1]->AsInteger();
