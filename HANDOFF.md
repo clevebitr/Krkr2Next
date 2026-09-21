@@ -6,18 +6,21 @@
 
 ---
 
-## 0. 一句话现状（2026-09-19）
+## 0. 一句话现状（2026-09-21）
 
-两条并行目标都在推进：
+**当前主战场：渲染层**。三款游戏实测（NEKOPARA 4 / 千恋万花 / nainiuniu5krkr）暴露的问题、
+证据与下一步探针，全部记在 **`compat/recon/render-issues.md`**（新会话先读它）。
 
-1. **兼容层**：`cpp/core/io/` 单一 IO 组件已建成（存储/归档/路径/TJS 门面全在里面），两层机制
-   （按游戏选 `krkr2next.json` 的 compat 档）已接线；**A 块（TJS2 内核回退）、C1、C4 已完成**；
-   剩余 C3/C5/C6/C7、M6 插件层分批、以及**一项等用户裁决的 M1 尾巴**。
-2. **壳（Kotlin/Compose）**：用户新提的九项改造**除"目录收藏 UI 打磨"外全部落地**，最近一次
-   CI（`b2e9fb4`，run `35455858612`）**绿**，含 APK 产物。
+其余两条目标的状态：
 
-最新提交：`67c95b0`（已推送）。工作区除用户自己的 `.gitignore`/`README.md` 外干净；本轮又新增
-一批 M6 插件桩（未提交，见下）。
+1. **兼容层**：`cpp/core/io/` 单一 IO 组件已建成；**A 块（TJS2 内核回退）、C1、C4、B1（部分）、
+   B2 已完成**；`kag` 渲染档已删除（能力归 AetherKiri 层）。剩余 C3（阻塞于 C2）、C5/C6/C7、
+   E1、M6 分批、以及**一项等用户裁决的 M1 尾巴（I3）**。
+2. **壳（Kotlin/Compose）**：九项改造**除“目录收藏 UI 打磨”外全部落地**。
+
+最新提交：`e45f908`（已推送）。工作区除用户自己的 `.gitignore`/`README.md` 外干净。
+本轮新落地的：`kag` 档移除、draw-device 契约、B1 伴生脚本、`System.addDllDirectory` 等修复，
+以及一套 `KRKR_RENDER_PROBE` 探针（默认关）。
 
 ---
 
@@ -117,6 +120,7 @@
 | B1 伴生脚本虚拟替换（GPU 占位脚本 / motion-parameter / split-emote） | 中 | **部分实施（2026-09-21）**：`io/IoVirtualFile.*` + `compat/AetherKiriCompanions.cpp`；gfxEffect/logwindow/D3DEmote 未移 |
 | M6 其余插件（约 50 个缺失 + 部分覆盖项） | ~3300 行 | 无；清单见 `compat/recon/plugin-compat-diff.md`；本批已落地 systemEx/registory/stdio/javascript/messenger/msgreceiver/tasktray/adjustMonitor |
 | 壳：目录收藏交互打磨、平板双栏（列表-详情）、库页/详情页 MD3 细节 | 小-中 | 无 |
+| **渲染问题（三款游戏）**：NEKOPARA 4 视频 AMV 解码失败 / G2 `diffimage2.tjs` 递归 / 千恋万花 `wave` 转场缺失 + 卡死 + CG | 小-中 | 证据与下一步探针见 **`compat/recon/render-issues.md`**；两条已收窄到“再补一个探针就能定位” |
 
 ---
 
@@ -157,6 +161,7 @@ gh api "repos/clevebitr/Krkr2Next/actions/runs/$RID/artifacts" --jq '.artifacts[
 | KAG 脚本层对照证据（KAGParser、ScriptMgnIntf 补丁层、TJS 内核回退、ExtKAGParser、冲突清单） | `compat/recon/kag-script-diff.md` |
 | 插件层对照证据（约 100 个模块覆盖表、合并冲突、移植成本） | `compat/recon/plugin-compat-diff.md` |
 | 渲染层对照证据（兼容层↔渲染耦合、`ogl/` 相对上游的功能差异、未覆盖的 ES2-only 路径） | `compat/recon/render-diff.md` |
+| **渲染问题追踪（当前 open issues + 探针清单 + 取证命令）** | **`compat/recon/render-issues.md`** |
 | 移植溯源清单（含 `partial-extract` 类别） | `compat/upstream/aetherkiri_ports.json` |
 | IO 组件 | `cpp/core/io/`（`StoragePolicy.h` 策略契约；`IoPolicy.*` 注入点；`IoModuleLocator.*` 模块查询注入） |
 | 兼容层框架 | `cpp/core/compat/`（`CompatLayer.*` 层注册表 + 策略注入；`ModuleGate.*` 模块归属门；`AetherKiriCompanions.*` 伴生脚本 provider） |
@@ -169,8 +174,11 @@ gh api "repos/clevebitr/Krkr2Next/actions/runs/$RID/artifacts" --jq '.artifacts[
 
 ## 8. 下一轮建议顺序
 
-1. 若用户回了 **I3**：接完 `mountSiblingsForArchiveProject`（M1 收尾，小）。
-2. 否则：继续 **M6 小模块批次**（每批 2–4 个，机械、可验证）——下一批候选见
+1. **渲染问题（当前主线）**：读 `compat/recon/render-issues.md`，按里面每条问题的“下一步”
+   补探针 → 触发一次 `enable_render_probe=true` 构建 → 按 `probe:` 日志定位/修复。
+   当前最接近出结果的两条：NEKOPARA 的 AMV 载荷前缀、G2 的 `diffimage2.tjs` 递归（A/B 二选一）。
+2. 若用户回了 **I3**：接完 `mountSiblingsForArchiveProject`（M1 收尾，小）。
+3. 否则：继续 **M6 小模块批次**（每批 2–4 个，机械、可验证）——下一批候选见
    `compat/recon/plugin-compat-diff.md §2`（如 `systemEx` 剩余函数、`layerExSave`、`msdfrender`）。
-3. **C3 已阻塞**：上游 `GetNextTag` 聚合依赖 C2 翻译层（本仓库未移植）；若要推进需先裁决 C2。
-4. 壳侧：目录收藏交互打磨 → 平板双栏 → 库页/详情页 MD3 细节。
+4. **C3 已阻塞**：上游 `GetNextTag` 聚合依赖 C2 翻译层（本仓库未移植）；若要推进需先裁决 C2。
+5. 壳侧：目录收藏交互打磨 → 平板双栏 → 库页/详情页 MD3 细节。

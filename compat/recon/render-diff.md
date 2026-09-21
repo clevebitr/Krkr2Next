@@ -3,6 +3,8 @@
 > 证据文件，非规范。`KN/` = `KiriNext`，`AK/` = `AetherKiri`（rev `bd14a986`）。
 > 主题：**AetherKiri 兼容层与渲染层的耦合**，以及 `cpp/core/visual/ogl/` 相对上游 AetherKiri
 > 的功能改动。**不**重复 `kag-script-diff.md`（KAG 脚本层）与 `io-loading-diff.md`（IO）。
+>
+> **当前未解决的渲染问题**（三款游戏实测）见 `render-issues.md`（新会话先读那份）。
 
 ---
 
