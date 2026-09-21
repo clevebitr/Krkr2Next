@@ -1074,6 +1074,44 @@ tTJSNativeClass *TVPCreateNativeClass_System() {
         /*object to register*/ cls,
         /*func. name*/ system)
     //----------------------------------------------------------------------
+    // Win32 DLL 目录 API 的移动端桩。
+    //
+    // 为什么必须有：KRKRZ 系游戏的 `initialize.tjs` 第一行就是
+    // `System.addDllDirectory(Storages.getLocalName("file://.../plugin/"))`
+    // ——它调的是 **System 原生类的成员**，不经 tjs2 的未定义全局回退（那两个
+    // `addDllDirectory`/`setDefaultDllDirectories` 只在 A2 的全局名单里），所以
+    // 缺方法时直接抛 `Member "addDllDirectory" does not exist`，游戏卡在加载。
+    // Android 没有 DLL 搜索目录概念，纯返回成功即可（与上游 AetherKiri 同款）。
+    TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ setDefaultDllDirectories) {
+        if(result)
+            *result = static_cast<tjs_int>(1);
+        return TJS_S_OK;
+    }
+    TJS_END_NATIVE_STATIC_METHOD_DECL_OUTER(
+        /*object to register*/ cls,
+        /*func. name*/ setDefaultDllDirectories)
+    //----------------------------------------------------------------------
+    TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ addDllDirectory) {
+        if(result)
+            *result = static_cast<tjs_int>(1);
+        return TJS_S_OK;
+    }
+    TJS_END_NATIVE_STATIC_METHOD_DECL_OUTER(
+        /*object to register*/ cls,
+        /*func. name*/ addDllDirectory)
+    //----------------------------------------------------------------------
+    TJS_BEGIN_NATIVE_PROP_DECL(llsDefaultDirs) {
+        TJS_BEGIN_NATIVE_PROP_GETTER {
+            if(result)
+                *result = static_cast<tjs_int>(0x00001000);
+            return TJS_S_OK;
+        }
+        TJS_END_NATIVE_PROP_GETTER
+
+        TJS_DENY_NATIVE_PROP_SETTER
+    }
+    TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, llsDefaultDirs)
+    //----------------------------------------------------------------------
     TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ readRegValue) {
         if(numparams < 1)
             return TJS_E_BADPARAMCOUNT;
@@ -1179,6 +1217,18 @@ tTJSNativeClass *TVPCreateNativeClass_System() {
     //-- properties
 
     //----------------------------------------------------------------------
+    // 与上游 AetherKiri 的 `System.arcPath` 对齐（KRKRZ 系 initialize.tjs 会读它）。
+    // 语义 = 当前 app path（同 exePath）；这里是纯新增属性。
+    TJS_BEGIN_NATIVE_PROP_DECL(arcPath){
+        TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetAppPath();
+    return TJS_S_OK;
+}
+TJS_END_NATIVE_PROP_GETTER
+
+TJS_DENY_NATIVE_PROP_SETTER
+}
+TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, arcPath)
+//----------------------------------------------------------------------
     TJS_BEGIN_NATIVE_PROP_DECL(exePath){
         TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetAppPath();
     return TJS_S_OK;
