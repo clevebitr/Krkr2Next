@@ -713,7 +713,7 @@ namespace TJS {
             const tjs_char *fn = Name ? Name : TJS_W("?");
             spdlog::info(
                 "probe: TJS stack nearly exhausted block={} func={} start_ip={}",
-                ttstr(bn).c_str(), ttstr(fn).c_str(), start_ip);
+                ttstr(bn).AsStdString(), ttstr(fn).AsStdString(), start_ip);
             TJS_eTJSScriptError(
                 TJS_W("Script call stack exhausted (recursive call?)"), this,
                 start_ip);

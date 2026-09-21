@@ -6,7 +6,9 @@
 
 #include <turbojpeg.h>
 #include <zlib.h>
+#include <cstdio>
 #include <cstring>
+#include <string>
 #include <vector>
 #include <algorithm>
 
