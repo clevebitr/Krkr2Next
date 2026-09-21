@@ -264,7 +264,11 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
 
 #if defined(KRKR_RENDER_PROBE)
     {
-        int dump = static_cast<int>(std::min(payloadLen, (size_t)32));
+        // 结构探针：这份 AMV 的帧载荷不以 JPEG SOI 开头（首字节非 FFD8），
+        // 需要看清 [前缀][JPEG] 的边界、是否含 alpha 段、以及是否以 EOI 收尾。
+        //   SOI_count>1  ⇒ 载荷内有 color/alpha 两段 JPEG
+        //   tail16 以 FFD9 结尾 ⇒ 最后一段是完整 JPEG，前缀只需跳过
+        const int dump = static_cast<int>(std::min(payloadLen, (size_t)32));
         std::string hex;
         hex.reserve(dump * 2);
         for(int i = 0; i < dump; i++) {
@@ -272,20 +276,39 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
             std::snprintf(buf, sizeof(buf), "%02X", payload[i]);
             hex += buf;
         }
-        size_t ffd8 = (size_t)-1;
-        for(size_t i = 1; i < payloadLen; i++) {
-            if(payload[i - 1] == 0xFF && payload[i] == 0xD8) {
-                ffd8 = i - 1;
-                break;
+
+        std::string soiList;
+        size_t soiCount = 0;
+        for(size_t i = 0; i + 1 < payloadLen; i++) {
+            if(payload[i] == 0xFF && payload[i + 1] == 0xD8) {
+                ++soiCount;
+                if(soiCount <= 8) {
+                    soiList += std::to_string(i);
+                    soiList += ',';
+                }
             }
         }
+
+        const int tailN = static_cast<int>(std::min(payloadLen, (size_t)16));
+        std::string tailHex;
+        tailHex.reserve(tailN * 2);
+        for(int i = 0; i < tailN; i++) {
+            char buf[4];
+            std::snprintf(buf, sizeof(buf), "%02X",
+                          payload[payloadLen - tailN + i]);
+            tailHex += buf;
+        }
+
         spdlog::info(
-            "probe: AMV payload dump first32={} payloadLen={} firstFFD8={} "
-            "extraHdr={} sizeOfFrame={}",
-            hex, payloadLen,
-            ffd8 == (size_t)-1 ? std::string("none")
-                               : std::to_string(ffd8),
-            extraHdr, sizeOfFrame);
+            "probe: AMV payload first32={} payloadLen={} extraHdr={} "
+            "sizeOfFrame={} SOI_count={} SOI_offsets=[{}] tail16={}",
+            hex, payloadLen, extraHdr, sizeOfFrame, soiCount, soiList,
+            tailHex);
+        spdlog::info(
+            "probe: AMV variant revision={} qt_size_plus_hdr={} unk={} unk2={} "
+            "attr={} frame={}x{} alpha={}x{}",
+            hdr.revision, hdr.qt_size_plus_hdr, hdr.unk, hdr.unk2,
+            hdr.alpha_decode_attr, imgW, imgH, alphaW, alphaH);
     }
 #endif
 

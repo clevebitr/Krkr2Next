@@ -1237,6 +1237,13 @@ namespace TJS {
     }
 
     //---------------------------------------------------------------------------
+    // 前向声明：A 块名字回退链（定义见本文件后半段）。属性读取与**方法调用**
+    // 共用同一份名单。
+    static bool TJSCompatResolveFuncCallFallback(const tjs_char *membername,
+                                                 tTJSVariant *result,
+                                                 iTJSDispatch2 *target,
+                                                 iTJSDispatch2 *objthis);
+
     tjs_error tTJSCustomObject::FuncCall(tjs_uint32 flag,
                                          const tjs_char *membername,
                                          tjs_uint32 *hint, tTJSVariant *result,
@@ -1260,6 +1267,17 @@ namespace TJS {
                 if(CallGetMissing(membername, value_func))
                     return TJSDefaultFuncCall(flag, value_func, result,
                                               numparams, param, objthis);
+            }
+
+            // A 块兼容回退（仅 AetherKiri 层开启）。TJS 的**方法调用**走
+            // FuncCall、不经 PropGet，所以回退链必须在这里也挂一份：否则
+            // `Storages.commitSavedata()` 这类缺失方法仍会抛
+            // `Member "..." does not exist`，进而中断启动脚本。
+            tTJSVariant fallback;
+            if(TJSCompatResolveFuncCallFallback(membername, &fallback, this,
+                                                objthis)) {
+                return TJSDefaultFuncCall(flag, fallback, result, numparams,
+                                          param, objthis);
             }
 
             return TJS_E_MEMBERNOTFOUND; // member not found
@@ -1365,6 +1383,7 @@ namespace TJS {
         return membername &&
                (!TJS_strcmp(membername, TJS_W("bootStrap")) ||
                 !TJS_strcmp(membername, TJS_W("commitSavedata")) ||
+                !TJS_strcmp(membername, TJS_W("rollbackSavedata")) ||
                 !TJS_strcmp(membername, TJS_W("addDllDirectory")) ||
                 !TJS_strcmp(membername, TJS_W("KAGLayerConstructor")) ||
                 !TJS_strcmp(membername, TJS_W("KAGLayerFinalizer")) ||
@@ -1557,6 +1576,23 @@ namespace TJS {
             resolving = false;
             throw;
         }
+    }
+
+    // 方法调用版本的 A 块回退：与 tTJSCustomObject::PropGet 的回退链同名单、
+    // 同顺序（touchImage → 启动名 → 全局名 → TextRender.renderCount）。
+    // 上游把回退只接在 PropGet 上是不够的：脚本写 `obj.missing()` 时走 FuncCall，
+    // 属性回退根本不会被问到（nainiuniu5krkr 的 Storages.commitSavedata() 即此）。
+    static bool TJSCompatResolveFuncCallFallback(const tjs_char *membername,
+                                                 tTJSVariant *result,
+                                                 iTJSDispatch2 *target,
+                                                 iTJSDispatch2 *objthis) {
+        if(!TJSCompatFallbacksEnabledFlag || !membername || !result)
+            return false;
+        return TJSCompatResolveTouchImage(membername, result) ||
+               TJSCompatResolveStartupFallback(membername, result) ||
+               TJSCompatResolveGlobalFallback(membername, result) ||
+               TJSCompatResolveTextRenderRenderCount(membername, result, target,
+                                                     objthis);
     }
 
     //---------------------------------------------------------------------------
