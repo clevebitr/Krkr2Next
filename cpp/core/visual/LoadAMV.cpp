@@ -107,6 +107,12 @@ static bool TryDecodeJpeg(const unsigned char *data, size_t size,
     int w = 0, h = 0, subsamp = 0;
     if(tjDecompressHeader2(dec, const_cast<unsigned char *>(data),
                            (unsigned long)size, &w, &h, &subsamp) != 0) {
+#if defined(KRKR_RENDER_PROBE)
+        spdlog::info(
+            "probe: AMV header 失败：{}（size={}，first={:02X}{:02X}）",
+            tjGetErrorStr2(dec), size, size > 0 ? data[0] : 0,
+            size > 1 ? data[1] : 0);
+#endif
         tjDestroy(dec);
         return false;
     }
@@ -118,6 +124,12 @@ static bool TryDecodeJpeg(const unsigned char *data, size_t size,
                             w * numComponents, h, pixelFormat, TJFLAG_FASTDCT);
     if(ret != 0) {
         int errCode = tjGetErrorCode(dec);
+#if defined(KRKR_RENDER_PROBE)
+        spdlog::info("probe: AMV tjDecompress2 失败：code={} msg={} {}x{} "
+                     "subsamp={} pf={} ncomp={}",
+                     static_cast<int>(errCode), tjGetErrorStr2(dec), w, h,
+                     subsamp, pixelFormat, numComponents);
+#endif
         if(errCode == TJERR_WARNING) {
             tjDestroy(dec);
             return true;
@@ -138,8 +150,14 @@ static bool DecodeJpegWithQT(const unsigned char *jpegData, size_t jpegSize,
         return true;
     if(!dqtSeg.empty()) {
         auto patched = InjectDQT(jpegData, jpegSize, dqtSeg);
-        return TryDecodeJpeg(patched.data(), patched.size(), pixelFormat,
-                             numComponents, outW, outH, pixelOut);
+        const bool ok = TryDecodeJpeg(patched.data(), patched.size(),
+                                      pixelFormat, numComponents, outW, outH,
+                                      pixelOut);
+#if defined(KRKR_RENDER_PROBE)
+        spdlog::info("probe: AMV DQT 注入重试 ok={} dqtSeg={}B jpeg={}B",
+                     ok ? 1 : 0, dqtSeg.size(), jpegSize);
+#endif
+        return ok;
     }
     return false;
 }
