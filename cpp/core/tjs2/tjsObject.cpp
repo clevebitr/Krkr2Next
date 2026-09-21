@@ -1699,8 +1699,19 @@ namespace TJS {
         else
             data = Find(membername, hint);
 
+#if defined(KRKR_RENDER_PROBE)
+        if(!data) {
+            if(membername &&
+               TJS_strcmp(membername, TJS_W("diffEnterCount")) == 0) {
+                spdlog::info("probe: PropSet miss 'diffEnterCount', flag={:04X}",
+                             flag);
+            }
+            return TJS_E_MEMBERNOTFOUND; // not found
+        }
+#else
         if(!data)
             return TJS_E_MEMBERNOTFOUND; // not found
+#endif
 
         if(flag & TJS_HIDDENMEMBER)
             data->SymFlags |= TJS_SYMBOL_HIDDEN;

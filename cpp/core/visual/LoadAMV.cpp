@@ -260,6 +260,33 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
     ReadExact(src, payload.data(), (tjs_uint)payloadLen);
     const unsigned char *payloadStart = payload.data();
 
+#if defined(KRKR_RENDER_PROBE)
+    {
+        int dump = static_cast<int>(std::min(payloadLen, (size_t)32));
+        std::string hex;
+        hex.reserve(dump * 2);
+        for(int i = 0; i < dump; i++) {
+            char buf[4];
+            std::snprintf(buf, sizeof(buf), "%02X", payload[i]);
+            hex += buf;
+        }
+        size_t ffd8 = (size_t)-1;
+        for(size_t i = 1; i < payloadLen; i++) {
+            if(payload[i - 1] == 0xFF && payload[i] == 0xD8) {
+                ffd8 = i - 1;
+                break;
+            }
+        }
+        spdlog::info(
+            "probe: AMV payload dump first32={} payloadLen={} firstFFD8={} "
+            "extraHdr={} sizeOfFrame={}",
+            hex, payloadLen,
+            ffd8 == (size_t)-1 ? std::string("none")
+                               : std::to_string(ffd8),
+            extraHdr, sizeOfFrame);
+    }
+#endif
+
     // --- Decode ---
     std::vector<tjs_uint32> rgba(imgW * imgH, 0);
 

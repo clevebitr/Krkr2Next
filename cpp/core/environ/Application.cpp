@@ -27,6 +27,7 @@
 #include "GraphicsLoadThread.h"
 #include "Platform.h"
 #include "EventIntf.h"
+#include "utils/StallWatchdog.h"
 #include <thread>
 #include "ConfigManager/LocaleConfigManager.h"
 #include "StorageIntf.h"
@@ -587,14 +588,17 @@ void tTVPApplication::ShowException(const ttstr &e) {
 }
 void tTVPApplication::Run() {
     try {
+        krkr::stall::MarkStage("Application::Run 开始");
         if(TVPTerminated) {
             TVPSystemUninit();
             TVPExitApplication(TVPTerminateCode);
         }
         //	TVPBreathe();
         ProcessMessages();
+        krkr::stall::MarkStage("Application::Run: SystemWatchTimerTimer");
         if(TVPSystemControl)
             TVPSystemControl->SystemWatchTimerTimer();
+        krkr::stall::MarkStage("Application::Run 结束");
         //		TVPDeliverWindowUpdateEvents(); // from
         // SystemWatchTimerTimer
     } catch(const EAbort &) {
@@ -642,6 +646,7 @@ void tTVPApplication::Run() {
 }
 
 void tTVPApplication::ProcessMessages() {
+    krkr::stall::MarkStage("ProcessMessages: 开始");
     std::vector<std::tuple<void *, int, tMsg>> lstUserMsg;
     {
         std::lock_guard<std::mutex> cs(m_msgQueueLock);
@@ -651,6 +656,7 @@ void tTVPApplication::ProcessMessages() {
         std::get<2>(it)();
     }
     TVPTimer::ProgressAllTimer();
+    krkr::stall::MarkStage("ProcessMessages: 结束");
 }
 
 #if 0

@@ -707,10 +707,23 @@ namespace TJS {
         // 栈快没了就先抛脚本异常：异常展开时 AddTrace
         // 会把脚本名、行号与整条调用 链（" <-- "
         // 那串）带进日志，既不闪退，也直接指出递归点。
+#if defined(KRKR_RENDER_PROBE)
+        if(TVPIsTJSStackNearlyExhausted()) {
+            const tjs_char *bn = Block ? Block->GetName() : TJS_W("?");
+            const tjs_char *fn = Name ? Name : TJS_W("?");
+            spdlog::info(
+                "probe: TJS stack nearly exhausted block={} func={} start_ip={}",
+                ttstr(bn).c_str(), ttstr(fn).c_str(), start_ip);
+            TJS_eTJSScriptError(
+                TJS_W("Script call stack exhausted (recursive call?)"), this,
+                start_ip);
+        }
+#else
         if(TVPIsTJSStackNearlyExhausted())
             TJS_eTJSScriptError(
                 TJS_W("Script call stack exhausted (recursive call?)"), this,
                 start_ip);
+#endif
 
         tjs_int num_alloc =
             MaxVariableCount + VariableReserveCount + 1 + MaxFrameCount;
