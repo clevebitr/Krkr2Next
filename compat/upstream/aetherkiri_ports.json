@@ -102,6 +102,15 @@
       "reason": "AetherKiri 层插件 kztouch.dll（KZTouch 状态桩，available=true 让游戏走触摸 UI 分支）与 dmmcloud.dll（DMM 云服务桩：available=false、登录/购买失败、logout 成功）。local-fix：登记为 AetherKiri 层专属模块。",
       "sha256_local": "b55614088dff84415a75c8612d584b63e1862bf1db73b8f4cccfc4b651fd0fd6",
       "sha256_upstream_at_rev": "7ef60c81e5d7c53c14c9ff4f1bde2d97776f0ccd781396bd050d8bec3335a4a9"
+    },
+    {
+      "local": "cpp/plugins/compat/aetherkiri/legacy_system_env.cpp",
+      "upstream": "cpp/plugins/compatSystemPlugins.cpp",
+      "source_ref": "cpp/plugins/compatSystemPlugins.cpp:514-698（systemEx/registory）、:729-767（stdio）、:1114-1120（javascript）、:1174-1221（messenger/msgreceiver/tasktray）、:829-832（adjustMonitor）",
+      "modifications": "partial-extract",
+      "reason": "AetherKiri 层插件 systemEx.dll / registory.dll / stdio.dll / javascript.dll / messenger.dll / msgreceiver.dll / tasktray.dll / adjustMonitor.dll：脚本常调、但宿主无法真实提供的 Windows 系统面。本批只取纯桩子集，故意不含 process/shellExecute/httprequest（P6：不得阻塞持有 EGL 的脚本线程）。systemEx 只取 writeEnvValue/urlencode/urldecode/confirm/waitForAppLock，故意不注册 readEnvValue/expandEnvString（本仓库 windowEx.cpp 已有实现，避免同层覆盖）。local-fix：去掉上游日志里的平台名；登记为 AetherKiri 层专属模块。",
+      "sha256_local": "1777d496e065944784705367cfafecc6a39365b6e747278b772df4889ba1bdbd",
+      "sha256_upstream_at_rev": "b2973dab017fd549473a5b1587c086512526fbcca81d260805ba5aba9a84aba6"
     }
   ],
   "not_ported": [

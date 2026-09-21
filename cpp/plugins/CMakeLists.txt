@@ -43,6 +43,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     # compat/upstream/aetherkiri_ports.json）。
     compat/aetherkiri/legacy_zlib_version.cpp
     compat/aetherkiri/legacy_system_misc.cpp
+    compat/aetherkiri/legacy_system_env.cpp
     compatLegacyPlugins.cpp
 )
 
