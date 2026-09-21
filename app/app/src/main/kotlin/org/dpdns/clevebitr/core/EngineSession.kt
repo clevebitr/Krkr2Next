@@ -41,14 +41,14 @@ class EngineSession(
      */
     private val fontFallbackMode: String = "auto",
     /**
-     * krkrz 的 OGLDrawDevice 兼容档位（`off` / `alias` / `kag`，
+     * krkrz 的 OGLDrawDevice 兼容档位（`off` / `ogl` / `alias`，
      * 见 [AppPrefs.OGLDRAWDEVICE_COMPAT_MODES]）。引擎侧在插件注册时读一次，
      * 所以是"下次开游戏生效"。
      */
     private val oglDrawDeviceCompat: String = "off",
     /**
-     * 游戏兼容档（`auto` / `kirikiri2-classic` / `krkrz-gpu` / `krkrz-kag` /
-     * `krkrz-ogl`，见 [AppPrefs.GAME_COMPAT_PROFILES]）。
+     * 游戏兼容档（`auto` / `kirikiri2-classic` / `krkrz-gpu` / `krkrz-ogl` /
+     * `aetherkiri`，见 [AppPrefs.GAME_COMPAT_PROFILES]）。
      *
      * `auto` 时由引擎按**血脉标记**判档（不看游戏名），所以要在 `openGame()` 里
      * 连同游戏根目录一起传进去 —— 插件是在 `StartApplication`（post-regist）
@@ -766,7 +766,7 @@ class EngineSession(
     }
 
     /**
-     * 当前生效的兼容档（`<profile> <mode>`，例如 `krkrz-kag kag`）。
+     * 当前生效的兼容档（`<profile> <mode>`，例如 `aetherkiri alias`）。
      *
      * 档位解析在**引擎侧**完成（`auto` 要看游戏目录里的血脉标记，见
      * `engine_options.h`），所以壳只做缓存：`openGame()` 时失效、叠加层按 4Hz

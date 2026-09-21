@@ -44,12 +44,12 @@ object AppPrefs {
     private const val KEY_FONT_FALLBACK = "engine.font_fallback"
 
     /**
-     * krkrz 的 OGLDrawDevice 兼容档位（`off` / `alias`）。
+     * krkrz 的 OGLDrawDevice 兼容档位（`off` / `ogl` / `alias`）。
      * 见 [OGLDRAWDEVICE_COMPAT_MODES]。
      */
     private const val KEY_OGLDRAWDEVICE_COMPAT = "engine.ogldrawdevice_compat"
 
-    /** 游戏兼容档（`auto` / `kirikiri2-classic` / `krkrz-gpu` / `krkrz-kag` / `krkrz-ogl`）。 */
+    /** 游戏兼容档（`auto` / `kirikiri2-classic` / `krkrz-gpu` / `krkrz-ogl` / `aetherkiri`）。 */
     private const val KEY_GAME_COMPAT_PROFILE = "engine.game_compat_profile"
 
     /** 全局默认运行模式（兼容层 + 渲染器的固定组合），见 [RunMode]。 */
@@ -182,16 +182,17 @@ object AppPrefs {
      *  - `off`  ：不提供（默认，保持既有行为）
      *  - `ogl`  ：只挂 `Window.OGLDrawDevice`
      *  - `alias`：挂 `Window.OGLDrawDevice` + `Window.GLESAdaptor`
-     *  - `kag`  ：在 `alias` 之上再接管 `KAGWindow_createDrawDevice`
      *
      * 各档必须逐游戏试：`Window.OGLDrawDevice` 是闸门（挂上才会加载
      * `GPULayer.tjs` / `GPUAffineLayer.tjs`）；`Window.GLESAdaptor` 会把一部分游戏
-     * 会切进 motionplayer 的 `captureCanvas` 路径而 UI 出问题（用 `ogl` 避开）；
-     * `kag` 对 KAG 系作品正常，但会让另一类 krkrz 作品把主机 FBO 弄成 INCOMPLETE、连回想页都黑。
+     * 会切进 motionplayer 的 `captureCanvas` 路径而 UI 出问题（用 `ogl` 避开）。
+     *
+     * KAGWindow 绘制设备接管（旧 `kag` 档）已改由 **AetherKiri 兼容层**负责，
+     * 不再是本选项的取值。
      *
      * 引擎在插件注册时读一次，所以"下次开游戏生效"。
      */
-    val OGLDRAWDEVICE_COMPAT_MODES = listOf("off", "ogl", "alias", "kag")
+    val OGLDRAWDEVICE_COMPAT_MODES = listOf("off", "ogl", "alias")
 
     fun oglDrawDeviceCompat(context: Context): String {
         val stored = prefs(context).getString(KEY_OGLDRAWDEVICE_COMPAT, null)
@@ -209,14 +210,14 @@ object AppPrefs {
      * 引擎按**血脉标记**自动判档（只看游戏目录里有没有 `krkrgles.dll` /
      * `krkrlive2d.dll` / `motionplayer*.dll`，**不看游戏名字**）：
      *   - 带 krkrgles / Live2D → `krkrz-gpu`（GPU 层闸门 + GLESAdaptor）
-     *   - 带 motionplayer     → `krkrz-kag`（窗口绘制设备工厂走 KAGWindow）
+     *   - 带 motionplayer     → `aetherkiri`（激活 AetherKiri 层，接管 KAGWindow）
      *   - 其余                → `kirikiri2-classic`
      *
      * 取 `auto` 之外的具名档就是直接指定。无论哪种，只要 [oglDrawDeviceCompat]
      * 被显式设置过，引擎以显式值为准（档只在没显式设置时决定它）。
      */
     val GAME_COMPAT_PROFILES =
-        listOf("auto", "kirikiri2-classic", "krkrz-gpu", "krkrz-kag", "krkrz-ogl")
+        listOf("auto", "kirikiri2-classic", "krkrz-gpu", "krkrz-ogl", "aetherkiri")
 
     fun gameCompatProfile(context: Context): String {
         val stored = prefs(context).getString(KEY_GAME_COMPAT_PROFILE, null)

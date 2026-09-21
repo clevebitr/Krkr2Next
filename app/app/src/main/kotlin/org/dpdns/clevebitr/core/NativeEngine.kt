@@ -83,7 +83,7 @@ object NativeEngine {
     external fun engineGetRendererInfo(handle: Long, buffer: ByteArray): Int
 
     /**
-     * 当前生效的游戏兼容档（`<profile> <mode>`，如 `krkrz-kag kag`）写进 [buffer]，
+     * 当前生效的游戏兼容档（`<profile> <mode>`，如 `aetherkiri alias`）写进 [buffer]，
      * @return 写入字节数；失败返回 -1。**不需要 handle**，任意线程可调。
      */
     external fun engineGetCompatProfile(buffer: ByteArray): Int

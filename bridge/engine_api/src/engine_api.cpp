@@ -243,15 +243,14 @@ namespace {
          ENGINE_OGLDRAWDEVICE_COMPAT_OFF},
         {ENGINE_GAME_COMPAT_PROFILE_KRKRZ_GPU, 1,
          ENGINE_OGLDRAWDEVICE_COMPAT_ALIAS},
-        {ENGINE_GAME_COMPAT_PROFILE_KRKRZ_KAG, 1,
-         ENGINE_OGLDRAWDEVICE_COMPAT_KAG},
         {ENGINE_GAME_COMPAT_PROFILE_KRKRZ_OGL, 1,
          ENGINE_OGLDRAWDEVICE_COMPAT_OGL},
         // AetherKiri 兼容层：唯一会切换**兼容层**（而不只是渲染选项）的档。
-        // ogldrawdevice_compat 取 kag —— AetherKiri 的 KAGWindow 接管是无条件行为，
-        // 在移动端对应既有的 kag 档；壳若显式传了 ogldrawdevice_compat，仍以显式值为准。
+        // ogldrawdevice_compat 取 alias —— 只打开 GL 设备闸门；KAGWindow 接管 + 别名
+        // 扇出由激活的 AetherKiri 层在 krkrgles post-regist 完成（旧 `kag` 档的能力
+        // 已归入该层）。壳若显式传了 ogldrawdevice_compat，仍以显式值为准。
         {ENGINE_GAME_COMPAT_PROFILE_AETHERKIRI, 1,
-         ENGINE_OGLDRAWDEVICE_COMPAT_KAG},
+         ENGINE_OGLDRAWDEVICE_COMPAT_ALIAS},
     };
 
     std::mutex g_compat_mutex;
@@ -279,18 +278,19 @@ namespace {
     }
 
     // 血统标记 → 档。顺序即优先级：带 krkrgles/Live2D 的必是 krkrz GPU 层系；
-    // 带 E-mote(motionplayer) 的走 KAG 窗口绘制设备工厂；其余按老 KiriKiri2 处理。
+    // 带 E-mote(motionplayer) 的走 AetherKiri 层（KAGWindow 接管已归该层）；
+    // 其余按老 KiriKiri2 处理。
     const char *DetectCompatProfileByMarkers(const std::string &root) {
         static const char *kGpuMarkers[] = { "krkrgles.dll", "krkrlive2d.dll" };
-        static const char *kKagMarkers[] = { "motionplayer.dll",
-                                            "motionplayer_nod3d.dll" };
+        static const char *kEmoteMarkers[] = { "motionplayer.dll",
+                                               "motionplayer_nod3d.dll" };
         for(const char *m : kGpuMarkers) {
             if(CompatFileExists(root + "/plugin/" + m))
                 return ENGINE_GAME_COMPAT_PROFILE_KRKRZ_GPU;
         }
-        for(const char *m : kKagMarkers) {
+        for(const char *m : kEmoteMarkers) {
             if(CompatFileExists(root + "/plugin/" + m))
-                return ENGINE_GAME_COMPAT_PROFILE_KRKRZ_KAG;
+                return ENGINE_GAME_COMPAT_PROFILE_AETHERKIRI;
         }
         return ENGINE_GAME_COMPAT_PROFILE_KIRIKIRI2;
     }
@@ -306,8 +306,8 @@ namespace {
         // 致命之处在于 `TVPSetCommandLine` 是**先写先赢**（同名的后一条不生效；
         // 真机日志里那句 "earlier item has more priority" 就是它）：等 game_root
         // 到了再写 `kag`，插件读到的仍然是那个更早的 `off`。真机症状正是如此——
-        // 兼容档日志明明判成 `krkrz-kag v1 -> ogldrawdevice_compat=kag (auto)`，
-        // 却完全没有 `krkrgles: ogldrawdevice_compat=kag 已启用` 那一行，于是
+        // 兼容档日志明明判成 `krkrz-* v1 -> ogldrawdevice_compat=… (auto)`，
+        // 却完全没有 `krkrgles: ogldrawdevice_compat=… 已启用` 那一行，于是
         // GPU 闸门从未打开、千恋万花(默认 auto 档)黑屏进不去；而 G1 恰好被判成
         // classic/off，掩盖了这个 bug。
         //
@@ -349,20 +349,17 @@ namespace {
         g_compat_resolved_name = prof->name;
         g_compat_resolved_mode = prof->ogldrawdevice;
 
-        // 兼容层激活：只有显式具名档能切层（`aetherkiri`）；其余档（含 `auto` 判档到
-        // krkrz-*）一律保持缺省的旧版 krkr2 层 —— AetherKiri 层是新增代码路径，必须按
-        // 游戏显式开启。
-        //
-        // 现状：这里只登记"当前是哪一层"（并给后续迁移提供策略取值入口），IO/脚本/
-        // 插件注册的按层分派属于 M1.2–M1.6；未接通前不影响运行时行为。
-        if(g_compat_request != ENGINE_GAME_COMPAT_PROFILE_AUTO) {
-            krkr::compat::SetActiveLayerByName(prof->name);
-        } else {
-            krkr::compat::SetActiveLayer(krkr::compat::LayerId::Krkr2Classic);
-        }
+        // 兼容层激活：按解析出的档切换。`aetherkiri` 激活 AetherKiri 层，其余档
+        // （classic / krkrz-gpu / krkrz-ogl）一律回缺省的旧版 krkr2 层。`auto` 也走
+        // 同一条路径：判到 motionplayer 系（→ aetherkiri）时同样激活该层，保证
+        // E-mote 游戏仍拿到 KAGWindow 接管。
+        krkr::compat::SetActiveLayer(
+            std::string(prof->name) == ENGINE_GAME_COMPAT_PROFILE_AETHERKIRI
+                ? krkr::compat::LayerId::AetherKiri
+                : krkr::compat::LayerId::Krkr2Classic);
         // 幂等：profile 与 game_root 是分两条选项下发的，第二条到达时会把同一份
         // 结论再解析一遍。真机日志里因此出现过**逐字重复**的两行
-        // "compat profile: krkrz-kag v1 -> ..."。这里只对**日志**去重。
+        // "compat profile: krkrz-* v1 -> ..."。这里只对**日志**去重。
         //
         // ⚠️ 绝不能因此跳过下面的 TVPSetCommandLine：该选项是"先写先赢"，而且
         // 这些静态变量在同一进程的多次开游戏之间**不会重置**（跨 engine_destroy）。
@@ -2520,8 +2517,7 @@ engine_result_t engine_set_option(engine_handle_t handle,
         const std::string mode(option->value_utf8);
         const bool known = mode == ENGINE_OGLDRAWDEVICE_COMPAT_OFF ||
                            mode == ENGINE_OGLDRAWDEVICE_COMPAT_OGL ||
-                           mode == ENGINE_OGLDRAWDEVICE_COMPAT_ALIAS ||
-                           mode == ENGINE_OGLDRAWDEVICE_COMPAT_KAG;
+                           mode == ENGINE_OGLDRAWDEVICE_COMPAT_ALIAS;
         {
             std::lock_guard<std::mutex> lock(g_compat_mutex);
             g_ogldrawdevice_explicit = true;

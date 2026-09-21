@@ -39,7 +39,6 @@
  *  - `off`  ：不提供（默认，保持既有行为）
  *  - `ogl`  ：只挂 `Window.OGLDrawDevice`
  *  - `alias`：挂 `Window.OGLDrawDevice` + `Window.GLESAdaptor`
- *  - `kag`  ：在 `alias` 之上再接管 `KAGWindow_createDrawDevice`
  *
  * 各档作用不同，**必须逐游戏试**：
  *  - `Window.OGLDrawDevice` 是闸门：游戏 Initialize.tjs 探测到它才会加载
@@ -47,9 +46,10 @@
  *  - `Window.GLESAdaptor` 会改变部分游戏行为：千恋万花在 `alias` 档下被切进
  *    motionplayer 的 `captureCanvas` 路径，而 `Player::draw` 从此让路、UI 图全靠
  *    那条交付——实测不完整、UI 出问题。`ogl` 就是给这种游戏的。
- *  - `kag` 解决窗口绘制设备工厂：**千恋万花**在此档下立绘与背景动态正常；
- *    但对 G2（nainiuniu5krkr）会把主机 FBO 弄成 `INCOMPLETE 0x8CD6`（53 次），
- *    画面直接采不到（连回想页都黑），所以不要默认开。
+ *
+ * KAGWindow 绘制设备工厂接管（`KAGWindow_createDrawDevice`）**不再属于本选项**：
+ * 旧的 `kag` 取值已删除，该行为归 **AetherKiri 兼容层**，激活该层时由 krkrgles 在
+ * post-regist 一并安装（见 cpp/core/compat/CompatLayer.h、cpp/plugins/krkrgles.cpp）。
  *
  * 由 krkrgles 插件在注册完成时（post-regist）读一次，所以"下次开游戏生效"。
  */
@@ -58,7 +58,6 @@
 #define ENGINE_OGLDRAWDEVICE_COMPAT_OFF "off"
 #define ENGINE_OGLDRAWDEVICE_COMPAT_OGL "ogl"
 #define ENGINE_OGLDRAWDEVICE_COMPAT_ALIAS "alias"
-#define ENGINE_OGLDRAWDEVICE_COMPAT_KAG "kag"
 
 /**
  * 游戏兼容档（compat profile）—— 两条血脉的差异收敛点。
@@ -70,14 +69,16 @@
  *
  *   kirikiri2-classic  v1  → ogldrawdevice_compat=off
  *   krkrz-gpu          v1  → ogldrawdevice_compat=alias
- *   krkrz-kag          v1  → ogldrawdevice_compat=kag
  *   krkrz-ogl          v1  → ogldrawdevice_compat=ogl
- *   aetherkiri         v1  → ogldrawdevice_compat=kag，**并激活 AetherKiri 兼容层**
+ *   aetherkiri         v1  → ogldrawdevice_compat=alias，**并激活 AetherKiri 兼容层**
  *
- * `aetherkiri` 是唯一会**切换兼容层**的档（其余档只影响渲染侧选项，兼容层仍是缺省的
- * 旧版 krkr2 层）。层的口径与逐条差异见 compat/README.md，注册表实现在
- * `cpp/core/compat/CompatLayer.cpp`。缺省层 = `krkr2-classic`：AetherKiri 层是新增
- * 代码路径，必须按游戏显式开启（`auto` 判档暂不切换层）。
+ * `aetherkiri` 是唯一会**切换兼容层**的具名档（其余具名档只影响渲染侧选项，兼容层仍是
+ * 缺省的旧版 krkr2 层；`auto` 判到 `aetherkiri` 时也切层，见下）。层的口径与逐条差异见
+ * compat/README.md，注册表实现在 `cpp/core/compat/CompatLayer.cpp`。缺省层 = `krkr2-classic`。
+ *
+ * 旧的 `krkrz-kag` 档与 `ogldrawdevice_compat=kag` 已删除：它们对应的
+ * `KAGWindow_createDrawDevice` 接管能力归 AetherKiri 层，由激活层在 krkrgles
+ * post-regist 安装（见 cpp/plugins/krkrgles.cpp）。
  *
  * 档只映射到既有选项，插件与核心照旧只认选项。档的口径变化必须同时 +1 版本号，
  * 这样真机日志（`compat profile: <name> v<n> -> ...`）能区分"哪一版口径"。
@@ -86,9 +87,12 @@
  *   - `auto`：按**血脉标记**自动判定（不看游戏名字），需要
  *     [ENGINE_OPTION_GAME_COMPAT_GAME_ROOT]：
  *       plugin/krkrgles.dll | krkrlive2d.dll → krkrz-gpu
- *       plugin/motionplayer*.dll             → krkrz-kag
+ *       plugin/motionplayer*.dll             → aetherkiri（E-mote 系需要 KAGWindow 接管）
  *       其它                                  → kirikiri2-classic
  *   - 具名档：直接指定上面的名字。
+ *
+ * `auto` 也会切层：判到 `aetherkiri` 时激活 AetherKiri 层，保证 E-mote 系游戏仍拿到
+ * KAGWindow 接管。
  *
  * ⚠️ 时机：krkrgles 插件是在**注册完成（post-regist，engine_create 期）**读
  * `ogldrawdevice_compat` 的，所以壳必须在 engine_create 之前把本选项与
@@ -103,15 +107,15 @@
 #define ENGINE_GAME_COMPAT_PROFILE_AUTO "auto"
 #define ENGINE_GAME_COMPAT_PROFILE_KIRIKIRI2 "kirikiri2-classic"
 #define ENGINE_GAME_COMPAT_PROFILE_KRKRZ_GPU "krkrz-gpu"
-#define ENGINE_GAME_COMPAT_PROFILE_KRKRZ_KAG "krkrz-kag"
 #define ENGINE_GAME_COMPAT_PROFILE_KRKRZ_OGL "krkrz-ogl"
 
 /**
  * AetherKiri 兼容层档（必须显式开启；见上面的兼容档说明）。
  *
- * 与其它档的区别：它会调用 `krkr::compat::SetActiveLayerByName("aetherkiri")`，把整层
- * 行为（IO/加载策略、脚本前奏、插件注册集合）切到 AetherKiri 口径；其余档一律保持
- * 缺省的旧版 krkr2 层。层还没接通的部分不产生运行时影响（见 compat/README.md）。
+ * 与其它档的区别：它会把整层行为（IO/加载策略、脚本前奏、插件注册集合）切到
+ * AetherKiri 口径，并让 krkrgles 安装 KAGWindow 绘制设备接管（旧 `kag` 档的能力）；
+ * 其余档一律保持缺省的旧版 krkr2 层。层还没接通的部分不产生运行时影响
+ * （见 compat/README.md）。
  */
 #define ENGINE_GAME_COMPAT_PROFILE_AETHERKIRI "aetherkiri"
 

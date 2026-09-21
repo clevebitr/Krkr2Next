@@ -17,9 +17,9 @@ data class EngineOverride(
      * 原始值是它的展开，写盘时一起写，读盘时优先信 [runMode]。
      */
     val runMode: String? = null,
-    /** 游戏兼容档（`auto` / `kirikiri2-classic` / `krkrz-gpu` / `krkrz-kag` / `krkrz-ogl`）。 */
+    /** 游戏兼容档（`auto` / `kirikiri2-classic` / `krkrz-gpu` / `krkrz-ogl` / `aetherkiri`）。 */
     val compatProfile: String? = null,
-    /** krkrz OGLDrawDevice 兼容档（`off` / `ogl` / `alias` / `kag`）。 */
+    /** krkrz OGLDrawDevice 兼容档（`off` / `ogl` / `alias`）。 */
     val oglDrawDeviceCompat: String? = null,
     /** 帧率上限，0 = 不限速。 */
     val fpsLimit: Int? = null,

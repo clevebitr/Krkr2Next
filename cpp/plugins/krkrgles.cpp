@@ -2,6 +2,7 @@
 #include "ncbind.hpp"
 #include "ScriptMgnIntf.h"
 #include "SysInitIntf.h"
+#include "compat/CompatLayer.h"
 #include "EventIntf.h"
 #include "LayerImpl.h"
 #include "BitmapIntf.h"
@@ -3195,7 +3196,10 @@ namespace { // reopen anonymous namespace
 //   off   —— 什么都不做（默认，保持原行为）
 //   ogl   —— 只挂 Window.OGLDrawDevice
 //   alias —— 挂 Window.OGLDrawDevice + Window.GLESAdaptor
-//   kag   —— 在 alias 之上再接管 KAGWindow_createDrawDevice
+//
+// AetherKiri 兼容层额外接管 KAGWindow 绘制设备工厂（`KAGWindow_createDrawDevice`）：
+// 这一段以前是 `ogldrawdevice_compat=kag` 档，现该档已删除，能力归 AetherKiri 层；
+// 激活层时由 KrkrGlesPostRegist 安装（不再看 ogldrawdevice_compat 取值）。
 //
 // 各档的实测作用：
 //
@@ -3207,13 +3211,13 @@ namespace { // reopen anonymous namespace
 //     `drawOnto` 107 次、`drawPSBImages: captureCanvas active, skip draw` 104 次），
 //     而 `Player::draw` 从此让路、UI 图全压在 `drawOnto` 这一条交付上——实测那条交付
 //     不完整，UI 就出问题。`ogl` 档就是给这种"只要闸门、不要 canvas 捕获"的游戏用的。
-//   * `kag` 解决"窗口绘制设备工厂"：`KAGWindow_createDrawDevice` 由游戏自己的
+//   * KAGWindow 接管解决"窗口绘制设备工厂"：`KAGWindow_createDrawDevice` 由游戏自己的
 //     `system\mainwindow.tjs` 定义、在插件注册之后才 exec，所以覆盖必须**延迟**到
-//     脚本加载完（用一次性连续事件钩子，装完立即摘钩）。
-//     实测收益：**千恋万花**在 kag 档下能正常加载立绘与背景动态。
+//     脚本加载完（用连续事件钩子每帧重试，装完立即摘钩）。
+//     实测收益：**千恋万花**在 AetherKiri 层下能正常加载立绘与背景动态。
 //
 // ⚠️ 各档都不是万能的，**必须逐游戏试**：
-//   - `kag` 对 G2（nainiuniu5krkr）有害：主机侧 `HostWindowLayer::SourceSample`
+//   - 接管（旧 kag）对 G2（nainiuniu5krkr）有害：主机侧 `HostWindowLayer::SourceSample`
 //     报 53 次 `FBO incomplete 0x8CD6`（GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT），
 //     画面直接采不到（连回想页都黑）；draw 从 20/layers 143 变成 345/layers 465。
 //   - `alias` 对千恋万花有害（见上）。
@@ -3225,7 +3229,6 @@ namespace { // reopen anonymous namespace
 static const tjs_char *KrkrOglCompatOption = TJS_W("ogldrawdevice_compat");
 static const tjs_char *KrkrOglCompatOgl = TJS_W("ogl");
 static const tjs_char *KrkrOglCompatAlias = TJS_W("alias");
-static const tjs_char *KrkrOglCompatKag = TJS_W("kag");
 
 // 别名的目标对象名。
 //
@@ -3303,7 +3306,7 @@ static bool KrkrOglGlobalExists(const tjs_char *name) {
     return exists;
 }
 
-static const tjs_char *KrkrOglKagScript() {
+static const tjs_char *KrkrOglAetherKiriScript() {
     return TJS_W("function KAGWindow_createDrawDevice() {\n")
         TJS_W("    var dd = null;\n")
         TJS_W("    try { dd = new global.OGLDrawDevice(); } catch(e) { try {"
@@ -3335,9 +3338,9 @@ static const tjs_char *KrkrOglKagScript() {
 //
 // 上限按"约 10 秒 @60fps"取（与 AetherKiri 的 600 tick 重试同量级）：真机实测 KAGWindow
 // 与脚本加载完成要等到插件注册后 ~9.5 秒，上限不能太小。
-static constexpr int kKrkrOglKagInstallMaxTicks = 600;
+static constexpr int kKrkrOglAetherKiriInstallMaxTicks = 600;
 
-class KrkrOglKagInstallHook : public tTVPContinuousEventCallbackIntf {
+class KrkrOglAetherKiriInstallHook : public tTVPContinuousEventCallbackIntf {
 public:
     void OnContinuousCallback(tjs_uint64 /*tick*/) override {
         ++ticks_;
@@ -3349,7 +3352,7 @@ public:
 
         if(kagReady && !scriptInstalled_) {
             try {
-                TVPExecuteExpression(ttstr(KrkrOglKagScript()));
+                TVPExecuteExpression(ttstr(KrkrOglAetherKiriScript()));
                 scriptInstalled_ = true;
             } catch(...) {
                 scriptInstalled_ = false; // 下一帧再试
@@ -3358,14 +3361,14 @@ public:
 
         const bool aliasesDone = landed >= kKrkrOglAliasTargetCount;
         if((scriptInstalled_ && aliasesDone) ||
-           ticks_ >= kKrkrOglKagInstallMaxTicks) {
+           ticks_ >= kKrkrOglAetherKiriInstallMaxTicks) {
             TVPRemoveContinuousEventHook(this);
             const auto waited_ms =
                 std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - registeredAt_)
                     .count();
             spdlog::info(
-                "krkrgles: kag 档接管完成（KAGWindow_createDrawDevice={}、"
+                "krkrgles: AetherKiri 层接管完成（KAGWindow_createDrawDevice={}、"
                 "别名 {}/{}、耗时 {} ms / {} 帧；GL 设备进 gpuDrawDevice，"
                 "真设备仍是 BasicDrawDevice）",
                 scriptInstalled_ ? "已装" : "未装", landed,
@@ -3395,55 +3398,55 @@ private:
     bool scriptInstalled_ = false;
 };
 
-static KrkrOglKagInstallHook g_krkrOglKagInstallHook;
+static KrkrOglAetherKiriInstallHook g_krkrOglAetherKiriInstallHook;
 
 static void KrkrGlesPreRegist() {}
 
 static void KrkrGlesPostRegist() {
+    // AetherKiri 兼容层：接管 KAGWindow 绘制设备工厂（+ 别名扇出）。
+    // 这段以前是 `ogldrawdevice_compat=kag` 档，现归 AetherKiri 层职责。
+    if(krkr::compat::ActiveLayer() == krkr::compat::LayerId::AetherKiri) {
+        // Window.OGLDrawDevice 是闸门，GLESAdaptor 是 canvas 交付别名；
+        // KAGWindow_createDrawDevice 延迟到脚本加载完再装（每帧重试）。
+        KrkrOglAliasFanOut(TJS_W("OGLDrawDevice"));
+        KrkrOglAliasFanOut(TJS_W("GLESAdaptor"));
+        g_krkrOglAetherKiriInstallHook.MarkRegistered(true);
+        if(!KrkrOglGlobalExists(TJS_W("KAGWindow"))) {
+            TVPAddContinuousEventHook(&g_krkrOglAetherKiriInstallHook);
+            spdlog::info("krkrgles: AetherKiri 层就绪，KAGWindow_createDrawDevice 与"
+                         "别名将在 KAGWindow 构造完成后接管（每帧重试，上限 {} 帧）",
+                         kKrkrOglAetherKiriInstallMaxTicks);
+        } else {
+            // KAGWindow 已经在了（脚本比插件注册更早，少见）：直接装，不进重试循环。
+            g_krkrOglAetherKiriInstallHook.OnContinuousCallback(0);
+        }
+        return;
+    }
+
+    // 其余：按 ogldrawdevice_compat 选项（off/ogl/alias）。
     tTJSVariant modeVal;
     if(!TVPGetCommandLine(KrkrOglCompatOption, &modeVal))
         return;
     const ttstr mode(modeVal);
     const ttstr kOgl(KrkrOglCompatOgl);
     const ttstr kAlias(KrkrOglCompatAlias);
-    const ttstr kKag(KrkrOglCompatKag);
-    if(mode != kOgl && mode != kAlias && mode != kKag)
+    if(mode != kOgl && mode != kAlias)
         return; // off 或未知取值：保持原行为
 
     // Window.OGLDrawDevice 是"闸门"：所有非 off 档都挂，游戏才会去加载
     // GPULayer.tjs / GPUAffineLayer.tjs（真机实测：会话 11:22 首次出现在
     // StorageExec 里）。
     KrkrOglAliasFanOut(TJS_W("OGLDrawDevice"));
-    // Window.GLESAdaptor 只给 alias / kag。实测它会把一部分游戏（千恋万花）切进
+    // Window.GLESAdaptor 只给 alias。实测它会把一部分游戏（千恋万花）切进
     // motionplayer 的 captureCanvas 路径，而那条交付目前不完整 ⇒ `ogl` 档专门
     // 留给"只要闸门、不要 canvas 捕获"的游戏。
     const bool alsoGlesAdaptor = (mode != kOgl);
     if(alsoGlesAdaptor)
         KrkrOglAliasFanOut(TJS_W("GLESAdaptor"));
     spdlog::info("krkrgles: ogldrawdevice_compat={} 已启用（挂了 {}）",
-                 mode == kOgl ? "ogl" : (mode == kKag ? "kag" : "alias"),
+                 mode == kOgl ? "ogl" : "alias",
                  mode == kOgl ? "OGLDrawDevice"
                               : "OGLDrawDevice / GLESAdaptor");
-
-    // kag 档：额外接管窗口的绘制设备工厂（KAGWindow_createDrawDevice）。
-    //
-    // 为什么必须延迟 + **每帧重试**：注册发生在引擎启动早期，那时 KAGWindow 还不存在
-    // （真机实测 KAGWindow 构造 + embFontLoader/Override 脚本加载要等到注册后 ~9.5 秒）。
-    // 老实现是"首帧跑一次脚本、失败就被 try/catch 静静吞掉"，于是加载晚于首帧的游戏会
-    // 悄悄退回原生 BasicDrawDevice（表现为"开了 kag 档却没走 GL"，日志却写着已接管）。
-    // 现在改成每帧重试，直到 KAGWindow 出现且别名全部落位，或超过上限（约 10 秒 @60fps）。
-    if(mode == kKag) {
-        g_krkrOglKagInstallHook.MarkRegistered(alsoGlesAdaptor);
-        if(!KrkrOglGlobalExists(TJS_W("KAGWindow"))) {
-            TVPAddContinuousEventHook(&g_krkrOglKagInstallHook);
-            spdlog::info("krkrgles: kag 档就绪，KAGWindow_createDrawDevice 与别名将"
-                         "在 KAGWindow 构造完成后接管（每帧重试，上限 {} 帧）",
-                         kKrkrOglKagInstallMaxTicks);
-        } else {
-            // KAGWindow 已经在了（脚本比插件注册更早，少见）：直接装，不进重试循环。
-            g_krkrOglKagInstallHook.OnContinuousCallback(0);
-        }
-    }
 }
 NCB_PRE_REGIST_CALLBACK(KrkrGlesPreRegist);
 NCB_POST_REGIST_CALLBACK(KrkrGlesPostRegist);
@@ -3464,8 +3467,8 @@ static void KrkrGlesPreUnregist() {
     }
     // Kag 接管钩子：重启后旧钩子若还在队列里，会对已销毁的 world 执行脚本/写别名。
     // 这里摘钩并复位状态（**不**去 DeleteMember：world 正在销毁，碰脚本对象只会更危险）。
-    TVPRemoveContinuousEventHook(&g_krkrOglKagInstallHook);
-    g_krkrOglKagInstallHook.Reset();
+    TVPRemoveContinuousEventHook(&g_krkrOglAetherKiriInstallHook);
+    g_krkrOglAetherKiriInstallHook.Reset();
     g_captureActive = false;
     g_captureCount = 0;
     g_capturePerSec = 0;

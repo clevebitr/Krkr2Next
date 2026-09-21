@@ -37,7 +37,7 @@ enum class OverlayField(val key: String, val label: String) {
     /** 渲染器信息串（`engine_get_renderer_info`），原样显示不解析。 */
     RENDERER("renderer", "渲染器"),
 
-    /** 当前生效的游戏兼容档（`engine_get_compat_profile`），如 `krkrz-kag kag`。 */
+    /** 当前生效的游戏兼容档（`engine_get_compat_profile`），如 `aetherkiri alias`。 */
     COMPAT("compat", "兼容档"),
 
     /** 壳侧统计的 tick 失败次数；非 0 才值得看，但允许常显。 */

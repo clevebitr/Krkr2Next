@@ -500,7 +500,7 @@ Java_org_dpdns_clevebitr_core_NativeEngine_engineGetMemoryStats(
     return kFieldCount;
 }
 
-// 当前生效的兼容档，写成 `<profile> <mode>`（如 `krkrz-kag kag`），供性能叠加层
+// 当前生效的兼容档，写成 `<profile> <mode>`（如 `aetherkiri alias`），供性能叠加层
 // 显示"这个游戏按哪条血脉跑"。引擎侧不校验调用线程，所以壳按 4Hz 从任意线程轮询；
 // 还没定档时写入长度为 0。
 extern "C" JNIEXPORT jint JNICALL

@@ -23,10 +23,13 @@ krkr2next.json（每游戏 GameConfig.EngineOverride.runMode）
 
 - **一个进程只激活一层。** 同一个 Windows 插件名被两层各自模拟时，只有激活层的注册生效；
   非激活层的模块注册与钩子一律不跑（否则同名 TJS 类/全局会被注册两次）。
-- 缺省必须是 `krkr2-classic`：AetherKiri 层是新增代码路径，未真机回归前不能默认生效。
-  现有的 `auto` 判档（按游戏目录标记判 `krkrz-gpu` / `krkrz-kag` / `krkrz-ogl`）继续只决定
-  **渲染侧**选项（`ogldrawdevice_compat`），**暂不**据此切换兼容层；等 AetherKiri 层回归完
-  成后再把 `auto` 扩到层选择。
+- 缺省层是 `krkr2-classic`。`auto` 判档规则（按游戏目录标记，不看游戏名）：
+  `krkrgles.dll`/`krkrlive2d.dll` → `krkrz-gpu`（仍属旧层，只决定渲染闸门
+  `ogldrawdevice_compat=alias`）；`motionplayer*.dll` → `aetherkiri`（激活 AetherKiri 层）；
+  其余 → `kirikiri2-classic`。
+- 旧的 `kag` 渲染档（`ogldrawdevice_compat=kag`）与 `krkrz-kag` 兼容档已**删除**：
+  它做的 `KAGWindow_createDrawDevice` 接管归 **AetherKiri 层**，激活层时由
+  `cpp/plugins/krkrgles.cpp` 在 post-regist 安装（见 `compat/recon/render-diff.md`）。
 - 层的差异必须收敛成"具名 + 带版本号"的东西（沿用 `CompatProfile` 的做法），真机日志能看出
   用的是哪一层、哪一版口径。
 
@@ -46,6 +49,7 @@ krkr2next.json（每游戏 GameConfig.EngineOverride.runMode）
 | `layeredwindow.dll` | aetherkiri | 同上（`layeredwindow()` 返回 true） |
 | `kztouch.dll` | aetherkiri | `cpp/plugins/compat/aetherkiri/legacy_system_misc.cpp`（`KZTouch` 状态桩） |
 | `dmmcloud.dll` | aetherkiri | 同上（`DMMCloud` 桩：available=false、购买失败） |
+| `registory.dll` / `stdio.dll` / `javascript.dll` / `messenger.dll` / `msgreceiver.dll` / `tasktray.dll` / `adjustMonitor.dll` / `systemEx.dll` | aetherkiri | `cpp/plugins/compat/aetherkiri/legacy_system_env.cpp`（纯桩子集；不含 process/shellExecute/httprequest，见 P6） |
 
 新增层专属模块时：写实现 → 在文件里 `RegisterModuleOwner(name, LayerId::Xxx)` → 登记进
 `compat/upstream/aetherkiri_ports.json`（片段移植用 `partial-extract` 类别）→ 跑
@@ -167,6 +171,10 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 
 
 > 证据见 `compat/recon/io-loading-diff.md`（IO/加载）与 `compat/recon/plugin-compat-diff.md`（插件层）。
+> 兼容层与**渲染层**的耦合、以及 `cpp/core/visual/ogl/` 相对上游 AetherKiri 的功能差异见
+> `compat/recon/render-diff.md`（结论：AetherKiri 层映射 `ogldrawdevice_compat=alias`，
+> 并由该层负责 KAGWindow 接管；旧 `kag` 档已删除。该层还缺 AetherKiri 的伴生脚本替换与
+> 完整 drawDevice 别名，见 render-diff §3）。
 > 列 = 项 / 我们的行为 / AetherKiri 行为 / 影响面 / 建议 / 状态（待裁决 / 照搬 / 保留 / 并存开关）。
 
 ### 5.1 IO 与加载（M1、M5）
@@ -203,9 +211,9 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 | A5 | `kag.*` 六个默认值 | 用 `kag_runtime_defaults.tjs` 注入（等价） | 内核回退返回 0 | 保持我们的实现 | 待裁决 |
 | B1 | GPU 伴生脚本注入方式 | 引擎选项 `ogldrawdevice_compat` 门控 + 首帧一次性钩子 | `TVPRegisterStorageResolver` + 惰性打开（打开 11 个 GPU 存储名时注入，无条件） | 保留我们的门控；把"惰性注入"作为 AetherKiri 层行为可选引入 | 待做（保留门控；惰性注入可按需引入） |
 | B2 | `KAGWindow`/`kag` 别名扇出 + 600-tick 重试 + 卸载清理 | 只写 `Window.<name>`；无重试；无 unregist 清理 | 三目标扇出 + prototype + 重试 + `PreUnregist` | 照搬（对 classic 层也是修"脚本晚加载就失效"） | 已实施（4 目标扇出 + 每帧重试 600 帧 + 卸载摘钩） |
-| C1 | `taglist` 标签元数据 + `copyTag`（约 140 行） | 没有 | 有（KAGParserEx 文档化特性） | 移植（自包含、风险最低） | 待做（依赖 `taglist` helper 块 ~130 行 + `CopyTag`/`CloneTag` ~110 行 + 调用点；下一轮起做） |
+| C1 | `taglist` 标签元数据 + `copyTag`（约 140 行） | 没有 | 有（KAGParserEx 文档化特性） | 移植（自包含、风险最低） | 已实施（两层；helper 块 + `[macro]`/`[tag *]` 重同步 + `CopyTag`/`CloneTag` + native 注册） |
 | C2 | 明文行翻译（`TVPTransformText`/`PrefetchText`） | 没有 | 有（依赖 REF 独有 `utils/TextTransform.h`） | 暂不移植（本仓库无翻译功能） | 待裁决 |
-| C3 | `GetNextTag` 文本段聚合 + `TextTagQueue` | 没有（`return _GetNextTag()`） | 有（会改变 `kag.curLine/curPos` 与存档位置语义） | **按层开关**：AetherKiri 层启用，classic 层保持（存档兼容） | 待做（只给 AetherKiri 层） |
+| C3 | `GetNextTag` 文本段聚合 + `TextTagQueue` | 没有（`return _GetNextTag()`） | 有（会改变 `kag.curLine/curPos` 与存档位置语义） | **不可单独移植**：上游实现建在 C2 翻译层（`TVPTransformText`/`TVPPrefetchText`）之上；本仓库无 C2，去掉翻译后聚合只改存档位置语义、无功能收益（见 §5.4 说明）。**阻塞于 C2 是否移植** | 阻塞（依赖 C2） |
 | C4 | `.scn` 编译场景容错 + 标签解析回调（含 psbfile 侧标签收集） | 没有 | 有（成对实现） | 移植（成对，否则回调无消费者） | 已实施（两层；含 psbfile 侧标签收集，成对完成） |
 | C5 | 每帧 KAG 修复（`envclear` 环境复位、`[endtrans]` 无 trans 等待） | 没有 | 有（`EngineLoop` tick 钩子 + `ScriptMgnIntf` 实现） | 移植到 AetherKiri 层 | 待裁决 |
 | C6 | KAG 运行时补丁层（27 个文本补丁 + 11 个类包装，约 1500 行） | 没有 | 有 | **不整体照搬**：其前提是"patch.tjs 在 startup 之后"，与我们的顺序相反；按游戏逐条摘 | 待裁决 |
@@ -224,7 +232,7 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 | P1 | 注册失败回滚 | **无**（一个 registrar 抛异常会中断其后所有模块） | 逐条回滚 | 照搬（对 classic 层也是修 bug） | 已实施（逐条隔离 + 失败不写已注册表） |
 | P2 | 模块别名机制 | 无 `NCB_REGISTER_MODULE_ALIAS` | 有 | 照搬机制，用来给 `DrawDeviceD2D.dll`/`DrawDeviceD2Dm.dll` 之类建别名 | 已实施（NCB_REGISTER_MODULE_ALIAS） |
 | P3 | `k2compat_scripts.cpp`（2359 行 TJS） | **没被任何 target 编译、零调用**（死代码） | — | 先接线或先删除，二选一 | 已实施（编译进目标 + k2compat_scripts 选项门控 + 框架就绪后安装） |
-| P4 | 缺失模块（约 60 个） | — | `zlib/version/process/shellExecute/systemEx/stdio/httprequest/msdfrender/layerExSave/…` | 按"脚本真的会调"排序分批移植：先 `zlib`/`version`/`systemEx`/`stdio`/`process`，再 `layerExSave`/`msdfrender` | 待裁决 |
+| P4 | 缺失模块（约 60 个） | — | `zlib/version/process/shellExecute/systemEx/stdio/httprequest/msdfrender/layerExSave/…` | 按"脚本真的会调"排序分批移植：先 `zlib`/`version`/`systemEx`/`stdio`/`process`，再 `layerExSave`/`msdfrender` | 进行中（已移植 `zlib`/`version`/`fpslimit`/`layeredwindow`/`kztouch`/`dmmcloud`；本批 `systemEx`/`registory`/`stdio`/`javascript`/`messenger`/`msgreceiver`/`tasktray`/`adjustMonitor`，其中 `systemEx` 只取无冲突函数） |
 | P5 | 部分覆盖（`layerExSave`/`textrender` 属性形状/`menu.MenuItem`/`csvParser` 注销/`DrawDeviceD2D` 规范名） | 见 `recon/plugin-compat-diff.md §2` | — | 逐条补齐；`textrender.renderDelay/renderOver` 必须改回只读属性（否则调用方无限重试） | 部分实施（DrawDeviceD2D.dll 规范名已用别名补上；textrender/菜单等待做） |
 | P6 | 阻塞式实现（popen/curl/httpserv 无超时） | — | 有 | 移植时必须改成非阻塞或加超时；脚本线程即 EGL 线程 | 待裁决 |
 
@@ -287,7 +295,7 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 | 项 | 规模 | 阻塞 |
 |---|---|---|
 | ~~C1 `taglist` + `copyTag`~~ | **已完成**：helper 块 + `[macro]` 记录 + `PushMacroArgs` 重设 + `[tag *]` 重同步 + 合成标签 taglist + `copyTag`/`CloneTag` + native 注册 | 无 |
-| C3 `GetNextTag` 文本段聚合 | ~230 行 + 头文件成员 | 无（已裁决只给 AetherKiri 层） |
+| C3 `GetNextTag` 文本段聚合 | ~230 行 + 头文件成员 | **阻塞**：上游 `GetNextTag` 依赖 C2 的 `TVPTransformText`/`TVPPrefetchText`；C2 未移植时聚合只改 `kag.curLine/curPos` 与存档语义、无功能收益，故不能按原样落地 |
 | C5 每帧 KAG 修复（`envclear` 复位、`[endtrans]` 无 trans 等待） | ~120 行 + `EngineLoop` tick 钩子 | 依赖 C6 的部分前提（KAG 运行时对象形态） |
 | C6 KAG 运行时补丁层（27 文本补丁 + 11 类包装） | ~1500 行 | **前提是 patch.tjs 晚执行**（E1）；需按游戏逐条摘 |
 | C7 `ExtKAGParser` | ~4700 行 | 需先改 `ExtKAGParser.hpp` 保护宏、定 `paramMacros`/`copyTag` 缺失、与 `kagparserex` 空壳互斥 |
@@ -295,3 +303,9 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 | M1 最后一个策略开关（`mountSiblingsForArchiveProject`） | 小 | **等用户裁决 I3**（是否让 classic 层在档案工程直启时挂兄弟 `patch*.xp3`）；`archiveRoot` 已完成 |
 | M6 插件模拟层（约 60 个缺失模块 + 部分覆盖项） | ~3450 行（分批） | 无阻塞，按"脚本真的会调"排序分批；`compat/recon/plugin-compat-diff.md` 有清单 |
 | B1 GPU 伴生脚本惰性注入 | 中等 | 无阻塞（可选） |
+
+> **C3 为什么不能单独做**（2026-09-19 核实上游 `KAGParser.cpp:3062-3128`）：上游 `GetNextTag`
+> 把连续 `ch` 标签合并成一段、调 `TVPTransformText` 整段翻译、再按翻译结果逐字重切成新 `ch` 标签入队；
+> `PrefetchTextLookahead` 也调 `TVPPrefetchText` 预取。这两个函数属于 C2 翻译层（本仓库未移植）。
+> 若把翻译换成恒等，聚合后再出队的序列与原序列逐个相同，唯一可观察变化是 `kag.curLine/curPos`
+> 提前到文本段之后（存档/断点语义变化）——**无收益、只有风险**。因此 C3 只有在决定移植 C2 之后才有意义。

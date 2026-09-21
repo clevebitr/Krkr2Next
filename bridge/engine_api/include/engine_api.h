@@ -457,7 +457,7 @@ ENGINE_API_EXPORT engine_result_t engine_get_renderer_info(
 
 /**
  * 读回**当前生效**的游戏兼容档，写成 `<profile> <mode>`（空格分隔，例如
- * `krkrz-kag kag`），供壳把"这个游戏按哪条血脉跑"显示在性能叠加层上。
+ * `aetherkiri alias`），供壳把"这个游戏按哪条血脉跑"显示在性能叠加层上。
  *
  * 解析在 engine_set_option 里完成（见 engine_options.h 的
  * ENGINE_OPTION_GAME_COMPAT_PROFILE），所以本函数只是读结果：

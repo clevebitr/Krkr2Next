@@ -86,8 +86,8 @@ fun SettingsScreen(
     oglDrawDeviceCompat: String = "off",
     onOglDrawDeviceCompatChanged: (String) -> Unit = {},
     /**
-     * 游戏兼容档（`auto` / `kirikiri2-classic` / `krkrz-gpu` / `krkrz-kag` /
-     * `krkrz-ogl`）。`auto` 由引擎按血脉标记判档；同样**下次开游戏**生效。
+     * 游戏兼容档（`auto` / `kirikiri2-classic` / `krkrz-gpu` / `krkrz-ogl` /
+     * `aetherkiri`）。`auto` 由引擎按血脉标记判档；同样**下次开游戏**生效。
      */
     gameCompatProfile: String = "auto",
     onGameCompatProfileChanged: (String) -> Unit = {},

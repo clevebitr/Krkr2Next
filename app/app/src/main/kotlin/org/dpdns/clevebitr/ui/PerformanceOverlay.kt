@@ -216,7 +216,7 @@ private val PREVIEW_SNAPSHOT = PerfSnapshot(
     maxMs = 24.9f,
     errors = 0L,
     rendererInfo = "gles3/mali",
-    compatProfile = "krkrz-kag kag",
+    compatProfile = "aetherkiri alias",
     memory = null,
 )
 

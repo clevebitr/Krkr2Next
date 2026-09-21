@@ -16,7 +16,8 @@
 2. **壳（Kotlin/Compose）**：用户新提的九项改造**除"目录收藏 UI 打磨"外全部落地**，最近一次
    CI（`b2e9fb4`，run `35455858612`）**绿**，含 APK 产物。
 
-最新提交：`b2e9fb4`（已推送）。工作区除用户自己的 `.gitignore`/`README.md` 外干净。
+最新提交：`67c95b0`（已推送）。工作区除用户自己的 `.gitignore`/`README.md` 外干净；本轮又新增
+一批 M6 插件桩（未提交，见下）。
 
 ---
 
@@ -29,7 +30,7 @@
 | A | TJS2 内核兼容读写：未定义全局回退(34 名) + 启动名回退 + `touchImage`/`renderCount` 合成 + 8 名启动期**写**白名单 | ✅ 完成 |
 | B | KAGWindow / krkrgles 脚本别名与绘制设备接管 | 🟡 B2 完成（4 目标扇出 + 每帧重试 600 帧 + 卸载摘钩）；B1（GPU 伴生脚本惰性注入）未做 |
 | C | KAGParser / extkagparser / kagparserex 行为对齐 | 🟡 **C1 ✅、C4 ✅**；C3/C5/C6/C7 未做 |
-| D | 插件模拟层（旧 Windows 插件全量照搬，分批） | 🟡 已移 6 个 AetherKiri 层专属模块；其余约 50 个缺失模块待分批 |
+| D | 插件模拟层（旧 Windows 插件全量照搬，分批） | 🟡 已移 6 个 AetherKiri 层专属模块 + 本批 8 个（systemEx/registory/stdio/javascript/messenger/msgreceiver/tasktray/adjustMonitor）；其余约 50 个缺失模块待分批 |
 | E | 启动与资源加载顺序（startup/patch/auto-path/插件解析） | 🟡 I 系列大部分已做；`patch.tjs` 分两层（E1）未做 |
 
 架构要求（用户明确）：
@@ -39,6 +40,9 @@
   `IoPolicy.*` / `IoModuleLocator.*`），公开声明仍在 `base/StorageIntf.h` 与 `base/impl/StorageImpl.h`。
 - 兼容层按游戏选择：`krkr2next.json` 的 compat 字段 → 引擎选项 `game_compat_profile`；
   **缺省走旧版 krkr2 层**（`krkr2-classic`），AetherKiri 层显式开启（新增 `aetherkiri` 档）。
+- **架构收敛为两层**（2026-09-19）：删除 `kag` 渲染档与 `krkrz-kag` 兼容档，其 KAGWindow
+  接管能力归 AetherKiri 层（`krkrgles` post-regist 按 `ActiveLayer()==AetherKiri` 安装）；
+  `auto` 判到 `motionplayer*` 直接激活 AetherKiri 层。Live2D 仍用本仓库原生 Cubism 实现。
 - 两层共用同一 IO 组件，不重复实现。
 
 ---
@@ -91,7 +95,7 @@
 | A 块回退（全局名/启动名/renderCount/touchImage） | **只给 AetherKiri 层**（开关 `TJS::TJSSetCompatFallbacksEnabled`，缺省关） |
 | A3 启动期**写**白名单（8 名） | **两层都要**（无开关） |
 | C1 `taglist` + `copyTag` | **两层都要** |
-| C3 `GetNextTag` 文本段聚合 | **只给 AetherKiri 层**（会改 `kag.curLine/curPos` 与存档位置语义） |
+| C3 `GetNextTag` 文本段聚合 | 决定仍是"只给 AetherKiri 层"，但**上游该实现建在 C2 翻译层之上**（`TVPTransformText`/`TVPPrefetchText`），C2 未移植时无法落地（详见 `compat/README.md §5.4` 注） |
 | C4 `.scn` 容错 + 标签回调 | 两层（未注册回调时行为与移植前逐字相同） |
 | E1 `patch.tjs` 时机 | **分两层**：classic 保持 startup 之前；AetherKiri 层照搬上游（**必须连晚 patch 韧性层一起**） |
 | I2 首次读 `startup.tjs` 被原版压住 | **在 classic 层修**（已做：boost 提到 startup 之前） |
@@ -105,13 +109,13 @@
 | 项 | 规模 | 阻塞 |
 |---|---|---|
 | **I3（唯一等用户一句话）**：classic 层在档案工程直启 `.../data.xp3>` 时，是否挂兄弟 `patch*.xp3`？ | 小 | 决定 M1 最后一个策略开关 `mountSiblingsForArchiveProject` |
-| C3 `GetNextTag` 文本段聚合（只给 AetherKiri 层） | ~230 行 | 无（已裁决），需一段完整上下文 |
+| C3 `GetNextTag` 文本段聚合（只给 AetherKiri 层） | ~230 行 | **阻塞**：上游依赖 C2 `TVPTransformText`/`TVPPrefetchText`；C2 未移植时聚合无功能收益、只改存档位置语义 |
 | C5 每帧 KAG 修复（`envclear` 复位、`[endtrans]` 无 trans 等待） | ~120 行 | 依赖 C6 部分前提 |
 | C6 KAG 运行时补丁层（27 文本补丁 + 11 类包装） | ~1500 行 | 前提是 patch.tjs 晚执行（E1） |
 | C7 `ExtKAGParser`（第二解析器） | ~4700 行 | 先改 `ExtKAGParser.hpp` 的 `KAGParserH` 保护宏、定 `paramMacros`/`copyTag` 缺失、与 `kagparserex` 空壳互斥 |
 | E1 `patch.tjs` 分两层（含韧性层） | 中 | 无（已裁决），影响面大需逐游戏回归 |
 | B1 GPU 伴生脚本惰性注入 | 中 | 无（可选） |
-| M6 其余插件（约 50 个缺失 + 部分覆盖项） | ~3300 行 | 无；清单见 `compat/recon/plugin-compat-diff.md` |
+| M6 其余插件（约 50 个缺失 + 部分覆盖项） | ~3300 行 | 无；清单见 `compat/recon/plugin-compat-diff.md`；本批已落地 systemEx/registory/stdio/javascript/messenger/msgreceiver/tasktray/adjustMonitor |
 | 壳：目录收藏交互打磨、平板双栏（列表-详情）、库页/详情页 MD3 细节 | 小-中 | 无 |
 
 ---
@@ -138,7 +142,7 @@ gh api "repos/clevebitr/Krkr2Next/actions/runs/$RID/artifacts" --jq '.artifacts[
 `gh run view "$RID" --log-failed | grep -E "e: |error:"` 抓 Kotlin/NDK 错误。
 
 **真机回归清单（交给用户）**
-读档、动态立绘、`kag 档接管完成（…别名 N/4…）`、`io policy: tie-break=… patch-rule=…`、
+读档、动态立绘、`AetherKiri 层接管完成（…别名 N/4…）`、`io policy: tie-break=… patch-rule=…`、
 `module gate:`（选 AetherKiri 档时）、`FontSystem: 已注册字体 N 个 -> …`、
 `logs/games/<游戏名>-<短哈希>/engine-<时间戳>.log` 是否按游戏分开。
 
@@ -152,6 +156,7 @@ gh api "repos/clevebitr/Krkr2Next/actions/runs/$RID/artifacts" --jq '.artifacts[
 | IO 对照证据（auto-path 语义、挂载、归档、路径、纠缠点） | `compat/recon/io-loading-diff.md` |
 | KAG 脚本层对照证据（KAGParser、ScriptMgnIntf 补丁层、TJS 内核回退、ExtKAGParser、冲突清单） | `compat/recon/kag-script-diff.md` |
 | 插件层对照证据（约 100 个模块覆盖表、合并冲突、移植成本） | `compat/recon/plugin-compat-diff.md` |
+| 渲染层对照证据（兼容层↔渲染耦合、`ogl/` 相对上游的功能差异、未覆盖的 ES2-only 路径） | `compat/recon/render-diff.md` |
 | 移植溯源清单（含 `partial-extract` 类别） | `compat/upstream/aetherkiri_ports.json` |
 | IO 组件 | `cpp/core/io/`（`StoragePolicy.h` 策略契约；`IoPolicy.*` 注入点；`IoModuleLocator.*` 模块查询注入） |
 | 兼容层框架 | `cpp/core/compat/`（`CompatLayer.*` 层注册表 + 策略注入；`ModuleGate.*` 模块归属门） |
@@ -164,6 +169,7 @@ gh api "repos/clevebitr/Krkr2Next/actions/runs/$RID/artifacts" --jq '.artifacts[
 ## 8. 下一轮建议顺序
 
 1. 若用户回了 **I3**：接完 `mountSiblingsForArchiveProject`（M1 收尾，小）。
-2. 否则：**C3**（`GetNextTag` 文本段聚合，只给 AetherKiri 层，~230 行）—— 需要完整上下文；
-   或继续 **M6 小模块批次**（每批 2–4 个，机械、可验证）。
-3. 壳侧：目录收藏交互打磨 → 平板双栏 → 库页/详情页 MD3 细节。
+2. 否则：继续 **M6 小模块批次**（每批 2–4 个，机械、可验证）——下一批候选见
+   `compat/recon/plugin-compat-diff.md §2`（如 `systemEx` 剩余函数、`layerExSave`、`msdfrender`）。
+3. **C3 已阻塞**：上游 `GetNextTag` 聚合依赖 C2 翻译层（本仓库未移植）；若要推进需先裁决 C2。
+4. 壳侧：目录收藏交互打磨 → 平板双栏 → 库页/详情页 MD3 细节。
