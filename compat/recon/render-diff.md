@@ -146,7 +146,7 @@ AetherKiri 让 GPU 系游戏能渲染，靠的是**两套脚本侧机制**；KN 
   - 真实脚本存在时照常加载，进而在 KN 上抛 `mixinclass.tjs(1) [(function) missing]`
     （见 `KN/cpp/plugins/krkrgles.cpp:3136-3144` 注释），因为 KN 没有 Canvas/Texture/ShaderProgram。
 
-### 3.2 `drawDevice` 别名成员（KN 缺失）
+### 3.2 `drawDevice` 别名成员
 
 - AK `InstallDrawDeviceScriptAliases`（`AK/cpp/plugins/krkrgles.cpp:130-188`）对
   `{KAGWindow, kag, KAGWorldPlugin}` 逐个写：
@@ -157,11 +157,14 @@ AetherKiri 让 GPU 系游戏能渲染，靠的是**两套脚本侧机制**；KN 
   - 另把 `System/Storages/Scripts/Dictionary/Debug/Math/Plugins/Window/dm` 镜像到三目标
 - AK 在 `KrkrGlesPostRegist` **无条件**安装（`AK/cpp/plugins/krkrgles.cpp:2538-2546`），失败则
   每 tick 重试、上限 600（`:198-232`）。
-- KN `KrkrOglAliasFanOut`（`KN/cpp/plugins/krkrgles.cpp:3284-3304`）只写 `OGLDrawDevice`/
-  `GLESAdaptor` **类引用**到 `{Window, KAGWindow, kag, KAGWorldPlugin}`，**不写** `drawDevice`、
-  `gpuDrawDevice`、`nativeDrawDevice`，**不镜像**核心全局。
-- 唯一补上 `gpuDrawDevice` 的是脚本 `KAGWindow_createDrawDevice`（对 `this`，即调用它的
-  KAGWindow）——`kag` / `KAGWorldPlugin` 上仍可能拿不到 `gpuDrawDevice`/`nativeDrawDevice`。
+- **已实施（2026-09-21）**：KN `krkrgles.cpp` 的 AetherKiri 层分支已补上上述契约
+  （`KrkrOglAetherKiriContract`）：`drawDevice`/`gpuDrawDevice`/`nativeDrawDevice` +
+  核心全局镜像，对 `{KAGWindow, kag, KAGWorldPlugin}` 安装。采用上游的
+  `EnsureScriptMember` 语义（`TJS_MEMBERMUSTEXIST` 探测，**已存在不覆盖**），
+  避免破坏游戏框架自己的 `drawDevice`。安装一次（等 4 个别名目标全部就位后），
+  日志 `krkrgles: AetherKiri draw-device 契约已安装（… ok=N）`。
+- 原有的 `KrkrOglAliasFanOut`（写 `OGLDrawDevice`/`GLESAdaptor` 类引用）保持不变；
+  两者互补：扇出负责闸门（刻意覆盖），契约负责实例与全局镜像（不覆盖）。
 
 ### 3.3 全局镜像 vs A 块回退
 
@@ -201,15 +204,15 @@ AetherKiri 让 GPU 系游戏能渲染，靠的是**两套脚本侧机制**；KN 
 
 ### 5.2 修复候选（按性价比）
 
-1. **补 §3.1 伴生脚本替换**（AetherKiri 层）：在 `io` 存储层加一个伴生脚本策略开关 +
-   内嵌 `TVP_GPU_COMPAT_SCRIPT`，只对 AetherKiri 层生效。直接消掉"真实 GPU 脚本抛
-   `mixinclass.tjs missing`"与"虚拟脚本缺失"两类失败。
-2. **补 §3.2 别名成员**：把 `drawDevice`/`gpuDrawDevice`/`nativeDrawDevice` 与核心全局镜像
-   补进 `KrkrOglAliasFanOut`（或按层分派）。
-3. ~~**解耦 §R5**~~ **已实施（2026-09-19）**：删除 `kag` 档，KAGWindow 接管归 AetherKiri 层；
+1. ~~**补 §3.2 别名成员**~~ **已实施（2026-09-21）**：AetherKiri 层分支已补
+   `KrkrOglAetherKiriContract`（`drawDevice`/`gpuDrawDevice`/`nativeDrawDevice` + 核心全局
+   镜像），对 `{KAGWindow, kag, KAGWorldPlugin}` 安装，采用**非覆盖**语义。
+2. ~~**解耦 §R5**~~ **已实施（2026-09-19）**：删除 `kag` 档，KAGWindow 接管归 AetherKiri 层；
    `aetherkiri` 档映射 `alias`，`auto` 对 `motionplayer*` 直接激活 AetherKiri 层。
-4. **补 §R1**：把 PVR3 的 `InitPixel` 也走 `TVPLuminance*` + swizzle，或让它复用 §2.5 的
-   存储校验。
+3. **补 §3.1 伴生脚本替换**（未做）：在 `io` 存储层加一个**泛型虚拟文件**提供点，由
+   AetherKiri 层注册 `TVP_GPU_COMPAT_SCRIPT`，消掉"真实 GPU 脚本抛 `mixinclass.tjs missing`"。
+4. **补 §R1**（未做）：把 PVR3 的 `InitPixel` 也走 `TVPLuminance*` + swizzle，或复用 §2.5
+   的存储校验。
 
-> 截止 2026-09-19，以上均**未实施**。先确认症状与 §3/§4 哪一类吻合，再决定动哪一块；
-> 渲染改动要小（AGENTS §6），且 AetherKiri 层是实验档，不默认开启。
+> 状态（2026-09-21）：§3.2 与 §R5 已实施；§3.1、§R1 未做。渲染改动要小（AGENTS §6），
+> AetherKiri 层是实验档，不默认开启。

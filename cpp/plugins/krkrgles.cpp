@@ -7,6 +7,7 @@
 #include "LayerImpl.h"
 #include "BitmapIntf.h"
 #include "RenderManager.h"
+#include "WindowIntf.h"
 // Motion.Player 的自动渲染要判断原生实例（见 YuzuMotion 段）：直接包含
 // motionplayer 的 Player 头，与 AetherKiri 同一种做法。
 #include "motionplayer/Player.h"
@@ -3306,6 +3307,172 @@ static bool KrkrOglGlobalExists(const tjs_char *name) {
     return exists;
 }
 
+// ---------------------------------------------------------------------------
+// AetherKiri 层的 draw-device 契约（对齐上游 InstallDrawDeviceScriptAliases）
+//
+// 上游对 {KAGWindow, kag, KAGWorldPlugin} 逐个写 drawDevice / gpuDrawDevice（GPU 设备
+// **实例**）、OGLDrawDevice / GLESAdaptor（全局类镜像）、nativeDrawDevice（主窗口的
+// CPU 绘制设备），并把 System/Storages/Scripts/Dictionary/Debug/Math/Plugins/Window/dm
+// 镜像到这三个目标——KAG 脚本可能从任一目标上直接读这些名字。
+//
+// 关键差异：上游用 EnsureScriptMember —— **已存在的成员不覆盖**（先以
+// TJS_MEMBERMUSTEXIST 探测）。这里必须照做：`drawDevice`/`gpuDrawDevice` 是游戏框架
+// 自己的名字，覆盖会破坏游戏实现。`OGLDrawDevice`/`GLESAdaptor` 的闸门写入仍由
+// KrkrOglAliasOnto 负责（那个是刻意的覆盖）。
+// ---------------------------------------------------------------------------
+static bool KrkrOglEnsureMember(iTJSDispatch2 *obj, iTJSDispatch2 *objThis,
+                                const tjs_char *member,
+                                const tTJSVariant &value) {
+    if(!obj || !member)
+        return false;
+    tTJSVariant existing;
+    if(TJS_SUCCEEDED(obj->PropGet(TJS_MEMBERMUSTEXIST | TJS_IGNOREPROP, member,
+                                  nullptr, &existing, objThis)))
+        return true; // 已有：不动
+    return TJS_SUCCEEDED(obj->PropSet(TJS_MEMBERENSURE | TJS_IGNOREPROP, member,
+                                      nullptr, &value, objThis));
+}
+
+// 在已取到的目标 closure 上 ensure 成员（连 prototype，上游同款）。
+static bool KrkrOglEnsureOnClosure(const tTJSVariant &targetVal,
+                                   const tjs_char *member,
+                                   const tTJSVariant &value) {
+    if(targetVal.Type() != tvtObject)
+        return false;
+    tTJSVariantClosure closure = targetVal.AsObjectClosureNoAddRef();
+    iTJSDispatch2 *obj = closure.Object;
+    iTJSDispatch2 *objThis = closure.ObjThis ? closure.ObjThis : closure.Object;
+    if(!obj)
+        return false;
+    bool ok = KrkrOglEnsureMember(obj, objThis, member, value);
+    tTJSVariant proto;
+    if(TJS_SUCCEEDED(obj->PropGet(TJS_IGNOREPROP, TJS_W("prototype"), nullptr,
+                                  &proto, objThis)) &&
+       proto.Type() == tvtObject && proto.AsObjectNoAddRef()) {
+        ok = KrkrOglEnsureMember(proto.AsObjectNoAddRef(), objThis, member,
+                                 value) ||
+             ok;
+    }
+    return ok;
+}
+
+// 在全局对象 targetName 上 ensure 成员。
+static bool KrkrOglEnsureOnto(const tjs_char *targetName, const tjs_char *member,
+                              const tTJSVariant &value) {
+    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    if(!global)
+        return false;
+    bool ok = false;
+    tTJSVariant targetVal;
+    if(TJS_SUCCEEDED(
+           global->PropGet(0, targetName, nullptr, &targetVal, global)))
+        ok = KrkrOglEnsureOnClosure(targetVal, member, value);
+    global->Release();
+    return ok;
+}
+
+// 把全局 globalName 的值镜像到 targetName（仅在该目标没有该成员时写）。
+static bool KrkrOglMirrorGlobalOnto(const tjs_char *targetName,
+                                    const tjs_char *globalName) {
+    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    if(!global)
+        return false;
+    bool ok = false;
+    tTJSVariant value;
+    tTJSVariant targetVal;
+    if(TJS_SUCCEEDED(
+           global->PropGet(0, targetName, nullptr, &targetVal, global)) &&
+       TJS_SUCCEEDED(
+           global->PropGet(0, globalName, nullptr, &value, global)) &&
+       value.Type() != tvtVoid)
+        ok = KrkrOglEnsureOnClosure(targetVal, globalName, value);
+    global->Release();
+    return ok;
+}
+
+static const tjs_char *const kKrkrOglAetherKiriTargets[] = {
+    TJS_W("KAGWindow"),
+    TJS_W("kag"),
+    TJS_W("KAGWorldPlugin"),
+};
+static constexpr int kKrkrOglAetherKiriTargetCount =
+    static_cast<int>(sizeof(kKrkrOglAetherKiriTargets) /
+                     sizeof(kKrkrOglAetherKiriTargets[0]));
+
+// 核心全局镜像列表（上游同款）。`dm` 不在 A 块 34 名回退表里，因此必须显式镜像；
+// 其余名字虽然也在 34 名里，但镜像成**实际成员**比读时回退更接近上游。
+static const tjs_char *const kKrkrOglAetherKiriGlobals[] = {
+    TJS_W("System"),     TJS_W("Storages"), TJS_W("Scripts"),
+    TJS_W("Dictionary"), TJS_W("Debug"),    TJS_W("Math"),
+    TJS_W("Plugins"),    TJS_W("Window"),   TJS_W("dm"),
+};
+
+// 安装契约；返回是否有任何一项落位（上游的 installed OR 语义）。
+static bool KrkrOglAetherKiriContract() {
+    bool installed = false;
+
+    // 1. GPU 设备实例 → drawDevice / gpuDrawDevice。
+    tTJSVariant gpuDevice;
+    bool haveDevice = false;
+    try {
+        TVPExecuteExpression(ttstr(TJS_W("new OGLDrawDevice()")), &gpuDevice);
+        haveDevice = gpuDevice.Type() == tvtObject;
+    } catch(...) {
+        haveDevice = false;
+    }
+    if(!haveDevice) {
+        try {
+            TVPExecuteExpression(ttstr(TJS_W("new GLESAdaptor()")),
+                                 &gpuDevice);
+            haveDevice = gpuDevice.Type() == tvtObject;
+        } catch(...) {
+            haveDevice = false;
+        }
+    }
+    if(haveDevice) {
+        for(int i = 0; i < kKrkrOglAetherKiriTargetCount; ++i) {
+            installed = KrkrOglEnsureOnto(kKrkrOglAetherKiriTargets[i],
+                                          TJS_W("drawDevice"), gpuDevice) ||
+                        installed;
+            installed = KrkrOglEnsureOnto(kKrkrOglAetherKiriTargets[i],
+                                          TJS_W("gpuDrawDevice"),
+                                          gpuDevice) ||
+                        installed;
+            installed = KrkrOglMirrorGlobalOnto(kKrkrOglAetherKiriTargets[i],
+                                                TJS_W("OGLDrawDevice")) ||
+                        installed;
+            installed = KrkrOglMirrorGlobalOnto(kKrkrOglAetherKiriTargets[i],
+                                                TJS_W("GLESAdaptor")) ||
+                        installed;
+        }
+    }
+
+    // 2. 主窗口的 CPU 绘制设备 → nativeDrawDevice。
+    if(TVPMainWindow) {
+        const tTJSVariant &windowDrawDevice =
+            TVPMainWindow->GetDrawDeviceObject();
+        if(windowDrawDevice.Type() == tvtObject) {
+            for(int i = 0; i < kKrkrOglAetherKiriTargetCount; ++i) {
+                installed =
+                    KrkrOglEnsureOnto(kKrkrOglAetherKiriTargets[i],
+                                      TJS_W("nativeDrawDevice"),
+                                      windowDrawDevice) ||
+                    installed;
+            }
+        }
+    }
+
+    // 3. 核心全局镜像。
+    for(const tjs_char *g : kKrkrOglAetherKiriGlobals) {
+        for(int i = 0; i < kKrkrOglAetherKiriTargetCount; ++i) {
+            installed =
+                KrkrOglMirrorGlobalOnto(kKrkrOglAetherKiriTargets[i], g) ||
+                installed;
+        }
+    }
+    return installed;
+}
+
 static const tjs_char *KrkrOglAetherKiriScript() {
     return TJS_W("function KAGWindow_createDrawDevice() {\n")
         TJS_W("    var dd = null;\n")
@@ -3360,7 +3527,15 @@ public:
         }
 
         const bool aliasesDone = landed >= kKrkrOglAliasTargetCount;
-        if((scriptInstalled_ && aliasesDone) ||
+        if(scriptInstalled_ && aliasesDone && !contractInstalled_) {
+            contractInstalled_ = true;
+            const bool ok = KrkrOglAetherKiriContract();
+            spdlog::info("krkrgles: AetherKiri draw-device 契约已安装"
+                         "（drawDevice/gpuDrawDevice/nativeDrawDevice + 核心全局镜像，"
+                         "ok={}）",
+                         ok ? 1 : 0);
+        }
+        if((scriptInstalled_ && aliasesDone && contractInstalled_) ||
            ticks_ >= kKrkrOglAetherKiriInstallMaxTicks) {
             TVPRemoveContinuousEventHook(this);
             const auto waited_ms =
@@ -3382,12 +3557,14 @@ public:
         alsoGlesAdaptor_ = alsoGlesAdaptor;
         ticks_ = 0;
         scriptInstalled_ = false;
+        contractInstalled_ = false;
     }
 
     // 卸载/重启时复位：钩子若还挂在队列里，restart 后会对已销毁的 world 调脚本。
     void Reset() {
         ticks_ = 0;
         scriptInstalled_ = false;
+        contractInstalled_ = false;
         registeredAt_ = std::chrono::steady_clock::time_point();
     }
 
@@ -3396,6 +3573,7 @@ private:
     int ticks_ = 0;
     bool alsoGlesAdaptor_ = true;
     bool scriptInstalled_ = false;
+    bool contractInstalled_ = false;
 };
 
 static KrkrOglAetherKiriInstallHook g_krkrOglAetherKiriInstallHook;

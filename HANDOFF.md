@@ -28,7 +28,7 @@
 | 块 | 内容 | 状态 |
 |---|---|---|
 | A | TJS2 内核兼容读写：未定义全局回退(34 名) + 启动名回退 + `touchImage`/`renderCount` 合成 + 8 名启动期**写**白名单 | ✅ 完成 |
-| B | KAGWindow / krkrgles 脚本别名与绘制设备接管 | 🟡 B2 完成（4 目标扇出 + 每帧重试 600 帧 + 卸载摘钩）；B1（GPU 伴生脚本惰性注入）未做 |
+| B | KAGWindow / krkrgles 脚本别名与绘制设备接管 | 🟡 B2：4 目标扇出 + 每帧重试 600 帧 + 卸载摘钩 + **drawDevice/gpuDrawDevice/nativeDrawDevice 契约与核心全局镜像**（2026-09-21，非覆盖语义）；B1（GPU 伴生脚本替换）未做 |
 | C | KAGParser / extkagparser / kagparserex 行为对齐 | 🟡 **C1 ✅、C4 ✅**；C3/C5/C6/C7 未做 |
 | D | 插件模拟层（旧 Windows 插件全量照搬，分批） | 🟡 已移 6 个 AetherKiri 层专属模块 + 本批 8 个（systemEx/registory/stdio/javascript/messenger/msgreceiver/tasktray/adjustMonitor）；其余约 50 个缺失模块待分批 |
 | E | 启动与资源加载顺序（startup/patch/auto-path/插件解析） | 🟡 I 系列大部分已做；`patch.tjs` 分两层（E1）未做 |
