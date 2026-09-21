@@ -54,6 +54,16 @@ set(APP_NAME krkr2)
 
 project(${APP_NAME})
 
+# 统一诊断探针总开关。CI 用 `ENABLE_RENDER_PROBE=ON` 开启；默认关闭，
+# release 构建不受影响。探针代码全部包在 `#if defined(KRKR_RENDER_PROBE)` 里。
+option(ENABLE_RENDER_PROBE "开启 KRKR_RENDER_PROBE 诊断探针" OFF)
+if(ENABLE_RENDER_PROBE)
+    add_compile_definitions(KRKR_RENDER_PROBE)
+    message(STATUS "KRKR_RENDER_PROBE: ON (诊断探针已启用)")
+else()
+    message(STATUS "KRKR_RENDER_PROBE: OFF")
+endif()
+
 # Android 目标自检。上面那段注释描述的退化（宿主 clang、无 sysroot、无
 # __ANDROID__）不会让 configure 失败，只会在编译到某个引用了 EGL/GLES 头的
 # 文件时才报错——那时已经烧掉大半轮 CI。这里在 configure 期就编译一小段探针，
