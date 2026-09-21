@@ -1126,7 +1126,12 @@ ttstr TVPGetPlacedPath(const ttstr &name) {
 
     ttstr normalized(TVPNormalizeStorageName(name));
 
-    bool found = TVPIsExistentStorageNoSearchNoNormalize(normalized);
+    // 这里**只查物理存储**：虚拟文件（伴生脚本）必须等 auto-path 搜索也失败后才兜底。
+    // 否则会顶掉游戏自己放在 system/ 下的同名脚本：KAG 用裸名 `live2d.tjs` 请求，
+    // 而真实文件在 `data.xp3>system/live2d.tjs`；若把虚拟命中当成“当前目录已找到”，
+    // auto-path 搜索就被跳过，伴生占位脚本会静默替换掉游戏脚本
+    // （G2 的 Live2D 因此从未被驱动）。
+    bool found = TVPIsRealStorageNoSearchNoNormalize(normalized);
     if(found) {
         // found in current folder
         TVPAutoPathCache.Add(name, normalized);
@@ -1145,6 +1150,13 @@ ttstr TVPGetPlacedPath(const ttstr &name) {
         ttstr found = *result + storagename;
         TVPAutoPathCache.Add(name, found);
         return found;
+    }
+
+    // 物理与 auto-path 都没找到：最后才问虚拟文件 provider（伴生脚本）。
+    // 返回裸名，由 TVPCreateStream 的 `!TVPIsRealStorage…` 分支打开虚拟流。
+    if(krkr::io::IsVirtualFile(normalized)) {
+        TVPAutoPathCache.Add(name, normalized);
+        return normalized;
     }
 
     // not found

@@ -101,8 +101,24 @@ probe: AMV payload first32=CEA1DB873E1CF0CFFC8C9A563FE7EE2FFFD0C57EA94102C49EA7B
   fstat/dirlist/addFont/saveStruct 覆盖），而 `compat/README.md` 的 **I13** 已列出
   `arc`(PackinOne) 存储媒体**未实现、待裁决**；G2 的整包镜像正是 PackinOne 格式。
   资源名已在探针里捕获（见下），待下一轮日志确认是否 `arc://` 路径。
-- `live2d.tjs`（引擎虚拟伴生脚本）第 17/18 行报 `Member "KAGWindow" does not exist`
-  （KAGWindow 此时尚未建立）；`krkrlive2d` 的 `[probe]` 一条未出现 ⇒ Live2D 从未被驱动。
+- **Live2D 从未被驱动（根因已定位并已修）**：游戏在 `data.xp3` 里**确实有** `system/live2d.tjs`
+  （索引扫描确认，另有 `system/d3daffinesourcelive2d.tjs`、`system/affinesourcelive2d.tjs`），
+  但日志显示 `compat companion: 虚拟提供 live2d.tjs [gpu-compat-script]` —— 伴生占位脚本
+  **顶掉了游戏自己的脚本**。
+
+  原因在 `TVPGetPlacedPath`（`io/IoStorage.cpp`）的解析顺序：它用
+  `TVPIsExistentStorageNoSearchNoNormalize()` 做“当前目录是否已有”，而后者末尾是
+  `return krkr::io::IsVirtualFile(name);` —— 伴生名单（按 basename 匹配）因此被当成
+  “当前目录已找到”，**auto-path 搜索被跳过**，游戏真实的
+  `data.xp3>system/live2d.tjs` 永远不会被尝试（KAG 用裸名 `live2d.tjs` 请求）。
+  这也与 `IoVirtualFile.h` 自己写的契约“**物理文件优先**：缺失时才问 provider”相矛盾。
+
+  **已修**：`TVPGetPlacedPath` 的“当前目录”判断改为只查物理
+  （`TVPIsRealStorageNoSearchNoNormalize`），虚拟文件改为 **auto-path 搜索失败后的最后兜底**。
+  副作用：伴生脚本仍对“游戏确实没有”的名字生效，但不再遮蔽已有脚本。
+
+  另：`live2d.tjs` 占位脚本第 17/18 行的 `Member "KAGWindow" does not exist` 在
+  `try{}catch{}` 里，本身无害（占位脚本与上游 `TVP_GPU_COMPAT_SCRIPT` 逐字一致）。
 - 卡死探针仍报 1.9s：`Application::Run: SystemWatchTimerTimer`。
 
 ---
