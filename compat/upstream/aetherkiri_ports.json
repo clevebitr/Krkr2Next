@@ -135,7 +135,7 @@
       "source_ref": "cpp/plugins/alphamovie.cpp:127-1240（BufferManager/Huffman 表规格与构建/DC-AC 解码/IDCT 原语）与 2023-2596（zlib 与 jpeg 两条 MCU 循环及 YUV→RGBA）",
       "modifications": "partial-extract",
       "reason": "AlphaMovie(AJPM) 帧载荷解码器。放 core 而非插件的理由：.amv 由 core 的 tTVPGraphicType 注册（GraphicsLoaderIntf.cpp:238），图形与头部两条路径都在 core；core 不能依赖插件、插件可以依赖 core（compat/README.md §2），所以解码器在 core、插件复用，才能让 Layer.loadImages(\"*.amv\") 这类 core 路径也拿到帧。相对上游的改动：成员变量改为参数（qtbl/isZlib/zlibBufSize/geo/payload）、filePtr->ReadBuffer 改为带边界检查的载荷 memcpy、失败 return 改为 return false、amvImageConvertContext_ 改为函数内 static、产出写进 outRgba。另：YUV→RGBA 沿用上游的 swscale（故 core/visual 新增 find_package(FFMPEG swscale)；不能反向依赖 core_movie_module，会成环）。",
-      "sha256_local": "e6183845504166816ccf7d62f57a7dffa7d8013971b27ddf79476be7b81068cb",
+      "sha256_local": "a4891641a72fada0f8394544dc3a60f2c85beed6998588490392002febe110e6",
       "sha256_upstream_at_rev": "d8be10bb14225c6dd7faee37f2e5fe65437aaa9cc5135d320c201b9a9c3b55e0"
     }
   ],

@@ -10,7 +10,13 @@
 #define XMD_H
 #include <jpeglib.h>
 #include <jerror.h>
+
+// ffmpeg 头必须包在 extern "C" 里：本仓库 movie/ 下的头都是这个写法
+// （如 AEUtil.h:7）。不包的话 sws_scale/sws_getCachedContext 会按 C++ 链接
+// 生成修饰名，而 libswscale.a 提供的是 C 符号，链接期报 undefined symbol。
+extern "C" {
 #include <libswscale/swscale.h>
+}
 
 #include "tvpgl.h"
 
