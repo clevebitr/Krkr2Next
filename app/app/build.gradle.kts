@@ -1,3 +1,11 @@
+// Kotlin DSL 注意：Gradle 已把 `java` 注册为项目扩展，脚本里直接写 `java.text.*` /
+// `java.util.*` 会被当成对该扩展取成员而报 Unresolved reference（CI 实证）。
+// 所以用顶部 import + 简单名。
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -12,7 +20,7 @@ plugins {
 //
 // 注意：git 仓库根在上一层（KiriNext/），而 Gradle root 在 app/；git 会自己向上
 // 找到仓库，不需要额外传路径。
-fun gitShortHash(dir: java.io.File): String = try {
+fun gitShortHash(dir: File): String = try {
     val process = ProcessBuilder("git", "rev-parse", "--short=6", "HEAD")
         .directory(dir)
         .redirectErrorStream(true)
@@ -25,8 +33,7 @@ fun gitShortHash(dir: java.io.File): String = try {
 
 val stampedVersionName: String = run {
     val base = "0.1.0"
-    val date = java.text.SimpleDateFormat("yyMMdd", java.util.Locale.US)
-        .format(java.util.Date())
+    val date = SimpleDateFormat("yyMMdd", Locale.US).format(Date())
     "v$base-${gitShortHash(rootProject.projectDir)}-$date"
 }
 
