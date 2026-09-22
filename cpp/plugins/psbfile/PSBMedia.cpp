@@ -3,6 +3,9 @@
 //
 
 #include <algorithm>
+#include <cctype>
+#include <cstring>
+#include <string>
 #include <spdlog/spdlog.h>
 
 #include "utils/LogUtil.h"
@@ -47,6 +50,38 @@ namespace PSB {
                 return true;
             }
             return false;
+        }
+
+        /**
+         * 资源键 `\<档案\>/\<内部路径\>` 里档案名与内部路径的分界位置。
+         *
+         * 为什么不能就按第一个 '/' 切：档案可能带存储前缀（`lzfs:/x.psb/...`，
+         * motionplayer 发 `psb://lzfs://...` 经存储层规范化后 `//` 收成单斜杠）
+         * 或位于子目录（`motion/mono_loop.mtn/...`）；按第一个 '/' 会切出
+         * `lzfs:` / `motion` 这种假档案名 → `loadPSBFile` 必然失败。
+         * 移植自 AetherKiri `cpp/plugins/psbfile/PSBMedia.cpp:111-134`。
+         */
+        std::string ArchiveBoundaryKey(const std::string &key) {
+            std::string lower = key;
+            std::transform(lower.begin(), lower.end(), lower.begin(),
+                           [](const unsigned char ch) {
+                               return static_cast<char>(std::tolower(ch));
+                           });
+
+            size_t boundary = std::string::npos;
+            for(const auto *extension : { ".mtn/", ".psb/", ".pimg/" }) {
+                const auto position = lower.find(extension);
+                if(position == std::string::npos)
+                    continue;
+                const auto candidate = position + std::strlen(extension) - 1;
+                if(boundary == std::string::npos || candidate < boundary)
+                    boundary = candidate;
+            }
+            if(boundary != std::string::npos)
+                return key.substr(0, boundary);
+
+            const auto slash = key.find('/');
+            return slash == std::string::npos ? key : key.substr(0, slash);
         }
 
         uint16_t ReadLE16(const uint8_t *src) {
@@ -2264,11 +2299,16 @@ namespace PSB {
     }
 
     bool PSBMedia::tryLazyLoadArchive(const std::string &key) {
-        const auto slashPos = key.find('/');
-        if(slashPos == std::string::npos || slashPos == 0)
+        // 档案边界不能按"第一个 '/'"切：资源键形如 `<档案>/<内部路径>`，而档案本身
+        // 可能带存储前缀或位于子目录 —— `lzfs:/e-mote...psb/motion/all_parts/x`
+        // （motionplayer 发的是 `psb://lzfs://...`，经存储层规范化后 `//` 收成单斜杠）
+        // 按第一个 '/' 会切出档案名 `lzfs:`，随后 loadPSBFile 必然抛
+        // `Not supported media type ""`，于是立绘整块画不出来（NEKOPARA 4）。
+        // 移植自 AetherKiri `cpp/plugins/psbfile/PSBMedia.cpp:111-134` 的
+        // `ArchiveBoundaryKey()`。
+        const auto archiveKey = ArchiveBoundaryKey(key);
+        if(archiveKey.empty() || archiveKey == key)
             return false;
-
-        const std::string archiveKey = key.substr(0, slashPos);
         bool shouldAttemptLoad = false;
         {
             std::lock_guard<std::mutex> lock(_mutex);
