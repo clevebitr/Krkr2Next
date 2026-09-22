@@ -850,18 +850,37 @@ public:
             renderTargetW = 1920;
         if(renderTargetH == 0)
             renderTargetH = 1080;
+        auto tRendererCreate = std::chrono::steady_clock::now();
         CreateRenderer(renderTargetW, renderTargetH);
+        const long long msCreateRenderer = msSince(tRendererCreate);
         auto *renderer = GetRenderer<Rendering::CubismRenderer_OpenGLES2>();
         if(!renderer) {
             spdlog::error("krkrlive2d: failed to create renderer");
             return false;
         }
+        auto tBindTex = std::chrono::steady_clock::now();
         for(int i = 0; i < static_cast<int>(textureIds_.size()); ++i)
             renderer->BindTexture(static_cast<csmUint32>(i),
                                   textureIds_[static_cast<size_t>(i)]);
+        const long long msBindTex = msSince(tBindTex);
+        auto tMvp = std::chrono::steady_clock::now();
         renderer->SetMvpMatrix(&projMatrix_);
         renderer->IsPremultipliedAlpha(false);
+        const long long msMvp = msSince(tMvp);
         msRenderer = msSince(tPhase);
+#if defined(KRKR_RENDER_PROBE)
+        // 进 CG 等几秒的常见大头是这一段，而它只做 CreateRenderer +
+        // BindTexture + SetMvpMatrix。细分一下，区分是渲染器/掩码缓冲创建、
+        // 纹理绑定，还是别的（例如首次着色器编译）在吃时间。
+        if(msRenderer > 200) {
+            spdlog::info("krkrlive2d: 渲染器阶段细分 createRenderer={}ms "
+                         "bindTexture={}ms mvp={}ms（{}x{}，{} 张纹理）",
+                         msCreateRenderer, msBindTex, msMvp,
+                         static_cast<int>(renderTargetW),
+                         static_cast<int>(renderTargetH),
+                         static_cast<int>(textureIds_.size()));
+        }
+#endif
         tPhase = std::chrono::steady_clock::now();
 
         csmInt32 eyeBlinkCount = setting_->GetEyeBlinkParameterCount();
