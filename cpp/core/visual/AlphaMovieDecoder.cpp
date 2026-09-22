@@ -1150,16 +1150,14 @@ bool DecodeFrameToRgba(uint8_t qtbl[3][64], bool isZlib, uint32_t zlibBufSize,
     std::vector<uint8_t> scratchYuva;
     std::vector<int16_t> scratchIdc;
 
-    if(isZlib) {
-        if (isZlib) // zlib解压缩
-        {
+    if(isZlib) { // zlib 解压缩
             // alpha
             tjs_uint32 cacheLen = zlibBufSize;
             scratchCache.resize(cacheLen);
             tjs_uint8* cache = scratchCache.data();
             if(payloadOff + (size_t)(cacheLen) > payloadLen) return false;
-            std::memcpy(cache, payload + payloadOff, cacheLen);
-            payloadOff += (cacheLen);
+        std::memcpy(cache, payload + payloadOff, cacheLen);
+        payloadOff += (cacheLen);
             uLongf alphaSize = geo.width * geo.height;
             scratchAlpha.resize(alphaSize);
             tjs_uint8* alpha_buffer = scratchAlpha.data();
@@ -1172,8 +1170,8 @@ bool DecodeFrameToRgba(uint8_t qtbl[3][64], bool isZlib, uint32_t zlibBufSize,
             scratchCache.resize(cacheLen);
             cache = scratchCache.data();
             if(payloadOff + (size_t)(cacheLen) > payloadLen) return false;
-            std::memcpy(cache, payload + payloadOff, cacheLen);
-            payloadOff += (cacheLen);
+        std::memcpy(cache, payload + payloadOff, cacheLen);
+        payloadOff += (cacheLen);
             uLongf yuvSize = geo.width * geo.height * 3 / 2;
             scratchYuva.resize(yuvSize);
             tjs_uint8* yuv_buffer = scratchYuva.data();
@@ -1393,17 +1391,14 @@ bool DecodeFrameToRgba(uint8_t qtbl[3][64], bool isZlib, uint32_t zlibBufSize,
 
             // set value
             outRgba.assign(rgba_buffer, rgba_buffer + (size_t)rgbaSize);
-        }
-    } else {
-        else // jpeg解码
-        {
+    } else { // jpeg 解码
             // prepare
             tjs_uint32 cacheLen = payloadLen;
             scratchCache.resize(cacheLen);
             tjs_uint8* cache = scratchCache.data();
             if(payloadOff + (size_t)(cacheLen) > payloadLen) return false;
-            std::memcpy(cache, payload + payloadOff, cacheLen);
-            payloadOff += (cacheLen);
+        std::memcpy(cache, payload + payloadOff, cacheLen);
+        payloadOff += (cacheLen);
             tjs_uint32 yuvaSize = geo.width * geo.height * 5 / 2;
             scratchYuva.resize(yuvaSize);
             tjs_uint8* yuva_buffer = scratchYuva.data();
@@ -1731,7 +1726,6 @@ bool DecodeFrameToRgba(uint8_t qtbl[3][64], bool isZlib, uint32_t zlibBufSize,
 
             // set value
             outRgba.assign(rgba_buffer, rgba_buffer + (size_t)rgbaSize);
-        }
     }
     return true;
 }
