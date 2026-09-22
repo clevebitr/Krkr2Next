@@ -23,7 +23,13 @@
 - **详情页右侧改为 标签 → 简介（可折叠）→ 主按钮**（`ui/GameDetailScreen.kt`）→ 已完成；
 - **触控板光标不显示** → 已修（`HANDOFF.md §1.9.1`）。
 
-**还没做（仅此一项）**：§7 的 **加载期自动显示日志浮层**。
+**2026-09-23 第三批（已落地，待真机回归）**：
+
+- **加载期自动显示日志浮层**（§7）→ 已完成。`AppPrefs` 新键 `debug.auto_log_on_launch`
+  （缺省 false）+ 每游戏覆盖 `GameConfig.autoLogOnLaunch`；`GameScreen` 新增参数
+  `autoShowLogs`，`startup state 2` 时自动关。
+
+**壳侧已无未完成项**（`HANDOFF.md §3` 的清单全部落地）。
 
 ---
 
@@ -284,28 +290,26 @@ data class KeyPadProfile(val buttons: List<KeyButton>, val enabled: Boolean = fa
 
 ---
 
-## 7. 下一会话的建议顺序
+## 7. 已完成：加载期自动日志浮层（§7.1）
 
-1. **加载期自动显示日志浮层**（用户 2026-09-23 提，未做）：规格见下。
-2. 每完成一项：`bash scripts/build_shell_local.sh` → `bash scripts/check_static.sh`
-   → `git diff --check` → 单独提交。
+> 2026-09-23 落地。下面保留目标行为与验收标准。
 
-### 7.1 加载期自动日志（待实现规格）
+### 7.0 实现落点
+
+- `core/AppPrefs.kt`：`debug.auto_log_on_launch`（缺省 **false**）+ getter/setter。
+- `core/GameConfig.kt`：`GameConfig.autoLogOnLaunch: Boolean?`（null = 继承），落盘键
+  `autoLogOnLaunch`；并入 `GlobalDefaults` / `ResolvedShellSettings` / `resolve()`。
+- `ui/GameScreen.kt`：新参数 `autoShowLogs`；`LaunchedEffect(startupState, autoShowLogs)`
+  在 `startup state 2` 时把浮层关掉，在此之前按开关自动弹出；用户手动关过就记一个
+  `remember` 标志，**本局**不再弹（GameScreen 每个会话重新组合，标志自然按局重置）。
+  **失败态（3）不关**——那时日志正是要看的。
+- `MainActivity.kt`：`sessionAutoLogOnLaunch` 在 `startSession()` 里与每游戏覆盖合并；
+  全局开关改动在“该游戏没有独立配置”时立刻跟到本局（它只是显示开关，引擎不读）。
+- 全局设置页与游戏设置页各加一行（游戏页沿用“使用独立配置 + 值”的既有范式）。
 
 **目标行为**：新增一个开关（全局默认 + 每游戏覆盖，与叠加层/按键同范式）。打开后：
 从 `launchPath()` 到 `startup state -> 2` 期间**自动显示运行时日志浮层**，游戏起来后
 **自动关闭**；用户手动关闭后本局不再自动弹。
-
-**落点**：
-- `core/AppPrefs.kt`：新键（建议 `debug.auto_log_on_launch`，缺省 **false**）。
-- `core/GameConfig.kt`：`GameConfig.autoLogOnLaunch: Boolean?`（null = 继承）+ `resolve()`。
-- `ui/GameScreen.kt`：`logsVisible` 目前是内部 `remember`；加一个参数 `autoShowLogs`，
-  并用 `LaunchedEffect(startupState)`：
-  - `startupState != SUCCEEDED && autoShowLogs && !userClosedLogs` → `logsVisible = true`；
-  - `startupState == SUCCEEDED` → `logsVisible = false`。
-  需要把“用户手动关过”记成一个 `remember` 标志，避免启动成功后又被自动打开。
-- `MainActivity.kt`：把解析出的开关传给 `GameScreen`；`SettingsScreen` / `GameSettingsScreen`
-  各加一个 `SwitchRow`。
 
 **约束**：日志浮层打开时会吞掉 SurfaceView 的触摸（现有 `logsVisible` 分支）——启动期本来就
 不该操作游戏，但**自动关闭必须可靠**，否则用户会被卡在只能看日志的界面（已有一个可点关闭按钮）。

@@ -241,12 +241,23 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
 
 ## 2.5 おっぱいスパイ学園（`おっぱいスパイ学園`）— 切 CG 视频严重卡顿
 
-**状态：已定位，未修（下一轮第一件事）**
+**状态：已修（2026-09-23），待真机回归**
 
-现象：播放 CG 时每次**切换视频**（`ev_mv001_02_01..08.mpg`，1920×1080 h264 60fps）都卡一下，
-`frame_perf` 掉到 3–18 fps。
+根因（修正版）：`TVPMoviePlayer::Release()` 先有界等 4s 再销毁，但**没有任何路径
+叫停播放线程** —— `BasePlayer::Process()` 的循环条件只有 `m_bAbortRequest`，而该标志
+原先只在 `CloseInputStream()` 里置位，`CloseInputStream()` 又只从 `~BasePlayer` 调用。
+也就是说等的是一个没人叫停的线程，必然等满整个窗口，然后走"泄漏"分支。
 
-证据（真机 `engine-20260922-224405.log`，classic 层）：
+修法：
+- `BasePlayer::RequestStop()`（新）：置 `m_bAbortRequest`、`m_pDemuxer->Abort()`、
+  唤醒 `m_ready`；`m_bAbortRequest` 改 `std::atomic`。`Release()` 先请求再有界等待，
+  并打一条 `movie: 停播请求→影片线程退出耗时 Nms`（每关一片一行，真机判据）。
+- `CDVDMessageQueue`：`Put`/`Abort` 先自增唤醒序号再在 `m_mtxEvent` 上通知，`Get`
+  同锁求值谓词 —— 去掉"解锁 `m_section` 后、挂到条件变量前"丢唤醒而空等 timeout
+  的路径；被中断时立即返回。
+- `CThread::StopThread` 在 `m_mtxStopEvent` 锁内改 `m_bStop`。
+
+原始证据（真机 `engine-20260922-224405.log`，classic 层）：
 ```
 .stall : render: movie: Close→Release()（销毁播放器/join 解码线程）
          movie : movie: 解码线程→等消息(Get) / →处理消息/解码
@@ -256,26 +267,34 @@ frame_perf: fps=3.5  update_max=4731.04ms
 frame_perf: fps=2.5  update_max=4152.34ms
 ```
 
-根因：`Close/Release` 要 join 解码线程，而解码线程**不响应停止信号**——它阻塞在消息等待
-（`CDVDMsgQueue` 的 wait）或正在解一帧，只在自己超时/解完才看 `m_bStop`；于是渲染线程
-被拖 1.5–4.7s，直到 4s 兜底（`KRMoviePlayer.cpp:194`）放弃并**泄漏**该影片对象。
-
-修法（`cpp/core/movie/ffmpeg/`）：让 `CThread::StopThread` 的中断信号能**立刻唤醒**消息等待
-（`CDVDMsgQueue` 的 wait 加中断标志 + `notify_all`），并把「等缓冲」路径的等待改成可中断；
-4s 兜底保留（它是防“整机卡死只能杀进程”的安全网）。
+补充（为什么还要动消息队列）：即使叫停了，解码/音频线程本身也可能阻塞在
+`CDVDMsgQueue` 的等待上；上一轮的判断“解码线程不响应停止信号”对应的是
+`Get()` 里那条会丢唤醒、只能空等到 timeout 的等待路径，现已一并修掉。
 
 验收：连续切 8 段 CG 视频，`update_max` 不再出现 4000ms 量级；不再出现
-`影片线程 …ms 未退出，放弃销毁并泄漏`。
+`影片线程 …ms 未退出，放弃销毁并泄漏`；出现 `movie: 停播请求→影片线程退出耗时 Nms`
+且 N 远小于 4000。
 
 ---
 
 ## 2.6 猫娘乐园（NEKOPARA 4）— 游戏内 E-mote/Live2D 立绘加载不出
 
-**状态：已定位到路径解析，未修**
+**状态：已修（2026-09-23），待真机回归**
 
-现象：游戏内角色立绘（E-mote，经 motionplayer）不显示。
+根因：`PSBMedia::tryLazyLoadArchive()` 按**第一个 '/'** 切档案名。motionplayer 发的是
+嵌套存储名 `psb://lzfs://./x.psb/motion/...`，经存储层规范化后是 `lzfs:/x.psb/motion/...`，
+于是切出假档案名 `lzfs:`，`loadPSBFile("lzfs:")` 必然抛 `Not supported media type ""`。
+同一切法也会把子目录档案（`motion/mono_loop.mtn/...`）切成 `motion`。
 
-证据（真机 `engine-20260922-230250.1.log`，**AetherKiri 层**，`motionplayer.dll Success`）：
+修法：移植 AetherKiri `cpp/plugins/psbfile/PSBMedia.cpp:111-134` 的 `ArchiveBoundaryKey()`
+—— 先按 `.mtn/` / `.psb/` / `.pimg/` 扩展名定位档案边界，找不到才退回第一个 '/'。
+`lzfs:/x.psb/...` 因此切出 `lzfs:/x.psb`，而 `TVPCreateStream("lzfs:/x.psb")` 经存储层
+会还原成 `lzfs://./x.psb`，`LzfsStorageMedia` 照常打开。
+
+验收：立绘显示出来；`PSB lazy-load error: Not supported media type ""` 计数归零；
+每个档案一条 `PSB lazy-load archive: lzfs:/e-mote*.psb`。
+
+原始证据（真机 `engine-20260922-230250.1.log`，**AetherKiri 层**，`motionplayer.dll Success`）：
 ```
 drawFallback: storage=lzfs://./e-moteバニラ冬制服b.psb chara=all_parts motion=タイムライン構造
 drawFallback: trying psb://lzfs://./e-moteバニラ冬制服b.psb/motion/all_parts/タイムライン構造
@@ -284,16 +303,11 @@ drawFallback: trying psb://lzfs://./e-moteバニラ冬制服b.psb/motion/all_par
 [warning] drawFallback: no image loaded for lzfs://./e-moteバニラ冬制服b.psb  ← ×2321
 ```
 
-关键事实：传给 PSB 加载器的名字是 **`lzfs:`**（只有 media 名、路径全没了），所以
-`TVPExtractStorageExt` 拿到的媒体类型是 `""`。即 **`psb://lzfs://./<file>` 这种嵌套 media
-的路径在 `lzfs:` 之后被丢掉**——既不是缺资源，也不是脚本问题。
+关键事实：传给 PSB 加载器的名字是 **`lzfs:`**（只剩 media 名），所以 PSB 把它当档案名
+去 `loadPSBFile` 必然失败。注意**路径并没有在存储层被丢掉**：`psb://lzfs://./x.psb` 规范化后
+是 `lzfs:/x.psb`，信息完整，丢的只是"档案边界应该切在 `.psb/`"这件事（见上）。
 
-下一步（探针，不猜）：对 `cpp/core/io/IoPath.cpp` / `IoStorage.cpp` 的
-`TVPExtractStorageName` / `TVPExtractStoragePath` / `TVPChopStorageExt` 加一次性探针，
-输入分别用 `lzfs://./x.psb`、`psb://lzfs://./x.psb`、
-`psb://lzfs://./x.psb/motion/a/b`，打印入参/出参，看哪一步把 `//./x.psb` 吃掉。
-（注意 `TVPGetPlacedPath` 与 `TVPIsExistentStorageNoSearchNoNormalize` 已经在 §1.1 改过，
-排查时要一并看它们对这个嵌套名字的行为。）
+对照：AetherKiri 同一条链路用的是扩展名感知的 `ArchiveBoundaryKey()`，所以不吃这个亏。
 
 参照：另一款游戏（G2）的 Live2D 走的是本仓库原生 Cubism（`krkrlive2d`），不是 E-mote；
 本作走 motionplayer 的 `drawFallback` 路径，两者不共用加载器。

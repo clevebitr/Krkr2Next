@@ -7,10 +7,11 @@
 
 ---
 
-## 0. 一句话现状（2026-09-23）
+## 0. 一句话现状（2026-09-23，第二轮）
 
-**本轮主线：壳功能 + 兼容层回归修复**。壳侧按用户要求新增了 4 项交互并修了 2 处 bug，
-引擎侧修了 1 个由本轮引入的崩溃 + 1 个 classic 层启动失败。已真机确认的：
+**本轮主线：上一轮真机新报的三条问题的修复**（两条引擎、一条壳），均已落地、待真机回归。
+
+已真机确认的（上一轮）：
 
 - **壳：自定义按键浮层 / 光标触控板模式 / 按键自动对齐参考线 / 引擎菜单侧边栏** → 已落地
   （详见 `SHELL_HANDOVER.md`）
@@ -19,27 +20,30 @@
 - **侧边栏点菜单项 SIGABRT（NEKOPARA 4）** → 已修（§1.9.2：`EAbort` 逸出 `engine_tick`）
 - **classic 层缺 A 块常量回退（おっぱいスパイ学園 `Member "llsUserDirs"` 起不来）** → 已修（§1.9.3）
 
-**当前未解决**（本轮真机新报，详见 `compat/recon/render-issues.md`）：
+**本轮已修（代码已提交，待真机回归）**：
 
-1. **おっぱいスパイ学園 切 CG 视频严重卡顿**：`Close→Release()` join 解码线程阻塞
-   1.5–4.7s/次（4s 兜底才放弃并泄漏该影片对象）。**下轮第一件事**，改法已定（§6.1）
-2. **チート緊縛術（classic 层）`Member "showLayers" does not exist` → 引擎退出**：
+1. **おっぱいスパイ学園 切 CG 视频严重卡顿** → 已修（§1.10.1）：根因不是“解码线程不响应停止
+   信号”，而是**根本没人叫停播放线程** —— `Release()` 等的是一个循环条件永不为假的线程。
+2. **猫娘乐园（NEKOPARA 4）E-mote/Live2D 立绘加载不出** → 已修（§1.10.2）：`PSBMedia` 按
+   第一个 '/' 切档案名，把 `lzfs:/x.psb/...` 切成假档案 `lzfs:`。
+3. **壳：加载游戏时自动显示日志浮层、进游戏后自动关闭** → 已落地（`SHELL_HANDOVER.md §7`）。
+
+**当前未解决**（详见 `compat/recon/render-issues.md`）：
+
+1. **チート緊縛術（classic 层）`Member "showLayers" does not exist` → 引擎退出**：
    脚本层成员缺失（`showLayers` 在本仓库与 AetherKiri 都未注册）；该作带 `patch.xp3`
    + Claude 翻译补丁，疑似补丁替换的 `mainwindow.tjs` 少了该函数（§6.1）
-3. **チート緊縛術（AetherKiri 层）字体渲染不正确**：**缺日志**，需要用户提供 AetherKiri
+2. **チート緊縛術（AetherKiri 层）字体渲染不正确**：**缺日志**，需要用户提供 AetherKiri
    层那次 `engine-*.log`（现目录里只有 classic 层那次）
-4. **猫娘乐园（NEKOPARA 4）游戏内 E-mote/Live2D 立绘加载不出**：
-   `psb://lzfs://./<file>.psb` 的路径在 `lzfs:` 之后被丢掉（§6.1 有完整证据）
-5. 旧账未动：**G2 进动画卡 4.4s / 帧率 43–45**、**千恋万花 `wave` 转场缺失 + SD/logo 交付**、
+3. 旧账未动：**G2 进动画卡 4.4s / 帧率 43–45**、**千恋万花 `wave` 转场缺失 + SD/logo 交付**、
    **`SystemWatchTimerTimer` 卡顿**
 
 其余两条目标的状态：
 
-1. **兼容层**：`cpp/core/io/` 单一 IO 组件已建成；A 块（含本轮新增的 classic 常量回退）、
+1. **兼容层**：`cpp/core/io/` 单一 IO 组件已建成；A 块（含 classic 常量回退）、
    C1、C4、B1（部分）、B2 已完成；`kag` 渲染档已删除（能力归 AetherKiri 层）。
    剩余 C3（阻塞于 C2）、C5/C6/C7、E1、M6 分批，以及**一项等用户裁决的 M1 尾巴（I3）**。
-2. **壳（Kotlin/Compose）**：只剩一项未做 —— **加载游戏时自动显示日志浮层、进游戏后自动关闭**
-   （用户 2026-09-23 提，规格见 `SHELL_HANDOVER.md §7`）。其余全部落地。
+2. **壳（Kotlin/Compose）**：`SHELL_HANDOVER.md` 里的清单**已全部落地**（含本轮最后一项）。
 
 工作区除用户自己的 `.gitignore`/`README.md` 外干净（那两个文件**始终不要 add**）。
 
@@ -257,6 +261,41 @@ FATAL SIGNAL 6
 
 ---
 
+## 1.10 本轮（2026-09-23 第二轮）引擎侧修复
+
+### 1.10.1 切 CG 视频卡 1.5–4.7s（おっぱいスパイ学園）—— `cpp/core/movie/ffmpeg/`
+
+现象：每次切视频 `frame_perf update_max=4382/4553/4731ms`、fps 掉到 3–18，每次都打
+`movie: 影片线程 4000ms 未退出，放弃销毁并泄漏该影片对象`。
+
+根因：上一轮的兜底只做了「有界等」，**没有任何路径叫停播放线程**。
+`BasePlayer::Process()` 的循环条件只有 `m_bAbortRequest`，而该标志原先只在
+`CloseInputStream()` 里置位，`CloseInputStream()` 又只从 `~BasePlayer` 调用 ——
+等的是一个没人叫停的线程，必然等满整个窗口然后泄漏。
+
+修法：
+- 新增 `BasePlayer::RequestStop()`（置 `m_bAbortRequest`、`m_pDemuxer->Abort()`、唤醒
+  `m_ready`；`m_bAbortRequest` 改 `std::atomic`）。`Release()` 先请求再有界等待，并打一条
+  `movie: 停播请求→影片线程退出耗时 Nms`；`~TVPMoviePlayer` / `~MoviePlayerOverlay` 也先请求（幂等）。
+- `CDVDMessageQueue`：`Put`/`Abort` 先自增唤醒序号再在 `m_mtxEvent` 上通知，`Get` 同锁求值谓词
+  （去掉丢唤醒、只能空等 timeout 的路径）；`CThread::StopThread` 在锁内改 `m_bStop`。
+
+验收：连续切 8 段 CG，`update_max` 不再出现 4000ms 量级，且不再出现「未退出，放弃销毁」。
+
+### 1.10.2 NEKOPARA 4 E-mote 立绘（`cpp/plugins/psbfile/PSBMedia.cpp`）
+
+现象：`drawFallback: trying psb://lzfs://./e-mote…psb/motion/…` 之后
+`PSB lazy-load error: Not supported media type "" (lzfs:)` ×3230，立绘全空。
+
+根因：`tryLazyLoadArchive()` 按**第一个 '/'** 切档案名；嵌套存储名 `psb://lzfs://./x.psb/motion/…`
+经存储层规范化后是 `lzfs:/x.psb/motion/…`，于是切出假档案名 `lzfs:`。
+
+修法：移植 AetherKiri 的 `ArchiveBoundaryKey()`（先按 `.mtn/`/`.psb/`/`.pimg/` 扩展名定位边界，
+找不到才退回第一个 '/'）。`lzfs:/x.psb/…` 因此切出 `lzfs:/x.psb`，`TVPCreateStream` 会把它
+还原成 `lzfs://./x.psb`。同一处也修掉了子目录档案（`motion/mono_loop.mtn/…`）被切成 `motion`。
+
+---
+
 ## 2. 目标一：KAG 兼容层对齐 AetherKiri
 
 用户确认的范围是五块（原话概括）：
@@ -306,8 +345,9 @@ FATAL SIGNAL 6
 | 引擎菜单侧边栏可折叠展开 | ✅ 2026-09-23（`core/EngineMenu.kt` 的 `parseTree` + `ui/EngineMenuSidebar.kt`） |
 | 退出/强制退出（红色 + 二次确认） | ✅ 2026-09-23（`ui/GameScreen.kt`） |
 | 引擎无响应看门狗 + 强制退出/进程重启 | ✅ 2026-09-23（`EngineSession.stalledMs/shutdown(onDone)` + `MainActivity.forceExitGame/restartProcess`；新增 `engine_is_modal_active` 豁免模态） |
+| 加载游戏时自动显示日志浮层、进游戏后自动关闭 | ✅ 2026-09-23（`debug.auto_log_on_launch` + 每游戏覆盖；`GameScreen` 的 `autoShowLogs`，规格见 `SHELL_HANDOVER.md §7`） |
 
-> **壳的开发交接文档是 `SHELL_HANDOVER.md`**（本地编译闭环、文件/接口索引、两项待做功能的
+> **壳的开发交接文档是 `SHELL_HANDOVER.md`**（本地编译闭环、文件/接口索引、各项功能的
 > 数据模型与落点、验收标准）。改壳前先读它。
 
 ---
@@ -381,10 +421,10 @@ FATAL SIGNAL 6
 | 千恋万花 **SD/logo 交付（D3DEmote）** | 中 | 已补 `Layer.assignMotionImages` + `AssignImages` scratch/页面交换路由（均未解决本作）；**已裁决走方案 B**，见下 |
 | 千恋万花 **字体/文字颜色偏白、logo 色偏与残留矩形** | 中 | 候选根因：参考引擎为本作应用的 7 个标题 hook（含 `message edge argument routing`）KiriNext 全缺；未定位到 code path |
 | **AlphaMovie 插件复用 core 解码器** | 中 | 未做；完成后删掉重复 ~1700 行 |
-| おっぱいスパイ学園 **切 CG 视频严重卡顿** | 中 | **下轮第一件事**。根因：`Close→Release()` 要 join 解码线程，而解码线程不响应停止信号（阻塞在 `CDVDMsgQueue` 的 wait 或正在解一帧，只在自己超时/解完才看 `m_bStop`）⇒ 渲染线程被拖 1.5–4.7s，4s 兜底才放弃并泄漏。日志：`.stall` 的 `movie: Close→Release()（销毁播放器/join 解码线程）`、`movie: 影片线程 4000ms 未退出，放弃销毁并泄漏该影片对象`（`KRMoviePlayer.cpp:194`）、`frame_perf update_max=4382/4731/4553ms`。改法：让 `CThread::StopThread` 的中断信号能唤醒消息等待（`CDVDMsgQueue` 的 wait 加中断标志 + `notify_all`），「等缓冲」路径改成可中断；4s 兜底保留 |
+| おっぱいスパイ学園 **切 CG 视频严重卡顿** | 中 | ✅ **已修（§1.10.1），待真机回归**。根因是 `Release()` 等的是一个**没人叫停**的播放线程（`m_bAbortRequest` 只在 `~BasePlayer` 里置位），必然等满 4s 并泄漏 |
 | チート緊縛術（classic）**`Member "showLayers" does not exist` → 引擎退出** | 小-中 | 脚本层成员缺失：`showLayers` 在本仓库与 AetherKiri 都**未注册**（`grep -rn showLayers cpp/` 两边都空）。日志：`trace : mainwindow.tjs(5777)[(function expression)] <-- conductor.tjs(440)[onTag]`、`scenario.ks 行 223 タグ eval`。该作目录带 `patch.xp3` + `claude-3-5-sonnet-…翻译补丁备份` + `hook.ini` + `FONTCHANGER.dll`（加载失败），**疑似翻译补丁替换的 `mainwindow.tjs` 少了该函数**。需要用户提供 `data.xp3>mainwindow.tjs` 与 `patch.xp3` 里的同名文件对照 |
 | チート緊縛術（AetherKiri）**字体渲染不正确** | 小-中 | **缺日志**：该游戏目录里只有 classic 层那次 `engine-*.log`。要 AetherKiri 层那次的 `FontSystem: 已注册字体 N 个`、`font_fallback_mode=`、缺字/`GetBeingFont` 行。该作自带 `ShiraYukiNoa.otf` + `FONTCHANGER.dll`（本引擎加载失败）⇒ 字体很可能靠该插件换 |
-| **猫娘乐园（NEKOPARA 4）游戏内 E-mote/Live2D 立绘加载不出** | 中 | 日志实证（AetherKiri 层，`motionplayer.dll` 已 Success）：`drawFallback: storage=lzfs://./e-moteバニラ冬制服b.psb` → `trying psb://lzfs://./e-mote…/motion/all_parts/…` → `PSB lazy-load error: Not supported media type "" (lzfs:)` ×3230 → `drawFallback: no image loaded for lzfs://./e-moteバニラ冬制服b.psb` ×2321。**路径在 `lzfs:` 之后被丢掉**（媒体类型也变空），所以既不是缺资源也不是脚本问题，而是 `psb://lzfs://…` 这种**嵌套 media** 的路径解析。下一步：对 `TVPExtractStorageName/TVPExtractStoragePath/TVPChopStorageExt` 加探针，输入 `psb://lzfs://./x.psb` 与 `lzfs://./x.psb`，看哪一步把 `//./x.psb` 吃掉 |
+| **猫娘乐园（NEKOPARA 4）游戏内 E-mote/Live2D 立绘加载不出** | 中 | ✅ **已修（§1.10.2），待真机回归**。`PSBMedia::tryLazyLoadArchive()` 按第一个 '/' 切档案名，把 `lzfs:/x.psb/...` 切成假档案 `lzfs:`；已换成 AetherKiri 的 `ArchiveBoundaryKey()`（按 `.psb/` 等扩展名定位边界） |
 
 #### 千恋万花 SD：方案 B（搬参考的 D3DEmote.tjs）实施规格
 
@@ -432,7 +472,7 @@ FATAL SIGNAL 6
 | B1 伴生脚本虚拟替换（gfxEffect/logwindow/D3DEmote 未移） | 中 | 无；见 `compat/README.md` |
 | I13 `arc`(PackinOne) / `mem` / `zip` 存储媒体 | 中 | **待裁决**；G2 的 ZIP 头症状已由 §1.1 修复，故优先级下降 |
 | M6 其余插件（约 50 个缺失） | ~3300 行 | 无；清单见 `compat/recon/plugin-compat-diff.md` |
-| 壳：**加载游戏时自动显示日志浮层、进游戏后自动关闭** | 小 | 无（用户 2026-09-23 提）；规格见 `SHELL_HANDOVER.md §7` |
+| 壳：**加载游戏时自动显示日志浮层、进游戏后自动关闭** | 小 | ✅ 已完成（`SHELL_HANDOVER.md §7`） |
 
 ---
 
@@ -487,6 +527,8 @@ gh run view "$RID" --repo clevebitr/Krkr2Next --log-failed | rg -i "error:|undef
 | **AlphaMovie** | 插件 `cpp/plugins/alphamovie.cpp`（上游逐字节 + `local-fix` 几何探针 + 帧落笔点裁剪偏移修复）；core 解码器 `cpp/core/visual/AlphaMovieDecoder.{h,cpp}`（`partial-extract`）；接入点 `cpp/core/visual/LoadAMV.cpp` |
 | 图形加载器注册表 | `cpp/core/visual/GraphicsLoaderIntf.cpp`（`.amv` 在第 238 行；`TVPRegisterGraphicLoadingHandler` 是对外注册 API） |
 | StallWatchdog（卡死探针） | `cpp/core/utils/StallWatchdog.h`（阈值 1500ms，卡死写 `<log>.stall`） |
+| **影片停播/销毁** | `cpp/core/movie/ffmpeg/`（`BasePlayer::RequestStop()`、`CDVDMessageQueue` 可中断等待、`TVPMoviePlayer::Release()` 先请求再有界等待） |
+| **PSB 档案边界** | `cpp/plugins/psbfile/PSBMedia.cpp` 的 `ArchiveBoundaryKey()`（按 `.mtn/`/`.psb/`/`.pimg/` 定位边界，移植自 AetherKiri） |
 | 层专属插件 | `cpp/plugins/compat/aetherkiri/` |
 | 壳 UI | `app/app/src/main/kotlin/org/dpdns/clevebitr/ui/` |
 | 每游戏日志 | `app/.../core/LogFiles.kt`、`core/EngineSession.kt` |
@@ -495,17 +537,18 @@ gh run view "$RID" --repo clevebitr/Krkr2Next --log-failed | rg -i "error:|undef
 
 ## 9. 下一轮建议顺序
 
-1. **おっぱいスパイ学園 切 CG 卡顿**（§6.1）：改 `cpp/core/movie/ffmpeg/` 的线程停止/消息等待，
-   让 join 不再阻塞渲染线程。这是本轮唯一"用户点名要做"的引擎项。
-2. **猫娘乐园 E-mote/Live2D 立绘**（§6.1）：加 `TVPExtractStorageName/Path` 探针定位
-   `psb://lzfs://./x.psb` 的路径截断点。
-3. **壳：加载期自动日志选项**（`SHELL_HANDOVER.md §7`）。
-4. **チート緊縛術**：等用户给 AetherKiri 层日志（字体）+ `mainwindow.tjs`/`patch.xp3` 对照
+1. **真机回归本轮三项修复**（都要看日志，不能只看“感觉好了”）：
+   - おっぱいスパイ学園连续切 8 段 CG：`update_max` 不再出现 4000ms 量级、不再出现
+     「未退出，放弃销毁」、出现 `movie: 停播请求→影片线程退出耗时 Nms`（N 应远小于 4000）；
+   - NEKOPARA 4：立绘显示出来、`PSB lazy-load error: Not supported media type ""` 归零、
+     每个档案一条 `PSB lazy-load archive: lzfs:/e-mote*.psb`；
+   - 壳：打开「加载游戏时自动显示日志」→ 开游戏立即看到日志、`startup state -> 2` 后自动消失。
+2. **チート緊縛術**：等用户给 AetherKiri 层日志（字体）+ `mainwindow.tjs`/`patch.xp3` 对照
    （`showLayers`）。
-5. **NEKOPARA 翻转动画位置**（上一轮已修）：真机回归确认 `*c1*`/`*c2*` 变体位置。
-6. **千恋万花**：按**方案 B** 搬参考的 `D3DEmote.tjs`（规格见 §6.1）→ 字体/logo 颜色与 7 个标题 hook；
+3. **NEKOPARA 翻转动画位置**（上一轮已修）：真机回归确认 `*c1*`/`*c2*` 变体位置。
+4. **千恋万花**：按**方案 B** 搬参考的 `D3DEmote.tjs`（规格见 §6.1）→ 字体/logo 颜色与 7 个标题 hook；
    `wave` 转场需**按 GPU render method 重做**（CPU 扫描线移植已证实不适用，见 §6.1）。
-7. **G2**：进动画 4.4s（`CreateRenderer` 计时细分）→ 帧率（普通构建复测基线）。
-8. **`SystemWatchTimerTimer` 卡顿**：`SystemControl.cpp` 的 `DeliverEvents()`/`TickBeat()` 加 MarkStage。
-9. **兼容层**：若用户回了 **I3**，接完 `mountSiblingsForArchiveProject`（M1 收尾）；
+5. **G2**：进动画 4.4s（`CreateRenderer` 计时细分）→ 帧率（普通构建复测基线）。
+6. **`SystemWatchTimerTimer` 卡顿**：`SystemControl.cpp` 的 `DeliverEvents()`/`TickBeat()` 加 MarkStage。
+7. **兼容层**：若用户回了 **I3**，接完 `mountSiblingsForArchiveProject`（M1 收尾）；
    否则继续 **M6 小模块批次**。C3 已阻塞于 C2。
