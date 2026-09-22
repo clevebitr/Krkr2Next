@@ -547,38 +547,49 @@ void TVPSerializeMainWindowMenu(std::string &out) {
 }
 //---------------------------------------------------------------------------
 bool TVPInvokeMainWindowMenuItem(const std::string &id) {
-    tTJSNI_MenuItem *root = TVPGetMainWindowRootMenuItem();
-    if(!root || id.empty())
-        return false;
+    // **绝不能直接调 item->OnClick()**：那会在 engine_tick 里同步跑脚本 onClick，
+    // 脚本一抛异常，TVPShowScriptException 就会 `throw EAbort`；而 EAbort 只在
+    // `Application::Run()` 的 try 里被接住（Application.cpp）。从 engine_tick 直接调
+    // 会让异常穿过 JNI 边界 → std::terminate → SIGABRT（真机 NEKOPARA 实测：
+    // TVPShowScriptException ← TVPPostEvent ← OnClick ← TVPInvokeMainWindowMenuItem
+    // ← engine_tick）。
+    // 改为投一个菜单点击输入事件，交给引擎自己的事件派发（在 Run() 的 try 内）执行。
+    try {
+        tTJSNI_MenuItem *root = TVPGetMainWindowRootMenuItem();
+        if(!root || id.empty())
+            return false;
 
-    tTJSNI_BaseMenuItem *current = root;
-    size_t start = 0;
-    for(;;) {
-        const size_t dot = id.find('.', start);
-        const std::string seg =
-            id.substr(start, dot == std::string::npos ? std::string::npos
-                                                      : dot - start);
-        if(seg.empty())
+        tTJSNI_BaseMenuItem *current = root;
+        size_t start = 0;
+        for(;;) {
+            const size_t dot = id.find('.', start);
+            const std::string seg =
+                id.substr(start, dot == std::string::npos ? std::string::npos
+                                                          : dot - start);
+            if(seg.empty())
+                return false;
+            auto *current_item = dynamic_cast<tTJSNI_MenuItem *>(current);
+            if(!current_item)
+                return false;
+            const ObjectVector<tTJSNI_BaseMenuItem> &children =
+                current_item->GetChildren();
+            const int index = std::atoi(seg.c_str());
+            if(index < 0 || index >= (int)children.size())
+                return false;
+            current = children.at((size_t)index);
+            if(dot == std::string::npos)
+                break;
+            start = dot + 1;
+        }
+
+        auto *item = dynamic_cast<tTJSNI_MenuItem *>(current);
+        if(!item || !item->GetEnabled())
             return false;
-        auto *current_item = dynamic_cast<tTJSNI_MenuItem *>(current);
-        if(!current_item)
-            return false;
-        const ObjectVector<tTJSNI_BaseMenuItem> &children =
-            current_item->GetChildren();
-        const int index = std::atoi(seg.c_str());
-        if(index < 0 || index >= (int)children.size())
-            return false;
-        current = children.at((size_t)index);
-        if(dot == std::string::npos)
-            break;
-        start = dot + 1;
+        TVPPostInputEvent(new tTVPOnMenuItemClickInputEvent(item));
+        return true;
+    } catch(...) {
+        // 菜单查找/投递失败不该把 engine_tick 拖下水。
+        return false;
     }
-
-    auto *item = dynamic_cast<tTJSNI_MenuItem *>(current);
-    if(!item || !item->GetEnabled())
-        return false;
-    // 与 Windows 版一致：走该 MenuItem 的 onClick（内部再投 TJS 事件）。
-    item->OnClick();
-    return true;
 }
 //---------------------------------------------------------------------------

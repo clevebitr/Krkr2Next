@@ -3,6 +3,7 @@
 #if defined(ENGINE_API_USE_KRKR2_RUNTIME)
 
 #include <algorithm>
+#include <atomic>
 #include <cstdarg>
 #include <cstdio>
 #include <chrono>
@@ -962,18 +963,21 @@ namespace {
     std::deque<std::string> g_menu_invoke_queue;
     constexpr size_t kMaxQueuedMenuInvokes = 32;
 
-    /// 菜单树不会每帧变，按 tick 数降频刷新（~15 帧 ≈ 250ms @60fps）。
-    constexpr uint32_t kMenuRefreshIntervalTicks = 15;
-    uint32_t g_menu_refresh_countdown = 0;
+    /// 壳是否请求过菜单快照（打开侧边栏时置位）。
+    std::atomic<bool> g_menu_snapshot_requested{ false };
 
     void RefreshWindowMenuSnapshot() {
-        if(g_menu_refresh_countdown > 0) {
-            --g_menu_refresh_countdown;
+        // **只在壳真的要读菜单时才碰菜单树**：菜单注册表（MENU_LIST）按窗口指针
+        // 索引，跨会话可能残留陈旧项；游戏不打开侧边栏就完全不应触及它。
+        if(!g_menu_snapshot_requested.exchange(false))
             return;
-        }
-        g_menu_refresh_countdown = kMenuRefreshIntervalTicks;
         std::string fresh;
-        TVPSerializeMainWindowMenu(fresh);
+        try {
+            TVPSerializeMainWindowMenu(fresh);
+        } catch(...) {
+            // 菜单树由脚本维护，异常不应影响引擎主循环。
+            fresh.clear();
+        }
         std::lock_guard<std::mutex> lk(g_menu_mutex);
         if(fresh != g_menu_snapshot)
             g_menu_snapshot = std::move(fresh);
@@ -989,7 +993,15 @@ namespace {
                 id = std::move(g_menu_invoke_queue.front());
                 g_menu_invoke_queue.pop_front();
             }
-            if(!TVPInvokeMainWindowMenuItem(id)) {
+            // 菜单触发本身只投输入事件；再包一层 catch 保证任何异常都不从
+            // engine_tick 逸出（EAbort 逸出会穿过 JNI 边界 → std::terminate）。
+            bool ok = false;
+            try {
+                ok = TVPInvokeMainWindowMenuItem(id);
+            } catch(...) {
+                ok = false;
+            }
+            if(!ok) {
                 spdlog::debug("window menu item '{}' not found or disabled",
                               id);
             }
@@ -3246,6 +3258,8 @@ engine_result_t engine_list_window_menu(char *out_buffer, uint32_t buffer_size,
         std::lock_guard<std::mutex> lk(g_menu_mutex);
         snapshot = g_menu_snapshot;
     }
+    // 让引擎线程在下一次 tick 刷新快照（壳按 2Hz 轮询，下一拍就是新的）。
+    g_menu_snapshot_requested.store(true);
     // 只写完整的行：截断到最后一个 '\n'，免得壳解析到半行。
     if(snapshot.size() >= buffer_size) {
         snapshot.resize(buffer_size - 1);
