@@ -443,6 +443,12 @@ protected:
 public:
     void AssignImages(tTJSNI_BaseLayer *src); // assign image content
 
+    // 把已完成的生产者图像换进本显示层，并把本层原图交还生产者做下一帧的更新
+    // 目标——避免生产者写进“已挂在图层树上、正在显示”的纹理而触发整帧
+    // copy-on-write。移植自 AetherKiri cpp/core/visual/LayerIntf.h:480-484 与
+    // cpp/core/visual/LayerIntf.cpp:6279-6300（逐字一致）。
+    bool ExchangeMainImage(tTVPBaseTexture *&bitmap);
+
     void AssignMainImage(iTVPBaseBitmap *bmp);
     // assign single main bitmap image. the image size assigned must
     // be identical to the destination layer bitmap.
