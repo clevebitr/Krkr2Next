@@ -2446,6 +2446,29 @@ void tTJSNI_BaseLayer::AssignImages(tTJSNI_BaseLayer *src) {
     if(!src)
         return;
 
+    // TEMP DIAGNOSTIC（千恋万花 SD 不可见）：把每次交付的目标/源身份、可见性、
+    // 父层名与“是否被识别成 D3DEmote scratch swap”全记下来，封顶 24 条。
+    // 定位完成后删。
+    {
+        static std::atomic<int> s_assignProbe{0};
+        if(s_assignProbe.fetch_add(1) < 24) {
+            auto *tp = GetParent();
+            auto *sp = src->GetParent();
+            spdlog::info(
+                "probe: AssignImages target={} name='{}' visible={} parent='{}' "
+                "| source={} name='{}' visible={} parent='{}' "
+                "| motionScratch={}",
+                static_cast<const void *>(this), GetName().AsStdString(),
+                GetVisible() ? 1 : 0,
+                tp ? tp->GetName().AsStdString() : std::string("<none>"),
+                static_cast<const void *>(src), src->GetName().AsStdString(),
+                src->GetVisible() ? 1 : 0,
+                sp ? sp->GetName().AsStdString() : std::string("<none>"),
+                (src != this && TVPIsAffineSourceMotionScratch(this, src)) ? 1
+                                                                          : 0);
+        }
+    }
+
     // D3DEmote/SD 的 scratch 交付：普通 AssignImages 走 MainImage->Assign()，
     // 会让角色层与 scratch 共享同一张纹理，下一帧重写 scratch 就把刚交付的画面抹掉
     // （真机表现：SD 显示一两秒后消失 / 只剩背景 UI / 残留矩形）。这里改用交换语义。

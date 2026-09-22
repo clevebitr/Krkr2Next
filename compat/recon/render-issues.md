@@ -122,6 +122,17 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
     `TVPIsAffineSourceMotionScratch()`（同名判据：目标可见有名、源隐藏无名、源父层是
     `AffineSource情報プール用`、目标父层不在池内）把该交付路由到交换语义。
   - 待验证：真机确认 SD 正常出现并持续（不再一两秒后消失）、残留矩形是否消失。
+  - **2026-09-22 二轮真机：无变化。** 已用 APK 内 `libengine_api.so` 字符串校验确认改动确实在包里
+    （`AffineSource情報プール用`×1、`assignMotionImages`×3、`渲染层路由`×1），所以**该假设不足以解释**。
+  - 新增事实（游戏自带脚本字符串表实证）：`AffineSourceMotion.tjs` 用的成员是
+    `clearEnabled` / `captureCanvas` / `unloadUnusedTextures` / `assignImages` /
+    `_redrawImage` / `motionD3DAdaptor` / `motionWorkLayer` / `_motionSeparateAdaptor`；
+    **不用** `setPresentationTarget` / `clearPresentationTarget` / `presentationHold` /
+    `assignMotionImages` / `removeAllTextures`。⇒ 它不是 AetherKiri 自研的那份脚本。
+  - 已加判定性探针（封顶 24 条）：`probe: AssignImages target=… name='…' visible=…
+    parent='…' | source=… | motionScratch=0/1`，并在 `D3DAdaptor` 壳补上游戏脚本确实会写的
+    `clearEnabled` 属性（之前缺失）。下一轮日志据此直接判定：交付是否走了 assignImages、
+    scratch 签名是否匹配、目标层是否可见/在树上。
 - **启动 logo（`m2logo.mtn` / `yuzulogo.mtn`）**：颜色偏淡蓝而非红、播完残留两个矩形。
   - 已排除「PSB 解码通道序」：`PSBMedia.cpp` 全量输出 BGRA、全游戏一致，非本资源专属。
   - 已排除 `blandlogo1.png` 缺失：参考引擎在同一作同样报 85 次（游戏自带脚本引用了这个

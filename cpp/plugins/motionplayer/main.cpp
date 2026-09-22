@@ -1789,6 +1789,33 @@ static tjs_error D3DAdaptor_setCanvasCaptureEnabledProp(const tTJSVariant *,
     return TJS_S_OK;
 }
 
+// clearEnabled：游戏脚本 `AffineSourceMotion.tjs`（字符串表实证含 clearEnabled）
+// 会对 D3DAdaptor 写这个属性；参考实现的 D3DAdaptor 有完整语义。壳层先提供
+// 可写属性（避免缺成员），并一次性记录游戏写入的值以便定位。
+// clearEnabled: the game script writes this property on D3DAdaptor; the
+// reference D3DAdaptor implements it. Provide a writable property here and
+// log the written value once.
+static bool s_d3dClearEnabled = false;
+
+static tjs_error D3DAdaptor_getClearEnabledProp(tTJSVariant *r,
+                                                iTJSDispatch2 *) {
+    if(r)
+        *r = tTJSVariant(s_d3dClearEnabled);
+    return TJS_S_OK;
+}
+
+static tjs_error D3DAdaptor_setClearEnabledProp(const tTJSVariant *v,
+                                                iTJSDispatch2 *) {
+    s_d3dClearEnabled = v && static_cast<bool>(*v);
+    static std::atomic<int> s_logged{0};
+    if(s_logged.fetch_add(1) < 4) {
+        if(auto l = spdlog::get("plugin"))
+            l->info("probe: D3DAdaptor.clearEnabled = {}",
+                    s_d3dClearEnabled ? 1 : 0);
+    }
+    return TJS_S_OK;
+}
+
 static iTJSDispatch2 *Create_NC_D3DAdaptor() {
     auto *cls = new tTJSNativeClass(TJS_W("D3DAdaptor"));
     if(cls) {
@@ -1814,6 +1841,11 @@ static iTJSDispatch2 *Create_NC_D3DAdaptor() {
             D3DAdaptor_getCanvasCaptureEnabledProp,
             D3DAdaptor_setCanvasCaptureEnabledProp);
         TJSNativeClassRegisterNCM(cls, TJS_W("canvasCaptureEnabled"), cProp,
+                                  TJS_W("D3DAdaptor"), nitProperty);
+        iTJSDispatch2 *clrProp = TJSCreateNativeClassProperty(
+            D3DAdaptor_getClearEnabledProp,
+            D3DAdaptor_setClearEnabledProp);
+        TJSNativeClassRegisterNCM(cls, TJS_W("clearEnabled"), clrProp,
                                   TJS_W("D3DAdaptor"), nitProperty);
     }
     return cls;
