@@ -171,6 +171,25 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
       `DescribeLayerState` 加 `name/parent`、接入 `drawPSBImages`，并加
       `probe: resolveRealLayer target=… isSeparateAdaptor=… adaptorTarget=… adaptorOwner=…`
       （每种目标只记一次），下一轮即可判定 SD 走的是哪条分支、帧落在哪一层。
+  - **第六轮真机（`engine-20260922-175650.log`）——根因定位**：
+    - `drawPSBImages: 24 images … realLayer=0xb40000785a1ebfa0
+      layer(name='トップレイヤ',parent='プライマリレイヤ',visible=1,1920x1080)`：
+      **SD 被画进了 `トップレイヤ`**。而 `トップレイヤ`（= `Window.primaryLayer`）就是
+      页面 `表-背景`/`裏-背景` 的**父容器**（参考实现自己的注释：“The scratch layer used
+      by D3DEmote lives under トップレイヤ, not under 裏-背景”）；KiriKiri 里父层先画、
+      子层后画 ⇒ 画进容器 = **被背景与 UI 盖住**。
+    - `resolveRealLayer … isSeparateAdaptor=0`（全部）：不用 SeparateLayerAdaptor；
+      游戏把 **D3DAdaptor 壳**当绘制目标，`resolveRealLayer` 处理不了（它没有 `window`
+      成员）→ 兜底到 `window.primaryLayer`（即 `トップレイヤ`），于是发生上面的错层。
+    - 已改：参考实现的 D3DAdaptor 有**自己的 surface**；本壳没有，于是用游戏每帧
+      `captureCanvas(work)` 传入的 `work` 层作为其 surface（那正是游戏随后
+      `assignImages` 到可见层的**来源层**）。`D3DAdaptor_captureCanvas` 记录该层，
+      `resolveRealLayer` 的“无 window 成员”分支优先返回它，不再兜底到页面容器。
+    - 待验证：SD 是否已可见（预期在背景之上；若被消息窗盖住再调插入点）。
+
+> 临时探针（`probe: AssignImages[pair]` / `probe: AssignMotionImages` /
+> `probe: resolveRealLayer` / `probe: D3DAdaptor.clearEnabled`，以及
+> `DescribeLayerState` 的 name/parent）定案后一并删除。
 - **启动 logo（`m2logo.mtn` / `yuzulogo.mtn`）**：颜色偏淡蓝而非红、播完残留两个矩形。
   - 已排除「PSB 解码通道序」：`PSBMedia.cpp` 全量输出 BGRA、全游戏一致，非本资源专属。
   - 已排除 `blandlogo1.png` 缺失：参考引擎在同一作同样报 85 次（游戏自带脚本引用了这个

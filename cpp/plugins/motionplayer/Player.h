@@ -3485,6 +3485,13 @@ namespace motion {
             if(TJS_FAILED(target->PropGet(0, TJS_W("window"), nullptr, &probe,
                                           target)) ||
                probe.Type() != tvtObject || !probe.AsObjectNoAddRef()) {
+                // 目标不是真实 Layer（Yuzusoft 的 D3DAdaptor 壳）。参考实现的
+                // D3DAdaptor 有自己的 surface；本壳用最近一次 captureCanvas 的目标层
+                // 代替——它正是游戏随后 assignImages 到可见层的来源层。兜底到
+                // window.primaryLayer 会把内容画进页面容器（表/裏-背景 的父层），
+                // KiriKiri 父层先画子层后画 ⇒ 被背景与 UI 盖住。
+                if(iTJSDispatch2 *surface = GetLastD3DAdaptorCaptureTarget())
+                    return surface;
                 if(TVPMainWindow) {
                     iTJSDispatch2 *winDsp = TVPMainWindow->GetOwnerNoAddRef();
                     if(winDsp) {

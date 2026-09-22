@@ -1694,6 +1694,29 @@ NCB_REGISTER_SUBCLASS(ResourceManager) {
 //     captured result as a later image source (reads the return value or draws
 //     to a target layer). Current Senren Clinic disassembly shows it calls
 //     but ignores the return, so no-op is sufficient.
+// D3DAdaptor 的 "surface"：游戏每帧 captureCanvas(work) 传入的 work 层，也是它随后
+// assignImages 到可见层的来源层。参考实现的 D3DAdaptor 有自己的 surface；本壳没有，
+// 于是用它代替——这样 Player::draw(D3DAdaptor) 的内容才会落在游戏交付链的源头层，
+// 而不是被 resolveRealLayer 兜底到 window.primaryLayer。后者是页面容器（表/裏-背景
+// 的父层），KiriKiri 里父层先画、子层后画，内容会被背景与 UI 盖住——真机表现就是
+// “SD 只显示背景 UI / 完全不显示”。
+static iTJSDispatch2 *s_d3dAdaptorSurface = nullptr;
+static std::mutex s_d3dAdaptorSurfaceMutex;
+
+iTJSDispatch2 *GetLastD3DAdaptorCaptureTarget() {
+    std::lock_guard<std::mutex> lock(s_d3dAdaptorSurfaceMutex);
+    return s_d3dAdaptorSurface;
+}
+
+static void SetD3DAdaptorSurface(iTJSDispatch2 *layer) {
+    std::lock_guard<std::mutex> lock(s_d3dAdaptorSurfaceMutex);
+    if(layer)
+        layer->AddRef();
+    if(s_d3dAdaptorSurface)
+        s_d3dAdaptorSurface->Release();
+    s_d3dAdaptorSurface = layer;
+}
+
 static tjs_error D3DAdaptor_captureCanvas(tTJSVariant *r, tjs_int numparams,
                                           tTJSVariant **param,
                                           iTJSDispatch2 *objthis) {
@@ -1745,8 +1768,10 @@ static tjs_error D3DAdaptor_captureCanvas(tTJSVariant *r, tjs_int numparams,
     if(player && numparams >= 1 && param[0] &&
        (*param[0]).Type() == tvtObject) {
         iTJSDispatch2 *dest = (*param[0]).AsObjectNoAddRef();
-        if(dest)
+        if(dest) {
+            SetD3DAdaptorSurface(dest);
             player->captureDrawTo(dest);
+        }
     }
     // 返回 void 让脚本 continue；不 clear，保留已渲染内容。
     // Return void so the script can continue; do not clear, keep rendered
