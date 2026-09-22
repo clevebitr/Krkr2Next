@@ -239,6 +239,112 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
 
 ---
 
+## 2.5 おっぱいスパイ学園（`おっぱいスパイ学園`）— 切 CG 视频严重卡顿
+
+**状态：已定位，未修（下一轮第一件事）**
+
+现象：播放 CG 时每次**切换视频**（`ev_mv001_02_01..08.mpg`，1920×1080 h264 60fps）都卡一下，
+`frame_perf` 掉到 3–18 fps。
+
+证据（真机 `engine-20260922-224405.log`，classic 层）：
+```
+.stall : render: movie: Close→Release()（销毁播放器/join 解码线程）
+         movie : movie: 解码线程→等消息(Get) / →处理消息/解码
+[error] movie: 影片线程 4000ms 未退出，放弃销毁并泄漏该影片对象（渲染线程绝不 join 它；…）
+frame_perf: fps=7.2  update_max=4553.92ms  slow(>33ms)=17
+frame_perf: fps=3.5  update_max=4731.04ms
+frame_perf: fps=2.5  update_max=4152.34ms
+```
+
+根因：`Close/Release` 要 join 解码线程，而解码线程**不响应停止信号**——它阻塞在消息等待
+（`CDVDMsgQueue` 的 wait）或正在解一帧，只在自己超时/解完才看 `m_bStop`；于是渲染线程
+被拖 1.5–4.7s，直到 4s 兜底（`KRMoviePlayer.cpp:194`）放弃并**泄漏**该影片对象。
+
+修法（`cpp/core/movie/ffmpeg/`）：让 `CThread::StopThread` 的中断信号能**立刻唤醒**消息等待
+（`CDVDMsgQueue` 的 wait 加中断标志 + `notify_all`），并把「等缓冲」路径的等待改成可中断；
+4s 兜底保留（它是防“整机卡死只能杀进程”的安全网）。
+
+验收：连续切 8 段 CG 视频，`update_max` 不再出现 4000ms 量级；不再出现
+`影片线程 …ms 未退出，放弃销毁并泄漏`。
+
+---
+
+## 2.6 猫娘乐园（NEKOPARA 4）— 游戏内 E-mote/Live2D 立绘加载不出
+
+**状态：已定位到路径解析，未修**
+
+现象：游戏内角色立绘（E-mote，经 motionplayer）不显示。
+
+证据（真机 `engine-20260922-230250.1.log`，**AetherKiri 层**，`motionplayer.dll Success`）：
+```
+drawFallback: storage=lzfs://./e-moteバニラ冬制服b.psb chara=all_parts motion=タイムライン構造
+drawFallback: trying psb://lzfs://./e-moteバニラ冬制服b.psb/motion/all_parts/タイムライン構造
+… /normal … /show … /source/title/motion/normal … /source/title/icon/bg/pixel
+[warning] PSB lazy-load error: Not supported media type "" (lzfs:)     ← ×3230
+[warning] drawFallback: no image loaded for lzfs://./e-moteバニラ冬制服b.psb  ← ×2321
+```
+
+关键事实：传给 PSB 加载器的名字是 **`lzfs:`**（只有 media 名、路径全没了），所以
+`TVPExtractStorageExt` 拿到的媒体类型是 `""`。即 **`psb://lzfs://./<file>` 这种嵌套 media
+的路径在 `lzfs:` 之后被丢掉**——既不是缺资源，也不是脚本问题。
+
+下一步（探针，不猜）：对 `cpp/core/io/IoPath.cpp` / `IoStorage.cpp` 的
+`TVPExtractStorageName` / `TVPExtractStoragePath` / `TVPChopStorageExt` 加一次性探针，
+输入分别用 `lzfs://./x.psb`、`psb://lzfs://./x.psb`、
+`psb://lzfs://./x.psb/motion/a/b`，打印入参/出参，看哪一步把 `//./x.psb` 吃掉。
+（注意 `TVPGetPlacedPath` 与 `TVPIsExistentStorageNoSearchNoNormalize` 已经在 §1.1 改过，
+排查时要一并看它们对这个嵌套名字的行为。）
+
+参照：另一款游戏（G2）的 Live2D 走的是本仓库原生 Cubism（`krkrlive2d`），不是 E-mote；
+本作走 motionplayer 的 `drawFallback` 路径，两者不共用加载器。
+
+---
+
+## 2.7 チート緊縛術（`KRKR_チート緊縛術で爆乳孕ませハーレム…`）— 两个独立问题
+
+**状态：均未修；一缺日志、一缺脚本对照**
+
+### 2.7.1 classic 层：`Member "showLayers" does not exist` → 引擎退出（脚本层）
+
+```
+#(1) showLayers(sf.effection_page)
+Member "showLayers" does not exist at anonymous@0x…(1)[(top level script) global]
+trace : mainwindow.tjs(5777)[(function expression) (anonymous)] <-- conductor.tjs(440)[(function) onTag] <-- …
+ファイル : scenario.ks  行 : 223   タグ : eval
+TVPShowSimpleMessageBox: title='Information' … → TVPExitApplication → engine_destroy
+```
+
+关键事实：`showLayers` **在本仓库与 AetherKiri 都未注册**（`grep -rn showLayers cpp/` 两边都空），
+所以它不是引擎 API。TVP2 的语义是未捕获脚本异常 → `TVPTerminateAfterScriptException` →
+运行时终止（这就是引擎退出的原因）。
+
+该作目录带 `patch.xp3`（1 dir, 29 files）+ `claude-3-5-sonnet-20240620翻译补丁备份` +
+`hook.ini` + `FONTCHANGER.dll`（本引擎加载失败）——**疑似翻译补丁替换的 `mainwindow.tjs`
+与游戏本体 KAG 版本不一致、少了 `showLayers` 的定义**。
+
+需要用户提供：`data.xp3>mainwindow.tjs` 与 `patch.xp3` 里的同名文件（若存在）第 5777 行附近，
+以及 `showLayers` 的定义处。拿到就能判定是补丁缺函数，还是要引擎补。
+
+### 2.7.2 AetherKiri 层：字体渲染不正确（渲染/字体层）
+
+用户反馈：AetherKiri 层能正常进、对应场景不崩，但**字体渲染不正确**。
+
+**当前缺日志**：该游戏目录里只有 classic 层那次 `engine-20260922-224201.log`。
+要 AetherKiri 层那次的：
+- `FontSystem: 已注册字体 N 个 -> …`（看游戏自带的 `ShiraYukiNoa.otf` 有没有注册进去）；
+- `Specified option(s) … font_fallback_mode=…`（该作 per-game 配置写的是 `legacy`，
+  AetherKiri 层跑的是 `auto`）；
+- `GetBeingFont` / 缺字 / 字形回退行。
+
+候选根因（未证实）：该作自带 `ShiraYukiNoa.otf` + `hook.ini` + `FONTCHANGER.dll`，而
+`FONTCHANGER.dll` 在本引擎**加载失败**（日志有 `Loading Plugin: …/FONTCHANGER.dll Failed`）
+——字体很可能就是靠这个插件换的。
+
+可立即自测：在游戏设置 → 字体回退里把 `legacy` / `auto` 各试一次（两者实现不同：
+单一回退字面 vs 逐字回退链 + 基线对齐），能区分"字体没注册"与"回退策略差异"。
+
+---
+
 ## 3. 渲染器架构评估（背景，非 issue）
 
 详见 `render-diff.md`。三点结论：

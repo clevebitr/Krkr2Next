@@ -8,12 +8,22 @@
 
 ## 0. 一句话现状
 
-壳的原有九项改造已全部落地（见 `HANDOFF.md §3`）。本轮（2026-09-22）新增：
+壳的原有九项改造已全部落地（见 `HANDOFF.md §3`）。2026-09-22 新增：
 
 - **详情页改版（Steam 大屏式左右分栏）→ 已完成**（`ui/GameDetailScreen.kt`）。
 - **壳的 Kotlin 编译已能在 Termux 本地跑通** → 见 §1，改壳必须先本地编译过再推。
 
-**还没做**：无（§3 自定义按键浮层、§4 引擎菜单侧边栏均已完成）。
+2026-09-23 新增（均已真机确认）：
+
+- **自定义按键浮层**（§3）、**引擎菜单侧边栏**（§4）→ 已完成；
+- **光标触控板模式**（`ui/Touchpad.kt`，每游戏可覆盖 + 悬浮菜单可切）→ 已完成；
+- **按键自动对齐参考线**（`ui/KeyPadOverlay.kt` 的 `snapPosition`）→ 已完成；
+- **右下角宽矩形按钮抽屉** + **「更多」菜单收窄**（`ui/GameScreen.kt`）→ 已完成；
+- **退出/强制退出（error 色 + 二次确认）** + **无响应看门狗 / 进程重启**（`HANDOFF.md §1.8`）→ 已完成；
+- **详情页右侧改为 标签 → 简介（可折叠）→ 主按钮**（`ui/GameDetailScreen.kt`）→ 已完成；
+- **触控板光标不显示** → 已修（`HANDOFF.md §1.9.1`）。
+
+**还没做（仅此一项）**：§7 的 **加载期自动显示日志浮层**。
 
 ---
 
@@ -276,7 +286,29 @@ data class KeyPadProfile(val buttons: List<KeyButton>, val enabled: Boolean = fa
 
 ## 7. 下一会话的建议顺序
 
-1. §3 自定义按键浮层、§4 引擎菜单侧边栏**均已完成**（本地编译 + 静态检查通过，待真机验收）；
-2. 光标触控板模式、按键自动对齐参考线已完成；
-3. 每完成一项：`bash scripts/build_shell_local.sh` → `bash scripts/check_static.sh`
+1. **加载期自动显示日志浮层**（用户 2026-09-23 提，未做）：规格见下。
+2. 每完成一项：`bash scripts/build_shell_local.sh` → `bash scripts/check_static.sh`
    → `git diff --check` → 单独提交。
+
+### 7.1 加载期自动日志（待实现规格）
+
+**目标行为**：新增一个开关（全局默认 + 每游戏覆盖，与叠加层/按键同范式）。打开后：
+从 `launchPath()` 到 `startup state -> 2` 期间**自动显示运行时日志浮层**，游戏起来后
+**自动关闭**；用户手动关闭后本局不再自动弹。
+
+**落点**：
+- `core/AppPrefs.kt`：新键（建议 `debug.auto_log_on_launch`，缺省 **false**）。
+- `core/GameConfig.kt`：`GameConfig.autoLogOnLaunch: Boolean?`（null = 继承）+ `resolve()`。
+- `ui/GameScreen.kt`：`logsVisible` 目前是内部 `remember`；加一个参数 `autoShowLogs`，
+  并用 `LaunchedEffect(startupState)`：
+  - `startupState != SUCCEEDED && autoShowLogs && !userClosedLogs` → `logsVisible = true`；
+  - `startupState == SUCCEEDED` → `logsVisible = false`。
+  需要把“用户手动关过”记成一个 `remember` 标志，避免启动成功后又被自动打开。
+- `MainActivity.kt`：把解析出的开关传给 `GameScreen`；`SettingsScreen` / `GameSettingsScreen`
+  各加一个 `SwitchRow`。
+
+**约束**：日志浮层打开时会吞掉 SurfaceView 的触摸（现有 `logsVisible` 分支）——启动期本来就
+不该操作游戏，但**自动关闭必须可靠**，否则用户会被卡在只能看日志的界面（已有一个可点关闭按钮）。
+
+**验收**：打开开关 → 开游戏立即看到日志；`startup state -> 2` 后自动消失；
+关掉开关行为与现在完全一致；每游戏覆盖生效。
