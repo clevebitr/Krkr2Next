@@ -120,6 +120,14 @@
       "reason": "AetherKiri 层的伴生脚本虚拟文件：GPU 占位脚本（11 名，含 live2d.tjs）、motion_<asset>.psb/.mtn.tjs → %[\"storage\" => …]、*emo 虚拟存储。上游把这套逻辑直接写在 StorageIntf.cpp 里（io 层因此耦合了发行版知识）；本仓库改为 io 只提供泛型注册点 cpp/core/io/IoVirtualFile.*，由 compat 层注册 provider（见 compat/README.md §2）。local-fix：provider 只在 ActiveLayer()==AetherKiri 时生效；每个名字只打一条命中日志。gfxEffect / logwindow / D3DEmote 三类伴生脚本本轮未移（分别依赖模块存在性检查、~90 行内嵌脚本、36KB 生成 blob）。",
       "sha256_local": "cd8bb584193324e01c9824891b56e5a5feacf57307604ba28d77e81f67d76b57",
       "sha256_upstream_at_rev": "de2300aadb7e05e087fa6f539ae721f2478647afeef45b5f9a1ddc2c86d278c4"
+    },
+    {
+      "local": "cpp/plugins/alphamovie.cpp",
+      "upstream": "cpp/plugins/alphamovie.cpp",
+      "modifications": "none",
+      "reason": "AlphaMovie.dll 完整实现（替换原 158 行 stub）。NEKOPARA 4 的 AMV 帧载荷不是标准 JPEG：AlphaMovie.dll 自带 Huffman 编码，载荷无 SOI/DHT（Huffman 用标准表）、DQT 取自文件头，因此 turbojpeg 报 Could not determine subsampling level。本文件内含完整 baseline JPEG 解码器（decode_dc/ac_run_length、jpeg_idct_data、MCU 循环）与帧解析；另注册 GLAlphaMovie.dll 别名——游戏拿不到 GPU 变体会退化成 Layer.loadImages(\"*.amv\") 并触发 gfx_amovie.tjs 的除零。已核实：不引用 AetherKiri 专属 API，不引用 VideoPresentLayer 的视频缓冲新增成员，故无需改动共享的 movie/ffmpeg/。",
+      "sha256_local": "d8be10bb14225c6dd7faee37f2e5fe65437aaa9cc5135d320c201b9a9c3b55e0",
+      "sha256_upstream_at_rev": "d8be10bb14225c6dd7faee37f2e5fe65437aaa9cc5135d320c201b9a9c3b55e0"
     }
   ],
   "not_ported": [
