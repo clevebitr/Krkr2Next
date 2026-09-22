@@ -178,7 +178,13 @@ NEKOPARA 的 AMV 帧载荷**不是标准 JPEG**：`AlphaMovie.dll` 自带 Huffma
 11. **别用 `rg "A\|B"`**：rg 用 Rust 正则，`\|` 是**字面量管道符**而非 alternation，
     会静默匹配为空。本会话因此两次误判（"CMake 没这个 option"、"日志里没有问题"）。
     一律写 `rg "A|B"`。
-12. **commit message 别带反引号**（shell 会当命令替换，把内容吃掉）。
+12. **commit message 必须带 Conventional 前缀**：`<type>(<scope>): <中文主题>`（type/scope 取值与正文要求见 `AGENTS.md` 的「Git 协作」）。
+    本会话（2026-09-22）的 **17 条提交全部漏了前缀**，是近 300 条里唯一一批不带的（其余 200 条中 164 条带前缀）。
+    开工第一条提交前先 `git log --format='%s' -20` 对齐格式。
+13. **commit message 别用双引号 + 反引号**：shell 会把反引号当命令替换，把内容吃掉（本会话踩过）。
+    用 heredoc（`git commit -F - <<'EOF'`）或 `git commit -F <file>`。
+14. **push 会取消正在跑的 CI**：要交给用户验收的构建（特别是探针构建）在跑时，先把改动**只提交不推送**，
+    等构建产出产物后再推。
 
 ---
 
