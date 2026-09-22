@@ -2518,6 +2518,22 @@ void tTJSNI_BaseLayer::AssignImages(tTJSNI_BaseLayer *src) {
            MainImage->GetTexture() == src->MainImage->GetTexture()) {
             MainImage->Independ();
             main_changed = true;
+            static std::atomic<int> s_detachProbe{0};
+            if(s_detachProbe.fetch_add(1) < 12)
+                spdlog::info("probe: AssignImages detach(Independ) target='{}' {}x{}",
+                             GetName().AsStdString(), MainImage->GetWidth(),
+                             MainImage->GetHeight());
+        } else if(src != this && src->MainImage && MainImage &&
+                  src->GetName().IsEmpty() && !src->GetVisible() &&
+                  GetVisible() && !GetName().IsEmpty()) {
+            // 条件形状命中但纹理并未共享：把两个纹理指针记下来，判定“别名”到底存在与否。
+            static std::atomic<int> s_noShareProbe{0};
+            if(s_noShareProbe.fetch_add(1) < 8)
+                spdlog::info("probe: AssignImages no-shared-texture target='{}' "
+                             "targetTex={} srcTex={}",
+                             GetName().AsStdString(),
+                             static_cast<const void *>(MainImage->GetTexture()),
+                             static_cast<const void *>(src->MainImage->GetTexture()));
         }
     } else {
         DeallocateImage();
