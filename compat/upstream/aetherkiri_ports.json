@@ -128,6 +128,15 @@
       "reason": "AlphaMovie.dll 完整实现（替换原 158 行 stub）。NEKOPARA 4 的 AMV 帧载荷不是标准 JPEG：AlphaMovie.dll 自带 Huffman 编码，载荷无 SOI/DHT（Huffman 用标准表）、DQT 取自文件头，因此 turbojpeg 报 Could not determine subsampling level。本文件内含完整 baseline JPEG 解码器与帧解析；另注册 GLAlphaMovie.dll 别名。【local-fix】仅在两处呈现路径（showNextImage / copyNextImageToTexture）加了 KRKR_RENDER_PROBE 保护的几何探针（各前 6 次），用于定位真机反馈的『视频尺寸正常但整体偏移』并确认游戏实际走哪条路径；其余逐字节同上游。",
       "sha256_local": "e4697bf76ca95384218fceea8d65ec87c4cd382f1f425d68df2cd4bb148f95cc",
       "sha256_upstream_at_rev": "d8be10bb14225c6dd7faee37f2e5fe65437aaa9cc5135d320c201b9a9c3b55e0"
+    },
+    {
+      "local": "cpp/core/visual/AlphaMovieDecoder.cpp",
+      "upstream": "cpp/plugins/alphamovie.cpp",
+      "source_ref": "cpp/plugins/alphamovie.cpp:127-1240（BufferManager/Huffman 表规格与构建/DC-AC 解码/IDCT 原语）与 2023-2596（zlib 与 jpeg 两条 MCU 循环及 YUV→RGBA）",
+      "modifications": "partial-extract",
+      "reason": "AlphaMovie(AJPM) 帧载荷解码器。放 core 而非插件的理由：.amv 由 core 的 tTVPGraphicType 注册（GraphicsLoaderIntf.cpp:238），图形与头部两条路径都在 core；core 不能依赖插件、插件可以依赖 core（compat/README.md §2），所以解码器在 core、插件复用，才能让 Layer.loadImages(\"*.amv\") 这类 core 路径也拿到帧。相对上游的改动：成员变量改为参数（qtbl/isZlib/zlibBufSize/geo/payload）、filePtr->ReadBuffer 改为带边界检查的载荷 memcpy、失败 return 改为 return false、amvImageConvertContext_ 改为函数内 static、产出写进 outRgba。另：YUV→RGBA 沿用上游的 swscale（故 core/visual 新增 find_package(FFMPEG swscale)；不能反向依赖 core_movie_module，会成环）。",
+      "sha256_local": "6024c997763638a00c317da419663acb3d223817760b3da8aa5a19dd0dd168d8",
+      "sha256_upstream_at_rev": "d8be10bb14225c6dd7faee37f2e5fe65437aaa9cc5135d320c201b9a9c3b55e0"
     }
   ],
   "not_ported": [

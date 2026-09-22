@@ -3,6 +3,7 @@ project(core_visual_module LANGUAGES CXX)
 
 set(VISUAL_PATH ${CMAKE_CURRENT_LIST_DIR})
 set(VISUAL_SOURCE_FILES
+    ${VISUAL_PATH}/AlphaMovieDecoder.cpp
     ${VISUAL_PATH}/LoadWEBP.cpp
     ${VISUAL_PATH}/TransIntf.cpp
     ${VISUAL_PATH}/MenuItemIntf.cpp
@@ -124,6 +125,13 @@ target_link_libraries(${PROJECT_NAME} PRIVATE PNG::PNG)
 
 find_package(ZLIB REQUIRED)
 target_link_libraries(${PROJECT_NAME} PRIVATE ZLIB::ZLIB)
+
+# AlphaMovie（AJPM）帧载荷解码的 YUV→RGBA 转换与上游一致用 swscale。
+# core_movie_module 已 find_package(FFMPEG)，但 movie → visual 已是 PRIVATE 边，
+# visual 不能再反向依赖 movie（会成环），所以这里单独 find 一次。
+find_package(FFMPEG COMPONENTS avutil swscale REQUIRED)
+target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARIES})
 
 # Highway SIMD optimization module
 add_subdirectory(simd)

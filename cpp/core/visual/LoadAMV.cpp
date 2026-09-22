@@ -1,6 +1,7 @@
 #include "tjsCommHead.h"
 
 #include "LoadAMV.h"
+#include "AlphaMovieDecoder.h"
 #include "GraphicsLoaderIntf.h"
 #include "MsgIntf.h"
 
@@ -34,10 +35,13 @@ struct AMVZlibFrameHeader {
     tjs_uint32 magic;
     tjs_uint32 size_of_frame;
     tjs_uint32 index;
+    // 这 4 个 uint16 是**裁剪矩形** left/top/width/height（上游注释：它们是
+    // copyNextImageToTexture 返回的 Rect.left/top 与宽高），不是 alpha 平面
+    // 尺寸。历史命名有误导，这里按上游语义取名。
+    tjs_uint16 frame_left;
+    tjs_uint16 frame_top;
     tjs_uint16 frame_width;
     tjs_uint16 frame_height;
-    tjs_uint16 alpha_width;
-    tjs_uint16 alpha_height;
     tjs_uint32 rgb_buffer_size;
 };
 
@@ -45,10 +49,10 @@ struct AMVJpegFrameHeader {
     tjs_uint32 magic;
     tjs_uint32 size_of_frame;
     tjs_uint32 index;
+    tjs_uint16 frame_left;
+    tjs_uint16 frame_top;
     tjs_uint16 frame_width;
     tjs_uint16 frame_height;
-    tjs_uint16 alpha_width;
-    tjs_uint16 alpha_height;
 };
 #pragma pack(pop)
 
@@ -227,7 +231,7 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
     }
 
     // --- Read first frame header ---
-    int alphaW = 0, alphaH = 0;
+    int frameLeft = 0, frameTop = 0, frameW = 0, frameH = 0;
     tjs_uint32 sizeOfFrame = 0, rgbBufSize = 0;
     size_t extraHdr;
 
@@ -237,8 +241,10 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
         if(fh.magic != FRAM_MAGIC)
             TVPThrowExceptionMessage(TJS_W("AMV: invalid frame magic"));
         sizeOfFrame = fh.size_of_frame;
-        alphaW = fh.alpha_width;
-        alphaH = fh.alpha_height;
+        frameLeft = fh.frame_left;
+        frameTop = fh.frame_top;
+        frameW = fh.frame_width;
+        frameH = fh.frame_height;
         rgbBufSize = fh.rgb_buffer_size;
         extraHdr = sizeof(AMVZlibFrameHeader) - 8;
     } else {
@@ -247,8 +253,10 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
         if(fh.magic != FRAM_MAGIC)
             TVPThrowExceptionMessage(TJS_W("AMV: invalid frame magic"));
         sizeOfFrame = fh.size_of_frame;
-        alphaW = fh.alpha_width;
-        alphaH = fh.alpha_height;
+        frameLeft = fh.frame_left;
+        frameTop = fh.frame_top;
+        frameW = fh.frame_width;
+        frameH = fh.frame_height;
         extraHdr = sizeof(AMVJpegFrameHeader) - 8;
     }
 
@@ -308,7 +316,7 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
             "probe: AMV variant revision={} qt_size_plus_hdr={} unk={} unk2={} "
             "attr={} frame={}x{} alpha={}x{}",
             hdr.revision, hdr.qt_size_plus_hdr, hdr.unk, hdr.unk2,
-            hdr.alpha_decode_attr, imgW, imgH, alphaW, alphaH);
+            hdr.alpha_decode_attr, imgW, imgH, frameW, frameH);
     }
 #endif
 
@@ -319,8 +327,8 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
         if(rgbBufSize > payloadLen)
             TVPThrowExceptionMessage(TJS_W("AMV: rgb_buffer_size overflow"));
 
-        int colorW = alphaW > 0 ? alphaW : imgW;
-        int colorH = alphaH > 0 ? alphaH : imgH;
+        int colorW = frameW > 0 ? frameW : imgW;
+        int colorH = frameH > 0 ? frameH : imgH;
 
         if(rgbBufSize > 0) {
             unsigned long destLen =
@@ -346,8 +354,47 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
             }
         }
     } else {
+        // AlphaMovie 变体：载荷不是标准 JPEG（没有 SOI/DHT——Huffman 用标准表，
+        // DQT 取自文件头），turbojpeg 会报 Could not determine subsampling level。
+        // 先用专用解码器；失败再走标准 JPEG 路径。两种 AMV 变体靠载荷内容区分，
+        // 不靠扩展名。
+        bool decodedAmv = false;
+        {
+            krkr::alphamovie::FrameGeometry geo;
+            geo.left = static_cast<uint16_t>(frameLeft);
+            geo.top = static_cast<uint16_t>(frameTop);
+            geo.width = static_cast<uint16_t>(frameW);
+            geo.height = static_cast<uint16_t>(frameH);
+            uint8_t qtbl[3][64] = {};
+            if(qtData.size() >= sizeof(qtbl))
+                std::memcpy(qtbl, qtData.data(), sizeof(qtbl));
+            std::vector<uint8_t> amvRgba;
+            if(krkr::alphamovie::DecodeFrameToRgba(qtbl, false, 0, geo,
+                                                   payloadStart, payloadLen,
+                                                   amvRgba)) {
+                const size_t need =
+                    static_cast<size_t>(geo.width) * geo.height * 4;
+                const int amvCopyW =
+                    std::min(static_cast<int>(geo.width), imgW - geo.left);
+                const int amvCopyH =
+                    std::min(static_cast<int>(geo.height), imgH - geo.top);
+                if(amvRgba.size() >= need && amvCopyW > 0 && amvCopyH > 0) {
+                    for(int y = 0; y < amvCopyH; y++) {
+                        const uint8_t *s = amvRgba.data() +
+                                           static_cast<size_t>(y) *
+                                               geo.width * 4;
+                        tjs_uint32 *d =
+                            rgba.data() +
+                            static_cast<size_t>(geo.top + y) * imgW + geo.left;
+                        std::memcpy(d, s, static_cast<size_t>(amvCopyW) * 4);
+                    }
+                    decodedAmv = true;
+                }
+            }
+        }
         auto dqtSeg = BuildDQTSegment(qtData.data(), qtData.size());
 
+        if(!decodedAmv) {
         size_t colorSize = payloadLen;
         size_t alphaDataOffset = payloadLen;
         FindSecondSOI(payloadStart, payloadLen, colorSize);
@@ -398,15 +445,15 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
                         copyW * sizeof(tjs_uint32));
         }
 
-        if(alphaDataOffset < payloadLen && alphaW > 0 && alphaH > 0) {
+        if(alphaDataOffset < payloadLen && frameW > 0 && frameH > 0) {
             const unsigned char *alphaJpeg = payloadStart + alphaDataOffset;
             size_t alphaJpegLen = payloadLen - alphaDataOffset;
             int aW = 0, aH = 0;
             std::vector<unsigned char> grayPixels;
             if(DecodeJpegWithQT(alphaJpeg, alphaJpegLen, dqtSeg, TJPF_GRAY, 1,
                                 aW, aH, grayPixels)) {
-                int applyW = std::min({ aW, (int)alphaW, imgW });
-                int applyH = std::min({ aH, (int)alphaH, imgH });
+                int applyW = std::min({ aW, (int)frameW, imgW });
+                int applyH = std::min({ aH, (int)frameH, imgH });
                 for(int y = 0; y < applyH; y++) {
                     for(int x = 0; x < applyW; x++) {
                         unsigned char a = grayPixels[y * aW + x];
@@ -416,6 +463,7 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
                 }
             }
         }
+        } // if(!decodedAmv)
     }
 
     // --- Output to engine ---
