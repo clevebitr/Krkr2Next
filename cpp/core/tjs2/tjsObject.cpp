@@ -1348,6 +1348,12 @@ namespace TJS {
     // AetherKiri 层时打开（用户裁决：A 块只给 AetherKiri 层）。
     //---------------------------------------------------------------------------
     static bool TJSCompatFallbacksEnabledFlag = false;
+
+    // 常量回退开关（`archiveUniqueKey` / `lls*` / `kirikiriz*` / `developMode` …）：
+    // **两层都开**（缺省 true）。这批只是 Windows/krkrz 的运行期常量名，不改变
+    // "未定义成员就报错"的语义；而像 おっぱいスパイ学園 这种 `initialize.tjs` 直接
+    // 读 `llsUserDirs` 的游戏，缺了它会在 classic 层启动期就抛异常并退出。
+    static bool TJSCompatConstFallbacksEnabledFlag = true;
     static CompatGlobalGetterFn TJSCompatGlobalGetter = nullptr;
 
     void TJSSetCompatGlobalGetter(CompatGlobalGetterFn fn) {
@@ -1360,6 +1366,10 @@ namespace TJS {
 
     bool TJSCompatFallbacksEnabled() {
         return TJSCompatFallbacksEnabledFlag;
+    }
+
+    void TJSSetCompatConstantFallbacksEnabled(bool enabled) {
+        TJSCompatConstFallbacksEnabledFlag = enabled;
     }
 
     // 启动期名回退：11 个"框架函数在脚本里被无条件调用"的名字，缺失时当作 no-op（返回 1）。
@@ -1409,28 +1419,36 @@ namespace TJS {
 
     static bool TJSCompatResolveStartupFallback(const tjs_char *membername,
                                                 tTJSVariant *result) {
-        if(!TJSCompatFallbacksEnabledFlag || !membername || !result)
+        if(!membername || !result)
             return false;
 
-        if(TJSCompatIsStartupNoOpFunction(membername)) {
-            iTJSDispatch2 *method =
-                TJSCreateNativeClassMethod(TJSCompatStartupNoOpFunction);
-            if(!method)
-                return false;
-            *result = tTJSVariant(method, method);
-            method->Release();
-            return true;
+        // 前两类（no-op 函数、空 ShortCut 键表）**只在 AetherKiri 层**提供：
+        // 它们会把"未定义成员"变成"静默可用"，改变脚本语义。
+        if(TJSCompatFallbacksEnabledFlag) {
+            if(TJSCompatIsStartupNoOpFunction(membername)) {
+                iTJSDispatch2 *method =
+                    TJSCreateNativeClassMethod(TJSCompatStartupNoOpFunction);
+                if(!method)
+                    return false;
+                *result = tTJSVariant(method, method);
+                method->Release();
+                return true;
+            }
+
+            if(!TJS_strcmp(membername, TJS_W("ShortCutInitialPadKeyMap")) ||
+               !TJS_strcmp(membername, TJS_W("ShortCutInitialGamePadKeyMap"))) {
+                iTJSDispatch2 *array = TJSCreateArrayObject();
+                if(!array)
+                    return false;
+                *result = tTJSVariant(array, array);
+                array->Release();
+                return true;
+            }
         }
 
-        if(!TJS_strcmp(membername, TJS_W("ShortCutInitialPadKeyMap")) ||
-           !TJS_strcmp(membername, TJS_W("ShortCutInitialGamePadKeyMap"))) {
-            iTJSDispatch2 *array = TJSCreateArrayObject();
-            if(!array)
-                return false;
-            *result = tTJSVariant(array, array);
-            array->Release();
-            return true;
-        }
+        // 下面这批是**常量**，两层都给（见 TJSCompatConstFallbacksEnabledFlag 的说明）。
+        if(!TJSCompatConstFallbacksEnabledFlag)
+            return false;
 
         // 注意：`CompoundStorageMedia` 与 `kirikiriz` 两项**故意不照搬上游取值**：
         //   - `CompoundStorageMedia`：本仓库在 SystemImpl.cpp 里用 TJS 注入了一个等价类

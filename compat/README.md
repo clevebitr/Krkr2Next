@@ -164,6 +164,7 @@ app/ ──→ bridge/engine_api ──→ cpp/core/compat        （层框架�
 > | 议题 | 裁决 |
 > |---|---|
 > | A 块 TJS2 内核回退（A1/A2/A4） | **只给 AetherKiri 层开启**；A3 白名单（17 行）两层都移植 |
+> | **A 块「常量回退」子集**（`archiveUniqueKey`/`inXP3archivePacked`/`llsDllLoadDir`/`llsApplicationDir`/`llsUserDirs`/`llsSystem32`/`llsDefaultDirs`/`kirikiriz`/`kirikiriz_generic`/`debugWindowEnabled`/`developMode`） | **两层都要**（2026-09-23 裁决）：它们只是 Windows/krkrz 的运行期常量名，不改变“未定义成员就报错”的语义；缺了它们，`initialize.tjs` 直接读 `llsUserDirs` 的游戏（如 おっぱいスパイ学園）在 classic 层启动期就抛异常退出。开关 `TJSSetCompatConstantFallbacksEnabled`（缺省 true）。no-op 函数 / 空 ShortCut 表 / 34 名全局回退仍只给 AetherKiri 层 |
 > | C 块解析器 | **C1 `taglist`+`copyTag` 两层都要**；**C3 `GetNextTag` 文本段聚合只给 AetherKiri 层**（classic 层存档/断点语义不变）；C4 成对移植 |
 > | E1 `patch.tjs` 时机 | **分两层**：classic 保持 startup 之前；AetherKiri 层照搬 REF（含晚 patch 韧性层） |
 > | I2 首次读 `startup.tjs` 被原版压住 | **在 classic 层修**（补丁包的 startup.tjs 第一读就应生效） |

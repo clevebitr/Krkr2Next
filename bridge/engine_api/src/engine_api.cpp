@@ -286,12 +286,17 @@ namespace {
         static const char *kGpuMarkers[] = { "krkrgles.dll", "krkrlive2d.dll" };
         static const char *kEmoteMarkers[] = { "motionplayer.dll",
                                                "motionplayer_nod3d.dll" };
+        // 插件 DLL 可能在 plugin/ 子目录，也可能直接放在游戏根目录，两处都看。
+        const auto has_marker = [&root](const char *m) {
+            return CompatFileExists(root + "/plugin/" + m) ||
+                   CompatFileExists(root + "/" + m);
+        };
         for(const char *m : kGpuMarkers) {
-            if(CompatFileExists(root + "/plugin/" + m))
+            if(has_marker(m))
                 return ENGINE_GAME_COMPAT_PROFILE_KRKRZ_GPU;
         }
         for(const char *m : kEmoteMarkers) {
-            if(CompatFileExists(root + "/plugin/" + m))
+            if(has_marker(m))
                 return ENGINE_GAME_COMPAT_PROFILE_AETHERKIRI;
         }
         return ENGINE_GAME_COMPAT_PROFILE_KIRIKIRI2;

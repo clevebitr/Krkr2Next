@@ -27,6 +27,12 @@ namespace TJS {
     //---------------------------------------------------------------------------
     void TJSSetCompatFallbacksEnabled(bool enabled);
     bool TJSCompatFallbacksEnabled();
+    /**
+     * 常量回退（`archiveUniqueKey` / `lls*` / `kirikiriz*` / `developMode` …）：
+     * **两层都开**（缺省 true）。这批只是 Windows/krkrz 的运行期常量名，
+     * 不改变"未定义成员就报错"的语义。
+     */
+    void TJSSetCompatConstantFallbacksEnabled(bool enabled);
 
     using CompatGlobalGetterFn = iTJSDispatch2 *(*)();
     void TJSSetCompatGlobalGetter(CompatGlobalGetterFn fn);

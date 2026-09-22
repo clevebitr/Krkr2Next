@@ -102,6 +102,10 @@ namespace krkr::compat {
         // A 块（TJS2 内核兼容回退）：用户裁决只给 AetherKiri 层开启。
         // tjs2 侧不认识"层"，只认这个开关（见 tjsObject.h / tjsObject.cpp 的说明）。
         TJS::TJSSetCompatFallbacksEnabled(id == LayerId::AetherKiri);
+        // 常量回退（`lls*` / `archiveUniqueKey` / `kirikiriz*` / `developMode` …）
+        // **两层都给**：它们只是 Windows/krkrz 的运行期常量名，不改变脚本语义；
+        // 缺了它们，直接读 `llsUserDirs` 的 initialize.tjs 在 classic 层会启动期抛异常。
+        TJS::TJSSetCompatConstantFallbacksEnabled(true);
         if(g_active == id)
             return;
         g_active = id;
