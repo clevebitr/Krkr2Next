@@ -174,6 +174,32 @@ UI / 残留矩形。参考实现为此提供 `Layer.assignMotionImages`（把完
 
 ---
 
+## 1.8 引擎无响应/崩溃后的强制退出（壳侧，2026-09-23）
+
+**现象**：游戏卡死或崩溃后引擎不会被拆掉，残留的渲染线程/原生全局状态（EGL、TJS
+运行时）让后续游戏都打不开，只能手动杀后台重进模拟器。
+
+**原因**：`EngineSession.shutdown()` 把 `engineDestroy` post 到渲染线程就立即把
+`thread/handler` 置空。渲染线程若卡在 native 里（死循环/死锁），那个 runnable 永远
+排不进它的 Looper，而 `launchPath()` 已经接着开了新会话——两条线程抢同一份全局原生状态。
+
+**做法**（分层，能优雅就优雅，不能就重启进程）：
+1. `EngineSession.stalledMs()`：渲染线程每帧更新心跳（`lastTickNanos`），卡住就不再更新。
+   **模态对话框期间豁免**（新增 `engine_is_modal_active()` ABI）：`Window.showModal`
+   会让 `engine_tick` 阻塞在嵌套循环里，用户把弹窗开着不动不是卡死。
+2. `EngineSession.shutdown(timeoutMs, onDone)`：带看门狗，2.5s 内渲染线程没退出就
+   回调 `onDone(false)`。
+3. `MainActivity.launchPath()` **等旧会话确实拆掉再开新的**；不干净就 `restartProcess()`。
+4. 看门狗协程：`stalledMs() ≥ 10s` → `forceExitGame()`（日志/Toast + 强拆，必要时重启）。
+5. `onFatal`（启动失败）→ 弹只能"返回游戏库"的对话框；`onEngineUnresponsive`
+   （连续 120 帧 tick 报错）→ 同样强制退出。
+6. 悬浮菜单里加"强制退出"（error 色 + 二次确认），"退出游戏"也改成 error 色 + 二次确认。
+
+**重启是最后手段**：渲染线程卡在 native 里时，除了结束进程没有可靠的恢复手段；
+不重启的话下一次开游戏必然失败（用户现在的做法就是手动杀后台）。
+
+---
+
 ## 2. 目标一：KAG 兼容层对齐 AetherKiri
 
 用户确认的范围是五块（原话概括）：
@@ -217,7 +243,12 @@ UI / 残留矩形。参考实现为此提供 `Layer.assignMotionImages`（把完
 | 自定义按键浮层（位置/大小/文字/MD3 图标/颜色/透明度/描边，每游戏 + 全局模板） | ✅ 2026-09-23，规格与实现落点见 `SHELL_HANDOVER.md §3` |
 | 游戏中右下角按钮 → 右侧悬浮侧边栏显示**引擎注册的窗口菜单** | ✅ 2026-09-23（`engine_list_window_menu` / `engine_invoke_window_menu` + JNI + `ui/EngineMenuSidebar.kt`），规格见 `SHELL_HANDOVER.md §4` |
 | 光标触控板模式（模拟触控板驱动光标） | ✅ 2026-09-23（`ui/Touchpad.kt`；每游戏可覆盖，悬浮菜单可切） |
+| 触控板光标不显示 | ✅ 2026-09-23（SurfaceView 监听按值捕获普通参数，改经 `rememberUpdatedState`；并在模式开启时把光标放到画面中央） |
 | 按键布局自动对齐参考线 | ✅ 2026-09-23（`ui/KeyPadOverlay.kt` 的 `snapPosition`） |
+| 右下角按钮抽屉（引擎菜单/更多收进抽屉，自动隐藏） | ✅ 2026-09-23（`ui/GameScreen.kt`） |
+| 引擎菜单侧边栏可折叠展开 | ✅ 2026-09-23（`core/EngineMenu.kt` 的 `parseTree` + `ui/EngineMenuSidebar.kt`） |
+| 退出/强制退出（红色 + 二次确认） | ✅ 2026-09-23（`ui/GameScreen.kt`） |
+| 引擎无响应看门狗 + 强制退出/进程重启 | ✅ 2026-09-23（`EngineSession.stalledMs/shutdown(onDone)` + `MainActivity.forceExitGame/restartProcess`；新增 `engine_is_modal_active` 豁免模态） |
 
 > **壳的开发交接文档是 `SHELL_HANDOVER.md`**（本地编译闭环、文件/接口索引、两项待做功能的
 > 数据模型与落点、验收标准）。改壳前先读它。

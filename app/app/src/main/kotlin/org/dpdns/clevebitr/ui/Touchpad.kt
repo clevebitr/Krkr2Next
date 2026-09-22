@@ -64,6 +64,19 @@ class TouchpadState {
         )
     }
 
+    /**
+     * 模式打开时把光标放到画面中央，**这样一开启就能看到它**（否则光标停在 0,0，
+     * 半个圆点在屏幕外，看起来像“没有光标”）。已经报过位置过就不动，只夹回范围。
+     */
+    fun prime(width: Float, height: Float) {
+        if (width <= 0f || height <= 0f) return
+        if (reported) {
+            clampTo(width, height)
+        } else {
+            cursor = Offset(width / 2f, height / 2f)
+        }
+    }
+
     private fun ensureInitialized(width: Float, height: Float) {
         if (!reported && width > 0f && height > 0f) {
             cursor = Offset(width / 2f, height / 2f)

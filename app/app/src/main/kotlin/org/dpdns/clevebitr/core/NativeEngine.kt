@@ -114,6 +114,14 @@ object NativeEngine {
      */
     external fun engineInvokeWindowMenu(id: String): Int
 
+    /**
+     * 引擎当前是否在模态对话框里（1/0，失败 -1）。
+     *
+     * 模态期间 `engineTick` 会阻塞在嵌套循环里，壳的"无响应"看门狗必须据此
+     * 豁免，否则用户把对话框开着不动就会被误判成卡死。不需要 handle，任意线程可调。
+     */
+    external fun engineIsModalActive(): Int
+
     // ── 输入 ──────────────────────────────────────────────────────────────
     /**
      * @param keyCode **Windows VK 码**，不是 Android `KEYCODE_*`——

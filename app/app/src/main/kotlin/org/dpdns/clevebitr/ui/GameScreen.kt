@@ -15,40 +15,48 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import org.dpdns.clevebitr.core.AppLog
-import org.dpdns.clevebitr.core.EngineMenuItem
+import org.dpdns.clevebitr.core.EngineMenuNode
 import org.dpdns.clevebitr.core.EngineSession
 import org.dpdns.clevebitr.core.KeyPadProfile
 import org.dpdns.clevebitr.core.OverlayConfig
@@ -56,6 +64,9 @@ import org.dpdns.clevebitr.core.InputEvent
 import org.dpdns.clevebitr.core.NativeEngine
 
 private const val TAG = "KrKr2Next/Game"
+
+/** 按钮抽屉空闲多久自动收起。 */
+private const val DRAWER_AUTO_HIDE_MS = 5_000L
 
 /**
  * 游戏画面。
@@ -104,7 +115,10 @@ fun GameScreen(
     onEngineMenuButtonChange: (Boolean) -> Unit,
     /** 打开设置页。设置页会盖在游戏之上，引擎与 SurfaceView 不被销毁。 */
     onOpenSettings: () -> Unit,
+    /** 正常退出（拆引擎后回到游戏库）。 */
     onExit: () -> Unit,
+    /** 强制退出：引擎可能已无响应，由宿主强拆并在必要时重启进程。 */
+    onForceExit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -144,16 +158,43 @@ fun GameScreen(
     // 触控板模式下的虚拟光标与手势状态。
     val touchpadState = remember { TouchpadState() }
 
+    // SurfaceView 的监听在 `factory` 里只建一次，闭包会**按值**捕获普通参数；
+    // 必须经 rememberUpdatedState 读最新值，否则运行中开关触控板模式永远不生效
+    // （表现为“光标不动/不显示”）。
+    val currentTouchpadMode by rememberUpdatedState(touchpadMode)
+    val currentTouchpadSensitivity by rememberUpdatedState(touchpadSensitivity)
+
+    // 画面尺寸：用来把触控板光标放到中央（否则停在 0,0，看起来像“没有光标”）。
+    var viewportSize by remember { mutableStateOf(IntSize.Zero) }
+    LaunchedEffect(touchpadMode, viewportSize) {
+        if (touchpadMode && viewportSize.width > 0 && viewportSize.height > 0) {
+            touchpadState.prime(viewportSize.width.toFloat(), viewportSize.height.toFloat())
+        }
+    }
+
     // 引擎菜单侧边栏（§4）。菜单快照由引擎在 tick 上刷新，这里按 2Hz 拉取。
     var engineMenuVisible by remember { mutableStateOf(false) }
-    var engineMenuItems by remember { mutableStateOf<List<EngineMenuItem>>(emptyList()) }
+    var engineMenuNodes by remember { mutableStateOf<List<EngineMenuNode>>(emptyList()) }
     LaunchedEffect(engineMenuVisible) {
         if (!engineMenuVisible) return@LaunchedEffect
         while (true) {
-            engineMenuItems = session.windowMenu()
+            engineMenuNodes = session.windowMenu()
             delay(500)
         }
     }
+
+    // 右下角按钮抽屉：收起时只剩一个长条把手。空闲几秒自动收起。
+    var drawerExpanded by remember { mutableStateOf(false) }
+    LaunchedEffect(drawerExpanded, menuOpen, engineMenuVisible) {
+        if (drawerExpanded && !menuOpen && !engineMenuVisible) {
+            delay(DRAWER_AUTO_HIDE_MS)
+            drawerExpanded = false
+        }
+    }
+
+    // 退出确认（普通退出 / 强制退出）。
+    var confirmExit by remember { mutableStateOf(false) }
+    var confirmForceExit by remember { mutableStateOf(false) }
 
     // 日志由任意线程写入 AppLog，这里按固定节拍取快照——不要在组合里直接读，
     // 否则每次重组都要去抢那把锁，而且没有"变了"的信号可依赖。
@@ -165,7 +206,12 @@ fun GameScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .onSizeChanged { viewportSize = it },
+    ) {
 
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -192,14 +238,14 @@ fun GameScreen(
                         // 会连带把 POINTER_DOWN 送进游戏。menuOpen/logsVisible/
                         // keypadEditing 是 Compose State，闭包每次读到的都是当时的值。
                         if (!menuOpen && !logsVisible && !keypadEditing && !engineMenuVisible) {
-                            if (touchpadMode) {
+                            if (currentTouchpadMode) {
                                 handleTouchpadTouch(
                                     session = session,
                                     event = event,
                                     state = touchpadState,
                                     width = view.width.toFloat(),
                                     height = view.height.toFloat(),
-                                    sensitivity = touchpadSensitivity,
+                                    sensitivity = currentTouchpadSensitivity,
                                 )
                             } else {
                                 handleTouch(session, event)
@@ -256,13 +302,13 @@ fun GameScreen(
             }
         }
 
-        // 悬浮按钮 + 展开菜单。放右下角，避开左上角的 FPS。
-        // 收起/展开共用同一个按钮：展开后图标变成叉，再点即收起——不引入额外的
-        // 全屏遮罩，免得和 SurfaceView 的触摸派发纠缠。
+        // 按钮抽屉：贴右边缘。收起时只剩一个长条把手（箭头指示方向），展开后露出
+        // 「引擎菜单」与「更多」两个同尺寸按钮；空闲 DRAWER_AUTO_HIDE_MS 后自动收起。
+        // 两个按钮都收进抽屉，是为了不再占着游戏画面右下角。
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(16.dp),
+                .padding(vertical = 16.dp),
         ) {
             Column(horizontalAlignment = Alignment.End) {
                 if (menuOpen) {
@@ -291,31 +337,67 @@ fun GameScreen(
                             menuOpen = false
                             onOpenSettings()
                         },
-                        onExit = {
+                        onRequestExit = {
                             menuOpen = false
-                            onExit()
+                            confirmExit = true
+                        },
+                        onRequestForceExit = {
+                            menuOpen = false
+                            confirmForceExit = true
                         },
                     )
                     Spacer(Modifier.height(12.dp))
                 }
-                if (engineMenuButton) {
+
+                if (drawerExpanded) {
+                    if (engineMenuButton) {
+                        SmallFloatingActionButton(
+                            onClick = { engineMenuVisible = true },
+                            containerColor = Color(0xCC1F1F1F),
+                            contentColor = Color.White,
+                            modifier = Modifier.padding(end = 10.dp),
+                        ) {
+                            Icon(Icons.Filled.Menu, contentDescription = "引擎菜单")
+                        }
+                        Spacer(Modifier.height(12.dp))
+                    }
                     SmallFloatingActionButton(
-                        onClick = { engineMenuVisible = true },
+                        onClick = { menuOpen = !menuOpen },
                         containerColor = Color(0xCC1F1F1F),
                         contentColor = Color.White,
+                        modifier = Modifier.padding(end = 10.dp),
                     ) {
-                        Icon(Icons.Filled.Menu, contentDescription = "引擎菜单")
+                        Icon(
+                            imageVector = if (menuOpen) Icons.Filled.Close else Icons.Filled.MoreVert,
+                            contentDescription = if (menuOpen) "收起菜单" else "游戏菜单",
+                        )
                     }
                     Spacer(Modifier.height(12.dp))
                 }
-                FloatingActionButton(
-                    onClick = { menuOpen = !menuOpen },
-                    containerColor = Color(0xCC1F1F1F),
-                    contentColor = Color.White,
+
+                // 抽屉把手：贴右边缘的长条，箭头指示收起/展开。
+                Box(
+                    modifier = Modifier
+                        .width(34.dp)
+                        .height(78.dp)
+                        .background(
+                            color = Color(0xCC1F1F1F),
+                            shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
+                        )
+                        .clickable {
+                            drawerExpanded = !drawerExpanded
+                            if (!drawerExpanded) menuOpen = false
+                        },
+                    contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = if (menuOpen) Icons.Filled.Close else Icons.Filled.MoreVert,
-                        contentDescription = if (menuOpen) "收起菜单" else "游戏菜单",
+                        imageVector = if (drawerExpanded) {
+                            Icons.Filled.ChevronRight
+                        } else {
+                            Icons.Filled.ChevronLeft
+                        },
+                        contentDescription = if (drawerExpanded) "收起按钮抽屉" else "展开按钮抽屉",
+                        tint = Color.White,
                     )
                 }
             }
@@ -324,9 +406,54 @@ fun GameScreen(
         // 引擎菜单侧边栏：压在游戏与按键浮层之上（展开时遮罩会吃掉游戏输入）。
         if (engineMenuVisible) {
             EngineMenuSidebar(
-                items = engineMenuItems,
+                nodes = engineMenuNodes,
                 onInvoke = { id -> session.invokeWindowMenu(id) },
                 onClose = { engineMenuVisible = false },
+            )
+        }
+
+        // 退出确认：普通退出（拆引擎回库）与强制退出（引擎可能已无响应）。
+        if (confirmExit) {
+            AlertDialog(
+                onDismissRequest = { confirmExit = false },
+                title = { Text("退出游戏？") },
+                text = { Text("会结束当前游戏并返回游戏库，未保存的进度会丢失。") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmExit = false
+                            onExit()
+                        },
+                    ) { Text("退出", color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmExit = false }) { Text("继续游戏") }
+                },
+            )
+        }
+
+        if (confirmForceExit) {
+            AlertDialog(
+                onDismissRequest = { confirmForceExit = false },
+                title = { Text("强制退出？") },
+                text = {
+                    Text(
+                        "立即强拆引擎并返回游戏库。\n" +
+                            "游戏卡死/无响应时用这个：普通退出可能等不到引擎收尾。" +
+                            "若引擎仍未退出，应用会自动重启。",
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmForceExit = false
+                            onForceExit()
+                        },
+                    ) { Text("强制退出", color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmForceExit = false }) { Text("取消") }
+                },
             )
         }
 
@@ -353,7 +480,8 @@ private fun GameMenu(
     onToggleKeypadEdit: () -> Unit,
     onShowLogs: () -> Unit,
     onOpenSettings: () -> Unit,
-    onExit: () -> Unit,
+    onRequestExit: () -> Unit,
+    onRequestForceExit: () -> Unit,
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xE61F1F1F))) {
         Column {
@@ -401,16 +529,36 @@ private fun GameMenu(
                     .height(1.dp)
                     .background(Color(0x33FFFFFF)),
             )
-            MenuEntry(label = "退出游戏", onClick = onExit)
+            // 退出类操作统一用 error 色：它们在菜单里是破坏性的，不该和“设置”同色。
+            MenuEntry(
+                label = "退出游戏",
+                onClick = onRequestExit,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color(0x33FFFFFF)),
+            )
+            MenuEntry(
+                label = "强制退出",
+                onClick = onRequestForceExit,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
     }
 }
 
 @Composable
-private fun MenuEntry(label: String, onClick: () -> Unit) {
+private fun MenuEntry(
+    label: String,
+    onClick: () -> Unit,
+    color: Color = Color.White,
+) {
     Text(
         text = label,
-        color = Color.White,
+        color = color,
         style = MaterialTheme.typography.labelLarge,
         modifier = Modifier
             .fillMaxWidth()

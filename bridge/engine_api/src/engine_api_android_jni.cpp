@@ -567,4 +567,15 @@ Java_org_dpdns_clevebitr_core_NativeEngine_engineInvokeWindowMenu(
     return static_cast<jint>(rc);
 }
 
+// 引擎是否在模态对话框里（1/0，失败 -1）。壳的“无响应”看门狗用它豁免模态等待。
+extern "C" JNIEXPORT jint JNICALL
+Java_org_dpdns_clevebitr_core_NativeEngine_engineIsModalActive(
+    JNIEnv * /*env*/, jobject /*thiz*/) {
+    uint32_t active = 0;
+    const engine_result_t rc = engine_is_modal_active(&active);
+    if(rc != ENGINE_RESULT_OK)
+        return -1;
+    return static_cast<jint>(active);
+}
+
 #endif // __ANDROID__

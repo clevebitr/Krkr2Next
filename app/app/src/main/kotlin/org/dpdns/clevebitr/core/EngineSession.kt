@@ -89,6 +89,11 @@ class EngineSession(
      *   - 继续游戏 → [resolveWindowClose]`(false)`，游戏从原处接着跑。
      */
     private val onWindowCloseRequested: () -> Unit = {},
+    /**
+     * 引擎连续多帧报错（不是 STARTUP_PENDING 那类“正常但不是 OK”的码），
+     * 判定它已经不可用。**已切到主线程回调**，只回调一次。
+     */
+    private val onEngineUnresponsive: () -> Unit = {},
 ) {
     companion object {
         private const val TAG = "KrKr2Next/Engine"
@@ -127,6 +132,15 @@ class EngineSession(
 
         /** 渲染器信息缓冲区大小（当前实现返回几十字节的 key=value 串）。 */
         private const val RENDERER_INFO_BUFFER_SIZE = 1024
+
+        /**
+         * 等待渲染线程退出的上限。超时说明它卡在 native 里（`engineDestroy`
+         * 排不进那条线程的 Looper），此时只能重启进程。
+         */
+        private const val SHUTDOWN_TIMEOUT_MS = 2_500L
+
+        /** 连续这么多帧 tick 失败就判定引擎不可用（≈2s @60fps）。 */
+        private const val TICK_FAILURE_LIMIT = 120
     }
 
     private var thread: HandlerThread? = null
@@ -236,6 +250,9 @@ class EngineSession(
     /** 累计 tick 失败次数，供限频日志带出"偶发还是彻底坏了"。只在渲染线程写。 */
     private var tickFailures = 0L
 
+    /** 连续失败计数；成功一帧就清零。只在渲染线程写。 */
+    private var consecutiveTickFailures = 0
+
     /**
      * 累计输入被拒次数。输入在调用线程（UI 线程）直接投递，读它的是渲染线程的
      * 性能日志，所以必须是 volatile。
@@ -258,6 +275,12 @@ class EngineSession(
     @Volatile private var destroyed = false
 
     /**
+     * 上一帧进入 `doFrame` 的时刻（纳秒）。看门狗据此判断引擎是否卡死：
+     * 渲染线程若卡在 `engineTick`（native 循环/死锁），这个值就不会再更新。
+     */
+    @Volatile private var lastTickNanos = 0L
+
+    /**
      * 游戏是否已请求退出。只用来把"请宿主收尾"收敛成一次（引擎会一直返回
      * `RESULT_GAME_TERMINATED`）。只在渲染线程读写。
      */
@@ -274,6 +297,7 @@ class EngineSession(
     private val frameCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
             if (!running) return
+            lastTickNanos = System.nanoTime()
 
             val deltaMs = if (lastFrameNanos == 0L) {
                 16L
@@ -342,6 +366,14 @@ class EngineSession(
                         // 每帧都能失败，逐帧记录会把日志刷爆（60 行/秒）。限频到 5 秒一条，
                         // 并把次数带上——次数本身是判断"偶发一次"还是"彻底坏了"的关键。
                         tickFailures++
+                        consecutiveTickFailures++
+                        if (consecutiveTickFailures == TICK_FAILURE_LIMIT) {
+                            AppLog.e(
+                                TAG,
+                                "engineTick 连续失败 $consecutiveTickFailures 次：判定引擎已不可用",
+                            )
+                            postToMain { onEngineUnresponsive() }
+                        }
                         AppLog.wLimited(
                             TAG,
                             "engineTick",
@@ -349,6 +381,7 @@ class EngineSession(
                         ) { "engineTick failed x$tickFailures (最近一次 rc=$rc err=${lastError()})" }
                     }
                 }
+                if (rc == NativeEngine.RESULT_OK) consecutiveTickFailures = 0
                 if (++frameCounter % STARTUP_POLL_FRAMES == 0L) {
                     pollStartupState()
                 }
@@ -603,15 +636,55 @@ class EngineSession(
         }
     }
 
-    /** 销毁引擎并结束渲染线程。调用后本对象不可再用。 */
-    fun shutdown() {
-        if (destroyed) return
+    /**
+     * 引擎已无响应的时长（毫秒）；0 表示正常或不该判定。
+     *
+     * 豁免三种情况：会话已销毁、已暂停（后台）、以及**正在处理模态对话框**
+     * （KAG 的 `Window.showModal`：`engine_tick` 会阻塞在嵌套循环里，用户把弹窗
+     * 开着不动不是卡死）。可从任意线程调用。
+     */
+    fun stalledMs(): Long {
+        if (destroyed || !running || paused) return 0L
+        val last = lastTickNanos
+        if (last == 0L) return 0L
+        if (NativeEngine.engineIsModalActive() == 1) return 0L
+        return (System.nanoTime() - last) / 1_000_000L
+    }
+
+    /**
+     * 销毁引擎并结束渲染线程，带超时看门狗。调用后本对象不可再用。
+     *
+     * @param timeoutMs 等待渲染线程真正退出的上限。超时说明它卡在 native 里——
+     *   `engineDestroy` 根本排不进那条线程，再等也没用。
+     * @param onDone **在主线程**回调一次：true = 引擎已确实拆掉（可以安全开下一局）；
+     *   false = 渲染线程卡死，宿主应当重启进程。
+     */
+    fun shutdown(
+        timeoutMs: Long = SHUTDOWN_TIMEOUT_MS,
+        onDone: ((Boolean) -> Unit)? = null,
+    ) {
+        if (destroyed) {
+            onDone?.let { cb -> postToMain { cb(true) } }
+            return
+        }
         destroyed = true
         running = false
 
         val ht = thread
         val h = handler
-        if (ht == null || h == null) return
+        thread = null
+        handler = null
+        if (ht == null || h == null) {
+            onDone?.let { cb -> postToMain { cb(true) } }
+            return
+        }
+
+        val reported = java.util.concurrent.atomic.AtomicBoolean(false)
+        val finish: (Boolean) -> Unit = { clean ->
+            if (reported.compareAndSet(false, true)) {
+                onDone?.let { cb -> postToMain { cb(clean) } }
+            }
+        }
 
         h.post {
             choreographer?.removeFrameCallback(frameCallback)
@@ -621,9 +694,20 @@ class EngineSession(
                 AppLog.i(TAG, "engineDestroy done")
             }
             ht.quitSafely()
+            finish(true)
         }
-        thread = null
-        handler = null
+
+        if (onDone != null) {
+            mainHandler.postDelayed(
+                {
+                    if (!reported.get()) {
+                        AppLog.e(TAG, "渲染线程 ${timeoutMs}ms 内没有退出：引擎已卡死")
+                        finish(false)
+                    }
+                },
+                timeoutMs,
+            )
+        }
     }
 
     // ── 输入 ──────────────────────────────────────────────────────────────
@@ -862,13 +946,13 @@ class EngineSession(
     private val windowMenuLock = Any()
 
     /**
-     * 读当前窗口菜单项快照。**任意线程可调**（引擎侧维护快照，加锁读）。
-     * 游戏没注册菜单时返回空列表——这是正常状态，不是错误。
+     * 读当前窗口菜单项快照（已还原成树）。**任意线程可调**（引擎侧维护快照，
+     * 加锁读）。游戏没注册菜单时返回空列表——这是正常状态，不是错误。
      */
-    fun windowMenu(): List<EngineMenuItem> = synchronized(windowMenuLock) {
+    fun windowMenu(): List<EngineMenuNode> = synchronized(windowMenuLock) {
         val n = NativeEngine.engineListWindowMenu(windowMenuBuffer)
         if (n <= 0) return emptyList()
-        EngineMenuParser.parse(
+        EngineMenuParser.parseTree(
             String(windowMenuBuffer, 0, minOf(n, windowMenuBuffer.size), Charsets.UTF_8),
         )
     }

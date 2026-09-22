@@ -3274,6 +3274,18 @@ engine_result_t engine_invoke_window_menu(const char *item_id_utf8) {
     return ENGINE_RESULT_OK;
 }
 
+engine_result_t engine_is_modal_active(uint32_t *out_active) {
+    if(out_active == nullptr) {
+        return SetThreadErrorAndReturn(ENGINE_RESULT_INVALID_ARGUMENT,
+                                       "out_active is null");
+    }
+    // 模态对话框（KAG 的 Window.showModal）期间 engine_tick 阻塞在嵌套循环里，
+    // 宿主看门狗据此豁免。
+    *out_active = (TVPGetActiveModalWindow() != nullptr) ? 1u : 0u;
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+}
+
 } // extern "C"
 
 #else
@@ -4031,6 +4043,16 @@ engine_result_t engine_invoke_window_menu(const char *item_id_utf8) {
     return SetThreadErrorAndReturn(
         ENGINE_RESULT_NOT_SUPPORTED,
         "window menu is not available in this build");
+}
+
+engine_result_t engine_is_modal_active(uint32_t *out_active) {
+    if(out_active == nullptr) {
+        return SetThreadErrorAndReturn(ENGINE_RESULT_INVALID_ARGUMENT,
+                                       "out_active is null");
+    }
+    *out_active = 0u;
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
 }
 
 } // extern "C"

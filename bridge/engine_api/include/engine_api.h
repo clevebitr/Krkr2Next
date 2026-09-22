@@ -519,6 +519,21 @@ ENGINE_API_EXPORT engine_result_t
 engine_invoke_window_menu(const char *item_id_utf8);
 
 /*
+ * Queries whether the engine is currently running a modal dialog (KAG's
+ * Window.showModal, or a game-created modal window). Writes 1/0 into
+ * out_active.
+ *
+ * While a modal is open, engine_tick blocks in a nested loop, so the host's
+ * "not responding" watchdog MUST exempt it — otherwise leaving a dialog open
+ * would be misread as a hang. Handle-free; callable from any thread.
+ *
+ * 引擎当前是否在模态对话框里（out_active 写 1/0）。模态期间 engine_tick 会阻塞在
+ * 嵌套循环里，宿主的"无响应"看门狗必须据此豁免，否则用户把对话框开着不动就会被
+ * 误判成卡死。不需要 handle，任意线程可调。
+ */
+ENGINE_API_EXPORT engine_result_t engine_is_modal_active(uint32_t *out_active);
+
+/*
  * Returns last error message as UTF-8 null-terminated string.
  * The returned pointer remains valid until next API call on the same handle.
  * Returns empty string when no error is recorded.

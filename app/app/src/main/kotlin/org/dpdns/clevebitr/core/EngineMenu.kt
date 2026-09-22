@@ -17,6 +17,14 @@ data class EngineMenuItem(
     val checked: Boolean,
     /** 是否可用；不可用的项置灰且不可点。 */
     val enabled: Boolean,
+    /** 是否有子项（侧边栏据此决定要不要画折叠箭头）。 */
+    val hasChildren: Boolean = false,
+)
+
+/** 侧边栏用的菜单树节点。 */
+data class EngineMenuNode(
+    val item: EngineMenuItem,
+    val children: List<EngineMenuNode>,
 )
 
 /**
@@ -30,9 +38,47 @@ object EngineMenuParser {
 
     fun parse(text: String): List<EngineMenuItem> {
         if (text.isEmpty()) return emptyList()
-        return text.lineSequence()
+        val items = text.lineSequence()
             .mapNotNull { line -> parseLine(line) }
             .toList()
+        // 子项判定：紧跟在后面、层级更深的那一项就是它的孩子。
+        return items.mapIndexed { index, item ->
+            val next = items.getOrNull(index + 1)
+            item.copy(hasChildren = next != null && next.depth > item.depth)
+        }
+    }
+
+    /**
+     * 按 `depth` 把扁平列表还原成树。depth 跳变（引擎侧不该发生，但配置/版本差异
+     * 可能有）时按"挂到最近的合法父节点"处理，不抛异常。
+     */
+    fun parseTree(text: String): List<EngineMenuNode> = buildTree(parse(text))
+
+    fun buildTree(items: List<EngineMenuItem>): List<EngineMenuNode> {
+        if (items.isEmpty()) return emptyList()
+        val roots = mutableListOf<MutableNode>()
+        // 栈里保存当前路径上"可能成为父节点"的节点，栈顶是最近的。
+        val stack = ArrayDeque<MutableNode>()
+
+        items.forEach { item ->
+            val node = MutableNode(item)
+            while (stack.isNotEmpty() && stack.last().item.depth >= item.depth) {
+                stack.removeLast()
+            }
+            if (stack.isEmpty()) {
+                roots += node
+            } else {
+                stack.last().children += node
+            }
+            stack.addLast(node)
+        }
+        return roots.map { it.freeze() }
+    }
+
+    private class MutableNode(val item: EngineMenuItem) {
+        val children = mutableListOf<MutableNode>()
+        fun freeze(): EngineMenuNode =
+            EngineMenuNode(item, children.map { it.freeze() })
     }
 
     private fun parseLine(line: String): EngineMenuItem? {

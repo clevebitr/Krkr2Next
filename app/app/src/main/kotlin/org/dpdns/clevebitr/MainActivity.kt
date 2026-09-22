@@ -84,6 +84,15 @@ class MainActivity : ComponentActivity() {
         private const val TAG = "KrKr2Next/Main"
         private const val ENGINE_LOG_TAG = "KrKr2Next/Engine"
         private const val DOUBLE_BACK_MS = 2_000L
+
+        /** 无响应看门狗的检查间隔。 */
+        private const val STALL_CHECK_INTERVAL_MS = 1_000L
+
+        /**
+         * 心跳停了多久算卡死。给足余量：GC、长帧、大资源加载（实测某作
+         * `CreateRenderer(1920x1080)` 就要 2.7s）都可能停一两秒。
+         */
+        private const val STALL_FORCE_EXIT_MS = 10_000L
     }
 
     private var session: EngineSession? = null
@@ -112,6 +121,9 @@ class MainActivity : ComponentActivity() {
 
     /** 游戏内悬浮菜单打开的设置页（覆盖在游戏画面之上）。 */
     private var inGameSettings by mutableStateOf(false)
+
+    /** 启动/打开失败的消息；非空时弹一个只能"返回游戏库"的对话框。 */
+    private var fatalMessage by mutableStateOf<String?>(null)
 
     /**
      * 本次会话生效的叠加层配置：启动时把"全局默认 + 该游戏覆盖"合并好。
@@ -205,6 +217,21 @@ class MainActivity : ComponentActivity() {
             .onFailure { AppLog.w(TAG, "从游戏目录恢复元数据失败：$it") }
         refreshLibrary()
 
+        // 引擎"无响应"看门狗：渲染线程卡在 native 里时（游戏死循环/死锁），帧回调
+        // 不会再更新心跳。超过阈值就强制退出——否则残留的坏引擎会让后续游戏都打不开
+        // （用户现在的做法是手动杀后台）。模态对话框期间会豁免（见 stalledMs）。
+        lifecycleScope.launch {
+            while (true) {
+                delay(STALL_CHECK_INTERVAL_MS)
+                val s = session ?: continue
+                val stalled = s.stalledMs()
+                if (stalled >= STALL_FORCE_EXIT_MS) {
+                    AppLog.e(TAG, "引擎无响应 ${stalled}ms，强制退出")
+                    forceExitGame("游戏无响应 ${stalled}ms")
+                }
+            }
+        }
+
         setContent {
             KrKr2NextTheme(darkTheme = resolveDarkTheme(themeMode)) {
                 // 根 Surface 不能省：`themes.xml` 的 windowBackground 是黑的，而 Compose
@@ -265,6 +292,7 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onOpenSettings = { inGameSettings = true },
                                 onExit = ::exitToLauncher,
+                                onForceExit = { forceExitGame("用户强制退出") },
                             )
                             if (inGameSettings) {
                                 Surface(
@@ -357,6 +385,21 @@ class MainActivity : ComponentActivity() {
                             },
                             dismissButton = {
                                 TextButton(onClick = { keepPlaying() }) { Text("继续游戏") }
+                            },
+                        )
+                    }
+
+                    // 启动/打开失败：此时引擎多半已经不可用，只能返回游戏库。
+                    fatalMessage?.let { msg ->
+                        AlertDialog(
+                            onDismissRequest = { fatalMessage = null },
+                            title = { Text("游戏无法启动") },
+                            text = { Text(msg) },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    fatalMessage = null
+                                    forceExitGame("游戏启动失败")
+                                }) { Text("返回游戏库", color = MaterialTheme.colorScheme.error) }
                             },
                         )
                     }
@@ -614,9 +657,24 @@ class MainActivity : ComponentActivity() {
         launchPath(game.path)
     }
 
-    /** 选定目录后创建引擎会话。库记录可选：目录页的"直接启动"走的就是这条路。 */
+    /**
+     * 选定目录后创建引擎会话。库记录可选：目录页的"直接启动"走的就是这条路。
+     *
+     * **必须先确认旧会话真的拆掉了再开新的**：旧渲染线程若卡在 native 里，新会话会
+     * 和它抢同一份全局原生状态（EGL、TJS 运行时），表现就是"后续游戏打不开，只能杀
+     * 进程重进"。旧线程在超时内没退出就直接重启应用。
+     */
     private fun launchPath(path: String) {
-        closeSession()
+        if (session != null) {
+            closeSession { clean ->
+                if (clean) startSession(path) else restartProcess("旧引擎未能在退出前收尾")
+            }
+            return
+        }
+        startSession(path)
+    }
+
+    private fun startSession(path: String) {
         inGameSettings = false
 
         // 必须先落这个状态：GameScreen（内含 SurfaceView）只在 gamePath 非空时才被
@@ -664,6 +722,7 @@ class MainActivity : ComponentActivity() {
             onFatal = { msg ->
                 statusText = msg
                 startupState = NativeEngine.STARTUP_FAILED
+                fatalMessage = msg
                 AppLog.e(TAG, "fatal: $msg")
             },
             // 游戏内"退出游戏"（TJS System.exit()）：先弹确认框问用户，而不是直接退出。
@@ -686,6 +745,12 @@ class MainActivity : ComponentActivity() {
                 Toast.makeText(this, "游戏已退出", Toast.LENGTH_SHORT).show()
                 exitToLauncher()
             },
+            // 连续多帧 tick 报错：引擎已经不可用，直接强拆（必要时重启进程），
+            // 否则残留在那里会让后续游戏都打不开。
+            onEngineUnresponsive = {
+                AppLog.e(TAG, "引擎连续报错 -> 强制退出")
+                forceExitGame("引擎连续报错")
+            },
         )
         session = s
         startupState = NativeEngine.STARTUP_IDLE
@@ -695,18 +760,27 @@ class MainActivity : ComponentActivity() {
         s.openGame(path)
     }
 
-    private fun closeSession() {
+    /**
+     * 关闭当前会话。
+     *
+     * @param onDone 在主线程回调一次：true = 引擎已确实拆掉（可以安全开下一局）；
+     *   false = 渲染线程卡死，调用方应重启进程。
+     */
+    private fun closeSession(onDone: ((Boolean) -> Unit)? = null) {
         // 退出游戏前把编辑态里没落盘的按键改动写回（用户可能没点“完成”就退出了）。
         persistSessionKeypad()
-        session?.let {
-            AppLog.i(TAG, "closeSession")
-            it.detachSurface()
-            it.shutdown()
-        }
+        val s = session
         session = null
         // 会话没了，退出确认框不该再挂着（否则退出后还会再弹一次）。
         gameExitPrompt = null
         keypadEditing = false
+        if (s == null) {
+            onDone?.invoke(true)
+            return
+        }
+        AppLog.i(TAG, "closeSession")
+        s.detachSurface()
+        s.shutdown { clean -> onDone?.invoke(clean) }
     }
 
     /**
@@ -733,11 +807,43 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun exitToLauncher() {
-        closeSession()
+        closeSession { clean ->
+            if (!clean) restartProcess("退出游戏时引擎无响应")
+        }
         gamePath = null
         startupState = NativeEngine.STARTUP_IDLE
         inGameSettings = false
         AppLog.i(TAG, "exitToLauncher")
+    }
+
+    /**
+     * 强制退出：不等优雅收尾。引擎可能已经卡死，所以拆不掉就重启进程——否则下一次
+     * 开游戏会和残留的引擎抢全局原生状态，表现就是"后续游戏都打不开"。
+     */
+    private fun forceExitGame(reason: String) {
+        AppLog.e(TAG, "强制退出游戏：$reason")
+        Toast.makeText(this, "正在强制退出…", Toast.LENGTH_SHORT).show()
+        closeSession { clean ->
+            if (!clean) restartProcess(reason)
+        }
+        gamePath = null
+        startupState = NativeEngine.STARTUP_IDLE
+        inGameSettings = false
+    }
+
+    /**
+     * 重启应用进程。渲染线程卡在 native 里时，除了结束进程没有可靠的恢复手段；
+     * 不重启的话下一次开游戏必然失败（用户现在的做法就是手动杀后台）。
+     */
+    private fun restartProcess(reason: String) {
+        AppLog.e(TAG, "重启应用进程：$reason")
+        Toast.makeText(this, "引擎无响应，正在重启应用…", Toast.LENGTH_LONG).show()
+        AppLog.flush()
+        // 给 Toast/日志一点时间落盘，再结束进程。
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+            { android.os.Process.killProcess(android.os.Process.myPid()) },
+            900L,
+        )
     }
 
     // ── 按键 ──────────────────────────────────────────────────────────────
