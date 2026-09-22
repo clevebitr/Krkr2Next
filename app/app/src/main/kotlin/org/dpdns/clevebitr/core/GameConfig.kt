@@ -333,7 +333,8 @@ data class GlobalDefaults(
     val fpsLimit: Int,
     val fontFallbackMode: String,
     val overlay: OverlayConfig,
-    val keypad: KeyPadProfile = KeyPadProfile.default(),
+    /** 全局默认按键浮层；未配置时为 [KeyPadProfile.starter]（默认开启）。 */
+    val keypad: KeyPadProfile = KeyPadProfile.starter(),
 )
 
 /** 合并后的结果：壳各处（启动、叠加层）只认它。 */

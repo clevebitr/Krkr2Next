@@ -362,7 +362,37 @@ fun GameDetailScreen(
                             }
                         }
 
-                        // ── 主操作 ──
+                        // ── 标签：在简介之上（两者都在封面右侧） ──
+                        if (game.tags.isNotEmpty()) {
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                game.tags.take(12).forEach { tag -> TagPill(tag) }
+                            }
+                        }
+
+                        // ── 简介：可折叠。右侧三块（标签/简介/按钮）可能比封面高，
+                        // 所以默认只显示几行，需要时再展开。 ──
+                        if (game.description.isNotBlank()) {
+                            Text(
+                                text = game.description,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = if (descriptionExpanded) {
+                                    Int.MAX_VALUE
+                                } else {
+                                    DESCRIPTION_COLLAPSED_LINES
+                                },
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            )
+                            TextButton(onClick = { descriptionExpanded = !descriptionExpanded }) {
+                                Text(if (descriptionExpanded) "收起简介" else "展开简介")
+                            }
+                        }
+
+                        // ── 主操作（在简介下面） ──
                         // 用 FlowRow 而不是 Row：窄屏（小手机竖屏）上封面已占 132dp，
                         // 两个带图标的按钮并排会挤到文字换行；换行比截断好。
                         FlowRow(
@@ -444,37 +474,6 @@ fun GameDetailScreen(
                                     if (own.enabled) "独立配置：开（${own.buttons.size} 个按钮）" else "独立配置：关"
                             },
                         )
-                    }
-                }
-
-                // ── 简介与标签 ──
-                if (game.tags.isNotEmpty()) {
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        // 标签是**只读信息**，不是可点项：用 AssistChip 会给出
-                        // “点了会做点什么”的误导提示（而 onClick 是空的）。
-                        game.tags.take(12).forEach { tag -> TagPill(tag) }
-                    }
-                }
-
-                if (game.description.isNotBlank()) {
-                    Text(
-                        text = game.description,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = if (descriptionExpanded) Int.MAX_VALUE else 6,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
-                    TextButton(
-                        onClick = { descriptionExpanded = !descriptionExpanded },
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    ) {
-                        Text(if (descriptionExpanded) "收起简介" else "展开简介")
                     }
                 }
 
@@ -574,6 +573,9 @@ private fun SummaryLine(label: String, value: String) {
         Text(text = value, style = MaterialTheme.typography.bodySmall)
     }
 }
+
+/** 简介默认收起的行数；展开后显示全部。 */
+private const val DESCRIPTION_COLLAPSED_LINES = 5
 
 /** 只读标签胶囊。与 `SuggestionChip` 区分：它没有涟漪、没有点击语义。 */
 @Composable

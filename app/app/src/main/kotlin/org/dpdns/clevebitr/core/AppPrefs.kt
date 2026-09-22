@@ -302,16 +302,19 @@ object AppPrefs {
 
     /**
      * **全局默认**按键浮层配置。每游戏覆盖存在各自的 `krkr2next.json` 里。
-     * 解析失败或从未设置时返回 [KeyPadProfile.default]（关着的空浮层）。
+     *
+     * 从未设置过时返回 [KeyPadProfile.starter]（**默认开启**的方向键 + 确认/返回布局）：
+     * 触屏玩 KiriKiri 时这些键没有可点区域，默认给一套比默认空着更有用；不想要的
+     * 用户在设置里关掉或清空即可。解析失败同样退回 starter（不抛异常）。
      */
     fun keyPadProfile(context: Context): KeyPadProfile {
         val raw = prefs(context).getString(KEY_KEYPAD_PROFILE, null)
-        if (raw.isNullOrBlank()) return KeyPadProfile.default()
+        if (raw.isNullOrBlank()) return KeyPadProfile.starter()
         return try {
-            KeyPadProfile.fromJson(JSONObject(raw)) ?: KeyPadProfile.default()
+            KeyPadProfile.fromJson(JSONObject(raw)) ?: KeyPadProfile.starter()
         } catch (t: Throwable) {
             AppLog.w(TAG, "按键浮层配置解析失败，按默认处理：$t")
-            KeyPadProfile.default()
+            KeyPadProfile.starter()
         }
     }
 

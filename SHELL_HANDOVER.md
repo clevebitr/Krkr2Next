@@ -77,11 +77,19 @@ git diff --check
 - 模型/存储：`core/KeyPadConfig.kt`（`KeyButton` / `KeyPadProfile`，归一化坐标，JSON）；
   每游戏存 `krkr2next.json` 的 `keypad` 段（`GameConfig.keypad`），全局默认与具名模板存
   `AppPrefs`（`input.keypad_profile` / `input.keypad_templates`）。
+  全局默认**未设置时返回 `KeyPadProfile.starter()`（默认开启）**：方向键 + 确认/返回。
 - 渲染/交互：`ui/KeyPadOverlay.kt`。**只有按钮命中区消费事件**，其余穿透给引擎；
   编辑态由 `GameScreen` 的 SurfaceView 监听吞掉全部触摸（否则拖按钮会把 `POINTER_DOWN`
   送进游戏）。长按按系统 repeat 心跳补发 down（引擎不生成 repeat）。
-- 编辑：游戏内悬浮菜单 →「编辑自定义按键」进入编辑态，拖拽移动、右下角把手缩放、
-  顶部工具条添加/删除/完成。属性细调在设置页（`ui/KeyPadConfigEditor.kt`）。
+- 编辑：游戏内悬浮菜单 →「编辑自定义按键」进入编辑态，顶部工具条
+  **添加 / 属性 / 删除 / 完成**。选中按钮后可拖拽移动、右下角把手缩放；「属性」打开
+  `ModalBottomSheet` 里的 `KeyPadConfigEditor`，**游戏内即可完整配置**
+  （键位/文字/图标/颜色/大小/透明度/描边/位置大小），无需退出游戏。
+- 拖拽/缩放为什么用"绝对目标"：`pointerInput` 的 block 不随 x/y/w/h 重建，
+  若按"当前值 + 增量"累加会永远拿旧值（表现为拖不动、缩放弹回）。现改为
+  手势起点快照 + 累计位移写绝对目标，并用 `rememberUpdatedState` 取最新回调；
+  选择与拖拽合并在**同一个** `awaitEachGesture` 里（`detectTapGestures` 会在 down 上
+  `consume()`，与同一节点的 `detectDragGestures` 冲突）。
 - 落盘时机：编辑态内只改内存，**退出编辑态/切后台/退出游戏**时才写一次
   `krkr2next.json`（拖拽每帧都改数据，不能每帧落盘）。
 
@@ -213,6 +221,10 @@ data class KeyPadProfile(val buttons: List<KeyButton>, val enabled: Boolean = fa
 
 改动的理由：详情页的第一诉求是"开游戏"，主按钮必须和封面同屏可见；左右分栏在
 平板/横屏上也能一屏放下"封面 + 标题 + 按钮"。
+
+**2026-09-23 布局微调**：右侧改为自上而下 **标题 → 标签 → 简介（可折叠）→ 主按钮**
+（封面在左，标签/简介/按钮三块都在封面右侧）；简介默认只显示 5 行，点"展开简介"
+看全文——否则右侧三块很容易比封面高出一大截。
 
 ---
 

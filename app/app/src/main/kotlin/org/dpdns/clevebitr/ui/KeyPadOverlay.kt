@@ -2,6 +2,8 @@ package org.dpdns.clevebitr.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -10,17 +12,23 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,11 +38,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,12 +71,22 @@ import org.dpdns.clevebitr.core.VkCodes
  * 全部触摸（否则拖按钮会连带把一次 `POINTER_DOWN` 送进游戏），因此编辑态下整个
  * 浮层才算"接管输入"。
  *
+ * ## 编辑态：拖拽/缩放为什么用"绝对位置 + 手势起点"
+ *
+ * `pointerInput(key)` 的 block 只在 key 变化时重建，因此它捕获的 `button` 是**创建时**
+ * 的那一份。若拖拽时按 `当前值 + 增量` 累加，block 不重建就永远拿旧值，每帧只会把
+ * 按钮挪到"起点 + 最后一帧增量"——表现出来就是拖不动、缩放弹回。所以这里：
+ *  - 手势开始时快照起点（经 [rememberUpdatedState] 取最新值）；
+ *  - 拖拽中累加**相对手势起点**的总位移，再按绝对目标写回；
+ *  - 回调本身也经 [rememberUpdatedState] 取最新，避免捕获过期闭包。
+ *
  * ## 按键注入
  *
  * `onKeyDown` / `onKeyUp` 收到的是 **Windows VK 码**（[KeyButton.vk]），由调用方
  * 转成 `engine_input_event_t` 投递。按下/抬起必须成对：长按由本组件按系统 repeat
  * 的心跳补发 down（引擎侧不生成 repeat，见 `EngineLoop::HandleKeyDown`）。
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KeyPadOverlay(
     profile: KeyPadProfile,
@@ -82,6 +102,9 @@ fun KeyPadOverlay(
 ) {
     if (!editing && !profile.visible) return
 
+    // 属性面板：编辑态下可完整配置选中按钮（键位/文字/图标/颜色/大小/透明度/描边）。
+    var propertiesOpen by remember { mutableStateOf(false) }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val cw = constraints.maxWidth.toFloat().coerceAtLeast(1f)
         val ch = constraints.maxHeight.toFloat().coerceAtLeast(1f)
@@ -94,8 +117,12 @@ fun KeyPadOverlay(
                     containerHeightPx = ch,
                     editing = editing,
                     selected = button.id == selectedId,
-                    onMove = { dx, dy -> onProfileChange(profile.withButton(button.moved(dx, dy))) },
-                    onResize = { dw, dh -> onProfileChange(profile.withButton(button.resized(dw, dh))) },
+                    onMoveTo = { nx, ny ->
+                        onProfileChange(profile.withButton(button.copy(x = nx, y = ny).sanitized()))
+                    },
+                    onResizeTo = { nw, nh ->
+                        onProfileChange(profile.withButton(button.copy(w = nw, h = nh).sanitized()))
+                    },
                     onSelect = { onSelect(button.id) },
                     onKeyDown = onKeyDown,
                     onKeyUp = onKeyUp,
@@ -119,6 +146,11 @@ fun KeyPadOverlay(
                     onProfileChange(profile.withButton(added))
                     onSelect(added.id)
                 },
+                onProperties = if (selectedId != null) {
+                    { propertiesOpen = true }
+                } else {
+                    null
+                },
                 onDelete = {
                     val id = selectedId ?: return@KeyPadEditToolbar
                     onProfileChange(profile.withoutButton(id))
@@ -129,16 +161,40 @@ fun KeyPadOverlay(
             )
         }
     }
+
+    if (propertiesOpen) {
+        ModalBottomSheet(onDismissRequest = { propertiesOpen = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 32.dp),
+            ) {
+                Text(
+                    text = "按键属性",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(start = 16.dp, bottom = 4.dp),
+                )
+                // 与设置页共用同一个编辑器：键位/图标/颜色/描边/位置大小三处语义一致。
+                KeyPadConfigEditor(
+                    profile = profile,
+                    onProfileChange = onProfileChange,
+                    initialSelectedId = selectedId,
+                )
+            }
+        }
+    }
 }
 
 /**
- * 编辑态工具条：添加 / 删除所选。放在画面顶部中间——避开右上角的性能叠加层与
- * 右下角的悬浮菜单。
+ * 编辑态工具条：添加 / 属性 / 删除所选 / 完成。放在画面顶部中间——避开右上角的
+ * 性能叠加层与右下角的悬浮菜单。
  */
 @Composable
 private fun KeyPadEditToolbar(
     hasSelection: Boolean,
     onAdd: () -> Unit,
+    onProperties: (() -> Unit)?,
     onDelete: () -> Unit,
     onExitEdit: (() -> Unit)?,
     modifier: Modifier = Modifier,
@@ -161,7 +217,13 @@ private fun KeyPadEditToolbar(
                 onClick = onAdd,
             )
             ToolbarAction(
-                label = "删除所选",
+                label = "属性",
+                enabled = onProperties != null,
+                icon = { Icon(Icons.Filled.Tune, contentDescription = null) },
+                onClick = onProperties ?: {},
+            )
+            ToolbarAction(
+                label = "删除",
                 enabled = hasSelection,
                 icon = { Icon(Icons.Filled.Delete, contentDescription = null) },
                 onClick = onDelete,
@@ -226,8 +288,8 @@ private fun KeyPadButtonView(
     containerHeightPx: Float,
     editing: Boolean,
     selected: Boolean,
-    onMove: (Float, Float) -> Unit,
-    onResize: (Float, Float) -> Unit,
+    onMoveTo: (Float, Float) -> Unit,
+    onResizeTo: (Float, Float) -> Unit,
     onSelect: () -> Unit,
     onKeyDown: (Int) -> Unit,
     onKeyUp: (Int) -> Unit,
@@ -237,6 +299,12 @@ private fun KeyPadButtonView(
     val heightPx = button.h * containerHeightPx
     val widthDp = with(density) { widthPx.toDp() }
     val heightDp = with(density) { heightPx.toDp() }
+
+    // 手势 block 不随 x/y/w/h 重建，所以必须用 rememberUpdatedState 读最新值/最新回调。
+    val currentButton by rememberUpdatedState(button)
+    val moveTo by rememberUpdatedState(onMoveTo)
+    val resizeTo by rememberUpdatedState(onResizeTo)
+    val select by rememberUpdatedState(onSelect)
 
     // 按下状态驱动"长按补发 down"的循环。编辑态不注入按键。
     var pressed by remember(button.id) { mutableStateOf(false) }
@@ -271,16 +339,43 @@ private fun KeyPadButtonView(
         )
 
     val interaction = if (editing) {
-        Modifier
-            .pointerInput(button.id, "edit-move") {
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    onMove(dragAmount.x / containerWidthPx, dragAmount.y / containerHeightPx)
+        // 选择与拖拽放在**同一个**手势处理器里：`detectTapGestures` 会在 down 上
+        // `consume()`，与同一节点的 `detectDragGestures` 冲突（拖拽会被取消）。
+        Modifier.pointerInput(button.id, "edit-gesture") {
+            val slop = viewConfiguration.touchSlop
+            // 右下角缩放把手占的边长；落在这里的按下交给把手处理，本节点不拖。
+            val handlePx = 22.dp.toPx()
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                select()
+                val fromHandle = down.position.x >= size.width - handlePx &&
+                    down.position.y >= size.height - handlePx
+                if (!fromHandle) {
+                    val startX = currentButton.x
+                    val startY = currentButton.y
+                    var accX = 0f
+                    var accY = 0f
+                    var dragging = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        accX += change.positionChange().x
+                        accY += change.positionChange().y
+                        if (!dragging && accX * accX + accY * accY >= slop * slop) {
+                            dragging = true
+                        }
+                        if (dragging) {
+                            moveTo(
+                                startX + accX / containerWidthPx,
+                                startY + accY / containerHeightPx,
+                            )
+                        }
+                        change.consume()
+                    }
                 }
             }
-            .pointerInput(button.id, "edit-select") {
-                detectTapGestures { onSelect() }
-            }
+        }
     } else {
         Modifier.pointerInput(button.id, "press") {
             detectTapGestures(
@@ -353,13 +448,27 @@ private fun KeyPadButtonView(
                         RoundedCornerShape(topStart = 8.dp),
                     )
                     .pointerInput(button.id, "resize") {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            onResize(
-                                dragAmount.x / containerWidthPx,
-                                dragAmount.y / containerHeightPx,
-                            )
-                        }
+                        var startW = 0f
+                        var startH = 0f
+                        var accX = 0f
+                        var accY = 0f
+                        detectDragGestures(
+                            onDragStart = {
+                                startW = currentButton.w
+                                startH = currentButton.h
+                                accX = 0f
+                                accY = 0f
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                accX += dragAmount.x
+                                accY += dragAmount.y
+                                resizeTo(
+                                    startW + accX / containerWidthPx,
+                                    startH + accY / containerHeightPx,
+                                )
+                            },
+                        )
                     },
                 contentAlignment = Alignment.Center,
             ) {

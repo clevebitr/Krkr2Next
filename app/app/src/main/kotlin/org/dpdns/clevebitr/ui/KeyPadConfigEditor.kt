@@ -58,8 +58,15 @@ fun KeyPadConfigEditor(
     templates: Map<String, KeyPadProfile> = emptyMap(),
     onSaveTemplate: ((String, KeyPadProfile) -> Unit)? = null,
     onDeleteTemplate: ((String) -> Unit)? = null,
+    /** 初次展示时选中哪个按钮（游戏内属性面板会传入浮层里已选的那个）。 */
+    initialSelectedId: String? = null,
 ) {
-    var selectedId by remember { mutableStateOf(profile.buttons.firstOrNull()?.id) }
+    var selectedId by remember {
+        mutableStateOf(
+            initialSelectedId?.takeIf { id -> profile.buttons.any { it.id == id } }
+                ?: profile.buttons.firstOrNull()?.id,
+        )
+    }
     var templateDialog by remember { mutableStateOf(false) }
 
     // 选中的按钮被删掉（或列表被替换）后，选中态回退到第一个，不写回状态。
