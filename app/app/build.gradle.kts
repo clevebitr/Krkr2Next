@@ -4,6 +4,32 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// ── 构建版本号（用于在真机上辨别装的是哪个提交）──────────────────────────────
+// versionName 会出现在「关于」页、设置页、app.log 与崩溃报告里，所以把 git 短哈希
+// 与构建日期编进去。格式：
+//     v<base>-<git 短哈希 6 位>-<YYMMDD>      例：v0.1.0-7a7579-260922
+// 拿不到 git（无 .git 的源码包）时退化为 v<base>-nogit-<YYMMDD>，不阻断构建。
+//
+// 注意：git 仓库根在上一层（KiriNext/），而 Gradle root 在 app/；git 会自己向上
+// 找到仓库，不需要额外传路径。
+fun gitShortHash(dir: java.io.File): String = try {
+    val process = ProcessBuilder("git", "rev-parse", "--short=6", "HEAD")
+        .directory(dir)
+        .redirectErrorStream(true)
+        .start()
+    val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+    if (process.waitFor() == 0 && output.isNotEmpty()) output else "nogit"
+} catch (_: Exception) {
+    "nogit"
+}
+
+val stampedVersionName: String = run {
+    val base = "0.1.0"
+    val date = java.text.SimpleDateFormat("yyMMdd", java.util.Locale.US)
+        .format(java.util.Date())
+    "v$base-${gitShortHash(rootProject.projectDir)}-$date"
+}
+
 android {
     namespace = "org.dpdns.clevebitr"
     // compose 1.11.4 与 material3 1.5.0-alpha18 只要求 compileSdk 35；这里取 36
@@ -18,7 +44,8 @@ android {
         minSdk = 24
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0"
+        // 形如 v0.1.0-7a7579-260922（见顶部 stampedVersionName）
+        versionName = stampedVersionName
 
         // 只构建 arm64-v8a。引擎（vcpkg triplet arm64-android）与 NDK 运行时
         // 都按此 ABI 配置，32 位/模拟器 ABI 不在支持范围。
