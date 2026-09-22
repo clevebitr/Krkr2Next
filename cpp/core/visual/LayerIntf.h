@@ -443,6 +443,13 @@ protected:
 public:
     void AssignImages(tTJSNI_BaseLayer *src); // assign image content
 
+    // D3DEmote/SD 交付专用：把生产者（scratch）已完成的纹理**换**进本层，并把本层
+    // 旧纹理交还给生产者当下一次渲染的缓冲区。AssignImages 走 MainImage->Assign()
+    // 会让两层共享同一张纹理，下一帧重写 scratch 就会抹掉刚交付的画面。移植自
+    // AetherKiri cpp/core/visual/LayerIntf.cpp:6065-6265（去掉 KAG 转场/exchanged-page
+    // 路由与 profile/trace 埋点）。
+    void AssignMotionImages(tTJSNI_BaseLayer *src);
+
     // 把已完成的生产者图像换进本显示层，并把本层原图交还生产者做下一帧的更新
     // 目标——避免生产者写进“已挂在图层树上、正在显示”的纹理而触发整帧
     // copy-on-write。移植自 AetherKiri cpp/core/visual/LayerIntf.h:480-484 与

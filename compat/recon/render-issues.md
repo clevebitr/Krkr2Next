@@ -95,7 +95,7 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
 
 ## 2. 千恋万花（`KRKR汉化高压_千恋万花`）— 多个独立问题
 
-**状态：图片路径正常；三个独立问题待处理**
+**状态：图片路径正常；SD/logo 交付与字体颜色待处理**
 
 已核实的现状：
 - `probe: Layer.loadImages(psb://quickmenu.pimg/*.tlg)` 一串 ⇒ 图片/E-mote 加载路径正常。
@@ -104,27 +104,43 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
   （与 G2 同源，见 §1 未解决 ③）。
 - `convertImage: RL decode failed … raw palette` ⇒ **已知小图标回退**
   （`cpp/plugins/psbfile/PSBMedia.cpp` 有注释：m2logo icon32/icon18 的未压缩调色图被标成 RL），非根因。
-- **SDCG 层级**（Yuzusoft 的 SD/emote 角色应绘在 UI 之上，实际落到错误层级）
-  - 机制：SD 分件是 `data1080.xp3` 的 `sdNNN.mtn` + `SDNNNAA.png`，由 motionplayer 经
-    `Motion.SeparateLayerAdaptor` 承载；`patch.tjs` 设 `Motion.Player.useD3D = 0`，
-    于是走 adaptor 的私有渲染层——**它就是可见的呈现层**（脚本不会把它再拷回 owner）。
-  - 根因：`motionplayer/main.cpp::GetSeparateAdaptorRenderTarget` 把该渲染层挂到
-    `window.primaryLayer`。参考实现（krkrsdl3；AetherKiri
-    `PlayerRender::resolveSeparateLayerRenderTarget`）把它建成**构造函数 owner 层的子层**
-    （owner 是游戏放在正确 z 序上的 `AffineLayer`，脚本随后把 `owner.type` 改成
-    `ltBinder`，渲染层紧贴其上）。挂错父层 ⇒ SD 整体层级不对。
-  - 已改（2026-09-22）：owner 能解析为真实 Layer 时以 owner 为父层，并把子层 left/top
-    归零（子层坐标相对 owner，否则被 owner 位置再偏移一次）；否则维持原 primaryLayer
-    回退。另按参考实现把 `SeparateLayerAdaptor.assign` 补成 no-op（参考注释：拷回
-    owner 会得到第二张偏移画面）。
-  - 待验证：真机确认 SD 是否已绘在 UI 之上。插件新增一条一次性路由日志：
-    `motion: SeparateLayerAdaptor 渲染层路由 owner=… parent=… parentIsOwner=… parentName=…`
-    （每次创建 adaptor 一条，封顶 8 条），用于确认走的是哪条父层路径。
+- **SDCG 只显示背景 UI / 显示一两秒后消失（+ 残留矩形）** ← 当前主问题
+  - 机制（真机日志实证）：SD 分件是 `data1080.xp3` 的 `sdNNN.mtn` + `SDNNNAA.png`，
+    由 motionplayer 的 **D3DEmote 路径**渲染：`engine-20260922-155105.log` 里
+    `D3DAdaptor.captureCanvas` 301 次、`SeparateLayerAdaptor` **0 次** —— 本作走
+    D3DAdaptor（与 `patch.tjs` 设 `useD3D=0` 的意图相反；脚本实际读的是 `Motion.enableD3D`）。
+    因此上一版改 `SeparateLayerAdaptor` 父层**对本作无效**（对别的 Yuzusoft 标题仍可能有用）。
+  - 根因：游戏自带的 `system/AffineSourceMotion.tjs`（编译字节码，字符串表可查）用
+    **`Layer.assignImages`** 把 scratch 层交给角色层；该池层名为
+    `AffineSource情報プール用`（见 `system/AffineSource.tjs`）。`AssignImages` 走
+    `MainImage->Assign()`，目标层与 scratch **共享同一张纹理**，下一帧重写 scratch 就把
+    刚交付的画面抹掉。参考实现为此提供 `Layer.assignMotionImages`（把完成的纹理**换**进
+    目标层），并在 `AssignImages` 内部识别 scratch 交付后路由过去。
+  - 已改（2026-09-22）：`cpp/core/visual/LayerIntf.{h,cpp}` 新增 `AssignMotionImages`
+    （移植自 AetherKiri `LayerIntf.cpp:6065-6265`，去掉其 KAG 转场/exchanged-page 路由与
+    profile 埋点）+ 注册 `Layer.assignMotionImages`；并在 `AssignImages` 里加
+    `TVPIsAffineSourceMotionScratch()`（同名判据：目标可见有名、源隐藏无名、源父层是
+    `AffineSource情報プール用`、目标父层不在池内）把该交付路由到交换语义。
+  - 待验证：真机确认 SD 正常出现并持续（不再一两秒后消失）、残留矩形是否消失。
+- **启动 logo（`m2logo.mtn` / `yuzulogo.mtn`）**：颜色偏淡蓝而非红、播完残留两个矩形。
+  已排除「PSB 解码通道序」：`PSBMedia.cpp` 全量输出 BGRA、全游戏一致，非本资源专属；
+  很可能与上面的纹理别名同源（logo 也走 D3DEmote 交付），先看 SD 回归结果。
+- **字体/文字颜色偏白**（应为厂商预设淡灰）：参考引擎为本作应用了
+  `message edge argument routing`（`EdgeShadowDrawText` 的 e/ecol 参数路由）等 7 个标题
+  专属 hook，KiriNext **一个都没有**（`AetherKiri cpp/core/base/ScriptMgnIntf.cpp`）。
+  这是下一个候选根因，尚未定位到具体 code path。
+- 参考引擎（AetherKiri）为**本作**应用的 hook 全清单（KiriNext 全缺）：
+  `layered PIMG source routing`、`D3DEmote GPU transaction batching`(×2)、
+  `action layer properties`、`world layer clone state`、
+  `compiled world title motion resolver`、`message edge argument routing`、
+  `quick-menu hover sound fallback`；另有合成 UI 存储（`aetherui://` 的 `.func` /
+  `scenelist*.csv`）。
 
 **下一步**：
-1. `wave` 转场：按 KAGEX 规范补实现（确定的功能缺口，可独立做）。
-2. SDCG 层级：已按参考实现改父层（见上），**待真机回归**；若仍不对，用那条路由日志
-   确认 `parentIsOwner` 与 `parentName`，再判断是父层选择还是合成路径问题。
+1. **SDCG / D3DEmote 交付**：已按参考实现补 `AssignMotionImages` + scratch 路由（见上），
+   **待真机回归**；若仍不对，再对照上面的 hook 清单逐项补。
+2. 启动 logo 颜色/残留、字体颜色：先看 SD 回归结果，再按 hook 清单定位。
+3. `wave` 转场：按 KAGEX 规范补实现（确定的功能缺口，可独立做）。
 3. 卡死：与 §1 未解决 ③ 同一处理（`SystemWatchTimerTimer` 细阶段探针）。
 
 ---

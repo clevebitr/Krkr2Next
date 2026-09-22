@@ -22,7 +22,7 @@
 
 1. **G2 进动画卡 4.4s**：已细分到 `CreateRenderer(1920x1080)` 本身 2689ms
 2. **G2 帧率 ~43–45（目标 60）**：每帧 1920×1080 GPU→CPU 回读（插件设计使然）
-3. **千恋万花 `wave` 转场缺失 + `SystemWatchTimerTimer` 卡顿 + SDCG 层级（已改待回归）**
+3. **千恋万花 `wave` 转场缺失 + `SystemWatchTimerTimer` 卡顿 + SD/logo 交付（已改待回归）**
 
 其余两条目标的状态：
 
@@ -138,7 +138,31 @@ owner，否则会被 owner 位置再偏移一次）；否则维持原 `primaryLa
 parentIsOwner=… parentName=…`（每次创建 adaptor 一条、封顶 8 条）用于确认父层选择。
 **待真机回归。**
 
-### 1.6 其他
+> ⚠️ 2026-09-22 真机修正：千恋万花实际走的是 **D3DAdaptor** 路径
+> （`engine-20260922-155105.log`：`D3DAdaptor.captureCanvas` 301 次、
+> `SeparateLayerAdaptor` 0 次），所以这一处改动**不是本作的解**（对别的 Yuzusoft
+> 标题可能仍有用）。本作的真因见 §1.6。
+
+### 1.6 D3DEmote scratch 交付：补 `Layer.assignMotionImages` + `AssignImages` 路由（千恋万花 SD）
+
+真机日志把本作 SD 的链路摸清了：SD 分件（`data1080.xp3` 的 `sdNNN.mtn` +
+`SDNNNAA.png`）由 motionplayer 的 D3DEmote 路径渲染，最后由游戏脚本
+`system/AffineSourceMotion.tjs`（编译字节码；字符串表里只有 `assignImages`，没有
+`assignMotionImages`）把 scratch 层交给角色层，池层名 `AffineSource情報プール用`
+（见 `system/AffineSource.tjs`）。
+
+`AssignImages` 走 `MainImage->Assign()`，会让角色层与 scratch **共享同一张纹理**；
+下一帧重写 scratch 就把刚交付的画面抹掉 ⇒ 真机表现：SD 显示一两秒后消失 / 只剩背景
+UI / 残留矩形。参考实现为此提供 `Layer.assignMotionImages`（把完成的纹理**换**进目标
+层），并在 `AssignImages` 内部识别 scratch 交付后路由过去。
+
+改动：`cpp/core/visual/LayerIntf.{h,cpp}` 新增 `AssignMotionImages`（移植自 AetherKiri
+`LayerIntf.cpp:6065-6265`，去掉其 KAG 转场/exchanged-page 路由与 profile/trace 埋点）
++ 注册 `Layer.assignMotionImages`；并在 `AssignImages` 里加
+`TVPIsAffineSourceMotionScratch()`（目标可见有名、源隐藏无名、源父层是
+`AffineSource情報プール用`、目标父层不在池内）路由到交换语义。**待真机回归。**
+
+### 1.7 其他
 
 - `cpp/core/visual/LayerIntf.{h,cpp}`：补 `ExchangeMainImage`（AlphaMovie 移植所需的唯一外部
   API 缺口；片段移植，落点有注释）。
@@ -254,7 +278,8 @@ parentIsOwner=… parentName=…`（每次创建 adaptor 一条、封顶 8 条�
 | G2 **帧率 ~43–45** | 中 | 每帧 1920×1080 **GPU→CPU 回读**（`capture` 路径**刻意优先 CPU**：引擎随后按 CPU 位图重传纹理会覆盖只写纹理的内容）；主窗口走 `path=GPU`，只有 Live2D 图层退化。附带：该回读用 `GL_BGRA_EXT` 调 `glReadPixels`，ES3 非法 → `err=0x0502` |
 | G2 / 千恋万花 **`SystemWatchTimerTimer` 卡顿**（1.5–1.9s） | 中 | 卡在 `DeliverEvents()` 或 `TickBeat()` 循环（内层 MarkStage 未触发）；需在该函数内加细阶段探针 |
 | 千恋万花 **`wave` 转场缺失** | 小-中 | 确定的功能缺口，可独立做（按 KAGEX 规范） |
-| 千恋万花 **SDCG 无法渲染在 UI 之上** | 中 | 已按参考实现改渲染层父层（owner 而非 primaryLayer）+ `assign` no-op，见 §1.5；**待真机回归** |
+| 千恋万花 **SD/logo 交付（D3DEmote）** | 中 | 已补 `Layer.assignMotionImages` + `AssignImages` scratch 路由，见 §1.6；**待真机回归** |
+| 千恋万花 **字体/文字颜色偏白、logo 色偏与残留矩形** | 中 | 候选根因：参考引擎为本作应用的 7 个标题 hook（含 `message edge argument routing`）KiriNext 全缺；未定位到 code path |
 | **AlphaMovie 插件复用 core 解码器** | 中 | 未做；完成后删掉重复 ~1700 行 |
 
 ### 6.2 兼容层 / 插件 / 壳
@@ -340,7 +365,7 @@ gh run view "$RID" --repo clevebitr/Krkr2Next --log-failed | rg -i "error:|undef
    `capture` 的 CPU 回读能否改走 GPU（改动面较大，用户要求渲染改动小，需先确认收益）。
 5. **`SystemWatchTimerTimer` 卡顿**：在 `cpp/core/environ/win32/SystemControl.cpp` 的
    `DeliverEvents()` 与 `TickBeat()` 循环内加 MarkStage（当前内层阶段一条都不触发）。
-6. **千恋万花**：SDCG 层级（已改待回归，见 §1.5）→ `wave` 转场（独立功能缺口）。
+6. **千恋万花**：SD/logo 交付（已改待回归，见 §1.6）→ 字体/logo 颜色与 7 个标题 hook → `wave` 转场。
 7. **兼容层**：若用户回了 **I3**，接完 `mountSiblingsForArchiveProject`（M1 收尾）；
    否则继续 **M6 小模块批次**（每批 2–4 个，机械可验证）。
 8. **C3 已阻塞**于 C2；壳侧：目录收藏交互打磨 → 平板双栏 → MD3 细节。

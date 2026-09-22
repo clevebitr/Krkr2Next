@@ -2416,7 +2416,44 @@ void tTJSNI_BaseLayer::AllocateDefaultImage() {
 }
 
 //---------------------------------------------------------------------------
+// D3DEmote/SD 的 scratch 交付识别。移植自 AetherKiri
+// cpp/core/visual/LayerIntf.cpp:301-325。
+//
+// Yuzusoft 的 D3DEmote 把每个角色渲染进一块**隐藏、无名**的 scratch 图层，该层挂在
+// 名为「AffineSource情報プール用」的池层下；完成后把这帧 assignImages 给角色层
+// （可见、有名，且自己不在池里）。这个签名就是「swap 交付」的判据。
+static bool TVPIsAffineSourceMotionScratch(
+    const tTJSNI_BaseLayer *target,
+    const tTJSNI_BaseLayer *source) {
+    if(!target || !target->GetVisible() || target->GetName().IsEmpty() ||
+       !source || source->GetVisible() || !source->GetName().IsEmpty()) {
+        return false;
+    }
+    auto *source_parent = source->GetParent();
+    auto *target_parent = target->GetParent();
+    if(!source_parent || !target_parent ||
+       source_parent->GetName().AsStdString() != "AffineSource情報プール用") {
+        return false;
+    }
+    // 标题页/UI 合成也用同一个隐藏池；它们内部的工作层不是可见的页面目标，
+    // 必须保留普通 assignImages 语义。
+    return target_parent->GetName().AsStdString() !=
+        "AffineSource情報プール用";
+}
+
+//---------------------------------------------------------------------------
 void tTJSNI_BaseLayer::AssignImages(tTJSNI_BaseLayer *src) {
+    if(!src)
+        return;
+
+    // D3DEmote/SD 的 scratch 交付：普通 AssignImages 走 MainImage->Assign()，
+    // 会让角色层与 scratch 共享同一张纹理，下一帧重写 scratch 就把刚交付的画面抹掉
+    // （真机表现：SD 显示一两秒后消失 / 只剩背景 UI / 残留矩形）。这里改用交换语义。
+    if(src != this && TVPIsAffineSourceMotionScratch(this, src)) {
+        AssignMotionImages(src);
+        return;
+    }
+
     // assign images
     bool main_changed = true;
 
@@ -2455,6 +2492,76 @@ void tTJSNI_BaseLayer::AssignImages(tTJSNI_BaseLayer *src) {
 
     if(main_changed)
         Update(false); // update
+}
+
+//---------------------------------------------------------------------------
+// 移植自 AetherKiri cpp/core/visual/LayerIntf.cpp:6065-6265（只保留交付语义，去掉该
+// 仓库专属的 KAG 转场/exchanged-page 路由与 profile/trace 埋点）。
+//
+// Yuzusoft 的 D3DEmote/SD 交付路径把每个角色先渲染进一块全屏 scratch 图层，再把
+// 这帧交给角色层。AssignImages() 走 MainImage->Assign()，会让目标层与 scratch 共享
+// 同一张纹理；下一帧清空/重写 scratch 时，刚交付的画面就被抹掉——真机表现就是
+// 「SD 显示一两秒后消失 / 只剩背景 UI」以及残留矩形。这里改为交换 bitmap：目标层
+// 拿到已完成的纹理，自己的旧纹理交给 scratch 当下一次渲染的缓冲区。
+void tTJSNI_BaseLayer::AssignMotionImages(tTJSNI_BaseLayer *src) {
+    if(!src || src == this)
+        return;
+
+    if(!src->MainImage) {
+        AssignImages(src);
+        return;
+    }
+
+    if(!MainImage)
+        AllocateDefaultImage();
+
+    // 目标层此前可能已经走过 AssignImages 别名路径：两者持有不同的 bitmap 包装，
+    // 但底层是同一张 GPU 纹理。只交换指针打不断这个别名，必须先把目标层 detach 成
+    // 独立纹理，否则下一帧写 scratch 仍会覆盖刚交付的画面。
+    if(MainImage && src->MainImage &&
+       MainImage->GetTexture() == src->MainImage->GetTexture()) {
+        auto *oldImage = MainImage;
+        const tjs_uint width = std::max<tjs_uint>(1, oldImage->GetWidth());
+        const tjs_uint height = std::max<tjs_uint>(1, oldImage->GetHeight());
+        MainImage = new tTVPBaseTexture(width, height);
+        MainImage->Fill(tTVPRect(0, 0, width, height), NeutralColor);
+        MainImage->SetFont(Font);
+        TVPLayerBitmapTotalBytes.fetch_add(
+            TVPCalcMainImageBytes(MainImage) -
+                TVPCalcMainImageBytes(oldImage),
+            std::memory_order_relaxed);
+        // 正常情况 oldImage 只被本层持有；若旧路径让两层指向同一包装，留给 src。
+        if(oldImage != src->MainImage) {
+            delete oldImage;
+        }
+    }
+
+    std::swap(MainImage, src->MainImage);
+    FontChanged = true;
+    src->FontChanged = true;
+
+    if(src->ProvinceImage) {
+        if(ProvinceImage)
+            ProvinceImage->Assign(*src->ProvinceImage);
+        else
+            ProvinceImage = new tTVPBaseBitmap(*src->ProvinceImage);
+    } else if(ProvinceImage) {
+        DeallocateProvinceImage();
+    }
+
+    const tjs_uint completedWidth = MainImage->GetWidth();
+    const tjs_uint completedHeight = MainImage->GetHeight();
+    InternalSetImageSize(completedWidth, completedHeight);
+    ResetClip();
+    if(src->MainImage) {
+        src->InternalSetImageSize(src->MainImage->GetWidth(),
+                                  src->MainImage->GetHeight());
+        src->ResetClip();
+    }
+
+    ImageModified = true;
+    src->ImageModified = true;
+    Update(false);
 }
 
 //---------------------------------------------------------------------------
@@ -9707,6 +9814,33 @@ tTJSNC_Layer::tTJSNC_Layer() : tTJSNativeClass(TJS_W("Layer")) {
         return TJS_S_OK;
     }
     TJS_END_NATIVE_METHOD_DECL(/*func. name*/ assignImages)
+    //----------------------------------------------------------------------
+    TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ assignMotionImages) {
+        TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
+                                /*var. type*/ tTJSNI_Layer);
+
+        if(numparams < 1)
+            return TJS_E_BADPARAMCOUNT;
+
+        tTJSNI_BaseLayer *src = nullptr;
+        if(param[0]->Type() != tvtObject)
+            TVPThrowExceptionMessage(TVPSpecifyLayer);
+
+        tTJSVariantClosure clo = param[0]->AsObjectClosureNoAddRef();
+        if(clo.Object) {
+            if(TJS_FAILED(clo.Object->NativeInstanceSupport(
+                   TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID,
+                   (iTJSNativeInstance **)&src)))
+                TVPThrowExceptionMessage(TVPSpecifyLayer);
+        }
+        if(!src)
+            TVPThrowExceptionMessage(TVPSpecifyLayer);
+
+        _this->AssignMotionImages(src);
+
+        return TJS_S_OK;
+    }
+    TJS_END_NATIVE_METHOD_DECL(/*func. name*/ assignMotionImages)
     //----------------------------------------------------------------------
     // 千恋万花等 Yuzusoft 作品：data 自带 affinesourcemotion.tjs 会把 motion 的
     // work layer 当 D3D canvas 捕获（captureCanvas / unloadUnusedTextures
