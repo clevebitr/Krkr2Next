@@ -2446,12 +2446,13 @@ void tTJSNI_BaseLayer::AssignImages(tTJSNI_BaseLayer *src) {
     if(!src)
         return;
 
-    // TEMP DIAGNOSTIC（千恋万花 SD 不可见）：把每次交付的目标/源身份、可见性、
-    // 父层名与“是否被识别成 D3DEmote scratch swap”全记下来，封顶 24 条。
-    // 定位完成后删。
-    {
+    // TEMP DIAGNOSTIC（千恋万花 SD 不可见，第二版）：第一版封顶 24 条被启动期的
+    // KAG 页面交换（SquareMaskLayer*/TouchUiLayer*）刷满，看不到 SD。现改为**只记录
+    // 隐藏且无名**的源层（D3DEmote 工作层候选）或路由判定为真的交付，封顶 40 条。
+    if((!src->GetVisible() && src->GetName().IsEmpty()) ||
+       (src != this && TVPIsAffineSourceMotionScratch(this, src))) {
         static std::atomic<int> s_assignProbe{0};
-        if(s_assignProbe.fetch_add(1) < 24) {
+        if(s_assignProbe.fetch_add(1) < 40) {
             auto *tp = GetParent();
             auto *sp = src->GetParent();
             spdlog::info(
@@ -2527,6 +2528,24 @@ void tTJSNI_BaseLayer::AssignImages(tTJSNI_BaseLayer *src) {
 // 「SD 显示一两秒后消失 / 只剩背景 UI」以及残留矩形。这里改为交换 bitmap：目标层
 // 拿到已完成的纹理，自己的旧纹理交给 scratch 当下一次渲染的缓冲区。
 void tTJSNI_BaseLayer::AssignMotionImages(tTJSNI_BaseLayer *src) {
+    // TEMP DIAGNOSTIC：路由真的命中时记一条（封顶 20），用于确认千恋万花是否走到这里。
+    {
+        static std::atomic<int> s_motionProbe{0};
+        if(s_motionProbe.fetch_add(1) < 20) {
+            auto *tp = GetParent();
+            auto *sp = src ? src->GetParent() : nullptr;
+            spdlog::info(
+                "probe: AssignMotionImages target={} name='{}' visible={} "
+                "parent='{}' | source={} name='{}' visible={} parent='{}'",
+                static_cast<const void *>(this), GetName().AsStdString(),
+                GetVisible() ? 1 : 0,
+                tp ? tp->GetName().AsStdString() : std::string("<none>"),
+                static_cast<const void *>(src),
+                src ? src->GetName().AsStdString() : std::string("<null>"),
+                src && src->GetVisible() ? 1 : 0,
+                sp ? sp->GetName().AsStdString() : std::string("<none>"));
+        }
+    }
     if(!src || src == this)
         return;
 

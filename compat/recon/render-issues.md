@@ -133,6 +133,14 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
     parent='…' | source=… | motionScratch=0/1`，并在 `D3DAdaptor` 壳补上游戏脚本确实会写的
     `clearEnabled` 属性（之前缺失）。下一轮日志据此直接判定：交付是否走了 assignImages、
     scratch 签名是否匹配、目标层是否可见/在树上。
+  - **第三轮真机（`engine-20260922-164741.log`）**：
+    - 探针生效但封顶被启动期 KAG 页面交换刷满（`SquareMaskLayer2`/`TouchUiLayer:*`，
+      `motionScratch=0`）⇒ 看不到 SD 的交付。已改为只记录「隐藏且无名的源层」或路由命中的交付。
+    - `AssignImages` 确认被大量使用（页面 `表-背景`↔`裏-背景` 交换），主路是 assignImages。
+    - `probe: D3DAdaptor.clearEnabled = 1/0/1/0` ⇒ **游戏确实写这个属性**，之前壳里缺失
+      是真的缺口（已补）；参考实现该属性有完整语义。
+    - `drawOnto ... capture target=… visible=0`：D3D 捕获目标层始终不可见（工作层），
+      与预期一致。
 - **启动 logo（`m2logo.mtn` / `yuzulogo.mtn`）**：颜色偏淡蓝而非红、播完残留两个矩形。
   - 已排除「PSB 解码通道序」：`PSBMedia.cpp` 全量输出 BGRA、全游戏一致，非本资源专属。
   - 已排除 `blandlogo1.png` 缺失：参考引擎在同一作同样报 85 次（游戏自带脚本引用了这个
