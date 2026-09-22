@@ -3,182 +3,303 @@
 > 用途：把**当前目标、已落地的东西、未完成项、硬约束、验证办法**交给下一个上下文。
 > 读这份之前先读根目录 `AGENTS.md`（项目级规则）。兼容层的细节事实与逐条差异见
 > `compat/README.md`，本文件是"接手第一份"。
+> 渲染层的 open issue 明细（证据 + 下一步探针）在 **`compat/recon/render-issues.md`**。
 
 ---
 
-## 0. 一句话现状（2026-09-21）
+## 0. 一句话现状（2026-09-22）
 
-**当前主战场：渲染层**。三款游戏实测（NEKOPARA 4 / 千恋万花 / nainiuniu5krkr）暴露的问题、
-证据与下一步探针，全部记在 **`compat/recon/render-issues.md`**（新会话先读它）。
+**当前主战场：渲染层**。三款游戏（NEKOPARA 4 / 千恋万花 / nainiuniu5krkr=G2）的问题都已
+从"现象"推进到"可定位"，其中**两条已修好并在真机确认**：
+
+- **G2 启动期 `diffimage2.tjs` 无限递归 → 已修**（A 块回退补上方法调用路径）
+- **G2 Live2D 从未被驱动 + 图片以 ZIP 头加载失败 → 已修**（伴生脚本遮蔽游戏脚本，`TVPGetPlacedPath` 解析顺序 bug）
+- **NEKOPARA 的 AMV 解码失败（视频帧当 CG 显示）→ 已修**（AlphaMovie 解码器下沉 core）
+- **NEKOPARA 的 AMV 播放 → 已修**（完整移植 AlphaMovie 插件）
+
+**当前未解决**（详见 `render-issues.md`）：
+
+1. **NEKOPARA 视频位置**：一个位置正确、一个不正确（几何探针已补全，待下一轮日志）
+2. **G2 进动画卡 4.4s**：已细分到 `CreateRenderer(1920x1080)` 本身 2689ms
+3. **G2 帧率 ~43–45（目标 60）**：每帧 1920×1080 GPU→CPU 回读（插件设计使然）
+4. **千恋万花 `wave` 转场缺失 + `SystemWatchTimerTimer` 卡顿 + SDCG 层级**
 
 其余两条目标的状态：
 
-1. **兼容层**：`cpp/core/io/` 单一 IO 组件已建成；**A 块（TJS2 内核回退）、C1、C4、B1（部分）、
-   B2 已完成**；`kag` 渲染档已删除（能力归 AetherKiri 层）。剩余 C3（阻塞于 C2）、C5/C6/C7、
-   E1、M6 分批、以及**一项等用户裁决的 M1 尾巴（I3）**。
-2. **壳（Kotlin/Compose）**：九项改造**除“目录收藏 UI 打磨”外全部落地**。
+1. **兼容层**：`cpp/core/io/` 单一 IO 组件已建成；A 块、C1、C4、B1（部分）、B2 已完成；
+   `kag` 渲染档已删除（能力归 AetherKiri 层）。剩余 C3（阻塞于 C2）、C5/C6/C7、E1、M6 分批、
+   以及**一项等用户裁决的 M1 尾巴（I3）**。
+2. **壳（Kotlin/Compose）**：九项改造**除"目录收藏 UI 打磨"外全部落地**。
 
-最新提交：`e45f908`（已推送）。工作区除用户自己的 `.gitignore`/`README.md` 外干净。
-本轮新落地的：`kag` 档移除、draw-device 契约、B1 伴生脚本、`System.addDllDirectory` 等修复，
-以及一套 `KRKR_RENDER_PROBE` 探针（默认关）。
+工作区除用户自己的 `.gitignore`/`README.md` 外干净（那两个文件**始终不要 add**）。
 
 ---
 
-## 1. 目标一：KAG 兼容层对齐 AetherKiri
+## 1. 本会话已落地的关键修复（理解现状必读）
+
+按影响面排序，每条都能独立回答"为什么现在是这个样子"。
+
+### 1.1 伴生脚本遮蔽游戏脚本（`cpp/core/io/IoStorage.cpp`）— 影响最广
+
+`TVPGetPlacedPath()` 用 `TVPIsExistentStorageNoSearchNoNormalize()` 判断"当前目录是否已有"，
+而后者末尾是 `return krkr::io::IsVirtualFile(name);`——伴生脚本名单（按 **basename** 匹配）
+因此被当成"已找到"，**auto-path 搜索被整个跳过**，游戏真实的
+`data.xp3>system/live2d.tjs` 永远没被尝试（KAG 用裸名 `live2d.tjs` 请求）。
+
+症状：G2 的 Live2D 从未初始化（占位脚本顶掉真脚本），并连带出现"图片以 ZIP 头加载失败"
+（`Unsupported image format (header 504b0304)`）。
+
+修法：`TVPGetPlacedPath` 的"当前目录"判断改为**只查物理**
+（`TVPIsRealStorageNoSearchNoNormalize`），虚拟文件改为 **auto-path 搜索失败后的最后兜底**。
+这与 `IoVirtualFile.h` 自己写明的契约"**物理文件优先**"一致。
+
+> 教训：虚拟文件（伴生脚本）的任何查询点都要排在物理与 auto-path **之后**。
+
+### 1.2 A 块回退缺方法调用路径（`cpp/core/tjs2/tjsObject.cpp`）
+
+`TJSCompatIsStartupNoOpFunction` 里本来就有 `commitSavedata`，但 A 块回退只挂在
+`tTJSCustomObject::PropGet` 上；而 `Storages.commitSavedata()` 是**方法调用**，走 `FuncCall`、
+不经 `PropGet` ⇒ 回退永远没被问到。
+
+G2 的完整因果链：`startup.tjs` → `mainwindow.tjs saveSystemVariables`
+→ `Storages.commitSavedata` 不存在 → `catch` 里 `Storages.rollbackSavedata` 也不存在
+→ 异常抛出 → 引擎兜底重跑 `system/Initialize.tjs` → `diffimage2.tjs` 执行两次
+→ `Storages.isExistentStorage` 双重包装 → 该包装**调用时读全局** `diffOrigIsExistentStorage`
+（已指向第一次的包装 W1）→ W1 调 W1（且它没有 `diffEnterCount` 兜底）→ 无限递归 → 栈耗尽。
+
+修法：新增 `TJSCompatResolveFuncCallFallback()`，在 `FuncCall` 的 `!data` 分支挂上与
+`PropGet` **同名单、同顺序**的回退链；`rollbackSavedata` 加入 no-op 名单。仅 AetherKiri 层生效。
+
+### 1.3 AlphaMovie：插件完整移植 + 解码器下沉 core
+
+NEKOPARA 的 AMV 帧载荷**不是标准 JPEG**：`AlphaMovie.dll` 自带 Huffman 编码，载荷无 SOI/DHT
+（Huffman 用标准表），DQT 取自文件头 `quantaization_table_size_plus_hdr_size`。
+这正是 turbojpeg 报 `Could not determine subsampling level` 的原因。
+
+两条链路分开修：
+
+| 链路 | 走法 | 修法 |
+|---|---|---|
+| **翻转动画（视频播放）** | `AlphaMovie` TJS 类 | **完整移植**上游 `cpp/plugins/alphamovie.cpp`（3519 行，原为 158 行 stub）；含 `GLAlphaMovie.dll` 别名 |
+| **`Layer.loadImages("<amv>")`（视频帧当 CG）** | core 图形路由器 → `TVPLoadAMV` | **解码器下沉 core**（见下） |
+
+为什么解码器进 core 而不是让插件注册 `.amv` 加载器（方案 B1）：`.amv` 本就由 core 的
+`tTVPGraphicType` 注册（`GraphicsLoaderIntf.cpp:238`，与 `.tlg/.png/.jpg` 同表）；core 不得
+依赖插件、插件可依赖 core（`compat/README.md §2`）；且目前没有任何插件用过
+`TVPRegisterGraphicLoadingHandler`。
+
+落地物：
+- `cpp/core/visual/AlphaMovieDecoder.{h,cpp}`：片段移植自上游插件（Huffman 表规格与构建、
+  DC/AC 解码、IDCT、zlib/jpeg 两条 MCU 循环、YUV→RGBA）。登记为 `partial-extract`。
+- `LoadAMV.cpp`：jpeg 分支先试专用解码器，失败再走标准 JPEG 路径（两种变体靠载荷内容区分）。
+  同时**纠正帧头命名**——那 4 个 uint16 是裁剪矩形 `left/top/width/height`（上游注释：它们是
+  `copyNextImageToTexture` 返回的 `Rect.left/top`），不是 alpha 平面尺寸；历史命名
+  `alpha_width/alpha_height` 有误导。
+- `cpp/core/visual/CMakeLists.txt`：新增 `find_package(FFMPEG avutil swscale)`。
+  **不能反向依赖 `core_movie_module`**（`movie → visual` 已是 PRIVATE 边，会成环）。
+
+**未做（下一步）**：让 `alphamovie.cpp` 改为调用 core 解码器，删掉重复的 ~1700 行实现。
+
+### 1.4 其他
+
+- `cpp/core/visual/LayerIntf.{h,cpp}`：补 `ExchangeMainImage`（AlphaMovie 移植所需的唯一外部
+  API 缺口；片段移植，落点有注释）。
+- 探针构建：`ENABLE_RENDER_PROBE` 选项与 CI 管道本就正确，真正的问题是**探针代码自身编译不过**
+  （`ttstr(...).c_str()` 交给 fmt → `const char16_t*` 被判为非法指针格式）——已改为 `AsStdString()`。
+
+---
+
+## 2. 目标一：KAG 兼容层对齐 AetherKiri
 
 用户确认的范围是五块（原话概括）：
 
 | 块 | 内容 | 状态 |
 |---|---|---|
-| A | TJS2 内核兼容读写：未定义全局回退(34 名) + 启动名回退 + `touchImage`/`renderCount` 合成 + 8 名启动期**写**白名单 | ✅ 完成 |
-| B | KAGWindow / krkrgles 脚本别名与绘制设备接管 | 🟡 B2：4 目标扇出 + 每帧重试 600 帧 + 卸载摘钩 + **drawDevice/gpuDrawDevice/nativeDrawDevice 契约与核心全局镜像**（2026-09-21）；B1：**伴生脚本虚拟替换部分实施**（GPU 占位脚本 11 名 / motion-parameter / split-emote，2026-09-21），gfxEffect/logwindow/D3DEmote 未移 |
-| C | KAGParser / extkagparser / kagparserex 行为对齐 | 🟡 **C1 ✅、C4 ✅**；C3/C5/C6/C7 未做 |
-| D | 插件模拟层（旧 Windows 插件全量照搬，分批） | 🟡 已移 6 个 AetherKiri 层专属模块 + 本批 8 个（systemEx/registory/stdio/javascript/messenger/msgreceiver/tasktray/adjustMonitor）；其余约 50 个缺失模块待分批 |
+| A | TJS2 内核兼容读写：未定义全局回退(34 名) + 启动名回退 + `touchImage`/`renderCount` 合成 + 8 名启动期**写**白名单 | ✅ 完成（2026-09-22 补上 **FuncCall** 路径） |
+| B | KAGWindow / krkrgles 脚本别名与绘制设备接管 | 🟡 B2 扇出/重试/卸载/契约已完成；B1 伴生脚本部分实施（GPU 占位 11 名 / motion-parameter / split-emote），gfxEffect/logwindow/D3DEmote 未移；**2026-09-22 修掉伴生脚本遮蔽游戏脚本（见 §1.1）** |
+| C | KAGParser / extkagparser / kagparserex 行为对齐 | 🟡 C1 ✅、C4 ✅；C3/C5/C6/C7 未做 |
+| D | 插件模拟层（旧 Windows 插件全量照搬，分批） | 🟡 已移 6 个 AetherKiri 层专属模块 + 8 个（systemEx/registory/stdio/javascript/messenger/msgreceiver/tasktray/adjustMonitor）+ **AlphaMovie（2026-09-22）**；其余约 50 个缺失模块待分批 |
 | E | 启动与资源加载顺序（startup/patch/auto-path/插件解析） | 🟡 I 系列大部分已做；`patch.tjs` 分两层（E1）未做 |
 
 架构要求（用户明确）：
-- 先做 **M1：把文件 IO/加载逻辑收敛为单一隔离组件**（新目录 + 稳定接口，现有公开 API 保持兼容）——
-  **已完成**：`cpp/core/io/`（`IoPath.cpp` / `IoStorage.cpp` / `IoStorageLocal.cpp` /
-  `XP3Archive*` / `ZIPArchive` / `7zArchive` / `TARArchive` / `tar.h` / `StoragePolicy.h` /
-  `IoPolicy.*` / `IoModuleLocator.*`），公开声明仍在 `base/StorageIntf.h` 与 `base/impl/StorageImpl.h`。
+
+- 先做 **M1：把文件 IO/加载逻辑收敛为单一隔离组件**（新目录 + 稳定接口，现有公开 API 保持兼容）
+  —— **已完成**：`cpp/core/io/`，公开声明仍在 `base/StorageIntf.h` 与 `base/impl/StorageImpl.h`。
 - 兼容层按游戏选择：`krkr2next.json` 的 compat 字段 → 引擎选项 `game_compat_profile`；
-  **缺省走旧版 krkr2 层**（`krkr2-classic`），AetherKiri 层显式开启（新增 `aetherkiri` 档）。
-- **架构收敛为两层**（2026-09-19）：删除 `kag` 渲染档与 `krkrz-kag` 兼容档，其 KAGWindow
-  接管能力归 AetherKiri 层（`krkrgles` post-regist 按 `ActiveLayer()==AetherKiri` 安装）；
-  `auto` 判到 `motionplayer*` 直接激活 AetherKiri 层。Live2D 仍用本仓库原生 Cubism 实现。
+  **缺省走旧版 krkr2 层**（`krkr2-classic`），AetherKiri 层显式开启（`aetherkiri` 档）。
+- **架构收敛为两层**：删除 `kag` 渲染档与 `krkrz-kag` 兼容档，其 KAGWindow 接管能力归
+  AetherKiri 层（`krkrgles` post-regist 按 `ActiveLayer()==AetherKiri` 安装）；`auto` 判到
+  `motionplayer*` 直接激活 AetherKiri 层。Live2D 仍用本仓库原生 Cubism 实现。
 - 两层共用同一 IO 组件，不重复实现。
 
 ---
 
-## 2. 目标二：壳（Kotlin/Compose）改造清单
+## 3. 目标二：壳（Kotlin/Compose）改造清单
 
-用户原话要点与状态：
-
-| 要求 | 状态 | 提交 |
-|---|---|---|
-| 引擎日志**按游戏分开**（不要混一个文件） | ✅ | `9b1c713` + `6a2431c`（剪枝/清空/分享/记住上一局） |
-| 点**封面**进详情页；启动游戏/移除游戏**只在详情页** | ✅ | `b2e9fb4` |
-| 移除游戏**不删文件**，只从库移除 | ✅（`GameLibrary.remove` 只改库文件；UI 已写明） | `2716920` `b2e9fb4` |
-| 详情页按 **MD3** 漂亮实现 | ✅ 重写过一版（`GameDetailScreen.kt` 723 行改动） | `b2e9fb4` |
-| **游戏设置单独一个页面** | ✅ `ui/GameSettingsScreen.kt` + 路由 | `b2e9fb4` |
-| 加**导航栏**，适配平板与手机 | ✅ 底部 `NavigationBar` / ≥600dp 左侧 `NavigationRail` | `a033a30` |
-| 去掉设置里多余说明（G2、千恋万花等开发测试游戏名） | ✅ 改通用表述 | `0e0d70a` |
-| 文件浏览器：两个 topbar 合一 + 完整路径跳转 + 目录收藏 | 🟡 顶栏合一 ✅(`3cc7a85`)、路径跳转 ✅（既有点标题打开对话框）、目录收藏**数据层**✅(`b5b44c0`)+UI 改动(`b2e9fb4`)，**交互待上机确认** | — |
-| 游戏库：收藏游戏 + 分组（便签式） | ✅ 数据层 `c3c3673` + UI `b2e9fb4` | — |
-| 关于页：作者/开源协议/仓库/技术栈/版本号 | ✅ `ui/AboutScreen.kt` + `Routes.ABOUT` | `0e0d70a` |
+| 要求 | 状态 |
+|---|---|
+| 引擎日志**按游戏分开** | ✅（剪枝/清空/分享/记住上一局） |
+| 点**封面**进详情页；启动/移除游戏**只在详情页** | ✅ |
+| 移除游戏**不删文件**，只从库移除 | ✅（UI 已写明） |
+| 详情页按 **MD3** 实现 | ✅ |
+| **游戏设置单独页面** | ✅ `ui/GameSettingsScreen.kt` + 路由 |
+| **导航栏**，适配平板与手机 | ✅ 底部 `NavigationBar` / ≥600dp 左侧 `NavigationRail` |
+| 去掉设置里多余说明（开发测试游戏名） | ✅ 改通用表述 |
+| 文件浏览器：两个 topbar 合一 + 完整路径跳转 + 目录收藏 | 🟡 顶栏合一 ✅、路径跳转 ✅、目录收藏数据层 ✅ + UI 改动 ✅，**交互待上机确认** |
+| 游戏库：收藏游戏 + 分组（便签式） | ✅ |
+| 关于页：作者/协议/仓库/技术栈/版本号 | ✅ |
 
 ---
 
-## 3. 硬约束（踩过的坑，别再犯）
+## 4. 硬约束（踩过的坑，别再犯）
 
 1. **不要提交/推送用户自己的改动**：`.gitignore`、`README.md` 在会话开始时就是 modified，
-   始终不要 `git add` 它们；也不要 `reset --hard` / `checkout --` / `clean -f`。
-2. **构建只在 CI**：本机没有 NDK/vcpkg/cmake，`./build.sh` 跑不了。可用的是
-   `bash scripts/check_static.sh`（JNI 符号、移植清单、语法检查）。
-3. **推送后会取消上一条 run**：工作流 `concurrency: cancel-in-progress: true`，
-   连推几次时中间 run 显示 `cancelled` 属**预期**，不是失败；要验证就以最后一次为准。
-4. **Kotlin 无法本地类型检查**：本机有 `kotlinc` 但缺 android.jar 与 androidx 依赖，
-   所以壳改动**必须靠 CI 的 APK 任务验证**。已踩过一次：加导航栏时漏 import
-   （`MainActivity` 少了 `ShellScaffold`/`Routes`），CI 报 `Unresolved reference`，
-   后续提交修好 —— 新加跨文件符号时**顺手补 import**。
-5. **移植纪律**：独立新文件的移植要登记 `compat/upstream/aetherkiri_ports.json`
-   （片段移植用 `partial-extract` + `source_ref`）并跑 `python3 scripts/check_port_drift.py --update`；
-   **既有文件内部的片段移植不进清单**，改为在落点写"移植自 AetherKiri <文件>:<行范围>"，
-   理由见 `compat/README.md §6`。
-6. **不要动内存预算/压力相关逻辑**（用户明确禁止，历史上改坏过）；**渲染改动要小**。
-7. 诊断探针：能默认关闭就默认关闭；高风险/高频日志要采样或只打边沿。
-8. 真机验证只能靠用户装 CI 产物；本机看不到设备。
+   始终不要 `git add`；也不要 `reset --hard` / `checkout --` / `clean -f`。
+2. **构建只在 CI**：本机没有 NDK/vcpkg/cmake，`./build.sh` 跑不了。可用的只有
+   `bash scripts/check_static.sh`（JNI 符号 / 移植清单 / 语法）。
+3. **推送会取消上一条 run**（`concurrency: cancel-in-progress`）：中间 run 显示 `cancelled`
+   属**预期**；以最后一次为准。**多次提交攒成一次 push**，别每条提交都推。
+4. **Kotlin 无法本地类型检查**：壳改动必须靠 CI 的 APK 任务验证；新加跨文件符号**顺手补 import**。
+5. **移植纪律**：独立新文件的移植登记 `compat/upstream/aetherkiri_ports.json`
+   （片段移植用 `partial-extract` + `source_ref`），并跑 `python3 scripts/check_port_drift.py --update`；
+   **既有文件内部的片段移植不进清单**，改为在落点写"移植自 AetherKiri <文件>:<行范围>"。
+   改了 ported 文件必须显式更新 `modifications`，否则静态检查**刻意硬失败**。
+6. **不要动内存预算/压力相关逻辑**（用户明确禁止）；**渲染改动要小**。
+7. **ffmpeg 头必须包 `extern "C"`**：本仓库 `movie/` 下的头统一这么写（`AEUtil.h:7` 等）。
+   不包会按 C++ 生成修饰名，而 `libswscale.a` 提供 C 符号 → 链接期 `undefined symbol`。
+   不要把它当"冗余包裹"删掉（本会话踩过）。
+8. **不要按行号切代码**：本会话用行号切片生成 core 解码器时，起始行记错 2 行就切掉了
+   `struct BufferManager` 的头，连锁报出"unknown type name"一串。要用**模式匹配 + 括号配对**
+   定位边界，并在生成后静态复核（残留引用计数、括号平衡）。
+9. **探针不得改变正常结果、时序、性能**（AGENTS §10）。**帧率必须在普通构建上测**：
+   探针构建 30 秒写几百 KB 日志，`HostWindowLayer::RTProbe` / `engine_tick: … enter/return`
+   （带 `flush()`）都是每帧同步写盘，会把 fps 测低。高频日志要采样/限频/只打边沿。
+10. **真机验证只能靠用户装 CI 产物**；本机看不到设备。
+11. **别用 `rg "A\|B"`**：rg 用 Rust 正则，`\|` 是**字面量管道符**而非 alternation，
+    会静默匹配为空。本会话因此两次误判（"CMake 没这个 option"、"日志里没有问题"）。
+    一律写 `rg "A|B"`。
+12. **commit message 别带反引号**（shell 会当命令替换，把内容吃掉）。
 
 ---
 
-## 4. 已裁决的决策（不要重新讨论）
+## 5. 已裁决的决策（不要重新讨论）
 
 | 议题 | 裁决 |
 |---|---|
-| A 块回退（全局名/启动名/renderCount/touchImage） | **只给 AetherKiri 层**（开关 `TJS::TJSSetCompatFallbacksEnabled`，缺省关） |
+| A 块回退（全局名/启动名/renderCount/touchImage，**含 FuncCall 路径**） | **只给 AetherKiri 层**（`TJS::TJSSetCompatFallbacksEnabled`，缺省关） |
 | A3 启动期**写**白名单（8 名） | **两层都要**（无开关） |
 | C1 `taglist` + `copyTag` | **两层都要** |
-| C3 `GetNextTag` 文本段聚合 | 决定仍是"只给 AetherKiri 层"，但**上游该实现建在 C2 翻译层之上**（`TVPTransformText`/`TVPPrefetchText`），C2 未移植时无法落地（详见 `compat/README.md §5.4` 注） |
+| C3 `GetNextTag` 文本段聚合 | 只给 AetherKiri 层，但**阻塞**于 C2 翻译层 |
 | C4 `.scn` 容错 + 标签回调 | 两层（未注册回调时行为与移植前逐字相同） |
 | E1 `patch.tjs` 时机 | **分两层**：classic 保持 startup 之前；AetherKiri 层照搬上游（**必须连晚 patch 韧性层一起**） |
-| I2 首次读 `startup.tjs` 被原版压住 | **在 classic 层修**（已做：boost 提到 startup 之前） |
+| I2 首次读 `startup.tjs` 被原版压住 | **在 classic 层修**（已做） |
 | 缺省兼容层 | **旧版 krkr2 层**；`aetherkiri` 档显式开启 |
-| B2 别名扇出/重试/卸载、P1 注册回滚、P2 模块别名、P3' k2compat 门控 | 全部已实施 |
+| **虚拟文件（伴生脚本）与物理文件的优先级** | **物理优先，auto-path 次之，虚拟最后兜底**（2026-09-22 定；实现见 `TVPGetPlacedPath`） |
+| **`.amv` 解码器放哪** | **core**（`AlphaMovieDecoder`），插件复用；不允许插件反向注册 core 的格式处理项 |
+| **AlphaMovie 插件** | 按上游**完整移植**（用户明确选"一次性完整移植"） |
 
 ---
 
-## 5. 未完成 + 阻塞
+## 6. 未完成 + 阻塞
+
+### 6.1 渲染层（当前主线，详见 `compat/recon/render-issues.md`）
+
+| 项 | 规模 | 状态/阻塞 |
+|---|---|---|
+| NEKOPARA **视频位置**（一个对一个错） | 小 | 几何探针已补全（含 AMV 名、`crop=(l,t)`、帧序号/总帧数、上限 40）；**待下一轮日志**。怀疑 `showNextImage` 只用 `_left/_top`、未应用帧头裁剪偏移 |
+| G2 **进动画卡 4.4s** | 中 | 已细分：`createRenderer=2689ms bindTexture=0ms mvp=0ms`（1920×1080，1 张纹理）⇒ 卡在 `CreateRenderer`；需继续查 Cubism 渲染器/掩码缓冲创建 |
+| G2 **帧率 ~43–45** | 中 | 每帧 1920×1080 **GPU→CPU 回读**（`capture` 路径**刻意优先 CPU**：引擎随后按 CPU 位图重传纹理会覆盖只写纹理的内容）；主窗口走 `path=GPU`，只有 Live2D 图层退化。附带：该回读用 `GL_BGRA_EXT` 调 `glReadPixels`，ES3 非法 → `err=0x0502` |
+| G2 / 千恋万花 **`SystemWatchTimerTimer` 卡顿**（1.5–1.9s） | 中 | 卡在 `DeliverEvents()` 或 `TickBeat()` 循环（内层 MarkStage 未触发）；需在该函数内加细阶段探针 |
+| 千恋万花 **`wave` 转场缺失** | 小-中 | 确定的功能缺口，可独立做（按 KAGEX 规范） |
+| 千恋万花 **SDCG 无法渲染在 UI 之上** | 中 | 用户明确；需定位是层级顺序还是 SD 图层合成路径 |
+| **AlphaMovie 插件复用 core 解码器** | 中 | 未做；完成后删掉重复 ~1700 行 |
+
+### 6.2 兼容层 / 插件 / 壳
 
 | 项 | 规模 | 阻塞 |
 |---|---|---|
-| **I3（唯一等用户一句话）**：classic 层在档案工程直启 `.../data.xp3>` 时，是否挂兄弟 `patch*.xp3`？ | 小 | 决定 M1 最后一个策略开关 `mountSiblingsForArchiveProject` |
-| C3 `GetNextTag` 文本段聚合（只给 AetherKiri 层） | ~230 行 | **阻塞**：上游依赖 C2 `TVPTransformText`/`TVPPrefetchText`；C2 未移植时聚合无功能收益、只改存档位置语义 |
+| **I3（唯一等用户一句话）**：classic 层在档案工程直启 `.../data.xp3>` 时是否挂兄弟 `patch*.xp3`？ | 小 | 决定 M1 最后一个策略开关 `mountSiblingsForArchiveProject` |
+| C3 `GetNextTag` 文本段聚合 | ~230 行 | **阻塞**：上游依赖 C2 `TVPTransformText`/`TVPPrefetchText` |
 | C5 每帧 KAG 修复（`envclear` 复位、`[endtrans]` 无 trans 等待） | ~120 行 | 依赖 C6 部分前提 |
 | C6 KAG 运行时补丁层（27 文本补丁 + 11 类包装） | ~1500 行 | 前提是 patch.tjs 晚执行（E1） |
 | C7 `ExtKAGParser`（第二解析器） | ~4700 行 | 先改 `ExtKAGParser.hpp` 的 `KAGParserH` 保护宏、定 `paramMacros`/`copyTag` 缺失、与 `kagparserex` 空壳互斥 |
 | E1 `patch.tjs` 分两层（含韧性层） | 中 | 无（已裁决），影响面大需逐游戏回归 |
-| B1 伴生脚本虚拟替换（GPU 占位脚本 / motion-parameter / split-emote） | 中 | **部分实施（2026-09-21）**：`io/IoVirtualFile.*` + `compat/AetherKiriCompanions.cpp`；gfxEffect/logwindow/D3DEmote 未移 |
-| M6 其余插件（约 50 个缺失 + 部分覆盖项） | ~3300 行 | 无；清单见 `compat/recon/plugin-compat-diff.md`；本批已落地 systemEx/registory/stdio/javascript/messenger/msgreceiver/tasktray/adjustMonitor |
-| 壳：目录收藏交互打磨、平板双栏（列表-详情）、库页/详情页 MD3 细节 | 小-中 | 无 |
-| **渲染问题（三款游戏）**：NEKOPARA 4 视频 AMV 解码失败 / G2 `diffimage2.tjs` 递归 / 千恋万花 `wave` 转场缺失 + 卡死 + CG | 小-中 | 证据与下一步探针见 **`compat/recon/render-issues.md`**；两条已收窄到“再补一个探针就能定位” |
+| B1 伴生脚本虚拟替换（gfxEffect/logwindow/D3DEmote 未移） | 中 | 无；见 `compat/README.md` |
+| I13 `arc`(PackinOne) / `mem` / `zip` 存储媒体 | 中 | **待裁决**；G2 的 ZIP 头症状已由 §1.1 修复，故优先级下降 |
+| M6 其余插件（约 50 个缺失） | ~3300 行 | 无；清单见 `compat/recon/plugin-compat-diff.md` |
+| 壳：目录收藏交互打磨、平板双栏、库页/详情页 MD3 细节 | 小-中 | 无 |
 
 ---
 
-## 6. 怎么验证
+## 7. 怎么验证
 
 **本地（每次改完都要跑）**
 ```bash
-cd KiriNext && bash scripts/check_static.sh          # JNI 符号 / 移植清单 / 语法
-python3 scripts/check_port_drift.py                  # 只查移植漂移
-clang++ -std=c++17 -fsyntax-only -I<...> <file>      # 单 TU 语法检查（缺 spdlog/boost 时
-                                                     # 可用 .scratch/shim 里的最小替身）
+bash scripts/check_static.sh          # JNI 符号 / 移植清单 / 语法（有失败项会硬失败）
+python3 scripts/check_port_drift.py   # 只查移植漂移（改了 ported 文件要 --update）
+git diff --check                      # 空白/冲突标记
 ```
 
 **CI（唯一真构建）**
 ```bash
+# 普通构建（push 自动触发；测帧率用这个）
 git push origin main
+# 探针构建（要 probe: 日志时用这个）
+gh workflow run "Android 构建" --repo clevebitr/Krkr2Next --ref main \
+  -f build_type=debug -f enable_render_probe=true
 RID=$(gh api "repos/clevebitr/Krkr2Next/actions/runs?per_page=1" --jq '.workflow_runs[0].id')
-gh run watch "$RID" --repo clevebitr/Krkr2Next          # 注意 --exit-status 对 cancelled 不可靠
-gh api "repos/clevebitr/Krkr2Next/actions/runs/$RID" --jq '.conclusion'   # 以此为准
+gh api "repos/clevebitr/Krkr2Next/actions/runs/$RID" --jq '.conclusion'    # 以此为准
 gh api "repos/clevebitr/Krkr2Next/actions/runs/$RID/artifacts" --jq '.artifacts[].name'
+gh run view "$RID" --repo clevebitr/Krkr2Next --log-failed | rg -i "error:|undefined symbol|FAILED:"
 ```
-产物：`KrKr2Next-apk-debug`、`libengine_api-debug`。失败时用
-`gh run view "$RID" --log-failed | grep -E "e: |error:"` 抓 Kotlin/NDK 错误。
+产物：`KrKr2Next-apk-debug`、`libengine_api-debug`。CI 偶发 **NDK 下载损坏**
+（`Archive is not a ZIP archive`）——那是基础设施问题，**重跑即可**，不是代码错。
 
 **真机回归清单（交给用户）**
-读档、动态立绘、`AetherKiri 层接管完成（…别名 N/4…）`、`io policy: tie-break=… patch-rule=…`、
-`module gate:`（选 AetherKiri 档时）、`FontSystem: 已注册字体 N 个 -> …`、
-`logs/games/<游戏名>-<短哈希>/engine-<时间戳>.log` 是否按游戏分开。
+- 每游戏日志：`/storage/emulated/0/Android/media/org.dpdns.clevebitr/logs/games/<游戏名>-<短哈希>/engine-<时间戳>.log`；卡死另有同前缀 `.stall`
+- 关键行：`compat layer: 激活层切换为 …`、`io policy: tie-break=… patch-rule=…`、
+  `AetherKiri 层接管完成（…别名 N/4…）`、`FontSystem: 已注册字体 N 个 -> …`
+- 探针行以 `probe:` 开头；几何探针见 `probe: AlphaMovie.showNextImage/copyNextImageToTexture`
 
 ---
 
-## 7. 关键文件与证据索引
+## 8. 关键文件与证据索引
 
 | 东西 | 位置 |
 |---|---|
 | 兼容层事实/约束/阶段表/差异清单/裁决记录 | `compat/README.md`（§1 层与选择、§2 依赖不变量、§3 目录边界、§4 阶段、§5 差异+裁决、§6 移植溯源、§7 恢复指引） |
-| IO 对照证据（auto-path 语义、挂载、归档、路径、纠缠点） | `compat/recon/io-loading-diff.md` |
-| KAG 脚本层对照证据（KAGParser、ScriptMgnIntf 补丁层、TJS 内核回退、ExtKAGParser、冲突清单） | `compat/recon/kag-script-diff.md` |
-| 插件层对照证据（约 100 个模块覆盖表、合并冲突、移植成本） | `compat/recon/plugin-compat-diff.md` |
-| 渲染层对照证据（兼容层↔渲染耦合、`ogl/` 相对上游的功能差异、未覆盖的 ES2-only 路径） | `compat/recon/render-diff.md` |
-| **渲染问题追踪（当前 open issues + 探针清单 + 取证命令）** | **`compat/recon/render-issues.md`** |
-| 移植溯源清单（含 `partial-extract` 类别） | `compat/upstream/aetherkiri_ports.json` |
-| IO 组件 | `cpp/core/io/`（`StoragePolicy.h` 策略契约；`IoPolicy.*` 注入点；`IoModuleLocator.*` 模块查询注入） |
-| 兼容层框架 | `cpp/core/compat/`（`CompatLayer.*` 层注册表 + 策略注入；`ModuleGate.*` 模块归属门；`AetherKiriCompanions.*` 伴生脚本 provider） |
-| 虚拟文件注册点 | `cpp/core/io/IoVirtualFile.{h,cpp}`（provider 只产出内容，io 包成流且物理文件优先） |
-| 层专属插件 | `cpp/plugins/compat/aetherkiri/`（`legacy_zlib_version.cpp`、`legacy_system_misc.cpp`） |
-| 壳 UI | `app/app/src/main/kotlin/org/dpdns/clevebitr/ui/`（`Nav.kt` 路由+导航条、`LibraryScreen`、`GameDetailScreen`、`GameSettingsScreen`、`PickerScreen`、`SettingsScreen`、`AboutScreen`） |
-| 每游戏日志 | `app/.../core/LogFiles.kt`（`gameLogDir`/`gameEngineLog`）、`core/EngineSession.kt`（`switchEngineLogToGame`） |
+| **渲染问题追踪（open issues + 探针清单 + 取证命令）** | **`compat/recon/render-issues.md`** |
+| IO 对照证据 | `compat/recon/io-loading-diff.md` |
+| KAG 脚本层对照证据 | `compat/recon/kag-script-diff.md` |
+| 插件层对照证据（约 100 个模块覆盖表） | `compat/recon/plugin-compat-diff.md` |
+| 渲染层对照证据（兼容层↔渲染耦合、ES2-only 残留） | `compat/recon/render-diff.md` |
+| 移植溯源清单 | `compat/upstream/aetherkiri_ports.json`（12 个文件） |
+| IO 组件 | `cpp/core/io/`（`StoragePolicy.h` 策略契约；`IoPolicy.*`；`IoModuleLocator.*`；`IoVirtualFile.*` 虚拟文件注册点） |
+| 兼容层框架 | `cpp/core/compat/`（`CompatLayer.*`、`ModuleGate.*`、`AetherKiriCompanions.*`） |
+| A 块 TJS 回退 | `cpp/core/tjs2/tjsObject.cpp`（`TJSCompatResolve*`，含 **FuncCall** 链） |
+| **AlphaMovie** | 插件 `cpp/plugins/alphamovie.cpp`（上游逐字节 + `local-fix` 探针）；core 解码器 `cpp/core/visual/AlphaMovieDecoder.{h,cpp}`（`partial-extract`）；接入点 `cpp/core/visual/LoadAMV.cpp` |
+| 图形加载器注册表 | `cpp/core/visual/GraphicsLoaderIntf.cpp`（`.amv` 在第 238 行；`TVPRegisterGraphicLoadingHandler` 是对外注册 API） |
+| StallWatchdog（卡死探针） | `cpp/core/utils/StallWatchdog.h`（阈值 1500ms，卡死写 `<log>.stall`） |
+| 层专属插件 | `cpp/plugins/compat/aetherkiri/` |
+| 壳 UI | `app/app/src/main/kotlin/org/dpdns/clevebitr/ui/` |
+| 每游戏日志 | `app/.../core/LogFiles.kt`、`core/EngineSession.kt` |
 
 ---
 
-## 8. 下一轮建议顺序
+## 9. 下一轮建议顺序
 
-1. **渲染问题（当前主线）**：读 `compat/recon/render-issues.md`，按里面每条问题的“下一步”
-   补探针 → 触发一次 `enable_render_probe=true` 构建 → 按 `probe:` 日志定位/修复。
-   当前最接近出结果的两条：NEKOPARA 的 AMV 载荷前缀、G2 的 `diffimage2.tjs` 递归（A/B 二选一）。
-2. 若用户回了 **I3**：接完 `mountSiblingsForArchiveProject`（M1 收尾，小）。
-3. 否则：继续 **M6 小模块批次**（每批 2–4 个，机械、可验证）——下一批候选见
-   `compat/recon/plugin-compat-diff.md §2`（如 `systemEx` 剩余函数、`layerExSave`、`msdfrender`）。
-4. **C3 已阻塞**：上游 `GetNextTag` 聚合依赖 C2 翻译层（本仓库未移植）；若要推进需先裁决 C2。
-5. 壳侧：目录收藏交互打磨 → 平板双栏 → 库页/详情页 MD3 细节。
+1. **NEKOPARA 视频位置（最接近出结果）**：让用户装最新探针构建跑一次，取
+   `probe: AlphaMovie.showNextImage [<amv>] frame=n/N crop=(l,t) WxH pos=(x,y) screen=… layer=…`。
+   对照"正确"与"不正确"两个 AMV 的 `crop` 与 `pos`，判断是否 `showNextImage` 未应用裁剪偏移
+   （它目前只把帧画在 `_left/_top`）。若是，修法在插件内（`m_BmpBits->Update(...)` 的落点）。
+2. **AlphaMovie 插件复用 core 解码器**：删掉插件内重复实现（单独提交、便于回退）。
+3. **G2 进动画 4.4s**：继续查 `CreateRenderer(1920x1080)` 为何 2689ms
+   （Cubism 掩码缓冲/GL 资源创建；可在 `CreateRenderer` 前后加更细计时）。
+4. **G2 帧率**：先用**普通构建**复测确认基线（探针构建会测低）；再评估
+   `capture` 的 CPU 回读能否改走 GPU（改动面较大，用户要求渲染改动小，需先确认收益）。
+5. **`SystemWatchTimerTimer` 卡顿**：在 `cpp/core/environ/win32/SystemControl.cpp` 的
+   `DeliverEvents()` 与 `TickBeat()` 循环内加 MarkStage（当前内层阶段一条都不触发）。
+6. **千恋万花**：`wave` 转场（独立功能缺口）→ SDCG 层级。
+7. **兼容层**：若用户回了 **I3**，接完 `mountSiblingsForArchiveProject`（M1 收尾）；
+   否则继续 **M6 小模块批次**（每批 2–4 个，机械可验证）。
+8. **C3 已阻塞**于 C2；壳侧：目录收藏交互打磨 → 平板双栏 → MD3 细节。

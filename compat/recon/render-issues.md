@@ -15,111 +15,111 @@
 - 日志位置：
   - 每游戏引擎日志：`/storage/emulated/0/Android/media/org.dpdns.clevebitr/logs/games/<游戏名>-<短哈希>/engine-<时间戳>.log`
   - 宿主日志：`.../logs/app.log`；卡死转储：`.../engine-<时间戳>.log.stall`
+- **帧率必须在普通构建（push 构建）上测**：探针构建每帧同步写日志（`HostWindowLayer::RTProbe`、
+  `engine_tick: … enter/return` 且带 `flush()`），会把 fps 测低。
 - **已内置探针**（默认关，日志前缀 `probe:`）：
-  | 探针 | 位置 | 次数上限 |
+
+  | 探针 | 位置 | 上限 |
   |---|---|---|
-  | `probe: Storages.isExistentStorage(<arg>) #N` | `cpp/core/io/IoStorage.cpp` | 前 64 次 |
-  | `probe: Layer.loadImages(<arg>) #N` | `cpp/core/visual/LayerIntf.cpp` | 前 64 次 |
-  | `probe: PropGet miss '<member>' (compatFallbacks=N)` | `cpp/core/tjs2/tjsObject.cpp` | 前 32 次 |
-  | `probe: AMV header 失败：<tjGetErrorStr2>（size=…，first=XXXX）` | `cpp/core/visual/LoadAMV.cpp` | 无（每帧） |
-  | `probe: AMV tjDecompress2 失败：…` | 同上 | 无 |
-  | `probe: AMV DQT 注入重试 ok=N dqtSeg=…B jpeg=…B` | 同上 | 无 |
+  | `probe: Storages.isExistentStorage(<arg>) #N` | `io/IoStorage.cpp` | 前 64 |
+  | `probe: Layer.loadImages(<arg>) #N` | `visual/LayerIntf.cpp` | 前 64 |
+  | `probe: PropGet miss '<member>' (compatFallbacks=N)` | `tjs2/tjsObject.cpp` | 前 32 |
+  | `probe: PropSet miss 'diffEnterCount', flag=…` | `tjs2/tjsObject.cpp` | 前 32 |
+  | `probe: TJS stack nearly exhausted block=… func=… start_ip=…` | `tjs2/tjsInterCodeExec.cpp` | 每次栈耗尽 |
+  | `probe: AMV payload first32=… SOI_count=… SOI_offsets=[…] tail16=…` | `visual/LoadAMV.cpp` | 每帧 |
+  | `probe: AMV variant revision=… qt_size_plus_hdr=… attr=… frame=… alpha=…` | 同上 | 每帧 |
+  | `probe: AMV retry-from-SOI off=… len=… ok=… WxH` | 同上 | 每帧 |
+  | `probe: 图片格式不支持 -> 1x1 占位 name=… ext=…` | `visual/GraphicsLoaderIntf.cpp` | 每次命中 |
+  | `probe: AlphaMovie.showNextImage [<amv>] frame=n/N crop=(l,t) WxH pos=(x,y) screen=… layer=…` | `plugins/alphamovie.cpp` | 前 40 |
+  | `probe: AlphaMovie.copyNextImageToTexture [<amv>] rect=(l,t)-(r,b) target=… atlasTop=…` | 同上 | 前 40 |
+  | `krkrlive2d: 渲染器阶段细分 createRenderer=…ms bindTexture=…ms mvp=…ms` | `plugins/krkrlive2d.cpp` | 该阶段 >200ms |
+  | `[probe] krkrlive2d: …` / `[probe] krkrgles: …` | 对应插件 | 多为首次/限频 |
+
 - 触发探针构建：
   ```bash
   gh workflow run "Android 构建" --repo clevebitr/Krkr2Next --ref main \
     -f build_type=debug -f enable_render_probe=true
   ```
-  （工作流 `concurrency: cancel-in-progress`：连推/连触发时前一条会显示 cancelled，属预期。）
+  （工作流 `concurrency: cancel-in-progress`：连推/连触发时前一条会显示 cancelled，属预期。
+  CI 偶发 NDK 下载损坏 `Archive is not a ZIP archive` —— 基础设施问题，重跑即可。）
 
 ---
 
-## 1. NEKOPARA 4（`KRKR__官中_NEKOPARA_4`）— 视频无法解码
+## 1. NEKOPARA 4（`KRKR__官中_NEKOPARA_4`）— 视频位置偏移
 
-**状态：根因已定位到数据层；待补"载荷 dump"探针**
+**状态：解码已修好；剩位置问题（用户：一个位置正确、一个不正确）**
 
-证据（`engine-20260921-210738.log`）：
-```
-AMV: 1280x720, 60 frames, mode=jpeg
-probe: AMV header 失败：Could not determine subsampling level of JPEG image（size=7091，first=CEA1）
-probe: AMV header 失败：…（size=7292，first=FFD8）
-probe: AMV DQT 注入重试 ok=0 dqtSeg=199B jpeg=7091B
-AMV: color JPEG decode failed at kaglayer.tjs(1)[(function) loadImages]
-画像ロード失敗, AMV: color JPEG decode failed
-```
+已修（2026-09-22，真机确认 `AMV: color JPEG decode failed` 归零）：
+- **视频帧当 CG 显示**（`Layer.loadImages("<amv>")`）：走 core 图形路由器 → `TVPLoadAMV`。
+  载荷不是标准 JPEG（无 SOI/DHT，Huffman 用标准表，DQT 取自文件头），turbojpeg 解不了。
+  已在 core 加专用解码器 `cpp/core/visual/AlphaMovieDecoder.{h,cpp}` 并接入 `LoadAMV.cpp`。
+- **翻转动画播放**：完整移植 `cpp/plugins/alphamovie.cpp`（含 `GLAlphaMovie.dll` 别名）。
 
-载荷 dump 探针实测（`engine-20260922-065143.log`）：
+未解决：**同一屏幕上的视频位置一个对、一个错。**
+
+已有证据（`engine-20260922-130028.log`）：
 ```
-probe: AMV payload first32=CEA1DB873E1CF0CFFC8C9A563FE7EE2FFFD0C57EA94102C49EA7B9AFCADF0CFFC
-       payloadLen=74160 extraHdr=12 sizeOfFrame=74172
+probe: AlphaMovie.showNextImage frame=2 pos=(0,0) frame=656x720 screen=1280x720 layer=1280x720
+（仅出现 showNextImage；copyNextImageToTexture 一条都没有）
 ```
-- 载荷**不以 JPEG SOI 开头**；首个 `FF D8` 在偏移 **7091**——`FindSecondSOI` 把它当成了
-  “第二个 SOI”，即把 7091 误当成彩色段长度。
-- 前 32 字节跨帧高度重复（结构化数据，非加密/压缩）；`firstFFD8` 逐帧变化很大
-  （7091 / 1827 / 11127 / 1269 / 40821），而 `payloadLen` 恒定 ≈74 KB
-  ⇒ 载荷是 **`[变长前缀][JPEG…]`**；`extraHdr` 与 `sizeOfFrame` 口径自洽。
-- 结构探针（全部 SOI 偏移 + 尾部找 `FF D9` + 头部变体字段）已在 `LoadAMV.cpp` 就位。
+- 该 AMV 帧是 1280×720 画布里的 **656×720 裁剪**，而 `showNextImage` 把帧画在 `_left/_top`
+  （脚本 `setPosition` 设的值）——**没有应用帧头的裁剪偏移**。
+- 注意：上面那次探针**漏打了 `crop=(l,t)`**，已补全（见 §0 探针表）。
 
 **下一步**：
-1. 按 `SOI_count` / `tail16` 判定前缀边界与是否含 alpha 段，再修 `payloadStart` / `colorSize`。
+1. 装最新探针构建跑一次，取 `probe: AlphaMovie.showNextImage [<amv>] frame=n/N crop=(l,t) WxH pos=(x,y) …`。
+2. 对比"正确"与"不正确"两个 AMV 的 `crop` 与 `pos`：若正确的 `crop` 为 `(0,0)`、不正确的非零，
+   则确认是 `showNextImage` 未应用裁剪偏移；修点在 `alphamovie.cpp` 的
+   `m_BmpBits->Update(frameData, pitch, _left, _top, w, h)` 落点。
+3. 顺带确认 `_screenWidth/_screenHeight`（1280×720）与 `layer`（1280×720）一致后再动。
 
 ---
 
-## 2. nainiuniu5krkr（G2）— 启动期 `diffimage2.tjs` 无限递归
+## 2. nainiuniu5krkr（G2）— 进动画卡 4.4s + 帧率 ~43–45
 
-**状态：根因已定位并已修（待真机回归）**
+**状态：递归与 Live2D 已修好；剩性能问题**
 
-完整因果链（`engine-20260922-065121.log`，每步均有日志/反编译证据）：
-1. `startup.tjs`(exec#1) 跑完第一遍 KAG 初始化（`diffimage2.tjs` = exec#97）。
-2. `mainwindow.tjs saveSystemVariables` 里 `try { … Storages.commitSavedata() }`
-   抛 `Member "commitSavedata" does not exist`，进入 `catch` 又调
-   `Storages.rollbackSavedata()` → 同样不存在 → **异常从 catch 里抛出**。
-3. `StartupProbe: startup.tjs threw(eTJSScriptError) … msg=Member "rollbackSavedata" does not exist`
-   → 引擎兜底 `StartupProbe: running FALLBACK system/Initialize.tjs`。
-4. 第二遍初始化重跑（`diffimage2.tjs` = exec#229）⇒ `Storages.isExistentStorage` 被**包装两次**。
-5. `diffimage2.tjs` 的包装在**调用时**读全局 `diffOrigIsExistentStorage`；二次加载后该全局
-   指向第一次的包装 W1 ⇒ W1 调 W1，而该包装**没有** `diffEnterCount` 兜底 ⇒ 无限递归 → 栈耗尽。
+已修（真机确认）：
+- **启动期 `diffimage2.tjs` 无限递归**：根因是 A 块回退只挂在 `PropGet`，而
+  `Storages.commitSavedata()` 走 `FuncCall`；缺失成员导致 `startup.tjs` 抛错 → 引擎兜底重跑
+  `system/Initialize.tjs` → `diffimage2.tjs` 执行两次 → `Storages.isExistentStorage` 双重包装自递归。
+  现已在 `tjsObject.cpp` 补 `TJSCompatResolveFuncCallFallback()` 并把 `rollbackSavedata`
+  加入 no-op 名单。
+- **Live2D 从未被驱动 + 图片以 ZIP 头加载失败**：根因是 `TVPGetPlacedPath` 把伴生脚本的虚拟命中
+  当成"当前目录已找到"，跳过了 auto-path 搜索，游戏的 `data.xp3>system/live2d.tjs` 永远没被尝试。
+  现已改为**物理优先、auto-path 次之、虚拟最后兜底**。
 
-关键事实：
-- **假设 (A) 排除**：`probe: PropSet miss 'diffEnterCount'` 一条都没有；且
-  `tTJSExtendableObject::PropSet` 覆盖了 `tTJSCustomObject::PropSet`，探针位置本就不会触发。
-- **回退失效的真正原因**：`TJSCompatIsStartupNoOpFunction` 里**本来就有** `commitSavedata`，
-  但 A 块回退只挂在 `tTJSCustomObject::PropGet` 上；而 `Storages.commitSavedata()` 是
-  **方法调用**，走 `FuncCall`、不经 `PropGet` ⇒ 回退永远没被问到。
+未解决 ①：**进动画同步卡 4.4s**（`engine-20260922-130246.log`）：
+```
+krkrlive2d: 渲染器阶段细分 createRenderer=2689ms bindTexture=0ms mvp=0ms（1920x1080，1 张纹理）
+krkrlive2d: 加载耗时 [ev_cg001_02s] zip=372ms moc3=3ms 纹理=1297ms 渲染器=2689ms 动作=40ms 合计=4404ms
+```
+⇒ 卡顿就在 `CreateRenderer(1920×1080)` 本身（该阶段其余两项 0ms）。第二次加载命中缓存只剩 95ms。
 
-**已修**（`tjsObject.cpp`）：
-- 新增 `TJSCompatResolveFuncCallFallback()`，在 `tTJSCustomObject::FuncCall` 的
-  `!data` 分支挂上与 `PropGet` 同名单、同顺序的回退链（仅 AetherKiri 层）。
-- `rollbackSavedata` 加入 `TJSCompatIsStartupNoOpFunction` 名单。
+**下一步**：在 `CreateRenderer` 前后加更细计时（Cubism `CubismRenderer_OpenGLES2` 初始化会创建
+掩码缓冲/着色器等 GL 资源），确认是掩码缓冲分配、着色器编译，还是首次 GL 同步。
 
-**背景（保留）**：`tjsInterCodeExec.cpp` 有一段**上游没有**的原生栈保护（256KB 余量），
-把原本的 SIGSEGV 转成了脚本异常；它只是兜底，不是修复。
+未解决 ②：**帧率 ~43–45（不到 60）**（同一日志，普通构建需复测）：
+```
+frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(>33ms)=3
+```
+- `update_avg` 只有 ~10ms，却只有 ~45fps ⇒ 差额在宿主侧（vsync 调度/交付），**先用普通构建复测**。
+- 每帧一次 **1920×1080 GPU→CPU 回读**，来自 `capture` 路径**刻意优先 CPU**
+  （源码注释：引擎随后按 CPU 位图重传纹理会把"只写纹理"的内容覆盖回去）：
+  ```
+  [probe] krkrgles: copy path=sync-read(bgra) fbo=4 ... copy=1920x1080 pitch=8192 err=0x0502
+  [probe] krkrgles: layer CPU buffer copied=1 1920x1080 ...
+  ```
+  主窗口走的是 `HostWindowLayer::UpdateDrawBuffer: path=GPU`，只有 Live2D 这条图层路径退化。
+- 附带：该回读用 `GL_BGRA_EXT` 调 `glReadPixels`，ES3 不是合法格式（首次 `err=0x0502`）。
 
-**残留问题（2026-09-22 真机：递归已消失、游戏可正常打开）**：
-- **某张图加载失败**：`Unsupported image format (header 504b0304)`（`PK\x03\x04` = ZIP），
-  引擎给 1×1 透明占位；紧跟在 `KAGParser, animation.ks, animation_1.ks` 之后出现两次。
-  `PackinOne.dll` 按 `aetherkiri_ports.json` 是刻意未移植（功能已由
-  fstat/dirlist/addFont/saveStruct 覆盖），而 `compat/README.md` 的 **I13** 已列出
-  `arc`(PackinOne) 存储媒体**未实现、待裁决**；G2 的整包镜像正是 PackinOne 格式。
-  资源名已在探针里捕获（见下），待下一轮日志确认是否 `arc://` 路径。
-- **Live2D 从未被驱动（根因已定位并已修）**：游戏在 `data.xp3` 里**确实有** `system/live2d.tjs`
-  （索引扫描确认，另有 `system/d3daffinesourcelive2d.tjs`、`system/affinesourcelive2d.tjs`），
-  但日志显示 `compat companion: 虚拟提供 live2d.tjs [gpu-compat-script]` —— 伴生占位脚本
-  **顶掉了游戏自己的脚本**。
+未解决 ③：**`Application::Run: SystemWatchTimerTimer` 卡顿**（1.5–1.9s，`.stall` 两条）：
+内层 MarkStage（`定时器: COMPACT_IDLE` / `RunMemoryGovernor` / `SystemWatchTimerTimer 返回`）
+**一条都没触发** ⇒ 卡在 `tTVPSystemControl::SystemWatchTimerTimer()` 的
+`DeliverEvents()` 或 per-window `TickBeat()` 循环里。
 
-  原因在 `TVPGetPlacedPath`（`io/IoStorage.cpp`）的解析顺序：它用
-  `TVPIsExistentStorageNoSearchNoNormalize()` 做“当前目录是否已有”，而后者末尾是
-  `return krkr::io::IsVirtualFile(name);` —— 伴生名单（按 basename 匹配）因此被当成
-  “当前目录已找到”，**auto-path 搜索被跳过**，游戏真实的
-  `data.xp3>system/live2d.tjs` 永远不会被尝试（KAG 用裸名 `live2d.tjs` 请求）。
-  这也与 `IoVirtualFile.h` 自己写的契约“**物理文件优先**：缺失时才问 provider”相矛盾。
-
-  **已修**：`TVPGetPlacedPath` 的“当前目录”判断改为只查物理
-  （`TVPIsRealStorageNoSearchNoNormalize`），虚拟文件改为 **auto-path 搜索失败后的最后兜底**。
-  副作用：伴生脚本仍对“游戏确实没有”的名字生效，但不再遮蔽已有脚本。
-
-  另：`live2d.tjs` 占位脚本第 17/18 行的 `Member "KAGWindow" does not exist` 在
-  `try{}catch{}` 里，本身无害（占位脚本与上游 `TVP_GPU_COMPAT_SCRIPT` 逐字一致）。
-- 卡死探针仍报 1.9s：`Application::Run: SystemWatchTimerTimer`。
+**下一步**：在 `cpp/core/environ/win32/SystemControl.cpp` 的 `DeliverEvents()` 与
+`TickBeat()` 循环内加 MarkStage，把阶段收窄到具体子步骤。
 
 ---
 
@@ -127,25 +127,19 @@ probe: AMV payload first32=CEA1DB873E1CF0CFFC8C9A563FE7EE2FFFD0C57EA94102C49EA7B
 
 **状态：图片路径正常；三个独立问题待处理**
 
-证据（`engine-20260921-210834.log`）：
+已核实的现状：
 - `probe: Layer.loadImages(psb://quickmenu.pimg/*.tlg)` 一串 ⇒ 图片/E-mote 加载路径正常。
-- **卡死**：`*.log.stall` 4 条 `render-thread-stall`：
-  - `movie: Close→清理窗口消息/状态`（1.6s）
-  - `engine_tick: Application::Run（脚本+合成+绘制）`（1.5s ×3）
 - **`Transition handler 'wave' not found, falling back to crossfade`** ⇒ `wave` 转场未实现。
+- **卡死**：`.stall` 记 `render-thread-stall`，阶段 `Application::Run: SystemWatchTimerTimer`
+  （与 G2 同源，见 §2 未解决 ③）。
 - `convertImage: RL decode failed … raw palette` ⇒ **已知小图标回退**
-  （`cpp/plugins/psbfile/PSBMedia.cpp` 有注释：m2logo icon32/icon18 的未压缩调色图被标成 RL），
-  非根因。
-- 上一次（`engine-20260921-203751.log`）`DrawVideoOverlay` 早期帧是**灰阶**
-  （`画后=(253,253,253)`、`(182,182,182)`、`(196,196,196)`，第 120 次才 `(237,222,176)`）——
-  若"logo 颜色丢失"指**开场视频**，属视频管线；本次未播视频所以没复现。
+  （`cpp/plugins/psbfile/PSBMedia.cpp` 有注释：m2logo icon32/icon18 的未压缩调色图被标成 RL），非根因。
+- **SDCG 无法正确渲染在 UI 之上**（用户 2026-09-22 明确）。
 
 **下一步**：
 1. `wave` 转场：按 KAGEX 规范补实现（确定的功能缺口，可独立做）。
-2. 卡死：`.stall` 只给了阶段名；需要更细的探针（渲染线程当时在做什么），
-   或复现时抓 `/data/anr` + `logcat`。
-3. "无法渲染 CG"（用户 2026-09-22 明确）：**SDCG 无法正确渲染在 UI 之上**。
-   需要定位是图层层级顺序问题，还是 SD 图层的合成路径问题。
+2. SDCG 层级：先定位是图层顺序问题还是 SD 图层的合成路径问题（需要具体界面/操作）。
+3. 卡死：与 §2 未解决 ③ 同一处理（`SystemWatchTimerTimer` 细阶段探针）。
 
 ---
 
@@ -170,7 +164,7 @@ probe: AMV payload first32=CEA1DB873E1CF0CFFC8C9A563FE7EE2FFFD0C57EA94102C49EA7B
 
 ```bash
 bash scripts/check_static.sh          # JNI 符号 / 移植清单 / 语法
-python3 scripts/check_port_drift.py   # 移植漂移
+python3 scripts/check_port_drift.py   # 移植漂移（改了 ported 文件要 --update）
 # 探针构建（唯一能拿到 probe: 日志的方式）：
 gh workflow run "Android 构建" --repo clevebitr/Krkr2Next --ref main \
   -f build_type=debug -f enable_render_probe=true
