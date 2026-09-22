@@ -2950,6 +2950,24 @@ tjs_int tTJSNI_AlphaMovie::showNextImage(tTJSVariant layer)
             {
                 m_BmpBits->Update(frameData.get(), ready.width * 4, _left, _top,
                                   ready.width, ready.height);
+#if defined(KRKR_RENDER_PROBE)
+                // 几何探针：帧尺寸正常但整体偏移时，需要知道游戏给的位置
+                // （_left/_top，由 setPosition 设）、帧自身尺寸、屏幕尺寸、
+                // 以及图层实际尺寸——四者才能定位偏移来源。
+                {
+                    static int s_showGeomProbe = 0;
+                    if(s_showGeomProbe < 6) {
+                        ++s_showGeomProbe;
+                        spdlog::info(
+                            "probe: AlphaMovie.showNextImage frame={} "
+                            "pos=({},{}) frame={}x{} screen={}x{} "
+                            "layer={}x{}",
+                            frameIndex, _left, _top, ready.width,
+                            ready.height, _screenWidth, _screenHeight,
+                            (long)src->GetWidth(), (long)src->GetHeight());
+                    }
+                }
+#endif
                 // Update() copies into the reusable presentation texture.  Do
                 // not retain a decoded RGBA image per AMV frame: a 112-frame
                 // 1080p feather animation alone is almost a gigabyte. Swap the
@@ -3031,6 +3049,23 @@ tjs_int tTJSNI_AlphaMovie::copyNextImageToTexture(tjs_int64 textureHandle,
 
     destinationRect->Set(ready.left, ready.top, ready.left + ready.width,
                          ready.top + ready.height);
+#if defined(KRKR_RENDER_PROBE)
+    // 几何探针：GLAlphaMovie 路径把帧上传到纹理底部条带（atlasTop），目标矩形
+    // 用帧头的 left/top。这两者任一错都会表现为“尺寸正常但整体偏移”。
+    {
+        static int s_copyGeomProbe = 0;
+        if(s_copyGeomProbe < 6) {
+            ++s_copyGeomProbe;
+            spdlog::info(
+                "probe: AlphaMovie.copyNextImageToTexture frame={} "
+                "rect=({},{})-({},{}) frame={}x{} target={}x{} atlasTop={}",
+                frameIndex, ready.left, ready.top, ready.left + ready.width,
+                ready.top + ready.height, ready.width, ready.height,
+                targetWidth, targetHeight,
+                static_cast<tjs_int>(targetHeight - ready.height));
+        }
+    }
+#endif
     textureLastFrame_ = frameIndex;
     textureFrameCursor_ = nextFrameIndex;
     return textureLastFrame_;
