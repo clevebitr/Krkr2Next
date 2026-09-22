@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import org.dpdns.clevebitr.core.EngineOverride
 import org.dpdns.clevebitr.core.GameConfig
 import org.dpdns.clevebitr.core.GlobalDefaults
+import org.dpdns.clevebitr.core.KeyPadProfile
 import org.dpdns.clevebitr.core.LibraryGame
 import org.dpdns.clevebitr.core.RunMode
 import org.dpdns.clevebitr.core.asEngineOverride
@@ -61,6 +62,10 @@ fun GameSettingsScreen(
     onSave: (GameConfig) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** 全局按键模板表与增删回调（与设置页共用同一份）。 */
+    keyPadTemplates: Map<String, KeyPadProfile> = emptyMap(),
+    onSaveKeyPadTemplate: ((String, KeyPadProfile) -> Unit)? = null,
+    onDeleteKeyPadTemplate: ((String) -> Unit)? = null,
 ) {
     // 界面只给"运行模式"一个旋钮（固定组合），两个原始值由模式展开——见 RunMode。
     var runMode by remember(game.id) {
@@ -74,6 +79,8 @@ fun GameSettingsScreen(
     }
     var useOwnOverlay by remember(game.id) { mutableStateOf(config.overlay != null) }
     var overlay by remember(game.id) { mutableStateOf(config.overlay ?: globalDefaults.overlay) }
+    var useOwnKeypad by remember(game.id) { mutableStateOf(config.keypad != null) }
+    var keypad by remember(game.id) { mutableStateOf(config.keypad ?: globalDefaults.keypad) }
 
     val globalMode = RunMode.fromConfig(
         globalDefaults.compatProfile,
@@ -91,6 +98,7 @@ fun GameSettingsScreen(
             fontFallbackMode = fontFallback.nullIfInherit(),
         ),
         overlay = if (useOwnOverlay) overlay else null,
+        keypad = if (useOwnKeypad) keypad else null,
     )
 
     Scaffold(
@@ -196,6 +204,34 @@ fun GameSettingsScreen(
                 } else {
                     Text(
                         text = "当前跟随全局默认：${if (globalDefaults.overlay.enabled) "已开启" else "已关闭"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+
+                SettingsSectionTitle("自定义按键浮层")
+
+                SwitchRow(
+                    title = "使用独立配置",
+                    subtitle = "关掉则跟随全局默认（按钮布局与样式都用全局那一份）。",
+                    checked = useOwnKeypad,
+                    onCheckedChange = { useOwnKeypad = it },
+                )
+                if (useOwnKeypad) {
+                    KeyPadConfigEditor(
+                        profile = keypad,
+                        onProfileChange = { keypad = it },
+                        templates = keyPadTemplates,
+                        onSaveTemplate = onSaveKeyPadTemplate,
+                        onDeleteTemplate = onDeleteKeyPadTemplate,
+                    )
+                } else {
+                    Text(
+                        text = "当前跟随全局默认：${if (globalDefaults.keypad.enabled) "已开启" else "已关闭"}" +
+                            "（${globalDefaults.keypad.buttons.size} 个按钮）",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp),

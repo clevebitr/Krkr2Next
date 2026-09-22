@@ -13,7 +13,7 @@
 - **详情页改版（Steam 大屏式左右分栏）→ 已完成**（`ui/GameDetailScreen.kt`）。
 - **壳的 Kotlin 编译已能在 Termux 本地跑通** → 见 §1，改壳必须先本地编译过再推。
 
-**还没做**：① 自定义按键浮层；② 引擎游戏设置侧边栏。两项都在 §3 / §4 写了实施规格。
+**还没做**：引擎游戏设置侧边栏（§4）。**自定义按键浮层已完成**（见 §3）。
 
 ---
 
@@ -53,6 +53,10 @@ git diff --check
 | 每游戏配置 | `core/GameConfig.kt` | `GameConfig`（`krkr2next.json` 的模型）、`GameConfigStore`、`GlobalDefaults`、`GamePaths` |
 | 每游戏覆盖数据的**范式** | `core/OverlayConfig.kt` | 性能叠加层的字段集合：`enum OverlayField(key, label)`，**key 落盘、不能改**，未知键忽略 |
 | 叠加层编辑器 UI 范式 | `ui/OverlayConfigEditor.kt` | 「一组可勾选/可配置项」的编辑界面写法，可直接照抄给自定义按键 |
+| 自定义按键浮层（渲染 + 编辑态） | `ui/KeyPadOverlay.kt` | 只按钮命中区消费事件，其余穿透；长按按系统 repeat 补发 down |
+| 自定义按键配置模型 | `core/KeyPadConfig.kt` | `KeyButton` / `KeyPadProfile`，归一化坐标，JSON 落盘 |
+| 自定义按键属性编辑器 | `ui/KeyPadConfigEditor.kt` | 全局设置页与游戏设置页共用；键位/图标/颜色/透明度/描边/位置大小 |
+| MD3 图标登记表 | `ui/KeyPadIcons.kt` | 落盘的是稳定键名而非 `ImageVector` 名 |
 | 游戏画面（浮层宿主） | `ui/GameScreen.kt` | 引擎 Surface 与壳侧浮层共存的地方；性能叠加层就挂在这里 |
 | 性能叠加层绘制 | `ui/PerformanceOverlay.kt` | 壳侧浮层如何画在游戏之上、如何按帧取 `PerfSnapshot` |
 | 引擎交互 | `core/NativeEngine.kt` | 壳↔引擎的唯一 Kotlin 入口（`external` 方法，22 个） |
@@ -64,7 +68,22 @@ git diff --check
 
 ---
 
-## 3. 待实现一：自定义按键浮层
+## 3. 已完成：自定义按键浮层
+
+> 2026-09-23 落地；下面保留目标行为与验收标准，实现落点见表。
+
+### 3.0 实现落点
+
+- 模型/存储：`core/KeyPadConfig.kt`（`KeyButton` / `KeyPadProfile`，归一化坐标，JSON）；
+  每游戏存 `krkr2next.json` 的 `keypad` 段（`GameConfig.keypad`），全局默认与具名模板存
+  `AppPrefs`（`input.keypad_profile` / `input.keypad_templates`）。
+- 渲染/交互：`ui/KeyPadOverlay.kt`。**只有按钮命中区消费事件**，其余穿透给引擎；
+  编辑态由 `GameScreen` 的 SurfaceView 监听吞掉全部触摸（否则拖按钮会把 `POINTER_DOWN`
+  送进游戏）。长按按系统 repeat 心跳补发 down（引擎不生成 repeat）。
+- 编辑：游戏内悬浮菜单 →「编辑自定义按键」进入编辑态，拖拽移动、右下角把手缩放、
+  顶部工具条添加/删除/完成。属性细调在设置页（`ui/KeyPadConfigEditor.kt`）。
+- 落盘时机：编辑态内只改内存，**退出编辑态/切后台/退出游戏**时才写一次
+  `krkr2next.json`（拖拽每帧都改数据，不能每帧落盘）。
 
 ### 3.1 目标行为
 
@@ -124,7 +143,7 @@ data class KeyPadProfile(val buttons: List<KeyButton>, val enabled: Boolean = fa
 - 浮层不得改变引擎的输入时序：只在用户按下/抬起时发事件，不要每帧发。
 - 不要为这个功能引入新库（AGENTS §2）。
 
-### 3.5 验收标准
+### 3.5 验收标准（已实现，待真机确认）
 
 - 关掉时**完全不拦截**触摸（游戏操作与之前逐帧一致）；
 - 一个按钮能触发游戏里对应键的效果（例如方向键、Enter、Esc）；
@@ -210,7 +229,7 @@ data class KeyPadProfile(val buttons: List<KeyButton>, val enabled: Boolean = fa
 
 ## 7. 下一会话的建议顺序
 
-1. 自定义按键浮层（§3）——纯壳侧，风险最低，可行性最高；
-2. 引擎游戏设置侧边栏（§4）——先确认引擎菜单链路是否存在，再动 C ABI；
+1. 引擎游戏设置侧边栏（§4）——先确认引擎菜单链路是否存在，再动 C ABI；
+2. 已完成：自定义按键浮层（§3）——纯壳侧，已本地编译通过；
 3. 每完成一项：`bash scripts/build_shell_local.sh` → `bash scripts/check_static.sh`
    → `git diff --check` → 单独提交。

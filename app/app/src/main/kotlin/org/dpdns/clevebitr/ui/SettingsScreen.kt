@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import org.dpdns.clevebitr.core.AppLog
 import org.dpdns.clevebitr.core.RunMode
 import org.dpdns.clevebitr.core.OverlayConfig
+import org.dpdns.clevebitr.core.KeyPadProfile
 import org.dpdns.clevebitr.core.AppPrefs
 import org.dpdns.clevebitr.core.BuildInfo
 import org.dpdns.clevebitr.core.LogFiles
@@ -76,6 +77,14 @@ fun SettingsScreen(
      * （悬浮菜单 -> 设置），光写偏好设置要退出重进才看得到，那就等于没生效。
      */
     onOverlayConfigChanged: (OverlayConfig) -> Unit = {},
+    /** 当前**全局默认**自定义按键浮层（每游戏覆盖在各自的 `krkr2next.json` 里）。 */
+    keyPadProfile: KeyPadProfile = KeyPadProfile.default(),
+    /** 按键浮层全局默认变化时回调；壳层据此立刻应用到没有独立配置的游戏。 */
+    onKeyPadProfileChanged: (KeyPadProfile) -> Unit = {},
+    /** 具名按键模板表（全局）。 */
+    keyPadTemplates: Map<String, KeyPadProfile> = emptyMap(),
+    onSaveKeyPadTemplate: ((String, KeyPadProfile) -> Unit)? = null,
+    onDeleteKeyPadTemplate: ((String) -> Unit)? = null,
     /** 主题档位；改完立刻换肤，所以要回调给壳层（与叠加层同理）。 */
     themeMode: String = "system",
     onThemeModeChanged: (String) -> Unit = {},
@@ -251,6 +260,29 @@ fun SettingsScreen(
                     onOverlayConfigChanged(it)
                     AppLog.i(TAG, "overlay: enabled=${it.enabled} fields=${it.orderedFields.map { f -> f.key }}")
                 },
+            )
+
+            Text(
+                text = "自定义按键浮层（全局默认）",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(start = 16.dp, top = 16.dp),
+            )
+            Text(
+                text = "在游戏画面上叠一组按钮，点它等于按键盘上的对应键。" +
+                    "这里改的是**默认值**；某个游戏想单独一套，去它的详情页打开" +
+                    "「使用独立配置」。游戏中可从悬浮菜单进「编辑自定义按键」直接拖拽定位。",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+            KeyPadConfigEditor(
+                profile = keyPadProfile,
+                onProfileChange = {
+                    onKeyPadProfileChanged(it)
+                    AppLog.i(TAG, "keypad: enabled=${it.enabled} buttons=${it.buttons.size}")
+                },
+                templates = keyPadTemplates,
+                onSaveTemplate = onSaveKeyPadTemplate,
+                onDeleteTemplate = onDeleteKeyPadTemplate,
             )
 
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {

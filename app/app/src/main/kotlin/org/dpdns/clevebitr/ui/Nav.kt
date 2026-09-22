@@ -38,6 +38,7 @@ import androidx.navigation.navArgument
 import java.io.File
 import org.dpdns.clevebitr.core.GameConfig
 import org.dpdns.clevebitr.core.GlobalDefaults
+import org.dpdns.clevebitr.core.KeyPadProfile
 import org.dpdns.clevebitr.core.LibraryGame
 import org.dpdns.clevebitr.core.scrape.ScoredCandidate
 
@@ -88,6 +89,10 @@ class ShellNavParams(
     val onApplyScrape: (String, ScoredCandidate) -> Unit,
     /** 读某游戏的配置 + 配置文件是否落在游戏目录。读盘只有几 KB，按需读即可。 */
     val loadGameConfig: (LibraryGame) -> Pair<GameConfig, Boolean>,
+    /** 全局按键模板表与增删回调（游戏设置页与设置页共用同一份）。 */
+    val keyPadTemplates: Map<String, KeyPadProfile> = emptyMap(),
+    val onSaveKeyPadTemplate: ((String, KeyPadProfile) -> Unit)? = null,
+    val onDeleteKeyPadTemplate: ((String) -> Unit)? = null,
 )
 
 /**
@@ -211,6 +216,9 @@ fun ShellNavHost(
                     game = it,
                     config = config,
                     globalDefaults = params.globalDefaults,
+                    keyPadTemplates = params.keyPadTemplates,
+                    onSaveKeyPadTemplate = params.onSaveKeyPadTemplate,
+                    onDeleteKeyPadTemplate = params.onDeleteKeyPadTemplate,
                     onSave = { updatedConfig ->
                         params.onSaveGame(it, updatedConfig)
                         navController.popBackStack()

@@ -30,8 +30,9 @@
    `kag` 渲染档已删除（能力归 AetherKiri 层）。剩余 C3（阻塞于 C2）、C5/C6/C7、E1、M6 分批、
    以及**一项等用户裁决的 M1 尾巴（I3）**。
 2. **壳（Kotlin/Compose）**：九项改造全部落地；详情页已改成 **Steam 大屏式左右分栏**；
-   壳的 Kotlin 编译**已能在本地跑通**（`scripts/build_shell_local.sh`）。
-   待做两项（自定义按键浮层 / 引擎菜单侧边栏）的规格在 **`SHELL_HANDOVER.md`**。
+   自定义按键浮层**已完成**（2026-09-23，`core/KeyPadConfig.kt` + `ui/KeyPadOverlay.kt` +
+   `ui/KeyPadConfigEditor.kt`）；壳的 Kotlin 编译**已能在本地跑通**（`scripts/build_shell_local.sh`）。
+   待做一项（引擎菜单侧边栏）的规格在 **`SHELL_HANDOVER.md`**。
 
 工作区除用户自己的 `.gitignore`/`README.md` 外干净（那两个文件**始终不要 add**）。
 
@@ -213,7 +214,7 @@ UI / 残留矩形。参考实现为此提供 `Layer.assignMotionImages`（把完
 | 游戏库：收藏游戏 + 分组（便签式） | ✅ |
 | 关于页：作者/协议/仓库/技术栈/版本号 | ✅（版本号已带 git 短哈希：`v0.1.0-<hash6>-<YYMMDD>`） |
 | 详情页布局：**封面在左、按钮在右**（Steam 大屏式） | ✅ 2026-09-22（`ui/GameDetailScreen.kt`） |
-| 自定义按键浮层（位置/大小/文字/MD3 图标/颜色/透明度/描边，每游戏 + 全局模板） | ⬜ **未做**，规格见 `SHELL_HANDOVER.md §3` |
+| 自定义按键浮层（位置/大小/文字/MD3 图标/颜色/透明度/描边，每游戏 + 全局模板） | ✅ 2026-09-23，规格与实现落点见 `SHELL_HANDOVER.md §3` |
 | 游戏中右下角按钮 → 右侧悬浮侧边栏显示**引擎注册的窗口菜单** | ⬜ **未做**（需新增 C ABI + JNI），规格见 `SHELL_HANDOVER.md §4` |
 
 > **壳的开发交接文档是 `SHELL_HANDOVER.md`**（本地编译闭环、文件/接口索引、两项待做功能的
@@ -286,7 +287,7 @@ UI / 残留矩形。参考实现为此提供 `Layer.assignMotionImages`（把完
 | G2 **进动画卡 4.4s** | 中 | 已细分：`createRenderer=2689ms bindTexture=0ms mvp=0ms`（1920×1080，1 张纹理）⇒ 卡在 `CreateRenderer`；需继续查 Cubism 渲染器/掩码缓冲创建 |
 | G2 **帧率 ~43–45** | 中 | 每帧 1920×1080 **GPU→CPU 回读**（`capture` 路径**刻意优先 CPU**：引擎随后按 CPU 位图重传纹理会覆盖只写纹理的内容）；主窗口走 `path=GPU`，只有 Live2D 图层退化。附带：该回读用 `GL_BGRA_EXT` 调 `glReadPixels`，ES3 非法 → `err=0x0502` |
 | G2 / 千恋万花 **`SystemWatchTimerTimer` 卡顿**（1.5–1.9s） | 中 | 卡在 `DeliverEvents()` 或 `TickBeat()` 循环（内层 MarkStage 未触发）；需在该函数内加细阶段探针 |
-| 千恋万花 **`wave` 转场缺失** | 小-中 | 确定的功能缺口，可独立做（按 KAGEX 规范） |
+| 千恋万花 **`wave` 转场缺失** | 小-中 | **已实施待回归**（2026-09-23）：逐字节移植 AetherKiri `extrans_precise/wave.{cpp,h}` + `common.h`，`extrans.dll` 注册点接入；见 `render-issues.md §2` |
 | 千恋万花 **SD/logo 交付（D3DEmote）** | 中 | 已补 `Layer.assignMotionImages` + `AssignImages` scratch/页面交换路由（均未解决本作）；**已裁决走方案 B**，见下 |
 | 千恋万花 **字体/文字颜色偏白、logo 色偏与残留矩形** | 中 | 候选根因：参考引擎为本作应用的 7 个标题 hook（含 `message edge argument routing`）KiriNext 全缺；未定位到 code path |
 | **AlphaMovie 插件复用 core 解码器** | 中 | 未做；完成后删掉重复 ~1700 行 |
@@ -409,7 +410,8 @@ gh run view "$RID" --repo clevebitr/Krkr2Next --log-failed | rg -i "error:|undef
    `capture` 的 CPU 回读能否改走 GPU（改动面较大，用户要求渲染改动小，需先确认收益）。
 5. **`SystemWatchTimerTimer` 卡顿**：在 `cpp/core/environ/win32/SystemControl.cpp` 的
    `DeliverEvents()` 与 `TickBeat()` 循环内加 MarkStage（当前内层阶段一条都不触发）。
-6. **千恋万花**：按**方案 B** 搬参考的 `D3DEmote.tjs`（规格见 §6.1）→ 字体/logo 颜色与 7 个标题 hook → `wave` 转场。
+6. **千恋万花**：按**方案 B** 搬参考的 `D3DEmote.tjs`（规格见 §6.1）→ 字体/logo 颜色与 7 个标题 hook；
+   `wave` 转场**已实施**（2026-09-23），待 CI 构建 + 真机回归。
 7. **兼容层**：若用户回了 **I3**，接完 `mountSiblingsForArchiveProject`（M1 收尾）；
    否则继续 **M6 小模块批次**（每批 2–4 个，机械可验证）。
 8. **C3 已阻塞**于 C2；壳侧见 **`SHELL_HANDOVER.md §7`**（自定义按键浮层 → 引擎菜单侧边栏）。

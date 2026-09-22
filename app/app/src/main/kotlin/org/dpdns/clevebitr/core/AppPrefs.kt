@@ -292,6 +292,82 @@ object AppPrefs {
             .apply()
     }
 
+    // ── 自定义按键浮层 ────────────────────────────────────────────────────
+
+    /** 全局默认按键浮层配置（JSON），见 [KeyPadProfile]。 */
+    private const val KEY_KEYPAD_PROFILE = "input.keypad_profile"
+
+    /** 具名模板表（JSON object：模板名 -> [KeyPadProfile]）。 */
+    private const val KEY_KEYPAD_TEMPLATES = "input.keypad_templates"
+
+    /**
+     * **全局默认**按键浮层配置。每游戏覆盖存在各自的 `krkr2next.json` 里。
+     * 解析失败或从未设置时返回 [KeyPadProfile.default]（关着的空浮层）。
+     */
+    fun keyPadProfile(context: Context): KeyPadProfile {
+        val raw = prefs(context).getString(KEY_KEYPAD_PROFILE, null)
+        if (raw.isNullOrBlank()) return KeyPadProfile.default()
+        return try {
+            KeyPadProfile.fromJson(JSONObject(raw)) ?: KeyPadProfile.default()
+        } catch (t: Throwable) {
+            AppLog.w(TAG, "按键浮层配置解析失败，按默认处理：$t")
+            KeyPadProfile.default()
+        }
+    }
+
+    fun setKeyPadProfile(context: Context, profile: KeyPadProfile) {
+        prefs(context).edit()
+            .putString(KEY_KEYPAD_PROFILE, profile.toJson().toString())
+            .apply()
+    }
+
+    /**
+     * 具名模板表。模板只存 `buttons`，应用时**重新分配 id**（见 [KeyPadProfile] 的
+     * 调用方）——同一个模板套到多个游戏时，按钮 id 不能互相冲突。
+     */
+    fun keyPadTemplates(context: Context): Map<String, KeyPadProfile> {
+        val raw = prefs(context).getString(KEY_KEYPAD_TEMPLATES, null)
+        if (raw.isNullOrBlank()) return emptyMap()
+        return try {
+            val obj = JSONObject(raw)
+            buildMap {
+                obj.keys().forEach { name ->
+                    KeyPadProfile.fromJson(obj.optJSONObject(name))?.let { put(name, it) }
+                }
+            }
+        } catch (t: Throwable) {
+            AppLog.w(TAG, "按键模板解析失败，按空处理：$t")
+            emptyMap()
+        }
+    }
+
+    /** 保存/覆盖一个具名模板。返回保存后的模板表。 */
+    fun saveKeyPadTemplate(
+        context: Context,
+        name: String,
+        profile: KeyPadProfile,
+    ): Map<String, KeyPadProfile> {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return keyPadTemplates(context)
+        val next = keyPadTemplates(context).toMutableMap()
+        next[trimmed] = KeyPadProfile(buttons = profile.buttons, enabled = profile.enabled)
+        writeKeyPadTemplates(context, next)
+        return next
+    }
+
+    fun deleteKeyPadTemplate(context: Context, name: String): Map<String, KeyPadProfile> {
+        val next = keyPadTemplates(context).toMutableMap()
+        next.remove(name)
+        writeKeyPadTemplates(context, next)
+        return next
+    }
+
+    private fun writeKeyPadTemplates(context: Context, templates: Map<String, KeyPadProfile>) {
+        val obj = JSONObject()
+        templates.forEach { (name, profile) -> obj.put(name, profile.toJson()) }
+        prefs(context).edit().putString(KEY_KEYPAD_TEMPLATES, obj.toString()).apply()
+    }
+
     // ── 游戏库 ────────────────────────────────────────────────────────────
 
     /** 库列表排序（`lastPlayed` / `title` / `added`）。 */

@@ -1,0 +1,374 @@
+package org.dpdns.clevebitr.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import java.util.UUID
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
+import org.dpdns.clevebitr.core.KeyButton
+import org.dpdns.clevebitr.core.KeyPadProfile
+import org.dpdns.clevebitr.core.VkCodes
+
+/**
+ * 自定义按键浮层。
+ *
+ * ## 触摸穿透（本组件最容易踩的坑）
+ *
+ * 浮层铺满整个游戏画面，但**只有按钮自身的命中区消费事件**：容器本身不挂任何
+ * `pointerInput`，所以按钮以外区域的触摸照常落到下面的引擎 SurfaceView。这与
+ * `PerformanceOverlay` 的做法一致（它也不消费触摸）。
+ *
+ * 编辑态是例外：那时 [editing] 为真，`GameScreen` 的 SurfaceView 监听会直接吞掉
+ * 全部触摸（否则拖按钮会连带把一次 `POINTER_DOWN` 送进游戏），因此编辑态下整个
+ * 浮层才算"接管输入"。
+ *
+ * ## 按键注入
+ *
+ * `onKeyDown` / `onKeyUp` 收到的是 **Windows VK 码**（[KeyButton.vk]），由调用方
+ * 转成 `engine_input_event_t` 投递。按下/抬起必须成对：长按由本组件按系统 repeat
+ * 的心跳补发 down（引擎侧不生成 repeat，见 `EngineLoop::HandleKeyDown`）。
+ */
+@Composable
+fun KeyPadOverlay(
+    profile: KeyPadProfile,
+    editing: Boolean,
+    selectedId: String?,
+    onProfileChange: (KeyPadProfile) -> Unit,
+    onSelect: (String?) -> Unit,
+    onKeyDown: (Int) -> Unit,
+    onKeyUp: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    /** 编辑态“完成”按钮；null 时不显示（无浮层宿主时）。 */
+    onExitEdit: (() -> Unit)? = null,
+) {
+    if (!editing && !profile.visible) return
+
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val cw = constraints.maxWidth.toFloat().coerceAtLeast(1f)
+        val ch = constraints.maxHeight.toFloat().coerceAtLeast(1f)
+
+        profile.buttons.forEach { button ->
+            key(button.id) {
+                KeyPadButtonView(
+                    button = button,
+                    containerWidthPx = cw,
+                    containerHeightPx = ch,
+                    editing = editing,
+                    selected = button.id == selectedId,
+                    onMove = { dx, dy -> onProfileChange(profile.withButton(button.moved(dx, dy))) },
+                    onResize = { dw, dh -> onProfileChange(profile.withButton(button.resized(dw, dh))) },
+                    onSelect = { onSelect(button.id) },
+                    onKeyDown = onKeyDown,
+                    onKeyUp = onKeyUp,
+                )
+            }
+        }
+
+        if (editing) {
+            KeyPadEditToolbar(
+                hasSelection = selectedId != null,
+                onAdd = {
+                    val added = KeyButton(
+                        id = UUID.randomUUID().toString(),
+                        vk = VkCodes.RETURN,
+                        label = "键",
+                        x = 0.42f,
+                        y = 0.42f,
+                        w = 0.12f,
+                        h = 0.14f,
+                    )
+                    onProfileChange(profile.withButton(added))
+                    onSelect(added.id)
+                },
+                onDelete = {
+                    val id = selectedId ?: return@KeyPadEditToolbar
+                    onProfileChange(profile.withoutButton(id))
+                    onSelect(null)
+                },
+                onExitEdit = onExitEdit,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
+            )
+        }
+    }
+}
+
+/**
+ * 编辑态工具条：添加 / 删除所选。放在画面顶部中间——避开右上角的性能叠加层与
+ * 右下角的悬浮菜单。
+ */
+@Composable
+private fun KeyPadEditToolbar(
+    hasSelection: Boolean,
+    onAdd: () -> Unit,
+    onDelete: () -> Unit,
+    onExitEdit: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(24.dp),
+        color = Color(0xE61F1F1F),
+        contentColor = Color.White,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            ToolbarAction(
+                label = "添加",
+                enabled = true,
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                onClick = onAdd,
+            )
+            ToolbarAction(
+                label = "删除所选",
+                enabled = hasSelection,
+                icon = { Icon(Icons.Filled.Delete, contentDescription = null) },
+                onClick = onDelete,
+            )
+            if (onExitEdit != null) {
+                ToolbarAction(
+                    label = "完成",
+                    enabled = true,
+                    icon = { Icon(Icons.Filled.Check, contentDescription = null) },
+                    onClick = onExitEdit,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToolbarAction(
+    label: String,
+    enabled: Boolean,
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit,
+) {
+    val tint = Color.White.copy(alpha = if (enabled) 1f else 0.4f)
+    Row(
+        modifier = Modifier
+            .padding(horizontal = 6.dp)
+            .then(
+                if (enabled) {
+                    Modifier.pointerInput(label) { detectTapGestures { onClick() } }
+                } else {
+                    Modifier
+                },
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CompositionLocalProvider(LocalContentColor provides tint) {
+            icon()
+        }
+        Text(
+            text = label,
+            color = tint,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(start = 4.dp),
+        )
+    }
+}
+
+/** 长按开始补发 down 的延迟；与 Android 系统键盘的初始 repeat 延迟量级一致。 */
+private const val REPEAT_INITIAL_DELAY_MS = 400L
+
+/** 补发 down 的间隔；~16 次/秒，够游戏把它当成持续按键。 */
+private const val REPEAT_INTERVAL_MS = 60L
+
+/** 按钮圆角。 */
+private val KeyButtonShape = RoundedCornerShape(10.dp)
+
+@Composable
+private fun KeyPadButtonView(
+    button: KeyButton,
+    containerWidthPx: Float,
+    containerHeightPx: Float,
+    editing: Boolean,
+    selected: Boolean,
+    onMove: (Float, Float) -> Unit,
+    onResize: (Float, Float) -> Unit,
+    onSelect: () -> Unit,
+    onKeyDown: (Int) -> Unit,
+    onKeyUp: (Int) -> Unit,
+) {
+    val density = LocalDensity.current
+    val widthPx = button.w * containerWidthPx
+    val heightPx = button.h * containerHeightPx
+    val widthDp = with(density) { widthPx.toDp() }
+    val heightDp = with(density) { heightPx.toDp() }
+
+    // 按下状态驱动"长按补发 down"的循环。编辑态不注入按键。
+    var pressed by remember(button.id) { mutableStateOf(false) }
+    if (pressed && !editing) {
+        LaunchedEffect(button.id, pressed) {
+            delay(REPEAT_INITIAL_DELAY_MS)
+            while (true) {
+                onKeyDown(button.vk)
+                delay(REPEAT_INTERVAL_MS)
+            }
+        }
+    }
+
+    val baseColor = Color(button.bgColor)
+    val background = baseColor.copy(alpha = baseColor.alpha * button.alpha)
+
+    val appears = Modifier
+        .background(background, KeyButtonShape)
+        .then(
+            if (button.strokeWidthDp > 0f) {
+                Modifier.border(button.strokeWidthDp.dp, Color(button.strokeColor), KeyButtonShape)
+            } else {
+                Modifier
+            },
+        )
+        .then(
+            if (editing && selected) {
+                Modifier.border(2.dp, MaterialTheme.colorScheme.primary, KeyButtonShape)
+            } else {
+                Modifier
+            },
+        )
+
+    val interaction = if (editing) {
+        Modifier
+            .pointerInput(button.id, "edit-move") {
+                detectDragGestures { change, dragAmount ->
+                    change.consume()
+                    onMove(dragAmount.x / containerWidthPx, dragAmount.y / containerHeightPx)
+                }
+            }
+            .pointerInput(button.id, "edit-select") {
+                detectTapGestures { onSelect() }
+            }
+    } else {
+        Modifier.pointerInput(button.id, "press") {
+            detectTapGestures(
+                onPress = {
+                    pressed = true
+                    onKeyDown(button.vk)
+                    try {
+                        tryAwaitRelease()
+                    } finally {
+                        pressed = false
+                        onKeyUp(button.vk)
+                    }
+                },
+            )
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .offset {
+                IntOffset(
+                    (button.x * containerWidthPx).roundToInt(),
+                    (button.y * containerHeightPx).roundToInt(),
+                )
+            }
+            .size(widthDp, heightDp)
+            .then(appears)
+            .then(interaction),
+        contentAlignment = Alignment.Center,
+    ) {
+        val icon = KeyPadIcons.resolve(button.iconKey)
+        val tint = Color(button.textColor).copy(alpha = button.alpha)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(
+                        with(density) {
+                            (heightPx * 0.45f).coerceAtMost(widthPx * 0.8f).toDp()
+                        },
+                    ),
+                )
+            }
+            if (button.label.isNotBlank()) {
+                Text(
+                    text = button.label,
+                    color = tint,
+                    fontSize = button.textSizeSp.sp,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 2.dp),
+                )
+            }
+        }
+
+        if (editing && selected) {
+            // 右下角缩放把手。它比按钮后声明，因此叠在上层、优先拿到事件。
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(22.dp)
+                    .background(
+                        MaterialTheme.colorScheme.primary,
+                        RoundedCornerShape(topStart = 8.dp),
+                    )
+                    .pointerInput(button.id, "resize") {
+                        detectDragGestures { change, dragAmount ->
+                            change.consume()
+                            onResize(
+                                dragAmount.x / containerWidthPx,
+                                dragAmount.y / containerHeightPx,
+                            )
+                        }
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "⤡",
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    fontSize = 14.sp,
+                )
+            }
+        }
+    }
+}

@@ -40,6 +40,7 @@ import org.dpdns.clevebitr.core.GameConfigStore
 import org.dpdns.clevebitr.core.GameLibrary
 import org.dpdns.clevebitr.core.GlobalDefaults
 import org.dpdns.clevebitr.core.InputEvent
+import org.dpdns.clevebitr.core.KeyPadProfile
 import org.dpdns.clevebitr.core.LibraryGame
 import org.dpdns.clevebitr.core.LogFiles
 import org.dpdns.clevebitr.core.MessageBoxHost
@@ -118,11 +119,26 @@ class MainActivity : ComponentActivity() {
     private var sessionOverlay by mutableStateOf(OverlayConfig.default())
     private var sessionOverlayIsPerGame = false
 
+    /**
+     * 本次会话生效的自定义按键浮层：启动时把"全局默认 + 该游戏覆盖"合并好。
+     * [sessionKeypadIsPerGame] 为真时，改全局默认不影响本局。
+     */
+    private var sessionKeypad by mutableStateOf(KeyPadProfile.default())
+    private var sessionKeypadIsPerGame = false
+
+    /** 按键浮层是否处于编辑态（浮层接管全部触摸）。 */
+    private var keypadEditing by mutableStateOf(false)
+
+    /** 编辑态里改动过、还没落盘。拖拽每帧都会改数据，落盘要等退出编辑态。 */
+    private var sessionKeypadDirty = false
+
     // ── 游戏库与设置状态 ──
     private lateinit var library: GameLibrary
     private var games by mutableStateOf<List<LibraryGame>>(emptyList())
     private var librarySort by mutableStateOf("lastPlayed")
     private var overlayConfig by mutableStateOf(OverlayConfig.default())
+    private var keypadConfig by mutableStateOf(KeyPadProfile.default())
+    private var keypadTemplates by mutableStateOf<Map<String, KeyPadProfile>>(emptyMap())
 
     private var themeMode by mutableStateOf("system")
     private var fontFallbackMode by mutableStateOf("auto")
@@ -164,6 +180,8 @@ class MainActivity : ComponentActivity() {
         // 先读一次全局设置，再读库：库排序要用到 librarySort
         librarySort = AppPrefs.librarySort(this)
         overlayConfig = AppPrefs.overlayConfig(this)
+        keypadConfig = AppPrefs.keyPadProfile(this)
+        keypadTemplates = AppPrefs.keyPadTemplates(this)
         themeMode = AppPrefs.themeMode(this)
         fontFallbackMode = AppPrefs.fontFallbackMode(this)
         oglDrawDeviceCompat = AppPrefs.oglDrawDeviceCompat(this)
@@ -211,6 +229,15 @@ class MainActivity : ComponentActivity() {
                                 startupState = startupState,
                                 statusText = statusText,
                                 overlayConfig = sessionOverlay,
+                                keypadConfig = sessionKeypad,
+                                keypadEditing = keypadEditing,
+                                onKeypadChange = { sessionKeypad = it; sessionKeypadDirty = true },
+                                onKeypadEditingChange = { editing ->
+                                    keypadEditing = editing
+                                    // 退出编辑态才落盘：拖拽/缩放是每帧改数据的，
+                                    // 不能每帧写一次 krkr2next.json。
+                                    if (!editing) persistSessionKeypad()
+                                },
                                 onOpenSettings = { inGameSettings = true },
                                 onExit = ::exitToLauncher,
                             )
@@ -374,6 +401,14 @@ class MainActivity : ComponentActivity() {
                     GameConfigStore.isWritable(game.dir)
                 config to inGameDir
             },
+            keyPadTemplates = keypadTemplates,
+            onSaveKeyPadTemplate = { name, profile ->
+                keypadTemplates = AppPrefs.saveKeyPadTemplate(this, name, profile)
+                Toast.makeText(this, "已保存按键模板：$name", Toast.LENGTH_SHORT).show()
+            },
+            onDeleteKeyPadTemplate = { name ->
+                keypadTemplates = AppPrefs.deleteKeyPadTemplate(this, name)
+            },
         )
 
     /** 设置页内容。启动器与游戏内共用同一个 Composable，行为不会分叉。 */
@@ -388,6 +423,21 @@ class MainActivity : ComponentActivity() {
                 overlayConfig = updated
                 // 该游戏没有独立配置时跟随全局；有独立配置就不动它
                 if (!sessionOverlayIsPerGame) sessionOverlay = updated
+            },
+            keyPadProfile = keypadConfig,
+            onKeyPadProfileChanged = { updated ->
+                keypadConfig = updated
+                AppPrefs.setKeyPadProfile(this, updated)
+                // 该游戏没有独立按键配置时跟随全局；有独立配置就不动它
+                if (!sessionKeypadIsPerGame) sessionKeypad = updated
+            },
+            keyPadTemplates = keypadTemplates,
+            onSaveKeyPadTemplate = { name, profile ->
+                keypadTemplates = AppPrefs.saveKeyPadTemplate(this, name, profile)
+                Toast.makeText(this, "已保存按键模板：$name", Toast.LENGTH_SHORT).show()
+            },
+            onDeleteKeyPadTemplate = { name ->
+                keypadTemplates = AppPrefs.deleteKeyPadTemplate(this, name)
             },
             themeMode = themeMode,
             onThemeModeChanged = { themeMode = it },
@@ -511,6 +561,7 @@ class MainActivity : ComponentActivity() {
         fpsLimit = AppPrefs.fpsLimit(this),
         fontFallbackMode = fontFallbackMode,
         overlay = overlayConfig,
+        keypad = keypadConfig,
     )
 
     // ── 引擎会话 ────────────────────────────────────────────────────────────
@@ -537,6 +588,10 @@ class MainActivity : ComponentActivity() {
         val resolved = config.resolve(globalDefaults())
         sessionOverlay = resolved.overlay
         sessionOverlayIsPerGame = config.overlay != null
+        sessionKeypad = resolved.keypad
+        sessionKeypadIsPerGame = config.keypad != null
+        sessionKeypadDirty = false
+        keypadEditing = false
 
         AppLog.i(
             TAG,
@@ -596,6 +651,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun closeSession() {
+        // 退出游戏前把编辑态里没落盘的按键改动写回（用户可能没点“完成”就退出了）。
+        persistSessionKeypad()
         session?.let {
             AppLog.i(TAG, "closeSession")
             it.detachSurface()
@@ -604,6 +661,22 @@ class MainActivity : ComponentActivity() {
         session = null
         // 会话没了，退出确认框不该再挂着（否则退出后还会再弹一次）。
         gameExitPrompt = null
+        keypadEditing = false
+    }
+
+    /**
+     * 把当前会话的按键浮层**按游戏落盘**（写进该游戏目录的 `krkr2next.json`，
+     * 不可写则回退应用私有）。只在退出编辑态/关闭会话时调一次，不在拖拽时调。
+     */
+    private fun persistSessionKeypad() {
+        if (!sessionKeypadDirty) return
+        val path = gamePath ?: return
+        sessionKeypadDirty = false
+        sessionKeypadIsPerGame = true
+        val dir = File(path)
+        val current = GameConfigStore.load(this, dir)
+        GameConfigStore.save(this, dir, current.copy(keypad = sessionKeypad))
+        AppLog.i(TAG, "按键浮层已保存：${sessionKeypad.buttons.size} 个按钮 -> ${dir.absolutePath}")
     }
 
     private fun exitToLauncher() {
@@ -676,6 +749,8 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         // 先暂停引擎再走默认流程：后台时不应继续烧 CPU/GPU
         session?.pause()
+        // 切后台也把按键编辑落盘（用户可能直接切走而不点“完成”）。
+        persistSessionKeypad()
         super.onPause()
         AppLog.d(TAG, "onPause")
     }

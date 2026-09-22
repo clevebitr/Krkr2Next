@@ -148,17 +148,21 @@ data class GameConfig(
     val engine: EngineOverride = EngineOverride(),
     /** null = 叠加层也继承全局。 */
     val overlay: OverlayConfig? = null,
+    /** null = 自定义按键浮层也继承全局。 */
+    val keypad: KeyPadProfile? = null,
     val metadata: GameMetadata = GameMetadata(),
     /** 用户备注；刮削给不了的信息（汉化组、版本、踩坑记录）放这里。 */
     val notes: String? = null,
 ) {
     val isEmpty: Boolean
-        get() = engine.isEmpty && overlay == null && metadata.isEmpty && notes.isNullOrBlank()
+        get() = engine.isEmpty && overlay == null && keypad == null &&
+            metadata.isEmpty && notes.isNullOrBlank()
 
     fun toJson(): JSONObject = JSONObject().apply {
         put(KEY_SCHEMA, SCHEMA)
         if (!engine.isEmpty) put(KEY_ENGINE, engine.toJson())
         overlay?.let { put(KEY_OVERLAY, it.toJson()) }
+        keypad?.let { put(KEY_KEYPAD, it.toJson()) }
         if (!metadata.isEmpty) put(KEY_METADATA, metadata.toJson())
         notes?.takeIf { it.isNotBlank() }?.let { put(KEY_NOTES, it) }
     }
@@ -170,6 +174,7 @@ data class GameConfig(
         const val KEY_SCHEMA = "schema"
         const val KEY_ENGINE = "engine"
         const val KEY_OVERLAY = "overlay"
+        const val KEY_KEYPAD = "keypad"
         const val KEY_METADATA = "metadata"
         const val KEY_NOTES = "notes"
 
@@ -181,6 +186,7 @@ data class GameConfig(
             return GameConfig(
                 engine = EngineOverride.fromJson(json.optJSONObject(KEY_ENGINE)),
                 overlay = OverlayConfig.fromJson(json.optJSONObject(KEY_OVERLAY)),
+                keypad = KeyPadProfile.fromJson(json.optJSONObject(KEY_KEYPAD)),
                 metadata = GameMetadata.fromJson(json.optJSONObject(KEY_METADATA)),
                 notes = json.optString(KEY_NOTES, "").takeIf { it.isNotEmpty() },
             )
@@ -327,6 +333,7 @@ data class GlobalDefaults(
     val fpsLimit: Int,
     val fontFallbackMode: String,
     val overlay: OverlayConfig,
+    val keypad: KeyPadProfile = KeyPadProfile.default(),
 )
 
 /** 合并后的结果：壳各处（启动、叠加层）只认它。 */
@@ -336,6 +343,7 @@ data class ResolvedShellSettings(
     val fpsLimit: Int,
     val fontFallbackMode: String,
     val overlay: OverlayConfig,
+    val keypad: KeyPadProfile,
 )
 
 /** 逐项合并：每游戏写了用它的，没写用全局默认。 */
@@ -345,6 +353,7 @@ fun GameConfig.resolve(global: GlobalDefaults): ResolvedShellSettings = Resolved
     fpsLimit = engine.fpsLimit ?: global.fpsLimit,
     fontFallbackMode = engine.fontFallbackMode ?: global.fontFallbackMode,
     overlay = overlay ?: global.overlay,
+    keypad = keypad ?: global.keypad,
 )
 
 /**

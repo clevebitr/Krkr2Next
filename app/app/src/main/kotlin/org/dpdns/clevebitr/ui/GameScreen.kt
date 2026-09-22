@@ -47,6 +47,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import org.dpdns.clevebitr.core.AppLog
 import org.dpdns.clevebitr.core.EngineSession
+import org.dpdns.clevebitr.core.KeyPadProfile
 import org.dpdns.clevebitr.core.OverlayConfig
 import org.dpdns.clevebitr.core.InputEvent
 import org.dpdns.clevebitr.core.NativeEngine
@@ -85,6 +86,12 @@ fun GameScreen(
      * 改了要退出重进才看得到。
      */
     overlayConfig: OverlayConfig,
+    /** 本次会话生效的自定义按键浮层（全局默认与每游戏覆盖**已在启动时合并**）。 */
+    keypadConfig: KeyPadProfile,
+    /** 按键浮层编辑态：为真时浮层接管全部触摸（游戏收不到），并显示拖拽/缩放把手。 */
+    keypadEditing: Boolean,
+    onKeypadChange: (KeyPadProfile) -> Unit,
+    onKeypadEditingChange: (Boolean) -> Unit,
     /** 打开设置页。设置页会盖在游戏之上，引擎与 SurfaceView 不被销毁。 */
     onOpenSettings: () -> Unit,
     onExit: () -> Unit,
@@ -122,6 +129,8 @@ fun GameScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var logsVisible by remember { mutableStateOf(false) }
     var logLines by remember { mutableStateOf<List<String>>(emptyList()) }
+    // 按键浮层里当前选中的按钮（仅编辑态有意义）。
+    var keypadSelectedId by remember { mutableStateOf<String?>(null) }
 
     // 日志由任意线程写入 AppLog，这里按固定节拍取快照——不要在组合里直接读，
     // 否则每次重组都要去抢那把锁，而且没有"变了"的信号可依赖。
@@ -156,14 +165,27 @@ fun GameScreen(
                         }
                     })
                     setOnTouchListener { _, event ->
-                        // 菜单或日志浮层打开时吞掉触摸：否则点浮层会连带把
-                        // POINTER_DOWN 送进游戏。menuOpen/logsVisible 是 Compose
-                        // State，闭包每次读到的都是当时的值。
-                        if (!menuOpen && !logsVisible) handleTouch(session, event)
+                        // 菜单/日志浮层打开、或按键编辑态时吞掉触摸：否则点浮层/拖按钮
+                        // 会连带把 POINTER_DOWN 送进游戏。menuOpen/logsVisible/
+                        // keypadEditing 是 Compose State，闭包每次读到的都是当时的值。
+                        if (!menuOpen && !logsVisible && !keypadEditing) handleTouch(session, event)
                         true
                     }
                 }
             },
+        )
+
+        // 自定义按键浮层：贴在引擎 Surface 之上、性能叠加层之下。
+        // 非编辑态只有按钮命中区消费事件，其余区域穿透给引擎（见 KeyPadOverlay）。
+        KeyPadOverlay(
+            profile = keypadConfig,
+            editing = keypadEditing,
+            selectedId = keypadSelectedId,
+            onProfileChange = onKeypadChange,
+            onSelect = { keypadSelectedId = it },
+            onKeyDown = { vk -> session.sendInput(InputEvent.KEY_DOWN, keyCode = vk) },
+            onKeyUp = { vk -> session.sendInput(InputEvent.KEY_UP, keyCode = vk) },
+            onExitEdit = { onKeypadEditingChange(false) },
         )
 
         // 性能叠加层：左上角 (16,12)，与 AetherKiri 的 _layout_perf_overlay 同位。
@@ -204,6 +226,11 @@ fun GameScreen(
             Column(horizontalAlignment = Alignment.End) {
                 if (menuOpen) {
                     GameMenu(
+                        keypadEditing = keypadEditing,
+                        onToggleKeypadEdit = {
+                            menuOpen = false
+                            onKeypadEditingChange(!keypadEditing)
+                        },
                         onShowLogs = {
                             menuOpen = false
                             logLines = AppLog.recent()
@@ -248,12 +275,24 @@ fun GameScreen(
  */
 @Composable
 private fun GameMenu(
+    keypadEditing: Boolean,
+    onToggleKeypadEdit: () -> Unit,
     onShowLogs: () -> Unit,
     onOpenSettings: () -> Unit,
     onExit: () -> Unit,
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xE61F1F1F))) {
         Column {
+            MenuEntry(
+                label = if (keypadEditing) "完成按键编辑" else "编辑自定义按键",
+                onClick = onToggleKeypadEdit,
+            )
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color(0x33FFFFFF)),
+            )
             MenuEntry(label = "显示运行时日志", onClick = onShowLogs)
             Box(
                 Modifier
