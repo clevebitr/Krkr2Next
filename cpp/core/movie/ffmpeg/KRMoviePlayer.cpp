@@ -198,6 +198,20 @@ void TVPMoviePlayer::Release() {
         // 让渲染线程卡住 —— 泄漏一个影片对象，换来的是游戏还能继续玩。
         constexpr unsigned kTeardownWaitMs = 4000;
         if(m_pPlayer) {
+            // **先唤醒可能卡在"等空 picture 槽位"的解码线程**。
+            //
+            // `AddVideoPicture()` 里那个 50ms 分片等待只认 `m_pictureWaitAbort`，
+            // 不认播放线程的中断标志（`m_bAbortRequest` / `m_bAbortOutput`）；而它的
+            // 消费者是渲染线程每帧的 `GetFrontBuffer()` —— 渲染线程此刻正卡在本函数里，
+            // 所以队列一定会填满、解码线程一定会停在那儿。不置位的话
+            // `OnExit → CloseStream(video) → StopThread()` 的 join 永远回不来，
+            // `WaitForExit()` 必然等满 4s（真机 2026-09-23 00:07 日志实证：
+            // `停播请求后影片线程 4000ms 仍未退出`，而影片线程阶段停在
+            // `解码线程→处理消息/解码`）。
+            //
+            // 为什么以前只放在 `Stop()`/析构里不够：`VideoOvlImpl::Close()` 走的是
+            // `Pause() → Release()`，从不经过 `Stop()`。
+            AbortPictureWait();
             m_pPlayer->RequestStop();
             const auto t0 = std::chrono::steady_clock::now();
             const bool exited = m_pPlayer->WaitForExit(kTeardownWaitMs);
@@ -433,6 +447,7 @@ int TVPMoviePlayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
         std::unique_lock<std::mutex> lk(m_mtxPicture);
         while(m_usedPicture >= MAX_BUFFER_COUNT &&
               !m_pictureWaitAbort.load(std::memory_order_acquire)) {
+            krkr::stall::MarkMovieStage("movie: 解码线程→等空 picture 槽位(overlay)");
             m_condPicture.wait_for(lk, std::chrono::milliseconds(50));
         }
         if(m_pictureWaitAbort.load(std::memory_order_acquire))

@@ -412,12 +412,15 @@ void BasePlayer::OnExit() {
     // openfile is still waiting for this event
     SetCaching(CACHESTATE_DONE);
 
+    krkr::stall::MarkMovieStage("movie: OnExit→CloseStream(音频)");
     // close each stream
     //	if (!m_bAbortRequest) CLog::Log(LOGNOTICE, "VideoPlayer: eof,
     // waiting
     // for queues to empty");
     CloseStream(m_CurrentAudio, !m_bAbortRequest);
+    krkr::stall::MarkMovieStage("movie: OnExit→CloseStream(视频)");
     CloseStream(m_CurrentVideo, !m_bAbortRequest);
+    krkr::stall::MarkMovieStage("movie: OnExit→清理 demuxer/输入流");
 
     // the generalization principle was abused for subtitle player.
     // actually it is not a stream player like video and audio.

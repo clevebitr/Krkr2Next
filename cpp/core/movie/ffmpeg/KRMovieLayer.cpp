@@ -3,6 +3,7 @@
 #include "LayerBitmapIntf.h"
 #include "Application.h"
 #include "VideoOvlImpl.h"
+#include "../../utils/StallWatchdog.h"
 
 #include <chrono>
 
@@ -88,6 +89,9 @@ int VideoPresentLayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
         std::unique_lock<std::mutex> lk(m_mtxPicture);
         while(m_usedPicture >= MAX_BUFFER_COUNT &&
               !m_pictureWaitAbort.load(std::memory_order_acquire)) {
+            // 阶段标记写在循环里（不是进循环前）：只有真卡在这里时它才会成为
+            // `.stall` 里最后一条影片阶段，卡在别处时不会被它盖掉。
+            krkr::stall::MarkMovieStage("movie: 解码线程→等空 picture 槽位(layer)");
             m_condPicture.wait_for(lk, std::chrono::milliseconds(50));
         }
         if(m_pictureWaitAbort.load(std::memory_order_acquire))
