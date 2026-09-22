@@ -280,6 +280,19 @@ public:
 
     void Pause();
 
+    /**
+     * 请求播放线程收尾退出：置中断标志并中断 demuxer 读取。
+     *
+     * 为什么单列出来：`Process()` 的循环条件只有 `m_bAbortRequest`，而该标志原先
+     * 只在 `CloseInputStream()` 里置位 —— 那个函数又只从 `~BasePlayer` 调用。于是
+     * "析构前先有界等线程退出"（`CThread::WaitForExit`）永远等不到，每次关片都要
+     * 空耗整个等待窗口并泄漏影片对象（真机：切 CG 视频卡 1.5–4.7s、fps 掉到 3–18）。
+     * 先请求、再有界等待、最后才销毁。
+     *
+     * 幂等，可从任意线程调用；不会释放任何资源（真正的释放仍在析构里做）。
+     */
+    void RequestStop();
+
     // IRenderMsg
     void VideoParamsChange() override;
 
@@ -458,7 +471,8 @@ private:
     std::string m_strFileName;
 
     bool m_players_created = false;
-    bool m_bAbortRequest = false;
+    // 由 RequestStop()（外部线程）置位、Process() 循环读取，必须原子。
+    std::atomic<bool> m_bAbortRequest{ false };
 
     ECacheState m_caching;
     Timer m_cachingTimer;

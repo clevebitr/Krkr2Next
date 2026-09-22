@@ -226,6 +226,18 @@ void BasePlayer::Pause() {
         SetSpeed(0);
 }
 
+void BasePlayer::RequestStop() {
+    // 先置中断标志：`Process()` 的循环条件与各内部检查都读它。
+    m_bAbortRequest = true;
+    // 再打断可能阻塞在 ffmpeg 读取里的 demuxer —— 否则 Process() 还停在
+    // ReadPacket()，要等一次慢 IO 走完才回到循环顶部看见中断。
+    // （与上游 CloseFile() 同一做法：中断 demuxer 是设计上允许跨线程调用的。）
+    if(m_pDemuxer)
+        m_pDemuxer->Abort();
+    // 唤醒任何在就绪条件上等待的人。
+    m_ready.notify_all();
+}
+
 void BasePlayer::GetVideoSize(long *width, long *height) {
     std::lock_guard<std::recursive_mutex> lock(m_SelectionStreams.m_section);
     int streamId = GetVideoStream();

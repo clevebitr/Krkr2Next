@@ -2,7 +2,9 @@
 
 #include "KRMovieDef.h"
 #include "Message.h"
+#include <atomic>
 #include <condition_variable>
+#include <cstdint>
 #include <list>
 #include <algorithm>
 #include "Thread.h"
@@ -99,6 +101,13 @@ public:
 private:
     std::mutex m_mtxEvent;
     std::condition_variable m_hEvent;
+    /**
+     * 唤醒序号：`Put`/`Abort` 在通知**之前**自增，`Get` 在持有 `m_mtxEvent`
+     * 时比较它。没有它就只能用「无谓词 wait + 超时」，一旦通知落在
+     * 「解锁 m_section 之后、真正挂到条件变量之前」就会被丢掉（lost wakeup），
+     * 等待方要空等到 timeout 才醒来 —— 停播路径上这正是渲染线程被拖住的原因之一。
+     */
+    std::atomic<uint64_t> m_notifySeq{ 0 };
     CCriticalSection m_section;
 
     std::atomic<bool> m_bAbortRequest;

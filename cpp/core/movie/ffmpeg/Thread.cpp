@@ -31,7 +31,12 @@ void CThread::Create() {
 }
 
 void CThread::StopThread(bool bWait /*= true*/) {
-    m_bStop = true;
+    {
+        // 在锁内改状态、出了锁再通知：否则与 Sleep() 的等待交错时会丢唤醒，
+        // 睡眠方要等满自己的超时才回到循环顶部看到 m_bStop。
+        std::lock_guard<std::mutex> lock(m_mtxStopEvent);
+        m_bStop = true;
+    }
     m_StopEvent.notify_all();
     if(m_ThreadId && bWait) {
         if(IsCurrentThread()) {

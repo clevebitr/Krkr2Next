@@ -50,11 +50,12 @@ void CDVDMessageQueue::Flush(CDVDMsg::Message type) {
 }
 
 void CDVDMessageQueue::Abort() {
-    CSingleLock lock(m_section);
-
     m_bAbortRequest = true;
 
-    // inform waiter for abort action
+    // 先自增唤醒序号，再取 m_mtxEvent 通知：等待方在持有 m_mtxEvent 时比较该序号，
+    // 两侧因此串行化，"置标志之后、等待方挂起之前"到达的通知不会丢。
+    m_notifySeq.fetch_add(1, std::memory_order_release);
+    std::lock_guard<std::mutex> eventLock(m_mtxEvent);
     m_hEvent.notify_all();
 }
 
@@ -117,8 +118,12 @@ MsgQueueReturnCode CDVDMessageQueue::Put(CDVDMsg *pMsg, int priority,
 
     pMsg->Release();
 
-    // inform waiter for new packet
-    m_hEvent.notify_all();
+    // 先自增唤醒序号再通知（见 m_notifySeq 的说明）；通知在 m_mtxEvent 上串行化。
+    m_notifySeq.fetch_add(1, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> eventLock(m_mtxEvent);
+        m_hEvent.notify_all();
+    }
 
     return MSGQ_OK;
 }
@@ -172,17 +177,23 @@ MsgQueueReturnCode CDVDMessageQueue::Get(CDVDMsg **pMsg,
             //			m_hEvent.Reset();
             m_section.unlock();
 
-            // wait for a new message
+            // 等待新消息或中断：谓词（唤醒序号变化或中断标志）在持有 m_mtxEvent
+            // 期间求值，与 Put/Abort 的通知侧串行化 ⇒ 不漏唤醒；被中断时立即返回，
+            // 而不是空等到 timeout（停播 join 的响应速度就取决于这一条）。
+            const uint64_t seq =
+                m_notifySeq.load(std::memory_order_acquire);
             std::unique_lock<std::mutex> eventLock(m_mtxEvent);
-            if(m_hEvent.wait_for(
-                   eventLock,
-                   std::chrono::milliseconds(iTimeoutInMilliSeconds)) ==
-               std::cv_status::timeout) {
-                m_section.lock();
-                return MSGQ_TIMEOUT;
-            }
+            const bool signalled = m_hEvent.wait_for(
+                eventLock, std::chrono::milliseconds(iTimeoutInMilliSeconds),
+                [this, seq] {
+                    return m_bAbortRequest.load(std::memory_order_acquire) ||
+                        m_notifySeq.load(std::memory_order_acquire) != seq;
+                });
 
             m_section.lock();
+
+            if(!signalled)
+                return MSGQ_TIMEOUT;
         }
     }
 

@@ -172,6 +172,10 @@ TVPMoviePlayer::~TVPMoviePlayer() {
     //  悬垂。当前阻塞点在临时文件删除上，见 VideoOvlImpl.cpp 的说明。）
     AbortPictureWait();
     krkr::stall::MarkStage("movie: ~TVPMoviePlayer→删除播放器(join player+解码线程)");
+    // 析构里的 join（~BasePlayer→CloseInputStream→StopThread）没有上界，先请求停播。
+    // Release() 与 ~MoviePlayerOverlay 已请求过，这里是其余删除路径的兜底；幂等。
+    if(m_pPlayer)
+        m_pPlayer->RequestStop();
     delete m_pPlayer;
     m_pPlayer = nullptr;
     krkr::stall::MarkStage("movie: ~TVPMoviePlayer→播放器已销毁");
@@ -181,20 +185,35 @@ TVPMoviePlayer::~TVPMoviePlayer() {
 
 void TVPMoviePlayer::Release() {
     if(RefCount == 1) {
-        // **先有界确认影片线程能退出，再销毁**。
-        // 销毁链路（~TVPMoviePlayer → ~BasePlayer → CloseInputStream → StopThread）
-        // 里的 join 没有上界：影片线程可能卡在文件读取/音频设备写入里永不返回，
-        // 级联下去会把渲染线程永久钉死（真机 16:51 的 engine.log.stall 实证：
-        //     render: movie: ~MoviePlayerOverlay→删除播放器
-        //     movie : movie: CloseInputStream→等 player 线程退出(join)）。
+        // **先请求停播，再有界确认影片线程退出，最后才销毁**。
+        //
+        // 为什么不能只"等"：`BasePlayer::Process()` 的循环条件只有 `m_bAbortRequest`，
+        // 而它原先只在 `~BasePlayer`→`CloseInputStream()` 里置位 —— 也就是"等线程
+        // 退出"等的是一个**没人叫停**的线程，必然等满整个窗口（真机：切 CG 视频
+        // update_max=4382/4553/4731ms、fps 掉到 3–18，每次都打"未退出，放弃销毁"）。
+        // `RequestStop()` 会置中断标志并中断 demuxer 读取，正常情况下几十毫秒内线程
+        // 就退出；4s 兜底保留 —— 它是"整机卡死只能杀进程"的安全网。
+        //
         // 退不出去时**宁可泄漏整个影片对象**（什么都不释放，线程还在用它），也绝不
         // 让渲染线程卡住 —— 泄漏一个影片对象，换来的是游戏还能继续玩。
         constexpr unsigned kTeardownWaitMs = 4000;
-        if(m_pPlayer && !m_pPlayer->WaitForExit(kTeardownWaitMs)) {
-            spdlog::error("movie: 影片线程 {}ms 未退出，放弃销毁并泄漏该影片对象"
-                          "（渲染线程绝不 join 它；否则整机卡死，只能杀进程）",
-                          kTeardownWaitMs);
-            return; // 故意不 delete：对象与线程都继续存活
+        if(m_pPlayer) {
+            m_pPlayer->RequestStop();
+            const auto t0 = std::chrono::steady_clock::now();
+            const bool exited = m_pPlayer->WaitForExit(kTeardownWaitMs);
+            const auto waitedMs =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - t0)
+                    .count();
+            if(!exited) {
+                spdlog::error(
+                    "movie: 停播请求后影片线程 {}ms 仍未退出，放弃销毁并泄漏该影片"
+                    "对象（渲染线程绝不 join 它；否则整机卡死，只能杀进程）",
+                    kTeardownWaitMs);
+                return; // 故意不 delete：对象与线程都继续存活
+            }
+            // 正常应在百毫秒内。每关一片一行，用来验证"切视频卡顿已消失"。
+            spdlog::info("movie: 停播请求→影片线程退出耗时 {}ms", waitedMs);
         }
         delete this;
     } else {
@@ -612,6 +631,12 @@ MoviePlayerOverlay::~MoviePlayerOverlay() {
     // 同步销毁：BasePlayer 的析构会经 m_pRenderer 回到所有者，延迟释放会造成悬垂
     // （详见 TVPMoviePlayer::~TVPMoviePlayer 的说明）。真正的阻塞点在临时文件删除，
     // 那里已改成后台执行。
+    //
+    // 析构侧的 join 同样没有上界（CloseInputStream→StopThread），所以这里也要先
+    // 请求停播：正常路径上 Release() 已经请求过（幂等），但从别的路径直接析构时
+    // 就靠这一句，避免再次出现"没人叫停却去 join"。
+    if(m_pPlayer)
+        m_pPlayer->RequestStop();
     delete m_pPlayer;
     m_pPlayer = nullptr;
 }
