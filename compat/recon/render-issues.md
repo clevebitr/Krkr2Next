@@ -141,6 +141,19 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
       是真的缺口（已补）；参考实现该属性有完整语义。
     - `drawOnto ... capture target=… visible=0`：D3D 捕获目标层始终不可见（工作层），
       与预期一致。
+  - **第四轮真机（`engine-20260922-171124.log`）——路由从未命中**：
+    - `AssignMotionImages` 命中 **0 次**：池判据 `TVPIsAffineSourceMotionScratch` 不成立。
+    - 真实交付签名（探针抓到）：
+      `target name='ev' visible=1 parent='表-背景'/'裏-背景'` ←
+      `source name='' visible=0 parent='トップレイヤ'`。
+      即：**工作层挂在 `トップレイヤ`（页面根）下，不是 `AffineSource情報プール用`**；
+      参考实现里对应的是 KAG 页面交换分支（`TVPResolveExchangedKagAssignmentTarget`），
+      其结构前置（`source->GetParent() == target->GetParent()->GetParent()`）成立。
+    - 第二版探针的 40 条封顶仍被“池内拷贝 + `ev` 页面交换”吃光，SD 未进记录 ⇒
+      已改为**按 (target,source) 对去重**（封顶 60），保证不漏。
+    - 同时加了一个与参考一致的定向修复：目标层与「隐藏无名工作层」交付后若共享同一张
+      纹理，则 `MainImage->Independ()` 断开别名（参考对 KAG `syslay` scratch 就是这么做的，
+      且 `Independ()` 是 GPU 侧拷贝、不丢像素）。
 - **启动 logo（`m2logo.mtn` / `yuzulogo.mtn`）**：颜色偏淡蓝而非红、播完残留两个矩形。
   - 已排除「PSB 解码通道序」：`PSBMedia.cpp` 全量输出 BGRA、全游戏一致，非本资源专属。
   - 已排除 `blandlogo1.png` 缺失：参考引擎在同一作同样报 85 次（游戏自带脚本引用了这个

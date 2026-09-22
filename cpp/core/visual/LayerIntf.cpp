@@ -18,6 +18,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <cmath>
+#include <mutex>
+#include <set>
 #include <utility>
 #include <spdlog/spdlog.h>
 
@@ -2446,18 +2448,30 @@ void tTJSNI_BaseLayer::AssignImages(tTJSNI_BaseLayer *src) {
     if(!src)
         return;
 
-    // TEMP DIAGNOSTIC（千恋万花 SD 不可见，第二版）：第一版封顶 24 条被启动期的
-    // KAG 页面交换（SquareMaskLayer*/TouchUiLayer*）刷满，看不到 SD。现改为**只记录
-    // 隐藏且无名**的源层（D3DEmote 工作层候选）或路由判定为真的交付，封顶 40 条。
+    // TEMP DIAGNOSTIC（千恋万花 SD 不可见，第三版）：第二版封顶 40 条仍然被池内拷贝与
+    // `ev` 页面交换吃光，SD 仍未进记录。改为**按 (target,source) 指针对去重**，封顶 60
+    // ——每个不同的交付对只记一条，保证不漏掉 SD。
     if((!src->GetVisible() && src->GetName().IsEmpty()) ||
        (src != this && TVPIsAffineSourceMotionScratch(this, src))) {
-        static std::atomic<int> s_assignProbe{0};
-        if(s_assignProbe.fetch_add(1) < 40) {
+        static std::mutex s_assignProbeMutex;
+        static std::set<std::pair<const void *, const void *>> s_assignProbeSeen;
+        bool logIt = false;
+        {
+            std::lock_guard<std::mutex> lock(s_assignProbeMutex);
+            if(s_assignProbeSeen.size() < 60 &&
+               s_assignProbeSeen
+                   .insert({static_cast<const void *>(this),
+                            static_cast<const void *>(src)})
+                   .second) {
+                logIt = true;
+            }
+        }
+        if(logIt) {
             auto *tp = GetParent();
             auto *sp = src->GetParent();
             spdlog::info(
-                "probe: AssignImages target={} name='{}' visible={} parent='{}' "
-                "| source={} name='{}' visible={} parent='{}' "
+                "probe: AssignImages[pair] target={} name='{}' visible={} "
+                "parent='{}' | source={} name='{}' visible={} parent='{}' "
                 "| motionScratch={}",
                 static_cast<const void *>(this), GetName().AsStdString(),
                 GetVisible() ? 1 : 0,
@@ -2491,6 +2505,20 @@ void tTJSNI_BaseLayer::AssignImages(tTJSNI_BaseLayer *src) {
                                                oldBytes,
                                            std::memory_order_relaxed);
         FontChanged = true; // invalidate font assignment cache
+
+        // D3DEmote/SD 交付：源是隐藏无名的工作层（scratch），每帧会被清空重画。
+        // Assign() 让目标层与它**共享同一张纹理**，下一帧重写 scratch 就把刚交付的
+        // 画面抹掉（真机：SD 显示一两秒后消失 / 只剩背景 UI / 残留矩形）。参考实现
+        // 对 KAG 的 syslay scratch 用 Independ() 断开别名；这里对「可见有名的目标 ←
+        // 隐藏无名的工作层」这一同类交付做同样处理。Independ() 做 GPU 侧拷贝，不会
+        // 丢像素（IndependNoCopy 会）。
+        if(src != this && src->MainImage && MainImage &&
+           src->GetName().IsEmpty() && !src->GetVisible() && GetVisible() &&
+           !GetName().IsEmpty() &&
+           MainImage->GetTexture() == src->MainImage->GetTexture()) {
+            MainImage->Independ();
+            main_changed = true;
+        }
     } else {
         DeallocateImage();
     }
