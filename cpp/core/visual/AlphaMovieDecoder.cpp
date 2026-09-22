@@ -17,6 +17,8 @@
 namespace krkr::alphamovie {
 namespace {
 
+struct BufferManager
+{
     std::unique_ptr<uint32_t[]> buffer;
     uint32_t bufferLen;
 
