@@ -17,11 +17,13 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -30,6 +32,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
@@ -42,6 +45,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SuggestionChip
@@ -59,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -139,7 +144,14 @@ fun LibraryScreen(
                         ) {
                             SORT_LABELS.forEach { (key, label) ->
                                 DropdownMenuItem(
-                                    text = { Text(if (key == sort) "✓ $label" else label) },
+                                    text = { Text(label) },
+                                    // 当前项用尾部对勾标记，而不是在文本前面拼 "✓ "：
+                                    // 拼字符串会让未选中项的起始位置与选中项差一个字宽。
+                                    trailingIcon = if (key == sort) {
+                                        { Icon(Icons.Filled.Check, contentDescription = "当前排序") }
+                                    } else {
+                                        null
+                                    },
                                     onClick = {
                                         sortMenuOpen = false
                                         onSortChange(key)
@@ -214,10 +226,20 @@ fun LibraryScreen(
                 if (shown.isEmpty()) {
                     FilteredEmpty(modifier = Modifier.fillMaxSize())
                 } else {
+                    // 宽屏（平板/横屏）下把最小卡片尺寸抬高：`Adaptive` 会尽量多塞列，
+                    // 手机上的 150dp 在 1200dp 平板上会变成 7–8 列的小豆腐块。
+                    val wide = LocalConfiguration.current.screenWidthDp >= 600
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 150.dp),
+                        columns = GridCells.Adaptive(minSize = if (wide) 200.dp else 150.dp),
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(12.dp),
+                        // 底部留出一整个 FAB 的高度：否则最后一行卡片会被右下角的
+                        // 「添加游戏」按钮盖住，点不到也看不全。
+                        contentPadding = PaddingValues(
+                            start = 12.dp,
+                            end = 12.dp,
+                            top = 12.dp,
+                            bottom = 96.dp,
+                        ),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
@@ -305,9 +327,13 @@ private fun LibraryCard(
             }
 
             // 收藏星标：左上角。收藏是"置顶"的语义，按钮直接标在卡片上比埋进菜单好找。
+            // 封面颜色不可控（可能恰好是白色），所以垫一层半透明圆底保证图标对比度。
             IconButton(
                 onClick = onToggleFavorite,
-                modifier = Modifier.align(Alignment.TopStart),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .background(Color(0x66000000), CircleShape),
             ) {
                 Icon(
                     imageVector = if (game.favorite) {
@@ -316,7 +342,6 @@ private fun LibraryCard(
                         Icons.Filled.FavoriteBorder
                     },
                     contentDescription = if (game.favorite) "取消收藏" else "收藏",
-                    // 封面颜色不可控：底色半透明圆 + 白/深描边图标比纯色图标更稳
                     tint = if (game.favorite) {
                         MaterialTheme.colorScheme.primary
                     } else {
@@ -535,7 +560,7 @@ private fun EmptyLibrary(onAddGame: () -> Unit, modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
-            Icons.Filled.Image,
+            Icons.Filled.SportsEsports,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -551,11 +576,12 @@ private fun EmptyLibrary(onAddGame: () -> Unit, modifier: Modifier = Modifier) {
             modifier = Modifier.padding(top = 8.dp),
         )
         Row(modifier = Modifier.padding(top = 16.dp)) {
-            ExtendedFloatingActionButton(
-                onClick = onAddGame,
-                icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
-                text = { Text("浏览并添加") },
-            )
+            // 这里用普通按钮而不是第二个 FAB：Scaffold 已经有「添加游戏」FAB，
+            // 同屏两个 FAB 违反 MD3 的单一主操作原则，也会让人不知道点哪个。
+            OutlinedButton(onClick = onAddGame) {
+                Icon(Icons.Filled.Refresh, contentDescription = null)
+                Text("浏览并添加", modifier = Modifier.padding(start = 6.dp))
+            }
         }
     }
 }

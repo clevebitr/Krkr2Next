@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -38,13 +37,12 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -365,9 +363,12 @@ fun GameDetailScreen(
                         }
 
                         // ── 主操作 ──
-                        Row(
+                        // 用 FlowRow 而不是 Row：窄屏（小手机竖屏）上封面已占 132dp，
+                        // 两个带图标的按钮并排会挤到文字换行；换行比截断好。
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Button(
                                 onClick = {
@@ -379,7 +380,6 @@ fun GameDetailScreen(
                                     }
                                     onLaunch()
                                 },
-                                modifier = Modifier.weight(1f),
                             ) {
                                 Icon(Icons.Filled.PlayArrow, contentDescription = null)
                                 Text("启动游戏", modifier = Modifier.padding(start = 6.dp))
@@ -430,6 +430,20 @@ fun GameDetailScreen(
                                 else -> if (own.enabled) "独立配置：开" else "独立配置：关"
                             },
                         )
+                        SummaryLine(
+                            "自定义按键",
+                            when (val own = config.keypad) {
+                                null ->
+                                    if (globalDefaults.keypad.enabled) {
+                                        "跟随全局：开（${globalDefaults.keypad.buttons.size} 个按钮）"
+                                    } else {
+                                        "跟随全局：关"
+                                    }
+
+                                else ->
+                                    if (own.enabled) "独立配置：开（${own.buttons.size} 个按钮）" else "独立配置：关"
+                            },
+                        )
                     }
                 }
 
@@ -438,10 +452,11 @@ fun GameDetailScreen(
                     FlowRow(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        game.tags.take(12).forEach { tag ->
-                            AssistChip(onClick = {}, label = { Text(tag) })
-                        }
+                        // 标签是**只读信息**，不是可点项：用 AssistChip 会给出
+                        // “点了会做点什么”的误导提示（而 onClick 是空的）。
+                        game.tags.take(12).forEach { tag -> TagPill(tag) }
                     }
                 }
 
@@ -560,20 +575,41 @@ private fun SummaryLine(label: String, value: String) {
     }
 }
 
-/** 信息行。路径这类长文本允许换行，不做省略——排查时全路径比好看重要。 */
+/** 只读标签胶囊。与 `SuggestionChip` 区分：它没有涟漪、没有点击语义。 */
+@Composable
+private fun TagPill(text: String) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+        )
+    }
+}
+
+/**
+ * 信息行：上标签下值。
+ *
+ * 不用 `ListItem`：它自带 56dp 最小高度与固定缩进，而这里是十来个紧挨着的
+ * "字段 → 值"，用 ListItem 会把页面拉得很长，且左侧缩进与页内其它内容对不齐。
+ * 值允许换行——排查问题时完整路径比排版好看重要。
+ */
 @Composable
 private fun InfoRow(label: String, value: String) {
-    ListItem(
-        headlineContent = { Text(label, style = MaterialTheme.typography.labelLarge) },
-        supportingContent = {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodySmall,
-                overflow = TextOverflow.Clip,
-            )
-        },
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-    )
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(text = value, style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
 /** 详情页始终来自游戏库（临时目录的启动不经过这里），保留这个判断只为让文案可读。 */
