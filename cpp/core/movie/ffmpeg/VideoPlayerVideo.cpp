@@ -187,7 +187,9 @@ void CVideoPlayerVideo::CloseStream(bool bWaitForBuffers) {
     //	CLog::Log(LOGNOTICE, "waiting for video thread to exit");
 
     m_bAbortOutput = true;
+    krkr::stall::MarkMovieStage("movie: video CloseStream→StopThread(join 视频线程)");
     StopThread();
+    krkr::stall::MarkMovieStage("movie: video CloseStream→视频线程已退出");
 
     m_messageQueue.End();
 
@@ -241,10 +243,10 @@ void CVideoPlayerVideo::Process() {
             iPriority = 1;
 
         CDVDMsg *pMsg;
-        krkr::stall::MarkMovieStage("movie: 解码线程→等消息(Get)");
+        krkr::stall::MarkMovieVideoStage("movie: video→等消息(Get)");
         MsgQueueReturnCode ret =
             m_messageQueue.Get(&pMsg, iQueueTimeOut, iPriority);
-        krkr::stall::MarkMovieStage("movie: 解码线程→处理消息/解码");
+        krkr::stall::MarkMovieVideoStage("movie: video→处理消息/解码");
 
         if(MSGQ_IS_ERROR(ret)) {
             //	CLog::Log(LOGERROR, "Got MSGQ_ABORT or MSGO_IS_ERROR
@@ -442,8 +444,10 @@ void CVideoPlayerVideo::Process() {
             // empty image structure, with correct flags
             m_pVideoCodec->SetDropState(bRequestDrop);
 
+            krkr::stall::MarkMovieVideoStage("movie: video→avcodec Decode");
             int iDecoderState = m_pVideoCodec->Decode(
                 pPacket->pData, pPacket->iSize, pPacket->dts, pPacket->pts);
+            krkr::stall::MarkMovieVideoStage("movie: video→处理解码输出");
 
             // 解码结果探针（只记前 3 次）：区分"收到包但解不出帧"与"解出来了但
             // 没交付"。至此四个静默失败点都有了日志：找不到解码器 / 打不开解码器 /
@@ -738,6 +742,13 @@ std::string CVideoPlayerVideo::GetStereoMode() {
 }
 
 int CVideoPlayerVideo::OutputPicture(const DVDVideoPicture *src, double pts) {
+    // 停播/析构进行中：不要再开始一次输出。本函数开头会把 `m_bAbortOutput` 清成
+    // false（上游行为，为 Flush 之后恢复服务），而 `CloseStream` 刚把它置 true
+    // 并正在 join 本线程 —— 清掉就等于把中断撤了，后面的等缓冲/重试又要各跑满
+    // 500ms。
+    if(m_bStop)
+        return EOS_ABORT;
+
     m_bAbortOutput = false;
 
     /* picture buffer is not allowed to be modified in this call */
@@ -868,6 +879,7 @@ int CVideoPlayerVideo::OutputPicture(const DVDVideoPicture *src, double pts) {
     // don't wait when going ff
     if(m_speed > DVD_PLAYSPEED_NORMAL)
         maxWaitTime = std::max(timeToDisplay, 0);
+    krkr::stall::MarkMovieVideoStage("movie: video→等 render 缓冲");
     int buffer = m_renderManager.WaitForBuffer(m_bAbortOutput, maxWaitTime);
     if(buffer < 0) {
         m_droppingStats.AddOutputDropGain(pts, 1);
@@ -876,7 +888,9 @@ int CVideoPlayerVideo::OutputPicture(const DVDVideoPicture *src, double pts) {
 
     //	ProcessOverlays(pPicture, pts);
 
+    krkr::stall::MarkMovieVideoStage("movie: video→AddVideoPicture");
     int index = m_renderManager.AddVideoPicture(*pPicture);
+    krkr::stall::MarkMovieVideoStage("movie: video→AddVideoPicture 重试循环");
 
     // video device might not be done yet
     while(index < 0 && !m_bAbortOutput &&
@@ -885,14 +899,17 @@ int CVideoPlayerVideo::OutputPicture(const DVDVideoPicture *src, double pts) {
         Sleep(1);
         index = m_renderManager.AddVideoPicture(*pPicture);
     }
+    krkr::stall::MarkMovieVideoStage("movie: video→AddVideoPicture 完成");
 
     if(index < 0) {
         m_droppingStats.AddOutputDropGain(pts, 1);
         return EOS_DROPPED;
     }
 
+    krkr::stall::MarkMovieVideoStage("movie: video→FlipPage");
     m_renderManager.FlipPage(m_bAbortOutput, pts,
                              (m_syncState == ESyncState::SYNC_STARTING));
+    krkr::stall::MarkMovieVideoStage("movie: video→FlipPage 返回");
 
     return result;
 }

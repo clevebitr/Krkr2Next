@@ -39,10 +39,18 @@ constexpr int64_t kStallThresholdMs = 1500;
 inline std::atomic<int64_t> g_lastProgressMs{ 0 };
 inline std::atomic<const char *> g_stage{ "尚未开始" };
 /**
- * 影片相关线程（player/解码/音频）的阶段。这些线程卡住会通过 join 级联把渲染线程
- * 也拖死，而它们的日志往往还没打印 —— 卡死时把两边阶段一起落盘才能定位。
+ * 影片相关线程的阶段。这些线程卡住会通过 join 级联把渲染线程
+ * 也拖死，而它们的日志往往还没打印 —— 卡死时把几边阶段一起落盘才能定位。
+ *
+ * 为什么分成三个槽位：player（`BasePlayer`）/ video（`CVideoPlayerVideo`）/ audio
+ * （`CVideoPlayerAudio`）是三条不同的线程，而 `BasePlayer::OnExit` 的 join 级联会把
+ * 卡死点从一条转移到另一条。共用一个槽位时后写的会盖掉先写的，`.stall` 里只剩一条，
+ * 无法回答"到底哪条线程卡在哪"（真机 2026-09-23 00:31 就是这个情况：只剩
+ * `OnExit→CloseStream(视频)` 与 `解码线程→处理消息/解码` 两条互相盖）。
  */
 inline std::atomic<const char *> g_movieStage{ "movie: 未开始" };
+inline std::atomic<const char *> g_movieVideoStage{ "movie: 未开始" };
+inline std::atomic<const char *> g_movieAudioStage{ "movie: 未开始" };
 /** 卡死时额外落盘的文件（绕过 spdlog：日志锁本身可能被卡住的那条线程握着）。 */
 inline char g_dumpPathBuf[1024] = { 0 };
 inline std::atomic<bool> g_dumpPathSet{ false };
@@ -67,9 +75,19 @@ inline void MarkStage(const char *stage) {
     g_lastProgressMs.store(NowMs(), std::memory_order_relaxed);
 }
 
-/** 影片线程自己的阶段（不推进渲染线程心跳）。 */
+/** 影片 player（`BasePlayer`）线程自己的阶段。 */
 inline void MarkMovieStage(const char *stage) {
     g_movieStage.store(stage, std::memory_order_relaxed);
+}
+
+/** 视频解码线程（`CVideoPlayerVideo`）自己的阶段。 */
+inline void MarkMovieVideoStage(const char *stage) {
+    g_movieVideoStage.store(stage, std::memory_order_relaxed);
+}
+
+/** 音频解码线程（`CVideoPlayerAudio`）自己的阶段。 */
+inline void MarkMovieAudioStage(const char *stage) {
+    g_movieAudioStage.store(stage, std::memory_order_relaxed);
 }
 
 /** 引擎日志路径设定后调用；卡死转储写到 <path>.stall（内部拷贝，路径可临时）。 */
@@ -87,7 +105,8 @@ inline void SetDumpPath(const char *path) {
  * 增长"，说明日志锁被卡住的那条线程握着；那种情况下只有独立文件能留下证据）。
  */
 inline void WriteDump(const char *reason, const char *renderStage,
-                      const char *movieStage, int64_t stalledMs) {
+                      const char *movieStage, const char *videoStage,
+                      const char *audioStage, int64_t stalledMs) {
     char path[1152];
     if(g_dumpPathSet.load(std::memory_order_relaxed) && g_dumpPathBuf[0]) {
         std::snprintf(path, sizeof(path), "%s.stall", g_dumpPathBuf);
@@ -101,10 +120,14 @@ inline void WriteDump(const char *reason, const char *renderStage,
     std::fprintf(f,
                  "[stall] t=%lld stalled=%lldms reason=%s\n"
                  "        render: %s\n"
-                 "        movie : %s\n",
+                 "        player: %s\n"
+                 "        video : %s\n"
+                 "        audio : %s\n",
                  static_cast<long long>(now),
                  static_cast<long long>(stalledMs), reason ? reason : "?",
-                 renderStage ? renderStage : "?", movieStage ? movieStage : "?");
+                 renderStage ? renderStage : "?", movieStage ? movieStage : "?",
+                 videoStage ? videoStage : "?",
+                 audioStage ? audioStage : "?");
     std::fflush(f);
     std::fclose(f);
 }
@@ -130,14 +153,19 @@ inline void WatchdogLoop() {
                     g_stage.load(std::memory_order_relaxed);
                 const char *movieStage =
                     g_movieStage.load(std::memory_order_relaxed);
+                const char *videoStage =
+                    g_movieVideoStage.load(std::memory_order_relaxed);
+                const char *audioStage =
+                    g_movieAudioStage.load(std::memory_order_relaxed);
                 // 先写独立转储文件（不依赖日志锁），再尝试常规日志。
                 WriteDump("render-thread-stall", renderStage, movieStage,
-                          stalledMs);
+                          videoStage, audioStage, stalledMs);
                 spdlog::warn("引擎卡死探针：渲染线程已 {:.1f}s 没有推进，"
-                             "最后阶段＝{}（影片线程阶段＝{}）（卡死期间的日志"
-                             "不会再出现，看这一条定位；另有 {} .stall 转储）",
+                             "最后阶段＝{}（player＝{}｜video＝{}｜audio＝{}）"
+                             "（卡死期间的日志不会再出现，看这一条定位；另有 "
+                             "{} .stall 转储）",
                              static_cast<double>(stalledMs) / 1000.0,
-                             renderStage, movieStage,
+                             renderStage, movieStage, videoStage, audioStage,
                              g_dumpPathSet.load(std::memory_order_relaxed) &&
                                      g_dumpPathBuf[0]
                                  ? g_dumpPathBuf
@@ -157,6 +185,9 @@ inline void Start() {
     g_paused.store(false);
     g_lastProgressMs.store(0);
     g_stage.store("尚未开始");
+    g_movieStage.store("movie: 未开始");
+    g_movieVideoStage.store("movie: 未开始");
+    g_movieAudioStage.store("movie: 未开始");
     g_thread = std::thread(WatchdogLoop);
 }
 

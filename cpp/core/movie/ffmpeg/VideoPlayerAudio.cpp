@@ -141,7 +141,9 @@ void CVideoPlayerAudio::CloseStream(bool bWaitForBuffers) {
     //	CLog::Log(LOGNOTICE, "Waiting for audio thread to exit");
 
     // shut down the adio_decode thread and wait for it
+    krkr::stall::MarkMovieStage("movie: audio CloseStream→StopThread(join 音频线程)");
     StopThread(); // will set this->m_bStop to true
+    krkr::stall::MarkMovieStage("movie: audio CloseStream→音频线程已退出");
 
     // destroy audio device
     //	CLog::Log(LOGNOTICE, "Closing audio device");
@@ -220,9 +222,9 @@ void CVideoPlayerAudio::Process() {
         if(m_paused)
             priority = 1;
 
-        krkr::stall::MarkMovieStage("movie: 音频线程→等消息(Get)");
+        krkr::stall::MarkMovieAudioStage("movie: audio→等消息(Get)");
         MsgQueueReturnCode ret = m_messageQueue.Get(&pMsg, timeout, priority);
-        krkr::stall::MarkMovieStage("movie: 音频线程→解码/写音频设备");
+        krkr::stall::MarkMovieAudioStage("movie: audio→解码/写音频设备");
 
         if(MSGQ_IS_ERROR(ret)) {
             //		CLog::Log(LOGERROR, "Got MSGQ_ABORT or

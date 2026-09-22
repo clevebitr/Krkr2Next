@@ -51,16 +51,22 @@ void VideoPresentLayer::OnContinuousCallback(tjs_uint64 tick) {
     if(!m_usedPicture)
         return;
     double m_curpts = m_pPlayer->GetClock() / DVD_TIME_BASE;
+    bool presentInFuture = false;
     {
         std::lock_guard<std::mutex> lk(m_mtxPicture);
         BitmapPicture &picbuf = m_picture[m_curPicture];
         // check pts
-        if(picbuf.pts > m_curpts) { // present in future
-            // 这条链路每 tick 最多呈现一帧，"跳过"次数偏高就说明呈现被引擎
-            // tick 卡住（而不是解码慢）—— 统计里必须区分开。
-            TVPMovieStatsNotePresent("layer", /*ptsNotYet=*/true);
-            return;
-        }
+        if(picbuf.pts > m_curpts) // present in future
+            presentInFuture = true;
+    }
+    if(presentInFuture) {
+        // 这条链路每 tick 最多呈现一帧，"跳过"次数偏高就说明呈现被引擎
+        // tick 卡住（而不是解码慢）—— 统计里必须区分开。
+        // **统计在锁外调**：它可能打日志，而持 `m_mtxPicture` 打 spdlog 会与
+        // engine_tick 的 `g_registry_mutex` 形成跨线程死锁（见 KRMoviePlayer.cpp
+        // 的 Flush()）。
+        TVPMovieStatsNotePresent("layer", /*ptsNotYet=*/true);
+        return;
     }
 #if 0
         do { // skip frame
@@ -91,7 +97,7 @@ int VideoPresentLayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
               !m_pictureWaitAbort.load(std::memory_order_acquire)) {
             // 阶段标记写在循环里（不是进循环前）：只有真卡在这里时它才会成为
             // `.stall` 里最后一条影片阶段，卡在别处时不会被它盖掉。
-            krkr::stall::MarkMovieStage("movie: 解码线程→等空 picture 槽位(layer)");
+            krkr::stall::MarkMovieVideoStage("movie: video→等空 picture 槽位(layer)");
             m_condPicture.wait_for(lk, std::chrono::milliseconds(50));
         }
         if(m_pictureWaitAbort.load(std::memory_order_acquire))

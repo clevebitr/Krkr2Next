@@ -361,18 +361,34 @@ int TVPMoviePlayer::WaitForBuffer(volatile std::atomic_bool &bStop,
 }
 
 void TVPMoviePlayer::Flush() {
-    std::unique_lock<std::mutex> lk(m_mtxPicture);
-    // Flush 会把未呈现的帧直接丢掉（m_usedPicture 归零）——"解码在跑却永远没有
-    // submitted"的一种来路。谁在放片中途调它就一目了然，故记录丢弃数量。
-    static std::atomic<int> s_flushLogs{ 0 };
-    if(s_flushLogs.fetch_add(1) < 3)
-        spdlog::info("MoviePlayer Flush: 丢弃 {} 帧待呈现缓冲（curPicture={}）",
-                     m_usedPicture, m_curPicture);
-    for(int i = 0; i < MAX_BUFFER_COUNT; ++i) {
-        m_picture[i].Clear();
+    // ⚠️ **绝不在持 `m_mtxPicture` 时调 spdlog**：`spdlog` 的 `StartupLogSink` 会取
+    // `g_registry_mutex`，而 `engine_tick` 整帧持有它。Flush 由**解码线程**经
+    // `CRenderManager::DiscardBuffer()` 调到，若在这里边持 `m_mtxPicture` 边打日志，
+    // 就会与"渲染线程持 `g_registry_mutex` → 脚本 → `VideoOverlay.Close()` →
+    // `Release()` → join 解码线程"形成**跨线程死锁**：解码线程等 `g_registry_mutex`，
+    // 渲染线程等解码线程，只能等 `WaitForExit` 超时后放弃（真机 2026-09-23 00:31：
+    // 每次切视频卡满 4s，`.stall` 里 video 线程停在"处理消息/解码"、
+    // player 线程停在 `OnExit→CloseStream(视频)`）。
+    int used = 0;
+    int cur = 0;
+    bool logIt = false;
+    {
+        std::unique_lock<std::mutex> lk(m_mtxPicture);
+        // Flush 会把未呈现的帧直接丢掉（m_usedPicture 归零）——"解码在跑却永远没有
+        // submitted"的一种来路。谁在放片中途调它就一目了然，故记录丢弃数量。
+        static std::atomic<int> s_flushLogs{ 0 };
+        logIt = s_flushLogs.fetch_add(1) < 3;
+        used = m_usedPicture;
+        cur = m_curPicture;
+        for(int i = 0; i < MAX_BUFFER_COUNT; ++i) {
+            m_picture[i].Clear();
+        }
+        m_curpts = 0.0;
+        m_usedPicture = 0;
     }
-    m_curpts = 0.0;
-    m_usedPicture = 0;
+    if(logIt)
+        spdlog::info("MoviePlayer Flush: 丢弃 {} 帧待呈现缓冲（curPicture={}）",
+                     used, cur);
 }
 
 void TVPMoviePlayer::FrameMove() { m_pPlayer->FrameMove(); }
@@ -447,7 +463,7 @@ int TVPMoviePlayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
         std::unique_lock<std::mutex> lk(m_mtxPicture);
         while(m_usedPicture >= MAX_BUFFER_COUNT &&
               !m_pictureWaitAbort.load(std::memory_order_acquire)) {
-            krkr::stall::MarkMovieStage("movie: 解码线程→等空 picture 槽位(overlay)");
+            krkr::stall::MarkMovieVideoStage("movie: video→等空 picture 槽位(overlay)");
             m_condPicture.wait_for(lk, std::chrono::milliseconds(50));
         }
         if(m_pictureWaitAbort.load(std::memory_order_acquire))
@@ -493,6 +509,11 @@ int TVPMoviePlayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
                 std::chrono::steady_clock::now() - convertStart)
                 .count()));
 
+    // 日志所需的量在锁内取，日志在锁外打（见 Flush() 的死锁说明）。
+    bool logIt = false;
+    double queuedPts = 0.0;
+    int queuedUsed = 0;
+    int remaining = 0;
     {
         std::lock_guard<std::mutex> lk(m_mtxPicture);
         BitmapPicture &picbuf =
@@ -504,13 +525,19 @@ int TVPMoviePlayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
         picbuf.pts = pic.pts / DVD_TIME_BASE;
         ++m_usedPicture;
         static std::atomic<int> s_queueLogs{ 0 };
-        if(s_queueLogs.fetch_add(1) < 3)
-            spdlog::info("MoviePlayer AddVideoPicture: queued {}x{} pts={} "
-                         "used={} visible={}",
-                         width, height, picbuf.pts, m_usedPicture,
-                         Visible ? "yes" : "no");
-        return MAX_BUFFER_COUNT - m_usedPicture;
+        logIt = s_queueLogs.fetch_add(1) < 3;
+        queuedPts = picbuf.pts;
+        queuedUsed = m_usedPicture;
+        remaining = MAX_BUFFER_COUNT - m_usedPicture;
     }
+    // 日志在锁外打（见 Flush() 的说明：持 m_mtxPicture 打 spdlog 会与
+    // engine_tick 的 g_registry_mutex 形成跨线程死锁）。
+    if(logIt)
+        spdlog::info("MoviePlayer AddVideoPicture: queued {}x{} pts={} "
+                     "used={} visible={}",
+                     width, height, queuedPts, queuedUsed,
+                     Visible ? "yes" : "no");
+    return remaining;
 }
 
 VideoPresentOverlay::~VideoPresentOverlay() {
@@ -542,8 +569,11 @@ void VideoPresentOverlay::PresentPicture(float dt) {
         if(m_usedPicture <= 0) {
             // 被调用但没帧可拿（生产者还没入队，或 Flush 把未消费帧丢了）。
             static std::atomic<int> s_emptyLogs{ 0 };
-            if(s_emptyLogs.fetch_add(1) < 3)
-                spdlog::info("movie[overlay]: PresentPicture 进入但 m_usedPicture<=0，无帧可呈现");
+            const bool logIt = s_emptyLogs.fetch_add(1) < 3;
+            lk.unlock(); // 先解锁再打日志（见 Flush() 的死锁说明）
+            if(logIt)
+                spdlog::info("movie[overlay]: PresentPicture 进入但 "
+                             "m_usedPicture<=0，无帧可呈现");
             return;
         }
         do {
@@ -606,21 +636,33 @@ void VideoPresentOverlay::OnContinuousCallback(tjs_uint64 tick) {
     static std::atomic<uint64_t> s_gateTicks{ 0 };
     const uint64_t gateTick = s_gateTicks.fetch_add(1) + 1;
     {
-        std::lock_guard<std::mutex> lk(m_mtxPicture);
-        if(m_picture[m_curPicture].pts > curpts) {
-            // 呈现门控探针：真机实测"开场视频有声音没画面"时，解码帧进得来
-            // （queued ... visible=yes）却一次 submitted 都没有。这条用来区分
-            // "时钟没走（curpts 一直落后于帧 pts）"与"门控通过但 PresentPicture
-            // 内部提前返回"。
-            //   前 30 次每次都记；之后每 120 帧（约 2 秒）记一条状态快照 ——
-            //   只有周期性快照才能看出"时钟是否真的越过了帧 pts"。
-            const bool early = gateTick <= 30;
-            const bool periodic = (gateTick % 120) == 0;
-            if(early || periodic)
+        double framePts = 0.0;
+        int used = 0;
+        bool gateBlocked = false;
+        bool logIt = false;
+        {
+            std::lock_guard<std::mutex> lk(m_mtxPicture);
+            if(m_picture[m_curPicture].pts > curpts) {
+                // 呈现门控探针：真机实测"开场视频有声音没画面"时，解码帧进得来
+                // （queued ... visible=yes）却一次 submitted 都没有。这条用来区分
+                // "时钟没走（curpts 一直落后于帧 pts）"与"门控通过但 PresentPicture
+                // 内部提前返回"。
+                //   前 30 次每次都记；之后每 120 帧（约 2 秒）记一条状态快照 ——
+                //   只有周期性快照才能看出"时钟是否真的越过了帧 pts"。
+                gateBlocked = true;
+                framePts = m_picture[m_curPicture].pts;
+                used = m_usedPicture;
+                const bool early = gateTick <= 30;
+                const bool periodic = (gateTick % 120) == 0;
+                logIt = early || periodic;
+            }
+        }
+        // 日志在锁外打（见 Flush() 的死锁说明）。
+        if(gateBlocked) {
+            if(logIt)
                 spdlog::info("movie[overlay]: 呈现门控未通过（帧 pts={:.6f} > "
                              "时钟 curpts={:.6f}，used={}，第 {} 帧）",
-                             m_picture[m_curPicture].pts, curpts,
-                             m_usedPicture, gateTick);
+                             framePts, curpts, used, gateTick);
             return;
         }
     }

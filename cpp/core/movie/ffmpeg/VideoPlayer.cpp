@@ -229,6 +229,10 @@ void BasePlayer::Pause() {
 void BasePlayer::RequestStop() {
     // 先置中断标志：`Process()` 的循环条件与各内部检查都读它。
     m_bAbortRequest = true;
+    // 同时置 `m_bStop`：`CDVDMsgGeneralSynchronize::Wait(m_bStop, …)`（FlushBuffers /
+    // SynchronizeDemuxer）与视频/音频 drain 循环的退出条件都是它，而这些等待在
+    // `Process()` 内部，光靠 `m_bAbortRequest` 要等整段 HandleMessages 跑完。
+    m_bStop = true;
     // 再打断可能阻塞在 ffmpeg 读取里的 demuxer —— 否则 Process() 还停在
     // ReadPacket()，要等一次慢 IO 走完才回到循环顶部看见中断。
     // （与上游 CloseFile() 同一做法：中断 demuxer 是设计上允许跨线程调用的。）
@@ -1025,8 +1029,10 @@ bool BasePlayer::CloseStream(CCurrentStream &current, bool bWaitForBuffers) {
     if(bWaitForBuffers)
         SetCaching(CACHESTATE_DONE);
 
-    if(m_pDemuxer && STREAM_SOURCE_MASK(current.source) == STREAM_SOURCE_DEMUX)
+    if(m_pDemuxer && STREAM_SOURCE_MASK(current.source) == STREAM_SOURCE_DEMUX) {
+        krkr::stall::MarkMovieStage("movie: CloseStream→EnableStream(false)");
         m_pDemuxer->EnableStream(current.demuxerId, current.id, false);
+    }
 
     IDVDStreamPlayer *player = GetStreamPlayer(current.player);
     if(player) {
@@ -1035,7 +1041,12 @@ bool BasePlayer::CloseStream(CCurrentStream &current, bool bWaitForBuffers) {
            (current.type == STREAM_VIDEO &&
             current.syncState != IDVDStreamPlayer::SYNC_INSYNC))
             bWaitForBuffers = false;
+        krkr::stall::MarkMovieStage(
+            current.type == STREAM_AUDIO
+                ? "movie: CloseStream→player->CloseStream(音频,join)"
+                : "movie: CloseStream→player->CloseStream(视频,join)");
         player->CloseStream(bWaitForBuffers);
+        krkr::stall::MarkMovieStage("movie: CloseStream→player 已关闭");
     }
 
     current.Clear();
