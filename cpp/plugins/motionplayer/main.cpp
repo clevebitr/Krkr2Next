@@ -311,15 +311,38 @@ GetSeparateAdaptorRenderTarget(motion::SeparateLayerAdaptor *adaptor) {
         windowObj = windowVar.AsObjectNoAddRef();
     }
 
-    tTJSVariant parentVar;
-    if(TJS_FAILED(owner->PropGet(0, TJS_W("primaryLayer"), nullptr, &parentVar,
-                                 owner)) ||
-       parentVar.Type() != tvtObject || !parentVar.AsObjectNoAddRef()) {
-        if(TJS_FAILED(windowObj->PropGet(0, TJS_W("primaryLayer"), nullptr,
-                                         &parentVar, windowObj)) ||
-           parentVar.Type() != tvtObject || !parentVar.AsObjectNoAddRef()) {
-            return owner;
+    // 父层：参考实现（krkrsdl3；AetherKiri PlayerRender::
+    // resolveSeparateLayerRenderTarget）把适配器的私有渲染层建成**构造函数 owner
+    // 层的子层**，绝不挂到 window.primaryLayer。owner 是游戏放在正确 z 序位置上的
+    // AffineLayer（脚本随后把 owner.type 改成 ltBinder，让渲染层紧贴其上绘制）；
+    // 挂到 primaryLayer 会让 SD/emote 整体落到错误的层级——真机表现为「SD 渲染不
+    // 到 UI 之上」。owner 不是真实 Layer 时退回旧的 primaryLayer 行为。
+    iTJSDispatch2 *parentObj = nullptr;
+    bool parentIsOwner = false;
+    {
+        tTJSNI_BaseLayer *ownerNative = nullptr;
+        if(TJS_SUCCEEDED(owner->NativeInstanceSupport(
+               TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID,
+               reinterpret_cast<iTJSNativeInstance **>(&ownerNative))) &&
+           ownerNative) {
+            parentObj = owner;
+            parentIsOwner = true;
         }
+    }
+
+    tTJSVariant parentVar;
+    if(!parentObj) {
+        if(TJS_FAILED(owner->PropGet(0, TJS_W("primaryLayer"), nullptr,
+                                     &parentVar, owner)) ||
+           parentVar.Type() != tvtObject || !parentVar.AsObjectNoAddRef()) {
+            if(TJS_FAILED(windowObj->PropGet(0, TJS_W("primaryLayer"), nullptr,
+                                             &parentVar, windowObj)) ||
+               parentVar.Type() != tvtObject ||
+               !parentVar.AsObjectNoAddRef()) {
+                return owner;
+            }
+        }
+        parentObj = parentVar.AsObjectNoAddRef();
     }
 
     iTJSDispatch2 *global = TVPGetScriptDispatch();
@@ -336,8 +359,7 @@ GetSeparateAdaptorRenderTarget(motion::SeparateLayerAdaptor *adaptor) {
 
     iTJSDispatch2 *layerClass = layerClassVar.AsObjectNoAddRef();
     tTJSVariant args[2] = { tTJSVariant(windowObj, windowObj),
-                            tTJSVariant(parentVar.AsObjectNoAddRef(),
-                                        parentVar.AsObjectNoAddRef()) };
+                            tTJSVariant(parentObj, parentObj) };
     tTJSVariant *argv[] = { &args[0], &args[1] };
     iTJSDispatch2 *layerObj = nullptr;
     const auto hr = layerClass->CreateNew(0, nullptr, nullptr, &layerObj, 2,
@@ -354,13 +376,44 @@ GetSeparateAdaptorRenderTarget(motion::SeparateLayerAdaptor *adaptor) {
                               layerObj);
         }
     };
-    syncProp(TJS_W("left"));
-    syncProp(TJS_W("top"));
+    if(parentIsOwner) {
+        // 子层坐标相对 owner：位置必须归零，否则会被 owner 自身的位置再偏移一次
+        // （参考实现同样把 SetPosition/SetImagePosition 复位）。
+        tTJSVariant zero(static_cast<tjs_int>(0));
+        layerObj->PropSet(TJS_MEMBERENSURE, TJS_W("left"), nullptr, &zero,
+                          layerObj);
+        layerObj->PropSet(TJS_MEMBERENSURE, TJS_W("top"), nullptr, &zero,
+                          layerObj);
+    } else {
+        syncProp(TJS_W("left"));
+        syncProp(TJS_W("top"));
+    }
     syncProp(TJS_W("width"));
     syncProp(TJS_W("height"));
     syncProp(TJS_W("visible"));
     syncProp(TJS_W("opacity"));
     syncProp(TJS_W("name"));
+
+    // 一次性路由日志（每个 adaptor 一条，封顶 8 条）：回答「SD/emote 渲染层挂在
+    // 谁下面」——层级类问题的判定点。状态边沿日志，不是高频探针。
+    {
+        static std::atomic<int> s_targetRoute{0};
+        if(s_targetRoute.fetch_add(1) < 8) {
+            auto lg = spdlog::get("plugin");
+            if(lg) {
+                ttstr parentName;
+                tTJSVariant nameVar;
+                if(TJS_SUCCEEDED(parentObj->PropGet(0, TJS_W("name"), nullptr,
+                                                    &nameVar, parentObj)))
+                    parentName = ttstr(nameVar);
+                lg->info("motion: SeparateLayerAdaptor 渲染层路由 owner={} "
+                         "parent={} parentIsOwner={} parentName='{}'",
+                         static_cast<const void *>(owner),
+                         static_cast<const void *>(parentObj),
+                         parentIsOwner ? 1 : 0, parentName.AsStdString());
+            }
+        }
+    }
 
     // Prevent the render target from intercepting mouse events;
     // hitThreshold=256 makes hit test always fail (max alpha is 255)
@@ -686,6 +739,17 @@ static tjs_error SeparateLayerAdaptor_unloadUnusedTextures(
     return TJS_S_OK;
 }
 
+// krkrsdl3 / 参考实现把 SeparateLayerAdaptor.assign 留成 no-op：适配器的私有子层
+// 已经是可见的呈现层，把它再拷贝回 owner 只会得到第二张偏移画面（AetherKiri
+// SeparateLayerAdaptor::assignCompat 同语义）。
+static tjs_error SeparateLayerAdaptor_assign(tTJSVariant *r, tjs_int,
+                                             tTJSVariant **,
+                                             iTJSDispatch2 *) {
+    if(r)
+        *r = tTJSVariant();
+    return TJS_S_OK;
+}
+
 NCB_REGISTER_SUBCLASS_DELAY(SeparateLayerAdaptor) {
     NCB_CONSTRUCTOR((iTJSDispatch2 *));
     NCB_PROPERTY_RAW_CALLBACK_RO(width, SeparateLayerAdaptor_getWidth, 0);
@@ -699,6 +763,7 @@ NCB_REGISTER_SUBCLASS_DELAY(SeparateLayerAdaptor) {
     NCB_METHOD_RAW_CALLBACK(loadImages, SeparateLayerAdaptor_loadImages, 0);
     NCB_METHOD_RAW_CALLBACK(fillRect, SeparateLayerAdaptor_fillRect, 0);
     NCB_METHOD_RAW_CALLBACK(operateRect, SeparateLayerAdaptor_operateRect, 0);
+    NCB_METHOD_RAW_CALLBACK(assign, SeparateLayerAdaptor_assign, 0);
     NCB_METHOD_RAW_CALLBACK(captureCanvas, SeparateLayerAdaptor_captureCanvas,
                             0);
     NCB_METHOD_RAW_CALLBACK(unloadUnusedTextures,

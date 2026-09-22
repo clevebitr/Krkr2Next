@@ -22,7 +22,7 @@
 
 1. **G2 进动画卡 4.4s**：已细分到 `CreateRenderer(1920x1080)` 本身 2689ms
 2. **G2 帧率 ~43–45（目标 60）**：每帧 1920×1080 GPU→CPU 回读（插件设计使然）
-3. **千恋万花 `wave` 转场缺失 + `SystemWatchTimerTimer` 卡顿 + SDCG 层级**
+3. **千恋万花 `wave` 转场缺失 + `SystemWatchTimerTimer` 卡顿 + SDCG 层级（已改待回归）**
 
 其余两条目标的状态：
 
@@ -119,7 +119,26 @@ probe: AlphaMovie.showNextImage [neko4_h02c1a.amv] frame=2/60 crop=(636,0) 656x7
 `636+656=1292` 正好超出 1280。同一语义在校验过的两条路径上一致：core 的
 `LoadAMV.cpp`（视频帧当 CG）与插件的 `copyNextImageToTexture`（GL 路径）都用帧头裁剪偏移。
 
-### 1.5 其他
+### 1.5 SeparateLayerAdaptor 渲染层父层：SD/emote 层级（千恋万花）
+
+Yuzusoft 的 SD/Q 版动效（`data1080.xp3` 的 `sdNNN.mtn` + `SDNNNAA.png`）由 motionplayer
+经 `Motion.SeparateLayerAdaptor` 承载。`patch.tjs` 设 `Motion.Player.useD3D = 0` ⇒ 走
+adaptor 的私有渲染层；参考实现里**该层就是可见的呈现层**（脚本不再把它拷回 owner），
+所以它的父层直接决定 SD 画在 UI 的上面还是下面。
+
+KiriNext 的 `GetSeparateAdaptorRenderTarget`（`cpp/plugins/motionplayer/main.cpp`）把它挂到
+`window.primaryLayer`；参考实现（krkrsdl3；AetherKiri `PlayerRender::resolveSeparateLayerRenderTarget`）
+把它建成**构造函数 owner 层的子层**——owner 是游戏放在正确 z 序上的 `AffineLayer`，脚本随后
+把 `owner.type` 改成 `ltBinder`，渲染层紧贴其上。
+
+改法：owner 能解析为真实 Layer 时以 owner 为父层，并把子层 `left/top` 归零（子层坐标相对
+owner，否则会被 owner 位置再偏移一次）；否则维持原 `primaryLayer` 回退。另按参考实现把
+`SeparateLayerAdaptor.assign` 补成 no-op（参考注释：拷回 owner 会得到第二张偏移画面）。
+插件加了一条一次性路由日志 `motion: SeparateLayerAdaptor 渲染层路由 owner=… parent=…
+parentIsOwner=… parentName=…`（每次创建 adaptor 一条、封顶 8 条）用于确认父层选择。
+**待真机回归。**
+
+### 1.6 其他
 
 - `cpp/core/visual/LayerIntf.{h,cpp}`：补 `ExchangeMainImage`（AlphaMovie 移植所需的唯一外部
   API 缺口；片段移植，落点有注释）。
@@ -235,7 +254,7 @@ probe: AlphaMovie.showNextImage [neko4_h02c1a.amv] frame=2/60 crop=(636,0) 656x7
 | G2 **帧率 ~43–45** | 中 | 每帧 1920×1080 **GPU→CPU 回读**（`capture` 路径**刻意优先 CPU**：引擎随后按 CPU 位图重传纹理会覆盖只写纹理的内容）；主窗口走 `path=GPU`，只有 Live2D 图层退化。附带：该回读用 `GL_BGRA_EXT` 调 `glReadPixels`，ES3 非法 → `err=0x0502` |
 | G2 / 千恋万花 **`SystemWatchTimerTimer` 卡顿**（1.5–1.9s） | 中 | 卡在 `DeliverEvents()` 或 `TickBeat()` 循环（内层 MarkStage 未触发）；需在该函数内加细阶段探针 |
 | 千恋万花 **`wave` 转场缺失** | 小-中 | 确定的功能缺口，可独立做（按 KAGEX 规范） |
-| 千恋万花 **SDCG 无法渲染在 UI 之上** | 中 | 用户明确；需定位是层级顺序还是 SD 图层合成路径 |
+| 千恋万花 **SDCG 无法渲染在 UI 之上** | 中 | 已按参考实现改渲染层父层（owner 而非 primaryLayer）+ `assign` no-op，见 §1.5；**待真机回归** |
 | **AlphaMovie 插件复用 core 解码器** | 中 | 未做；完成后删掉重复 ~1700 行 |
 
 ### 6.2 兼容层 / 插件 / 壳
@@ -321,7 +340,7 @@ gh run view "$RID" --repo clevebitr/Krkr2Next --log-failed | rg -i "error:|undef
    `capture` 的 CPU 回读能否改走 GPU（改动面较大，用户要求渲染改动小，需先确认收益）。
 5. **`SystemWatchTimerTimer` 卡顿**：在 `cpp/core/environ/win32/SystemControl.cpp` 的
    `DeliverEvents()` 与 `TickBeat()` 循环内加 MarkStage（当前内层阶段一条都不触发）。
-6. **千恋万花**：`wave` 转场（独立功能缺口）→ SDCG 层级。
+6. **千恋万花**：SDCG 层级（已改待回归，见 §1.5）→ `wave` 转场（独立功能缺口）。
 7. **兼容层**：若用户回了 **I3**，接完 `mountSiblingsForArchiveProject`（M1 收尾）；
    否则继续 **M6 小模块批次**（每批 2–4 个，机械可验证）。
 8. **C3 已阻塞**于 C2；壳侧：目录收藏交互打磨 → 平板双栏 → MD3 细节。

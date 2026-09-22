@@ -104,11 +104,27 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
   （与 G2 同源，见 §1 未解决 ③）。
 - `convertImage: RL decode failed … raw palette` ⇒ **已知小图标回退**
   （`cpp/plugins/psbfile/PSBMedia.cpp` 有注释：m2logo icon32/icon18 的未压缩调色图被标成 RL），非根因。
-- **SDCG 无法正确渲染在 UI 之上**（用户 2026-09-22 明确）。
+- **SDCG 层级**（Yuzusoft 的 SD/emote 角色应绘在 UI 之上，实际落到错误层级）
+  - 机制：SD 分件是 `data1080.xp3` 的 `sdNNN.mtn` + `SDNNNAA.png`，由 motionplayer 经
+    `Motion.SeparateLayerAdaptor` 承载；`patch.tjs` 设 `Motion.Player.useD3D = 0`，
+    于是走 adaptor 的私有渲染层——**它就是可见的呈现层**（脚本不会把它再拷回 owner）。
+  - 根因：`motionplayer/main.cpp::GetSeparateAdaptorRenderTarget` 把该渲染层挂到
+    `window.primaryLayer`。参考实现（krkrsdl3；AetherKiri
+    `PlayerRender::resolveSeparateLayerRenderTarget`）把它建成**构造函数 owner 层的子层**
+    （owner 是游戏放在正确 z 序上的 `AffineLayer`，脚本随后把 `owner.type` 改成
+    `ltBinder`，渲染层紧贴其上）。挂错父层 ⇒ SD 整体层级不对。
+  - 已改（2026-09-22）：owner 能解析为真实 Layer 时以 owner 为父层，并把子层 left/top
+    归零（子层坐标相对 owner，否则被 owner 位置再偏移一次）；否则维持原 primaryLayer
+    回退。另按参考实现把 `SeparateLayerAdaptor.assign` 补成 no-op（参考注释：拷回
+    owner 会得到第二张偏移画面）。
+  - 待验证：真机确认 SD 是否已绘在 UI 之上。插件新增一条一次性路由日志：
+    `motion: SeparateLayerAdaptor 渲染层路由 owner=… parent=… parentIsOwner=… parentName=…`
+    （每次创建 adaptor 一条，封顶 8 条），用于确认走的是哪条父层路径。
 
 **下一步**：
 1. `wave` 转场：按 KAGEX 规范补实现（确定的功能缺口，可独立做）。
-2. SDCG 层级：先定位是图层顺序问题还是 SD 图层的合成路径问题（需要具体界面/操作）。
+2. SDCG 层级：已按参考实现改父层（见上），**待真机回归**；若仍不对，用那条路由日志
+   确认 `parentIsOwner` 与 `parentName`，再判断是父层选择还是合成路径问题。
 3. 卡死：与 §1 未解决 ③ 同一处理（`SystemWatchTimerTimer` 细阶段探针）。
 
 ---
