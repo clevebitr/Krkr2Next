@@ -190,6 +190,19 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
 > 临时探针（`probe: AssignImages[pair]` / `probe: AssignMotionImages` /
 > `probe: resolveRealLayer` / `probe: D3DAdaptor.clearEnabled`，以及
 > `DescribeLayerState` 的 name/parent）定案后一并删除。
+
+  - **第八轮真机（`engine-20260922-185120.log`）——别名已排除**：
+    - `probe: AssignImages detach(Independ)` 出现 12 次、`no-shared-texture` **0 次**
+      ⇒ 共享纹理（别名）确实存在、也确实被 `Independ()` 断开，**SD 不可见不是别名问题**。
+    - SD 的交付签名：`target='CG View LayerAffineLayer' visible=1 parent='CG View Layer'`
+      ← `source='' visible=0 parent='トップレイヤ'`。`CG View Layer` 位于隐藏页下
+      ⇒ 帧落在**隐藏页**里，永远不显示。
+    - 已实现参考实现的 **KAG 页面交换路由**（`TVPIsKagBackgroundPair` +
+      `TVPResolveExchangedKagAssignmentTarget` 含 `known_stale`）：隐藏页上的运动帧改投
+      到可见页（`表-背景`/`裏-背景`）里同名同尺寸的兄弟层。落点：`LayerIntf.cpp`
+      `AssignImages` 最前，先于普通赋值。
+    - 待验证：SD 是否已可见。下一轮 `probe: AssignImages[pair]` 会带上
+      `parentVisible/opacity/type/pos/size/image + 父/祖层名与可见性`，足以定案。
 - **启动 logo（`m2logo.mtn` / `yuzulogo.mtn`）**：颜色偏淡蓝而非红、播完残留两个矩形。
   - 已排除「PSB 解码通道序」：`PSBMedia.cpp` 全量输出 BGRA、全游戏一致，非本资源专属。
   - 已排除 `blandlogo1.png` 缺失：参考引擎在同一作同样报 85 次（游戏自带脚本引用了这个

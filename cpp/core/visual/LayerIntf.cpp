@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cmath>
+#include <map>
 #include <mutex>
 #include <set>
 #include <utility>
@@ -2418,6 +2419,100 @@ void tTJSNI_BaseLayer::AllocateDefaultImage() {
 }
 
 //---------------------------------------------------------------------------
+// KAG 页面交换（表-背景 / 裏-背景）路由。移植自 AetherKiri
+// cpp/core/visual/LayerIntf.cpp:283-300（TVPIsKagBackgroundPair）与 346-476
+// （TVPResolveExchangedKagAssignmentTarget 的结构部分 + known_stale 状态）。
+//
+// 为什么需要：KAG 用 表-背景/裏-背景 两张页面交替显示，而运动帧常常被 assign 到
+// **当前隐藏页**里的层（真机：target='CG View LayerAffineLayer'，parent='CG View
+// Layer'，而 CG View Layer 在隐藏页下），于是画面落在隐藏页上永远不显示。参考实现
+// 把它**改投到可见页里同名同尺寸的兄弟层**。
+//
+// 只有“该页此前被观察到可见过、随后变隐藏”（known_stale）时才改投，避免首次赋值就
+// 错投（参考实现用同一判据）。
+static bool TVPIsKagBackgroundPair(const tTJSNI_BaseLayer *first,
+                                   const tTJSNI_BaseLayer *second) {
+    if(!first || !second)
+        return false;
+    return (first->GetName() == TJS_W("表-背景") &&
+            second->GetName() == TJS_W("裏-背景")) ||
+           (first->GetName() == TJS_W("裏-背景") &&
+            second->GetName() == TJS_W("表-背景"));
+}
+
+static std::mutex TVPExchangedKagPageMutex;
+static std::map<const tTJSNI_BaseLayer *, bool>
+    TVPKagPageLastObservedVisibility;
+static std::set<const tTJSNI_BaseLayer *> TVPExchangedHiddenKagPages;
+
+static tTJSNI_BaseLayer *
+TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
+                                       tTJSNI_BaseLayer *source) {
+    if(!target || !source || target->GetName().IsEmpty() ||
+       !target->GetVisible() || !source->GetName().IsEmpty() ||
+       source->GetVisible())
+        return nullptr;
+
+    auto *hidden_page = target->GetParent();
+    auto *page_root = hidden_page ? hidden_page->GetParent() : nullptr;
+    if(!hidden_page || !page_root || source->GetParent() != page_root)
+        return nullptr;
+
+    const bool page_visible =
+        hidden_page->GetVisible() && hidden_page->GetParentVisible();
+    bool known_stale = false;
+    {
+        std::lock_guard<std::mutex> lock(TVPExchangedKagPageMutex);
+        auto &last_visible = TVPKagPageLastObservedVisibility[hidden_page];
+        if(page_visible) {
+            last_visible = true;
+            TVPExchangedHiddenKagPages.erase(hidden_page);
+            return nullptr;
+        }
+        if(last_visible)
+            TVPExchangedHiddenKagPages.insert(hidden_page);
+        last_visible = false;
+        known_stale = TVPExchangedHiddenKagPages.find(hidden_page) !=
+                      TVPExchangedHiddenKagPages.end();
+    }
+    if(!known_stale)
+        return nullptr;
+
+    tTJSNI_BaseLayer *visible_page = nullptr;
+    for(tjs_uint i = 0; i < page_root->GetCount(); ++i) {
+        auto *cand = page_root->GetChildren(static_cast<tjs_int>(i));
+        if(!cand || cand == hidden_page || !cand->GetVisible() ||
+           !cand->GetParentVisible() ||
+           !TVPIsKagBackgroundPair(hidden_page, cand))
+            continue;
+        visible_page = cand;
+        break;
+    }
+    if(!visible_page)
+        return nullptr;
+
+    const auto normalized = [](const ttstr &name) {
+        std::string value = name.AsStdString();
+        constexpr const char *prefix = "trans_";
+        if(value.rfind(prefix, 0) == 0)
+            value.erase(0, 6);
+        return value;
+    };
+    const auto target_name = normalized(target->GetName());
+    for(tjs_uint i = 0; i < visible_page->GetCount(); ++i) {
+        auto *cand = visible_page->GetChildren(static_cast<tjs_int>(i));
+        if(!cand || cand == target || !cand->GetVisible() ||
+           !cand->GetParentVisible() ||
+           normalized(cand->GetName()) != target_name ||
+           cand->GetWidth() != target->GetWidth() ||
+           cand->GetHeight() != target->GetHeight())
+            continue;
+        return cand;
+    }
+    return nullptr;
+}
+
+//---------------------------------------------------------------------------
 // D3DEmote/SD 的 scratch 交付识别。移植自 AetherKiri
 // cpp/core/visual/LayerIntf.cpp:301-325。
 //
@@ -2468,19 +2563,39 @@ void tTJSNI_BaseLayer::AssignImages(tTJSNI_BaseLayer *src) {
         }
         if(logIt) {
             auto *tp = GetParent();
+            auto *tpp = tp ? tp->GetParent() : nullptr;
             auto *sp = src->GetParent();
             spdlog::info(
                 "probe: AssignImages[pair] target={} name='{}' visible={} "
-                "parent='{}' | source={} name='{}' visible={} parent='{}' "
+                "parentVisible={} opacity={} type={} pos=({},{}) size={}x{} "
+                "image={}x{} parent='{}(vis={})' grandparent='{}(vis={})' "
+                "| source={} name='{}' visible={} parent='{}' "
                 "| motionScratch={}",
                 static_cast<const void *>(this), GetName().AsStdString(),
-                GetVisible() ? 1 : 0,
+                GetVisible() ? 1 : 0, GetParentVisible() ? 1 : 0, GetOpacity(),
+                static_cast<int>(GetType()), GetLeft(), GetTop(), GetWidth(),
+                GetHeight(), GetImageWidth(), GetImageHeight(),
                 tp ? tp->GetName().AsStdString() : std::string("<none>"),
+                tp && tp->GetVisible() ? 1 : 0,
+                tpp ? tpp->GetName().AsStdString() : std::string("<none>"),
+                tpp && tpp->GetVisible() ? 1 : 0,
                 static_cast<const void *>(src), src->GetName().AsStdString(),
                 src->GetVisible() ? 1 : 0,
                 sp ? sp->GetName().AsStdString() : std::string("<none>"),
                 (src != this && TVPIsAffineSourceMotionScratch(this, src)) ? 1
                                                                           : 0);
+        }
+    }
+
+    // KAG 页面交换：运动帧被 assign 到**隐藏页**里的层时，改投到可见页里同名同尺寸的
+    // 兄弟层，否则画面留在隐藏页上永远不显示（参考同判据）。必须在普通赋值之前。
+    if(src != this) {
+        if(auto *visible_target =
+               TVPResolveExchangedKagAssignmentTarget(this, src)) {
+            if(visible_target != this) {
+                visible_target->AssignImages(src);
+                return;
+            }
         }
     }
 
@@ -2518,11 +2633,22 @@ void tTJSNI_BaseLayer::AssignImages(tTJSNI_BaseLayer *src) {
            MainImage->GetTexture() == src->MainImage->GetTexture()) {
             MainImage->Independ();
             main_changed = true;
-            static std::atomic<int> s_detachProbe{0};
-            if(s_detachProbe.fetch_add(1) < 12)
-                spdlog::info("probe: AssignImages detach(Independ) target='{}' {}x{}",
+            // 按目标名去重（封顶 8 个名字）：上一版按次数封顶 12，启动期就被 ev
+            // 用光，看不到 SD 目标。TEMP DIAGNOSTIC。
+            static std::mutex s_detachMutex;
+            static std::set<std::string> s_detachSeen;
+            bool logDetach = false;
+            {
+                std::lock_guard<std::mutex> lock(s_detachMutex);
+                if(s_detachSeen.size() < 8 &&
+                   s_detachSeen.insert(GetName().AsStdString()).second)
+                    logDetach = true;
+            }
+            if(logDetach)
+                spdlog::info("probe: AssignImages detach(Independ) target='{}' {}x{} "
+                             "parentVisible={}",
                              GetName().AsStdString(), MainImage->GetWidth(),
-                             MainImage->GetHeight());
+                             MainImage->GetHeight(), GetParentVisible() ? 1 : 0);
         } else if(src != this && src->MainImage && MainImage &&
                   src->GetName().IsEmpty() && !src->GetVisible() &&
                   GetVisible() && !GetName().IsEmpty()) {
