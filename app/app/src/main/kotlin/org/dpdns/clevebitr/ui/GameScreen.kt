@@ -7,6 +7,7 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -34,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -308,7 +311,7 @@ fun GameScreen(
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(vertical = 16.dp),
+                .padding(12.dp),
         ) {
             Column(horizontalAlignment = Alignment.End) {
                 if (menuOpen) {
@@ -349,56 +352,79 @@ fun GameScreen(
                     Spacer(Modifier.height(12.dp))
                 }
 
-                if (drawerExpanded) {
-                    if (engineMenuButton) {
-                        SmallFloatingActionButton(
-                            onClick = { engineMenuVisible = true },
-                            containerColor = Color(0xCC1F1F1F),
-                            contentColor = Color.White,
-                            modifier = Modifier.padding(end = 10.dp),
-                        ) {
-                            Icon(Icons.Filled.Menu, contentDescription = "引擎菜单")
-                        }
-                        Spacer(Modifier.height(12.dp))
-                    }
-                    SmallFloatingActionButton(
-                        onClick = { menuOpen = !menuOpen },
-                        containerColor = Color(0xCC1F1F1F),
-                        contentColor = Color.White,
-                        modifier = Modifier.padding(end = 10.dp),
-                    ) {
-                        Icon(
-                            imageVector = if (menuOpen) Icons.Filled.Close else Icons.Filled.MoreVert,
-                            contentDescription = if (menuOpen) "收起菜单" else "游戏菜单",
-                        )
-                    }
-                    Spacer(Modifier.height(12.dp))
-                }
-
-                // 抽屉把手：贴右边缘的长条，箭头指示收起/展开。
-                Box(
-                    modifier = Modifier
-                        .width(34.dp)
-                        .height(78.dp)
-                        .background(
-                            color = Color(0xCC1F1F1F),
-                            shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
-                        )
-                        .clickable {
-                            drawerExpanded = !drawerExpanded
-                            if (!drawerExpanded) menuOpen = false
-                        },
-                    contentAlignment = Alignment.Center,
+                // 按钮抽屉：一个宽矩形。收起时只露出这一条（箭头 + 文字），展开后
+                // 矩形里多出「引擎菜单」与「更多」两个同尺寸按钮；再点收起。
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color(0xCC1F1F1F),
+                    contentColor = Color.White,
                 ) {
-                    Icon(
-                        imageVector = if (drawerExpanded) {
-                            Icons.Filled.ChevronRight
-                        } else {
-                            Icons.Filled.ChevronLeft
-                        },
-                        contentDescription = if (drawerExpanded) "收起按钮抽屉" else "展开按钮抽屉",
-                        tint = Color.White,
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        if (drawerExpanded) {
+                            Row(
+                                modifier = Modifier.padding(
+                                    start = 10.dp,
+                                    end = 10.dp,
+                                    top = 10.dp,
+                                    bottom = 6.dp,
+                                ),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (engineMenuButton) {
+                                    SmallFloatingActionButton(
+                                        onClick = { engineMenuVisible = true },
+                                        containerColor = Color(0x33FFFFFF),
+                                        contentColor = Color.White,
+                                    ) {
+                                        Icon(Icons.Filled.Menu, contentDescription = "引擎菜单")
+                                    }
+                                }
+                                SmallFloatingActionButton(
+                                    onClick = { menuOpen = !menuOpen },
+                                    containerColor = Color(0x33FFFFFF),
+                                    contentColor = Color.White,
+                                ) {
+                                    Icon(
+                                        imageVector = if (menuOpen) Icons.Filled.Close else Icons.Filled.MoreVert,
+                                        contentDescription = if (menuOpen) "收起菜单" else "游戏菜单",
+                                    )
+                                }
+                            }
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(Color(0x33FFFFFF)),
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .clickable {
+                                    drawerExpanded = !drawerExpanded
+                                    if (!drawerExpanded) menuOpen = false
+                                }
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = if (drawerExpanded) {
+                                    Icons.Filled.ChevronRight
+                                } else {
+                                    Icons.Filled.ChevronLeft
+                                },
+                                contentDescription = if (drawerExpanded) "收起按钮抽屉" else "展开按钮抽屉",
+                                tint = Color.White,
+                            )
+                            Text(
+                                text = if (drawerExpanded) "收起" else "菜单",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelLarge,
+                                modifier = Modifier.padding(start = 6.dp),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -483,7 +509,11 @@ private fun GameMenu(
     onRequestExit: () -> Unit,
     onRequestForceExit: () -> Unit,
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color(0xE61F1F1F))) {
+    // 宽度按内容给，**不要全屏宽**：菜单只有几行文字，铺满屏幕既难看也挡住游戏。
+    Card(
+        modifier = Modifier.widthIn(max = 260.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xE61F1F1F)),
+    ) {
         Column {
             MenuEntry(
                 label = if (touchpadMode) "触控板模式：开" else "触控板模式：关",
