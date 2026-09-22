@@ -1,24 +1,13 @@
 #include "ncbind.hpp"
 
-// extrans.dll：补充内建转场之外的 KAGEX 转场（目前是 'wave'）。
-// 其它模块是空桩——引擎内建了它们的功能（vorbis/opus 解码等），
-// 但部分游戏会按名字显式 link。
-//
-// 移植自 AetherKiri cpp/plugins/extrans.cpp 与 extrans_precise/（见
-// compat/upstream/aetherkiri_ports.json）。
-#include "extrans_precise/wave.h"
+// Stub modules — register empty entries so Plugins.link() succeeds.
+// The engine already has built-in support for the functionality these
+// plugins originally provided (vorbis/opus decoding, transitions),
+// but some games explicitly link them by name.
 
 #define NCB_MODULE_NAME TJS_W("extrans.dll")
-static void initExtrans() {
-    RegisterWaveTransHandlerProvider();
-}
-
-static void doneExtrans() {
-    UnregisterWaveTransHandlerProvider();
-}
-
-NCB_PRE_REGIST_CALLBACK(initExtrans);
-NCB_POST_UNREGIST_CALLBACK(doneExtrans);
+static void extrans_stub() {}
+NCB_PRE_REGIST_CALLBACK(extrans_stub);
 
 #undef NCB_MODULE_NAME
 #define NCB_MODULE_NAME TJS_W("wuvorbis.dll")

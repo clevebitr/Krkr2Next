@@ -99,16 +99,18 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
 
 已核实的现状：
 - `probe: Layer.loadImages(psb://quickmenu.pimg/*.tlg)` 一串 ⇒ 图片/E-mote 加载路径正常。
-- **`wave` 转场** ⇒ **已实施待真机回归**（2026-09-23）：`wave` 转场此前未实现，
-  `TVPFindTransHandlerProvider` 找不到就回退 crossfade。现已从 AetherKiri
-  `cpp/plugins/extrans_precise/{wave.cpp,wave.h,common.h}` **逐字节移植**（`modifications: none`，
-  已登记 `compat/upstream/aetherkiri_ports.json`），`cpp/plugins/extrans.cpp` 的
-  `extrans.dll` 注册点从空桩改为 `RegisterWaveTransHandlerProvider()`，
-  `cpp/plugins/CMakeLists.txt` 加入 `extrans_precise/wave.cpp`。
-  `extrans.dll` **不按层门控**（它是原版 KiriKiri 的标准插件，不是层专属模块），
-  因此两层都拿到 wave。
-  验收：本作不再出现 `Transition handler 'wave' not found`，wave 转场按
-  `time`/`maxh`/`maxomega`/`bgcolor1`/`bgcolor2`/`wavetype` 选项生效。
+- **`Transition handler 'wave' not found, falling back to crossfade`** ⇒ `wave` 转场未实现。
+  **2026-09-23 取证：不能照搬 AetherKiri 的实现。** 试过逐字节移植 AK 的
+  `cpp/plugins/extrans_precise/wave.{cpp,h}`（CPU 扫描线实现），CI run 35724476705
+  的「构建引擎」失败：
+  `wave.cpp:215/217/219: error: no member named 'GetScanLineForWrite'/'GetScanLine' in 'iTVPScanLineProvider'`。
+  原因：本仓库转场管线已改为 **GPU render method**（`TransIntf.cpp` 的
+  `tTVPCrossFadeTransHandler::Blend` 用 `iTVPRenderManager::OperateRect` + 纹理，
+  CPU 扫描线路径整段 `#if 0`），并据此把 `iTVPScanLineProvider` 的
+  `GetPixelFormat`/`GetPitchBytes`/`GetScanLine`/`GetScanLineForWrite` 全部 `#if 0`
+  （`transhandler.h` / `TransIntf.h` / `TransIntf.cpp`）。
+  ⇒ **wave 必须按本仓库的 GPU render method 机制重做**（新增一条 shader 转场，
+  逐行位移 + 背景填充 + 混合），属引擎侧工作。
 - **卡死**：`.stall` 记 `render-thread-stall`，阶段 `Application::Run: SystemWatchTimerTimer`
   （与 G2 同源，见 §1 未解决 ③）。
 - `convertImage: RL decode failed … raw palette` ⇒ **已知小图标回退**
@@ -232,7 +234,7 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
 1. **SDCG / D3DEmote 交付**：已按参考实现补 `AssignMotionImages` + scratch 路由（见上），
    **待真机回归**；若仍不对，再对照上面的 hook 清单逐项补。
 2. 启动 logo 颜色/残留、字体颜色：先看 SD 回归结果，再按 hook 清单定位。
-3. `wave` 转场：**已实施**（见上），待 CI 构建 + 真机回归确认。
+3. `wave` 转场：**必须按 GPU render method 重做**（CPU 扫描线移植已证实不适用，见上）。
 3. 卡死：与 §1 未解决 ③ 同一处理（`SystemWatchTimerTimer` 细阶段探针）。
 
 ---

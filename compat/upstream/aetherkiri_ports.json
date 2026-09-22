@@ -137,30 +137,6 @@
       "reason": "AlphaMovie(AJPM) 帧载荷解码器。放 core 而非插件的理由：.amv 由 core 的 tTVPGraphicType 注册（GraphicsLoaderIntf.cpp:238），图形与头部两条路径都在 core；core 不能依赖插件、插件可以依赖 core（compat/README.md §2），所以解码器在 core、插件复用，才能让 Layer.loadImages(\"*.amv\") 这类 core 路径也拿到帧。相对上游的改动：成员变量改为参数（qtbl/isZlib/zlibBufSize/geo/payload）、filePtr->ReadBuffer 改为带边界检查的载荷 memcpy、失败 return 改为 return false、amvImageConvertContext_ 改为函数内 static、产出写进 outRgba。另：YUV→RGBA 沿用上游的 swscale（故 core/visual 新增 find_package(FFMPEG swscale)；不能反向依赖 core_movie_module，会成环）。",
       "sha256_local": "a4891641a72fada0f8394544dc3a60f2c85beed6998588490392002febe110e6",
       "sha256_upstream_at_rev": "d8be10bb14225c6dd7faee37f2e5fe65437aaa9cc5135d320c201b9a9c3b55e0"
-    },
-    {
-      "local": "cpp/plugins/extrans_precise/wave.cpp",
-      "upstream": "cpp/plugins/extrans_precise/wave.cpp",
-      "modifications": "none",
-      "reason": "KAGEX 'wave' 转场处理器：提供内建 crossfade/universal/scroll 之外的 wave。千恋万花请求 wave 时原先回退 crossfade。",
-      "sha256_local": "68ed4870d7496329d4428399d09f690e63338c5e3d3f6b5089957d076c45b119",
-      "sha256_upstream_at_rev": "68ed4870d7496329d4428399d09f690e63338c5e3d3f6b5089957d076c45b119"
-    },
-    {
-      "local": "cpp/plugins/extrans_precise/wave.h",
-      "upstream": "cpp/plugins/extrans_precise/wave.h",
-      "modifications": "none",
-      "reason": "wave 转场的注册/注销声明，随 wave.cpp 一起移植。",
-      "sha256_local": "b6a82af558f94dcb150dc9663127e7a9378adeafa00d793b6b4d3a0e721cc6ed",
-      "sha256_upstream_at_rev": "b6a82af558f94dcb150dc9663127e7a9378adeafa00d793b6b4d3a0e721cc6ed"
-    },
-    {
-      "local": "cpp/plugins/extrans_precise/common.h",
-      "upstream": "cpp/plugins/extrans_precise/common.h",
-      "modifications": "none",
-      "reason": "wave.cpp 需要的 Clip()/Blend() 行内辅助，随 wave.cpp 一起移植。",
-      "sha256_local": "6a535116e27c3464c4db4d40a72376116577fd59089c9777b71c0b8236a50e90",
-      "sha256_upstream_at_rev": "6a535116e27c3464c4db4d40a72376116577fd59089c9777b71c0b8236a50e90"
     }
   ],
   "not_ported": [

@@ -287,7 +287,7 @@ UI / 残留矩形。参考实现为此提供 `Layer.assignMotionImages`（把完
 | G2 **进动画卡 4.4s** | 中 | 已细分：`createRenderer=2689ms bindTexture=0ms mvp=0ms`（1920×1080，1 张纹理）⇒ 卡在 `CreateRenderer`；需继续查 Cubism 渲染器/掩码缓冲创建 |
 | G2 **帧率 ~43–45** | 中 | 每帧 1920×1080 **GPU→CPU 回读**（`capture` 路径**刻意优先 CPU**：引擎随后按 CPU 位图重传纹理会覆盖只写纹理的内容）；主窗口走 `path=GPU`，只有 Live2D 图层退化。附带：该回读用 `GL_BGRA_EXT` 调 `glReadPixels`，ES3 非法 → `err=0x0502` |
 | G2 / 千恋万花 **`SystemWatchTimerTimer` 卡顿**（1.5–1.9s） | 中 | 卡在 `DeliverEvents()` 或 `TickBeat()` 循环（内层 MarkStage 未触发）；需在该函数内加细阶段探针 |
-| 千恋万花 **`wave` 转场缺失** | 小-中 | **已实施待回归**（2026-09-23）：逐字节移植 AetherKiri `extrans_precise/wave.{cpp,h}` + `common.h`，`extrans.dll` 注册点接入；见 `render-issues.md §2` |
+| 千恋万花 **`wave` 转场缺失** | 中 | **需按 GPU render method 重做**：2026-09-23 试过逐字节移植 AetherKiri 的 CPU 扫描线实现，CI 编译失败（`iTVPScanLineProvider::GetScanLine*` 在本仓库被 `#if 0`）；根因与结论见 `render-issues.md §2` |
 | 千恋万花 **SD/logo 交付（D3DEmote）** | 中 | 已补 `Layer.assignMotionImages` + `AssignImages` scratch/页面交换路由（均未解决本作）；**已裁决走方案 B**，见下 |
 | 千恋万花 **字体/文字颜色偏白、logo 色偏与残留矩形** | 中 | 候选根因：参考引擎为本作应用的 7 个标题 hook（含 `message edge argument routing`）KiriNext 全缺；未定位到 code path |
 | **AlphaMovie 插件复用 core 解码器** | 中 | 未做；完成后删掉重复 ~1700 行 |
@@ -411,7 +411,7 @@ gh run view "$RID" --repo clevebitr/Krkr2Next --log-failed | rg -i "error:|undef
 5. **`SystemWatchTimerTimer` 卡顿**：在 `cpp/core/environ/win32/SystemControl.cpp` 的
    `DeliverEvents()` 与 `TickBeat()` 循环内加 MarkStage（当前内层阶段一条都不触发）。
 6. **千恋万花**：按**方案 B** 搬参考的 `D3DEmote.tjs`（规格见 §6.1）→ 字体/logo 颜色与 7 个标题 hook；
-   `wave` 转场**已实施**（2026-09-23），待 CI 构建 + 真机回归。
+   `wave` 转场需**按 GPU render method 重做**（CPU 扫描线移植已证实不适用，见 §6.1）。
 7. **兼容层**：若用户回了 **I3**，接完 `mountSiblingsForArchiveProject`（M1 收尾）；
    否则继续 **M6 小模块批次**（每批 2–4 个，机械可验证）。
 8. **C3 已阻塞**于 C2；壳侧见 **`SHELL_HANDOVER.md §7`**（自定义按键浮层 → 引擎菜单侧边栏）。

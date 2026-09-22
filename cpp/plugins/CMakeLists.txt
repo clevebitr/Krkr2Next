@@ -24,7 +24,6 @@ target_sources(${PROJECT_NAME} PUBLIC
     LayerExBase.cpp
     xp3filter.cpp
     extrans.cpp
-    extrans_precise/wave.cpp
     textrender.cpp
     alphamovie.cpp
     layerExBTOA.cpp
