@@ -19,7 +19,9 @@
 #include "tjsDictionary.h"
 #include "vkdefine.h"
 #include "ScriptMgnIntf.h"
+#include <cstdlib>
 #include <map>
+#include <string>
 
 static std::map<tTVInteger, iTJSDispatch2 *> MENU_LIST;
 static void AddMenuDispatch(tTVInteger hWnd, iTJSDispatch2 *menu) {
@@ -475,5 +477,108 @@ TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, keycodeToText)
 //    }
 
 return cls;
+}
+//---------------------------------------------------------------------------
+// 宿主壳用的窗口菜单查询
+//---------------------------------------------------------------------------
+static tTJSNI_MenuItem *TVPGetMainWindowRootMenuItem() {
+    if(!TVPMainWindow)
+        return nullptr;
+    // MENU_LIST 的键是窗口的 "HWND" 属性值，而该属性返回的就是 tTJSNI_Window*
+    // 本身（见 WindowImpl.cpp 的 HWND getter）。游戏从未访问过 Window.menu 时
+    // 这里返回 nullptr——“没有菜单”是正常状态。
+    iTJSDispatch2 *menu =
+        TVPGetMenuDispatch((tTVInteger)(tjs_intptr_t)TVPMainWindow);
+    if(!menu)
+        return nullptr;
+    tTJSNI_MenuItem *item = nullptr;
+    if(TJS_FAILED(menu->NativeInstanceSupport(
+           TJS_NIS_GETINSTANCE, tTJSNC_MenuItem::ClassID,
+           (iTJSNativeInstance **)&item)))
+        return nullptr;
+    return item;
+}
+//---------------------------------------------------------------------------
+static void TVPSerializeMenuItem(tTJSNI_BaseMenuItem *base,
+                                 const std::string &path, tjs_int depth,
+                                 std::string &out) {
+    auto *item = dynamic_cast<tTJSNI_MenuItem *>(base);
+    if(!item || !item->GetVisible())
+        return;
+
+    ttstr caption;
+    item->GetCaption(caption);
+    std::string title = caption.AsStdString();
+    // 分隔符与换行会破坏行格式；替换成空格（菜单标题里本来也不该有）。
+    for(char &c : title) {
+        if(c == '\t' || c == '\n' || c == '\r')
+            c = ' ';
+    }
+
+    out += std::to_string(depth);
+    out += '\t';
+    out += item->GetChecked() ? '1' : '0';
+    out += '\t';
+    out += item->GetEnabled() ? '1' : '0';
+    out += '\t';
+    out += path;
+    out += '\t';
+    out += title;
+    out += '\n';
+
+    const ObjectVector<tTJSNI_BaseMenuItem> &children = item->GetChildren();
+    const tjs_int count = (tjs_int)children.size();
+    for(tjs_int i = 0; i < count; ++i) {
+        TVPSerializeMenuItem(children.at(i), path + "." + std::to_string(i),
+                             depth + 1, out);
+    }
+}
+//---------------------------------------------------------------------------
+void TVPSerializeMainWindowMenu(std::string &out) {
+    out.clear();
+    tTJSNI_MenuItem *root = TVPGetMainWindowRootMenuItem();
+    if(!root)
+        return;
+    const ObjectVector<tTJSNI_BaseMenuItem> &children = root->GetChildren();
+    const tjs_int count = (tjs_int)children.size();
+    for(tjs_int i = 0; i < count; ++i) {
+        TVPSerializeMenuItem(children.at(i), std::to_string(i), 0, out);
+    }
+}
+//---------------------------------------------------------------------------
+bool TVPInvokeMainWindowMenuItem(const std::string &id) {
+    tTJSNI_MenuItem *root = TVPGetMainWindowRootMenuItem();
+    if(!root || id.empty())
+        return false;
+
+    tTJSNI_BaseMenuItem *current = root;
+    size_t start = 0;
+    for(;;) {
+        const size_t dot = id.find('.', start);
+        const std::string seg =
+            id.substr(start, dot == std::string::npos ? std::string::npos
+                                                      : dot - start);
+        if(seg.empty())
+            return false;
+        auto *current_item = dynamic_cast<tTJSNI_MenuItem *>(current);
+        if(!current_item)
+            return false;
+        const ObjectVector<tTJSNI_BaseMenuItem> &children =
+            current_item->GetChildren();
+        const int index = std::atoi(seg.c_str());
+        if(index < 0 || index >= (int)children.size())
+            return false;
+        current = children.at((size_t)index);
+        if(dot == std::string::npos)
+            break;
+        start = dot + 1;
+    }
+
+    auto *item = dynamic_cast<tTJSNI_MenuItem *>(current);
+    if(!item || !item->GetEnabled())
+        return false;
+    // 与 Windows 版一致：走该 MenuItem 的 onClick（内部再投 TJS 事件）。
+    item->OnClick();
+    return true;
 }
 //---------------------------------------------------------------------------

@@ -59,6 +59,7 @@ import org.dpdns.clevebitr.ui.SettingsScreen
 import org.dpdns.clevebitr.ui.ShellNavHost
 import org.dpdns.clevebitr.ui.ShellNavParams
 import org.dpdns.clevebitr.ui.ShellScaffold
+import org.dpdns.clevebitr.ui.logTouchpadMode
 import org.dpdns.clevebitr.ui.resolveDarkTheme
 
 /**
@@ -132,6 +133,11 @@ class MainActivity : ComponentActivity() {
     /** 编辑态里改动过、还没落盘。拖拽每帧都会改数据，落盘要等退出编辑态。 */
     private var sessionKeypadDirty = false
 
+    /** 本次会话的光标触控板模式（全局默认与每游戏覆盖已在启动时合并）。 */
+    private var sessionTouchpad by mutableStateOf(false)
+    private var sessionTouchpadIsPerGame = false
+    private var sessionTouchpadSensitivity by mutableStateOf(AppPrefs.TOUCHPAD_SENSITIVITY_DEFAULT)
+
     // ── 游戏库与设置状态 ──
     private lateinit var library: GameLibrary
     private var games by mutableStateOf<List<LibraryGame>>(emptyList())
@@ -139,6 +145,9 @@ class MainActivity : ComponentActivity() {
     private var overlayConfig by mutableStateOf(OverlayConfig.default())
     private var keypadConfig by mutableStateOf(KeyPadProfile.default())
     private var keypadTemplates by mutableStateOf<Map<String, KeyPadProfile>>(emptyMap())
+    private var touchpadDefault by mutableStateOf(false)
+    private var touchpadSensitivity by mutableStateOf(AppPrefs.TOUCHPAD_SENSITIVITY_DEFAULT)
+    private var engineMenuButton by mutableStateOf(true)
 
     private var themeMode by mutableStateOf("system")
     private var fontFallbackMode by mutableStateOf("auto")
@@ -182,6 +191,9 @@ class MainActivity : ComponentActivity() {
         overlayConfig = AppPrefs.overlayConfig(this)
         keypadConfig = AppPrefs.keyPadProfile(this)
         keypadTemplates = AppPrefs.keyPadTemplates(this)
+        touchpadDefault = AppPrefs.touchpadMode(this)
+        touchpadSensitivity = AppPrefs.touchpadSensitivity(this)
+        engineMenuButton = AppPrefs.engineMenuButton(this)
         themeMode = AppPrefs.themeMode(this)
         fontFallbackMode = AppPrefs.fontFallbackMode(this)
         oglDrawDeviceCompat = AppPrefs.oglDrawDeviceCompat(this)
@@ -237,6 +249,19 @@ class MainActivity : ComponentActivity() {
                                     // 退出编辑态才落盘：拖拽/缩放是每帧改数据的，
                                     // 不能每帧写一次 krkr2next.json。
                                     if (!editing) persistSessionKeypad()
+                                },
+                                touchpadMode = sessionTouchpad,
+                                touchpadSensitivity = sessionTouchpadSensitivity,
+                                onTouchpadModeChange = { enabled ->
+                                    sessionTouchpad = enabled
+                                    sessionTouchpadIsPerGame = true
+                                    logTouchpadMode(enabled)
+                                    persistSessionTouchpad()
+                                },
+                                engineMenuButton = engineMenuButton,
+                                onEngineMenuButtonChange = { enabled ->
+                                    engineMenuButton = enabled
+                                    AppPrefs.setEngineMenuButton(this@MainActivity, enabled)
                                 },
                                 onOpenSettings = { inGameSettings = true },
                                 onExit = ::exitToLauncher,
@@ -439,6 +464,22 @@ class MainActivity : ComponentActivity() {
             onDeleteKeyPadTemplate = { name ->
                 keypadTemplates = AppPrefs.deleteKeyPadTemplate(this, name)
             },
+            touchpadMode = touchpadDefault,
+            onTouchpadModeChange = { enabled ->
+                touchpadDefault = enabled
+                AppPrefs.setTouchpadMode(this, enabled)
+                logTouchpadMode(enabled)
+            },
+            touchpadSensitivity = touchpadSensitivity,
+            onTouchpadSensitivityChange = { value ->
+                touchpadSensitivity = value
+                AppPrefs.setTouchpadSensitivity(this, value)
+            },
+            engineMenuButton = engineMenuButton,
+            onEngineMenuButtonChange = { enabled ->
+                engineMenuButton = enabled
+                AppPrefs.setEngineMenuButton(this, enabled)
+            },
             themeMode = themeMode,
             onThemeModeChanged = { themeMode = it },
             fontFallbackMode = fontFallbackMode,
@@ -562,6 +603,7 @@ class MainActivity : ComponentActivity() {
         fontFallbackMode = fontFallbackMode,
         overlay = overlayConfig,
         keypad = keypadConfig,
+        touchpad = touchpadDefault,
     )
 
     // ── 引擎会话 ────────────────────────────────────────────────────────────
@@ -592,6 +634,9 @@ class MainActivity : ComponentActivity() {
         sessionKeypadIsPerGame = config.keypad != null
         sessionKeypadDirty = false
         keypadEditing = false
+        sessionTouchpad = resolved.touchpad
+        sessionTouchpadIsPerGame = config.touchpad != null
+        sessionTouchpadSensitivity = touchpadSensitivity
 
         AppLog.i(
             TAG,
@@ -677,6 +722,14 @@ class MainActivity : ComponentActivity() {
         val current = GameConfigStore.load(this, dir)
         GameConfigStore.save(this, dir, current.copy(keypad = sessionKeypad))
         AppLog.i(TAG, "按键浮层已保存：${sessionKeypad.buttons.size} 个按钮 -> ${dir.absolutePath}")
+    }
+
+    /** 把触控板模式**按游戏落盘**（单个布尔，切换即写）。 */
+    private fun persistSessionTouchpad() {
+        val path = gamePath ?: return
+        val dir = File(path)
+        val current = GameConfigStore.load(this, dir)
+        GameConfigStore.save(this, dir, current.copy(touchpad = sessionTouchpad))
     }
 
     private fun exitToLauncher() {

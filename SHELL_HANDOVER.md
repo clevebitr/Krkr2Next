@@ -13,7 +13,7 @@
 - **详情页改版（Steam 大屏式左右分栏）→ 已完成**（`ui/GameDetailScreen.kt`）。
 - **壳的 Kotlin 编译已能在 Termux 本地跑通** → 见 §1，改壳必须先本地编译过再推。
 
-**还没做**：引擎游戏设置侧边栏（§4）。**自定义按键浮层已完成**（见 §3）。
+**还没做**：无（§3 自定义按键浮层、§4 引擎菜单侧边栏均已完成）。
 
 ---
 
@@ -161,7 +161,33 @@ data class KeyPadProfile(val buttons: List<KeyButton>, val enabled: Boolean = fa
 
 ---
 
-## 4. 待实现二：引擎游戏设置侧边栏
+## 4. 已完成：引擎游戏设置侧边栏（§4）
+
+> 2026-09-23 落地（含引擎侧 C ABI）。
+
+### 4.0 实现落点
+
+引擎侧：
+- `cpp/core/visual/impl/MenuItemImpl.{h,cpp}`：`TVPSerializeMainWindowMenu()` /
+  `TVPInvokeMainWindowMenuItem()`。菜单树就是 KiriKiri 的 `tTVPMenuItem`
+  （`Window.menu` 的返回值）；根菜单项用窗口的 `HWND` 属性值（**其实就是
+  `tTJSNI_Window*` 本身**）到 `MenuItemImpl.cpp` 的 `MENU_LIST` 里查。
+  `Window.menu` 能解析到根，靠的是 TJS2 的 "default member invocation"
+  （`tjsObject.cpp` 的 `TJSDefaultPropGet`：成员值是对象时会以 `membername=nullptr`
+  调它的 `PropGet`）。
+- `bridge/engine_api`：新增 `engine_list_window_menu(out, size, written)` 与
+  `engine_invoke_window_menu(id)`（三处同步：`engine_api.h` / 实现 / JNI）。
+  菜单树只在 owner 线程变动 ⇒ **快照在 tick 里降频刷新（~15 帧）**，壳从任意
+  线程加锁读；触发只入队，由 tick（或模态泵）在 owner 线程派发。
+- 序列化格式：每行一项，`\t` 分隔 `depth checked enabled id title`；`id` 是路径
+  （顶层 `0`、子项 `0.2`），供触发。不可见项不输出。
+
+壳侧：
+- `core/EngineMenu.kt`：模型 + 文本解析（坏行跳过）。
+- `core/EngineSession.kt`：`windowMenu()` / `invokeWindowMenu(id)`。
+- `ui/EngineMenuSidebar.kt`：右侧面板 + 可点击遮罩（**打开时暂停游戏输入**）+ 空态。
+- `ui/GameScreen.kt`：右下角小 FAB（在悬浮菜单 FAB 上方）；可从悬浮菜单隐藏。
+  开关存 `AppPrefs.engineMenuButton`（默认显示），设置页也有。
 
 ### 4.1 目标行为
 
@@ -200,7 +226,7 @@ data class KeyPadProfile(val buttons: List<KeyButton>, val enabled: Boolean = fa
 - 列表数据来自 `core/NativeEngine.kt` 新增的 `external fun`（枚举/触发）。
 - 空态：游戏没注册任何菜单项时，侧边栏显示"本游戏没有引擎菜单项"，不要显示空白。
 
-### 4.4 验收标准
+## 4.4 验收标准（已实现，待真机确认）
 
 - 侧边栏列出的条目与 Windows 版菜单一致（至少覆盖游戏实际注册的那几项）；
 - 触发后行为与 Windows 版一致（例如"全屏/配置/关于"打开对应窗口）；
@@ -241,7 +267,7 @@ data class KeyPadProfile(val buttons: List<KeyButton>, val enabled: Boolean = fa
 
 ## 7. 下一会话的建议顺序
 
-1. 引擎游戏设置侧边栏（§4）——先确认引擎菜单链路是否存在，再动 C ABI；
-2. 已完成：自定义按键浮层（§3）——纯壳侧，已本地编译通过；
+1. §3 自定义按键浮层、§4 引擎菜单侧边栏**均已完成**（本地编译 + 静态检查通过，待真机验收）；
+2. 光标触控板模式、按键自动对齐参考线已完成；
 3. 每完成一项：`bash scripts/build_shell_local.sh` → `bash scripts/check_static.sh`
    → `git diff --check` → 单独提交。

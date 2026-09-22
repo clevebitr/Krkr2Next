@@ -15,6 +15,7 @@
 // #include <Menus.hpp>
 #include "MenuItemIntf.h"
 // #include "Menus.hpp"
+#include <string>
 
 //---------------------------------------------------------------------------
 // tTJSNI_MenuItem : MenuItem Native Instance
@@ -98,5 +99,18 @@ class WindowMenuProperty : public tTJSDispatch {
 };
 
 void CreateShortCutKeyCodeTable();
+
+//---------------------------------------------------------------------------
+// 宿主壳用的窗口菜单查询（**只在引擎线程调用**：菜单树由 TJS 在 tick 上改动）
+//---------------------------------------------------------------------------
+// 把主窗口的菜单树序列化成文本，每行一项，字段用 '\t' 分隔：
+//   depth <TAB> checked <TAB> enabled <TAB> id <TAB> title
+// id 是路径（顶层为 "0"、"1"…，子项为 "0.2"…）。游戏从未访问过 Window.menu
+// 时写入空串（“没有菜单”是正常状态，不是错误）。
+void TVPSerializeMainWindowMenu(std::string &out);
+
+// 按 id 路径触发一项（会走该 MenuItem 的 onClick）。返回是否找到且已触发。
+bool TVPInvokeMainWindowMenuItem(const std::string &id);
+
 //---------------------------------------------------------------------------
 #endif

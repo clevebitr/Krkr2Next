@@ -97,6 +97,23 @@ object NativeEngine {
      */
     external fun engineGetMemoryStats(handle: Long, out: LongArray): Int
 
+    // ── 窗口菜单（§4 引擎菜单侧边栏） ──────────────────────────────────────
+    /**
+     * 列出游戏注册的窗口菜单项（KiriKiri 的 `tTVPMenuItem` / `Window.menu`），
+     * 序列化成文本写入 [buffer]，@return 写入字节数；无菜单项返回 0，失败返回 -1。
+     *
+     * 每行一项，字段用 `\t` 分隔：`depth checked enabled id title`；`id` 是路径
+     * （顶层 `0`、子项 `0.2`），交给 [engineInvokeWindowMenu]。引擎侧维护快照，
+     * 所以任意线程可调。解析见 `core/EngineMenu.kt`。
+     */
+    external fun engineListWindowMenu(buffer: ByteArray): Int
+
+    /**
+     * 触发一个窗口菜单项（按 [id]）。引擎侧**只入队**，真正触发在 `engine_tick`
+     * （引擎 owner 线程）上做，所以可从 UI 线程直接调。
+     */
+    external fun engineInvokeWindowMenu(id: String): Int
+
     // ── 输入 ──────────────────────────────────────────────────────────────
     /**
      * @param keyCode **Windows VK 码**，不是 Android `KEYCODE_*`——
@@ -187,4 +204,7 @@ object NativeEngine {
 
     /** [engineGetCompatProfile] 建议的缓冲区长度（最长档名 + 模式名，留足余量）。 */
     const val COMPAT_PROFILE_BUFFER_SIZE = 64
+
+    /** [engineListWindowMenu] 建议的缓冲区长度（菜单项都是短文本，8KB 足够）。 */
+    const val WINDOW_MENU_BUFFER_SIZE = 8192
 }

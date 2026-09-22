@@ -1,5 +1,6 @@
 package org.dpdns.clevebitr.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -43,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
@@ -52,6 +54,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.UUID
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import org.dpdns.clevebitr.core.KeyButton
@@ -105,6 +108,10 @@ fun KeyPadOverlay(
     // 属性面板：编辑态下可完整配置选中按钮（键位/文字/图标/颜色/大小/透明度/描边）。
     var propertiesOpen by remember { mutableStateOf(false) }
 
+    // 对齐参考线（归一化坐标）。拖动时由 snapPosition 填入，手势结束清空。
+    var vGuides by remember { mutableStateOf<List<Float>>(emptyList()) }
+    var hGuides by remember { mutableStateOf<List<Float>>(emptyList()) }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val cw = constraints.maxWidth.toFloat().coerceAtLeast(1f)
         val ch = constraints.maxHeight.toFloat().coerceAtLeast(1f)
@@ -118,15 +125,52 @@ fun KeyPadOverlay(
                     editing = editing,
                     selected = button.id == selectedId,
                     onMoveTo = { nx, ny ->
-                        onProfileChange(profile.withButton(button.copy(x = nx, y = ny).sanitized()))
+                        // 拖动时自动停靠：对齐画面边缘/中线与其他按钮的边/中心，
+                        // 命中就把位置改成对齐值并记下参考线（类似 PS 的参考线）。
+                        val snapped = snapPosition(
+                            x = nx,
+                            y = ny,
+                            w = button.w,
+                            h = button.h,
+                            buttons = profile.buttons,
+                            selfId = button.id,
+                            containerWidthPx = cw,
+                            containerHeightPx = ch,
+                        )
+                        vGuides = snapped.vGuides
+                        hGuides = snapped.hGuides
+                        onProfileChange(
+                            profile.withButton(
+                                button.copy(x = snapped.x, y = snapped.y).sanitized(),
+                            ),
+                        )
                     },
                     onResizeTo = { nw, nh ->
                         onProfileChange(profile.withButton(button.copy(w = nw, h = nh).sanitized()))
+                    },
+                    onDragEnd = {
+                        vGuides = emptyList()
+                        hGuides = emptyList()
                     },
                     onSelect = { onSelect(button.id) },
                     onKeyDown = onKeyDown,
                     onKeyUp = onKeyUp,
                 )
+            }
+        }
+
+        if (editing && (vGuides.isNotEmpty() || hGuides.isNotEmpty())) {
+            // 参考线画在按钮之上（不然会被按钮盖住），但不消费触摸。
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val stroke = 1.dp.toPx()
+                vGuides.forEach { gx ->
+                    val x = gx * cw
+                    drawLine(GuideColor, Offset(x, 0f), Offset(x, ch), strokeWidth = stroke)
+                }
+                hGuides.forEach { gy ->
+                    val y = gy * ch
+                    drawLine(GuideColor, Offset(0f, y), Offset(cw, y), strokeWidth = stroke)
+                }
             }
         }
 
@@ -281,6 +325,87 @@ private const val REPEAT_INTERVAL_MS = 60L
 /** 按钮圆角。 */
 private val KeyButtonShape = RoundedCornerShape(10.dp)
 
+/** 对齐参考线的颜色。亮青色：在深浅两种游戏画面上都看得见。 */
+private val GuideColor = Color(0xFF00E5FF)
+
+/** 吸附阈值（dp）。8dp 是手指拖拽时既不“拉不动”又能明显停靠的量级。 */
+private const val SNAP_DP = 8f
+
+/** 一次拖动的吸附结果：新位置 + 命中的参考线（归一化坐标）。 */
+private data class SnapResult(
+    val x: Float,
+    val y: Float,
+    val vGuides: List<Float>,
+    val hGuides: List<Float>,
+)
+
+/**
+ * 自动对齐：把按钮的左/中/右与上/中/下分别吸到最近的候选线上。
+ *
+ * 候选线 = 画面左/中/右（上/中/下）+ 其它按钮的同名边与中心。阈值按**像素**给，
+ * 换算成归一化坐标后再比较，这样不同分辨率下手感一致。
+ */
+private fun snapPosition(
+    x: Float,
+    y: Float,
+    w: Float,
+    h: Float,
+    buttons: List<KeyButton>,
+    selfId: String,
+    containerWidthPx: Float,
+    containerHeightPx: Float,
+): SnapResult {
+    val thresholdX = SNAP_DP / containerWidthPx.coerceAtLeast(1f)
+    val thresholdY = SNAP_DP / containerHeightPx.coerceAtLeast(1f)
+
+    val xTargets = mutableListOf(0f, 0.5f, 1f)
+    val yTargets = mutableListOf(0f, 0.5f, 1f)
+    buttons.forEach { other ->
+        if (other.id == selfId) return@forEach
+        xTargets += other.x
+        xTargets += other.x + other.w / 2f
+        xTargets += other.x + other.w
+        yTargets += other.y
+        yTargets += other.y + other.h / 2f
+        yTargets += other.y + other.h
+    }
+
+    var bestX = x
+    var bestDX = thresholdX
+    var guideX: Float? = null
+    listOf(x, x + w / 2f, x + w).forEach { cand ->
+        xTargets.forEach { target ->
+            val d = abs(cand - target)
+            if (d <= bestDX) {
+                bestDX = d
+                bestX = x + (target - cand)
+                guideX = target
+            }
+        }
+    }
+
+    var bestY = y
+    var bestDY = thresholdY
+    var guideY: Float? = null
+    listOf(y, y + h / 2f, y + h).forEach { cand ->
+        yTargets.forEach { target ->
+            val d = abs(cand - target)
+            if (d <= bestDY) {
+                bestDY = d
+                bestY = y + (target - cand)
+                guideY = target
+            }
+        }
+    }
+
+    return SnapResult(
+        x = bestX,
+        y = bestY,
+        vGuides = listOfNotNull(guideX),
+        hGuides = listOfNotNull(guideY),
+    )
+}
+
 @Composable
 private fun KeyPadButtonView(
     button: KeyButton,
@@ -290,6 +415,7 @@ private fun KeyPadButtonView(
     selected: Boolean,
     onMoveTo: (Float, Float) -> Unit,
     onResizeTo: (Float, Float) -> Unit,
+    onDragEnd: () -> Unit,
     onSelect: () -> Unit,
     onKeyDown: (Int) -> Unit,
     onKeyUp: (Int) -> Unit,
@@ -305,6 +431,7 @@ private fun KeyPadButtonView(
     val moveTo by rememberUpdatedState(onMoveTo)
     val resizeTo by rememberUpdatedState(onResizeTo)
     val select by rememberUpdatedState(onSelect)
+    val dragEnd by rememberUpdatedState(onDragEnd)
 
     // 按下状态驱动"长按补发 down"的循环。编辑态不注入按键。
     var pressed by remember(button.id) { mutableStateOf(false) }
@@ -373,6 +500,7 @@ private fun KeyPadButtonView(
                         }
                         change.consume()
                     }
+                    dragEnd()
                 }
             }
         }

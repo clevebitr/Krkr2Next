@@ -856,6 +856,33 @@ class EngineSession(
      */
     fun rendererInfo(): String = rendererInfoCache
 
+    // ── 窗口菜单（§4 引擎菜单侧边栏） ────────────────────────────────────
+
+    private val windowMenuBuffer = ByteArray(NativeEngine.WINDOW_MENU_BUFFER_SIZE)
+    private val windowMenuLock = Any()
+
+    /**
+     * 读当前窗口菜单项快照。**任意线程可调**（引擎侧维护快照，加锁读）。
+     * 游戏没注册菜单时返回空列表——这是正常状态，不是错误。
+     */
+    fun windowMenu(): List<EngineMenuItem> = synchronized(windowMenuLock) {
+        val n = NativeEngine.engineListWindowMenu(windowMenuBuffer)
+        if (n <= 0) return emptyList()
+        EngineMenuParser.parse(
+            String(windowMenuBuffer, 0, minOf(n, windowMenuBuffer.size), Charsets.UTF_8),
+        )
+    }
+
+    /**
+     * 触发一个菜单项。**任意线程可调**：引擎侧只入队，真正触发在 tick 线程上做。
+     */
+    fun invokeWindowMenu(id: String) {
+        val rc = NativeEngine.engineInvokeWindowMenu(id)
+        if (rc != NativeEngine.RESULT_OK) {
+            AppLog.w(TAG, "engineInvokeWindowMenu($id) rc=$rc")
+        }
+    }
+
     private fun post(block: () -> Unit) {
         val h = handler
         if (h == null) {

@@ -22,6 +22,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,6 +38,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.util.Locale
 import org.dpdns.clevebitr.core.AppLog
 import org.dpdns.clevebitr.core.RunMode
 import org.dpdns.clevebitr.core.OverlayConfig
@@ -85,6 +87,14 @@ fun SettingsScreen(
     keyPadTemplates: Map<String, KeyPadProfile> = emptyMap(),
     onSaveKeyPadTemplate: ((String, KeyPadProfile) -> Unit)? = null,
     onDeleteKeyPadTemplate: ((String) -> Unit)? = null,
+    /** 全局默认光标触控板模式。 */
+    touchpadMode: Boolean = false,
+    onTouchpadModeChange: (Boolean) -> Unit = {},
+    touchpadSensitivity: Float = AppPrefs.TOUCHPAD_SENSITIVITY_DEFAULT,
+    onTouchpadSensitivityChange: (Float) -> Unit = {},
+    /** 游戏中右下角是否显示「引擎菜单」按钮（§4 侧边栏入口）。 */
+    engineMenuButton: Boolean = true,
+    onEngineMenuButtonChange: (Boolean) -> Unit = {},
     /** 主题档位；改完立刻换肤，所以要回调给壳层（与叠加层同理）。 */
     themeMode: String = "system",
     onThemeModeChanged: (String) -> Unit = {},
@@ -283,6 +293,38 @@ fun SettingsScreen(
                 templates = keyPadTemplates,
                 onSaveTemplate = onSaveKeyPadTemplate,
                 onDeleteTemplate = onDeleteKeyPadTemplate,
+            )
+
+            SectionTitle("输入")
+
+            SwitchRow(
+                title = "光标触控板模式",
+                subtitle = "手指变成触控板：相对拖动驱动一个虚拟光标，单指轻点=左键、" +
+                    "双指轻点=右键、双指上下拖=滚轮。适合需要鼠标的游戏（悬停高亮、" +
+                    "右键菜单、精确点选）；普通触屏操作请保持关闭。游戏中也可从悬浮菜单切换。",
+                checked = touchpadMode,
+                onCheckedChange = onTouchpadModeChange,
+            )
+            if (touchpadMode) {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                    Text(
+                        text = "灵敏度：${String.format(Locale.US, "%.1fx", touchpadSensitivity)}",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Slider(
+                        value = touchpadSensitivity,
+                        onValueChange = onTouchpadSensitivityChange,
+                        valueRange = AppPrefs.TOUCHPAD_SENSITIVITY_RANGE,
+                    )
+                }
+            }
+
+            SwitchRow(
+                title = "显示引擎菜单按钮",
+                subtitle = "游戏画面右下角的小按钮，点开是游戏注册的窗口菜单（Windows 版标题栏" +
+                    "下方那一栏：全屏、配置等）。游戏没注册菜单项时侧边栏会明确说明。",
+                checked = engineMenuButton,
+                onCheckedChange = onEngineMenuButtonChange,
             )
 
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {

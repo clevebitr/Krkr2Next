@@ -76,6 +76,7 @@ extern "C" void krkr_GetSurfaceDimensions(uint32_t *, uint32_t *);
 #include "visual/impl/WindowImpl.h"
 #include "visual/RenderManager.h"
 #include "visual/WindowIntf.h"
+#include "visual/impl/MenuItemImpl.h"
 #include "visual/TransIntf.h"
 #include "visual/FontImpl.h"
 #include "visual/FreeTypeFontRasterizer.h"
@@ -949,6 +950,50 @@ namespace {
         std::lock_guard<std::mutex> lk(g_input_queue_mutex);
         out.swap(g_input_queue);
         return out;
+    }
+
+    // ── 窗口菜单快照与触发队列 ─────────────────────────────────────────────
+    // 菜单树（tTVPMenuItem / Window.menu）只在引擎 owner 线程变动，所以快照在
+    // tick 里刷新；壳从任意线程读快照（加锁）。触发只入队，由 tick 在 owner 线程
+    // 派发——与输入队列同一套思路（见 g_input_queue_mutex 的说明）。
+    std::mutex g_menu_mutex;
+    std::string g_menu_snapshot;
+    std::mutex g_menu_invoke_mutex;
+    std::deque<std::string> g_menu_invoke_queue;
+    constexpr size_t kMaxQueuedMenuInvokes = 32;
+
+    /// 菜单树不会每帧变，按 tick 数降频刷新（~15 帧 ≈ 250ms @60fps）。
+    constexpr uint32_t kMenuRefreshIntervalTicks = 15;
+    uint32_t g_menu_refresh_countdown = 0;
+
+    void RefreshWindowMenuSnapshot() {
+        if(g_menu_refresh_countdown > 0) {
+            --g_menu_refresh_countdown;
+            return;
+        }
+        g_menu_refresh_countdown = kMenuRefreshIntervalTicks;
+        std::string fresh;
+        TVPSerializeMainWindowMenu(fresh);
+        std::lock_guard<std::mutex> lk(g_menu_mutex);
+        if(fresh != g_menu_snapshot)
+            g_menu_snapshot = std::move(fresh);
+    }
+
+    void DrainQueuedMenuInvokes() {
+        for(;;) {
+            std::string id;
+            {
+                std::lock_guard<std::mutex> lk(g_menu_invoke_mutex);
+                if(g_menu_invoke_queue.empty())
+                    break;
+                id = std::move(g_menu_invoke_queue.front());
+                g_menu_invoke_queue.pop_front();
+            }
+            if(!TVPInvokeMainWindowMenuItem(id)) {
+                spdlog::debug("window menu item '{}' not found or disabled",
+                              id);
+            }
+        }
     }
 
     void DropQueuedInputEvents() { TakeQueuedInputEvents(); }
@@ -1899,6 +1944,11 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
         }
     }
 
+    // 窗口菜单：刷新快照（供壳侧边栏读）+ 派发壳请求的菜单触发。都在本线程
+    // （owner 线程）上做，因为菜单对象属于 TJS 运行时。
+    RefreshWindowMenuSnapshot();
+    DrainQueuedMenuInvokes();
+
 #if defined(__ANDROID__)
     // Auto-attach pending ANativeWindow from JNI bridge.
     // The Kotlin plugin calls nativeSetSurface() which stores the
@@ -2842,6 +2892,8 @@ static void PumpModalInputOnTickThread() {
         spdlog::warn("PumpModalInput: 输入派发失败 err={}",
                      dispatch_error ? dispatch_error : "(unknown)");
     }
+    // 模态对话框里也可能有菜单触发请求（例如从侧边栏点"配置"），一并派发。
+    DrainQueuedMenuInvokes();
 }
 
 engine_result_t engine_send_input(engine_handle_t handle,
@@ -3180,6 +3232,46 @@ const char *engine_get_last_error(engine_handle_t handle) {
     auto *impl = reinterpret_cast<engine_handle_s *>(handle);
     std::lock_guard<std::recursive_mutex> guard(impl->mutex);
     return impl->last_error.c_str();
+}
+
+engine_result_t engine_list_window_menu(char *out_buffer, uint32_t buffer_size,
+                                        uint32_t *out_bytes_written) {
+    if(out_buffer == nullptr || buffer_size == 0) {
+        return SetThreadErrorAndReturn(
+            ENGINE_RESULT_INVALID_ARGUMENT,
+            "out_buffer is null or buffer_size is 0");
+    }
+    std::string snapshot;
+    {
+        std::lock_guard<std::mutex> lk(g_menu_mutex);
+        snapshot = g_menu_snapshot;
+    }
+    // 只写完整的行：截断到最后一个 '\n'，免得壳解析到半行。
+    if(snapshot.size() >= buffer_size) {
+        snapshot.resize(buffer_size - 1);
+        const size_t last_nl = snapshot.rfind('\n');
+        snapshot.resize(last_nl == std::string::npos ? 0 : last_nl + 1);
+    }
+    std::memcpy(out_buffer, snapshot.c_str(), snapshot.size() + 1);
+    if(out_bytes_written != nullptr)
+        *out_bytes_written = static_cast<uint32_t>(snapshot.size());
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+}
+
+engine_result_t engine_invoke_window_menu(const char *item_id_utf8) {
+    if(item_id_utf8 == nullptr || item_id_utf8[0] == '\0') {
+        return SetThreadErrorAndReturn(ENGINE_RESULT_INVALID_ARGUMENT,
+                                       "item_id_utf8 is null or empty");
+    }
+    {
+        std::lock_guard<std::mutex> lk(g_menu_invoke_mutex);
+        g_menu_invoke_queue.emplace_back(item_id_utf8);
+        if(g_menu_invoke_queue.size() > kMaxQueuedMenuInvokes)
+            g_menu_invoke_queue.pop_front();
+    }
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
 }
 
 } // extern "C"
@@ -3916,6 +4008,29 @@ const char *engine_get_last_error(engine_handle_t handle) {
     auto *impl = reinterpret_cast<engine_handle_s *>(handle);
     std::lock_guard<std::recursive_mutex> guard(impl->mutex);
     return impl->last_error.c_str();
+}
+
+engine_result_t engine_list_window_menu(char *out_buffer, uint32_t buffer_size,
+                                        uint32_t *out_bytes_written) {
+    if(out_buffer == nullptr || buffer_size == 0) {
+        return SetThreadErrorAndReturn(ENGINE_RESULT_INVALID_ARGUMENT,
+                                       "out_buffer is null or buffer_size is 0");
+    }
+    out_buffer[0] = '\0';
+    if(out_bytes_written != nullptr)
+        *out_bytes_written = 0;
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+}
+
+engine_result_t engine_invoke_window_menu(const char *item_id_utf8) {
+    if(item_id_utf8 == nullptr || item_id_utf8[0] == '\0') {
+        return SetThreadErrorAndReturn(ENGINE_RESULT_INVALID_ARGUMENT,
+                                       "item_id_utf8 is null or empty");
+    }
+    return SetThreadErrorAndReturn(
+        ENGINE_RESULT_NOT_SUPPORTED,
+        "window menu is not available in this build");
 }
 
 } // extern "C"

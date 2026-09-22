@@ -30,9 +30,9 @@
    `kag` 渲染档已删除（能力归 AetherKiri 层）。剩余 C3（阻塞于 C2）、C5/C6/C7、E1、M6 分批、
    以及**一项等用户裁决的 M1 尾巴（I3）**。
 2. **壳（Kotlin/Compose）**：九项改造全部落地；详情页已改成 **Steam 大屏式左右分栏**；
-   自定义按键浮层**已完成**（2026-09-23，`core/KeyPadConfig.kt` + `ui/KeyPadOverlay.kt` +
-   `ui/KeyPadConfigEditor.kt`）；壳的 Kotlin 编译**已能在本地跑通**（`scripts/build_shell_local.sh`）。
-   待做一项（引擎菜单侧边栏）的规格在 **`SHELL_HANDOVER.md`**。
+   自定义按键浮层、光标触控板模式、按键自动对齐参考线、**引擎菜单侧边栏**均已完成
+   （2026-09-23，后者含引擎侧 C ABI）；壳的 Kotlin 编译**已能在本地跑通**
+   （`scripts/build_shell_local.sh`）。壳侧暂无待做项。
 
 工作区除用户自己的 `.gitignore`/`README.md` 外干净（那两个文件**始终不要 add**）。
 
@@ -215,7 +215,9 @@ UI / 残留矩形。参考实现为此提供 `Layer.assignMotionImages`（把完
 | 关于页：作者/协议/仓库/技术栈/版本号 | ✅（版本号已带 git 短哈希：`v0.1.0-<hash6>-<YYMMDD>`） |
 | 详情页布局：**封面在左、按钮在右**（Steam 大屏式） | ✅ 2026-09-22（`ui/GameDetailScreen.kt`） |
 | 自定义按键浮层（位置/大小/文字/MD3 图标/颜色/透明度/描边，每游戏 + 全局模板） | ✅ 2026-09-23，规格与实现落点见 `SHELL_HANDOVER.md §3` |
-| 游戏中右下角按钮 → 右侧悬浮侧边栏显示**引擎注册的窗口菜单** | ⬜ **未做**（需新增 C ABI + JNI），规格见 `SHELL_HANDOVER.md §4` |
+| 游戏中右下角按钮 → 右侧悬浮侧边栏显示**引擎注册的窗口菜单** | ✅ 2026-09-23（`engine_list_window_menu` / `engine_invoke_window_menu` + JNI + `ui/EngineMenuSidebar.kt`），规格见 `SHELL_HANDOVER.md §4` |
+| 光标触控板模式（模拟触控板驱动光标） | ✅ 2026-09-23（`ui/Touchpad.kt`；每游戏可覆盖，悬浮菜单可切） |
+| 按键布局自动对齐参考线 | ✅ 2026-09-23（`ui/KeyPadOverlay.kt` 的 `snapPosition`） |
 
 > **壳的开发交接文档是 `SHELL_HANDOVER.md`**（本地编译闭环、文件/接口索引、两项待做功能的
 > 数据模型与落点、验收标准）。改壳前先读它。

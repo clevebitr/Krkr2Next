@@ -292,7 +292,47 @@ object AppPrefs {
             .apply()
     }
 
+    // ── 光标触控板模式 ────────────────────────────────────────────────────
+
+    /** 光标触控板模式（模拟触控板驱动光标，而不是直接把手指标成绝对坐标）。 */
+    private const val KEY_TOUCHPAD_MODE = "input.touchpad_mode"
+
+    /** 触控板相对移动的灵敏度倍率。 */
+    private const val KEY_TOUCHPAD_SENSITIVITY = "input.touchpad_sensitivity"
+
+    /** 灵敏度默认值：手机屏幕上 1:1 相对移动太慢，1.8 更接近桌面触控板手感。 */
+    const val TOUCHPAD_SENSITIVITY_DEFAULT = 1.8f
+
+    val TOUCHPAD_SENSITIVITY_RANGE = 0.5f..4.0f
+
+    fun touchpadMode(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_TOUCHPAD_MODE, false)
+
+    fun setTouchpadMode(context: Context, enabled: Boolean) =
+        prefs(context).edit().putBoolean(KEY_TOUCHPAD_MODE, enabled).apply()
+
+    fun touchpadSensitivity(context: Context): Float {
+        val v = prefs(context).getFloat(KEY_TOUCHPAD_SENSITIVITY, TOUCHPAD_SENSITIVITY_DEFAULT)
+        return if (v.isNaN()) TOUCHPAD_SENSITIVITY_DEFAULT
+        else v.coerceIn(TOUCHPAD_SENSITIVITY_RANGE)
+    }
+
+    fun setTouchpadSensitivity(context: Context, value: Float) {
+        val v = if (value.isNaN()) TOUCHPAD_SENSITIVITY_DEFAULT
+        else value.coerceIn(TOUCHPAD_SENSITIVITY_RANGE)
+        prefs(context).edit().putFloat(KEY_TOUCHPAD_SENSITIVITY, v).apply()
+    }
+
     // ── 自定义按键浮层 ────────────────────────────────────────────────────
+
+    /** 游戏中右下角是否显示「引擎菜单」按钮（§4 侧边栏入口）。默认显示。 */
+    private const val KEY_ENGINE_MENU_BUTTON = "input.engine_menu_button"
+
+    fun engineMenuButton(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ENGINE_MENU_BUTTON, true)
+
+    fun setEngineMenuButton(context: Context, enabled: Boolean) =
+        prefs(context).edit().putBoolean(KEY_ENGINE_MENU_BUTTON, enabled).apply()
 
     /** 全局默认按键浮层配置（JSON），见 [KeyPadProfile]。 */
     private const val KEY_KEYPAD_PROFILE = "input.keypad_profile"

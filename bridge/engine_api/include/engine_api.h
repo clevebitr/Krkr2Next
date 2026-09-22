@@ -475,6 +475,50 @@ ENGINE_API_EXPORT engine_result_t engine_get_memory_stats(
     engine_handle_t handle, engine_memory_stats_t *out_stats);
 
 /*
+ * Lists the window menu items registered by the game (KiriKiri's
+ * tTVPMenuItem / Window.menu — the menu bar Windows builds show under the
+ * title bar). Android has no OS menu bar, so the host renders them itself.
+ *
+ * The menu tree is serialized as text into out_buffer, one item per line,
+ * fields separated by '\t':
+ *
+ *     depth <TAB> checked <TAB> enabled <TAB> id <TAB> title
+ *
+ * Lines end with '\n'. `id` is the item's path (top level "0", "1", …, a
+ * submenu child "0.2", …) and is what engine_invoke_window_menu() takes.
+ * `checked`/`enabled` are '0' or '1'. Titles have tabs/newlines replaced by
+ * spaces. Items with visible == false are omitted.
+ *
+ * Returns the number of bytes written (excluding the NUL terminator) in
+ * out_bytes_written; an empty menu yields 0. The buffer is truncated on a
+ * line boundary if it is too small.
+ *
+ * Safe to call from any thread: the engine keeps a snapshot refreshed on its
+ * owner thread (the menu tree is only mutated there).
+ *
+ * 列出游戏注册的窗口菜单项（KiriKiri 的 tTVPMenuItem / Window.menu，即 Windows
+ * 版标题栏下方菜单栏那一套）。Android 没有系统菜单栏，所以由宿主自己渲染。
+ * 序列化格式与线程约束见上（任意线程可调；引擎在 owner 线程维护快照）。
+ */
+ENGINE_API_EXPORT engine_result_t
+engine_list_window_menu(char *out_buffer, uint32_t buffer_size,
+                        uint32_t *out_bytes_written);
+
+/*
+ * Invokes a window menu item by id (see engine_list_window_menu).
+ *
+ * Only enqueues the request: the actual invocation runs on the engine's owner
+ * thread during engine_tick, because the menu objects belong to the TJS
+ * runtime. Callable from any thread. Returns ENGINE_RESULT_INVALID_ARGUMENT
+ * for a null/empty id (an unknown id is dropped silently at dispatch time).
+ *
+ * 按 id 触发窗口菜单项。**只入队**，真正触发在 engine_tick（引擎 owner 线程）
+ * 上做（菜单对象属于 TJS 运行时），因此可从任意线程调用。
+ */
+ENGINE_API_EXPORT engine_result_t
+engine_invoke_window_menu(const char *item_id_utf8);
+
+/*
  * Returns last error message as UTF-8 null-terminated string.
  * The returned pointer remains valid until next API call on the same handle.
  * Returns empty string when no error is recorded.

@@ -527,4 +527,44 @@ Java_org_dpdns_clevebitr_core_NativeEngine_engineGetCompatProfile(
     return static_cast<jint>(written);
 }
 
+// 窗口菜单项列表，序列化成文本（格式见 engine_list_window_menu）。与
+// engineGetCompatProfile 同一套缓冲区约定：写入 UTF-8、返回字节数，失败 -1。
+// 引擎侧维护快照，所以任意线程可调。
+extern "C" JNIEXPORT jint JNICALL
+Java_org_dpdns_clevebitr_core_NativeEngine_engineListWindowMenu(
+    JNIEnv *env, jobject /*thiz*/, jbyteArray buffer) {
+    if(buffer == nullptr)
+        return -1;
+    const jsize len = env->GetArrayLength(buffer);
+    if(len <= 0)
+        return 0;
+
+    std::vector<char> tmp(static_cast<size_t>(len));
+    uint32_t written = 0;
+    const engine_result_t rc = engine_list_window_menu(
+        tmp.data(), static_cast<uint32_t>(len), &written);
+    if(rc != ENGINE_RESULT_OK)
+        return -1;
+    if(written > 0) {
+        env->SetByteArrayRegion(buffer, 0, static_cast<jsize>(written),
+                                reinterpret_cast<const jbyte *>(tmp.data()));
+    }
+    return static_cast<jint>(written);
+}
+
+// 触发窗口菜单项。引擎侧只入队，真正触发在 engine_tick（owner 线程）上做，
+// 所以可从 UI 线程直接调。
+extern "C" JNIEXPORT jint JNICALL
+Java_org_dpdns_clevebitr_core_NativeEngine_engineInvokeWindowMenu(
+    JNIEnv *env, jobject /*thiz*/, jstring id) {
+    if(id == nullptr)
+        return ENGINE_RESULT_INVALID_ARGUMENT;
+    const char *utf = env->GetStringUTFChars(id, nullptr);
+    if(utf == nullptr)
+        return ENGINE_RESULT_INTERNAL_ERROR;
+    const engine_result_t rc = engine_invoke_window_menu(utf);
+    env->ReleaseStringUTFChars(id, utf);
+    return static_cast<jint>(rc);
+}
+
 #endif // __ANDROID__

@@ -81,6 +81,8 @@ fun GameSettingsScreen(
     var overlay by remember(game.id) { mutableStateOf(config.overlay ?: globalDefaults.overlay) }
     var useOwnKeypad by remember(game.id) { mutableStateOf(config.keypad != null) }
     var keypad by remember(game.id) { mutableStateOf(config.keypad ?: globalDefaults.keypad) }
+    var useOwnTouchpad by remember(game.id) { mutableStateOf(config.touchpad != null) }
+    var touchpad by remember(game.id) { mutableStateOf(config.touchpad ?: globalDefaults.touchpad) }
 
     val globalMode = RunMode.fromConfig(
         globalDefaults.compatProfile,
@@ -99,6 +101,7 @@ fun GameSettingsScreen(
         ),
         overlay = if (useOwnOverlay) overlay else null,
         keypad = if (useOwnKeypad) keypad else null,
+        touchpad = if (useOwnTouchpad) touchpad else null,
     )
 
     Scaffold(
@@ -237,6 +240,27 @@ fun GameSettingsScreen(
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                 }
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+
+                SettingsSectionTitle("光标触控板")
+
+                SwitchRow(
+                    title = "使用独立配置",
+                    subtitle = "关掉则跟随全局默认。",
+                    checked = useOwnTouchpad,
+                    onCheckedChange = { useOwnTouchpad = it },
+                )
+                SwitchRow(
+                    title = "触控板模式",
+                    subtitle = "手指当触控板：相对拖动驱动光标，轻点=左键、双指轻点=右键、" +
+                        "双指上下拖=滚轮。适合需要鼠标的游戏。",
+                    checked = if (useOwnTouchpad) touchpad else globalDefaults.touchpad,
+                    onCheckedChange = { checked ->
+                        if (!useOwnTouchpad) useOwnTouchpad = true
+                        touchpad = checked
+                    },
+                )
 
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),

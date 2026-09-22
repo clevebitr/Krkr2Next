@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -28,6 +29,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,6 +48,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import org.dpdns.clevebitr.core.AppLog
+import org.dpdns.clevebitr.core.EngineMenuItem
 import org.dpdns.clevebitr.core.EngineSession
 import org.dpdns.clevebitr.core.KeyPadProfile
 import org.dpdns.clevebitr.core.OverlayConfig
@@ -92,6 +95,13 @@ fun GameScreen(
     keypadEditing: Boolean,
     onKeypadChange: (KeyPadProfile) -> Unit,
     onKeypadEditingChange: (Boolean) -> Unit,
+    /** 光标触控板模式：手指变触控板，相对移动驱动虚拟光标。 */
+    touchpadMode: Boolean,
+    touchpadSensitivity: Float,
+    onTouchpadModeChange: (Boolean) -> Unit,
+    /** 右下角是否显示「引擎菜单」按钮（§4 侧边栏）。 */
+    engineMenuButton: Boolean,
+    onEngineMenuButtonChange: (Boolean) -> Unit,
     /** 打开设置页。设置页会盖在游戏之上，引擎与 SurfaceView 不被销毁。 */
     onOpenSettings: () -> Unit,
     onExit: () -> Unit,
@@ -131,6 +141,19 @@ fun GameScreen(
     var logLines by remember { mutableStateOf<List<String>>(emptyList()) }
     // 按键浮层里当前选中的按钮（仅编辑态有意义）。
     var keypadSelectedId by remember { mutableStateOf<String?>(null) }
+    // 触控板模式下的虚拟光标与手势状态。
+    val touchpadState = remember { TouchpadState() }
+
+    // 引擎菜单侧边栏（§4）。菜单快照由引擎在 tick 上刷新，这里按 2Hz 拉取。
+    var engineMenuVisible by remember { mutableStateOf(false) }
+    var engineMenuItems by remember { mutableStateOf<List<EngineMenuItem>>(emptyList()) }
+    LaunchedEffect(engineMenuVisible) {
+        if (!engineMenuVisible) return@LaunchedEffect
+        while (true) {
+            engineMenuItems = session.windowMenu()
+            delay(500)
+        }
+    }
 
     // 日志由任意线程写入 AppLog，这里按固定节拍取快照——不要在组合里直接读，
     // 否则每次重组都要去抢那把锁，而且没有"变了"的信号可依赖。
@@ -164,11 +187,24 @@ fun GameScreen(
                             session.detachSurface()
                         }
                     })
-                    setOnTouchListener { _, event ->
+                    setOnTouchListener { view, event ->
                         // 菜单/日志浮层打开、或按键编辑态时吞掉触摸：否则点浮层/拖按钮
                         // 会连带把 POINTER_DOWN 送进游戏。menuOpen/logsVisible/
                         // keypadEditing 是 Compose State，闭包每次读到的都是当时的值。
-                        if (!menuOpen && !logsVisible && !keypadEditing) handleTouch(session, event)
+                        if (!menuOpen && !logsVisible && !keypadEditing && !engineMenuVisible) {
+                            if (touchpadMode) {
+                                handleTouchpadTouch(
+                                    session = session,
+                                    event = event,
+                                    state = touchpadState,
+                                    width = view.width.toFloat(),
+                                    height = view.height.toFloat(),
+                                    sensitivity = touchpadSensitivity,
+                                )
+                            } else {
+                                handleTouch(session, event)
+                            }
+                        }
                         true
                     }
                 }
@@ -187,6 +223,11 @@ fun GameScreen(
             onKeyUp = { vk -> session.sendInput(InputEvent.KEY_UP, keyCode = vk) },
             onExitEdit = { onKeypadEditingChange(false) },
         )
+
+        // 触控板模式的虚拟光标：压在浮层之上（否则会被按键盖住），但不消费触摸。
+        if (touchpadMode && !keypadEditing && !menuOpen && !logsVisible) {
+            TouchpadCursor(position = touchpadState.cursor)
+        }
 
         // 性能叠加层：左上角 (16,12)，与 AetherKiri 的 _layout_perf_overlay 同位。
         // 不设 clickable，触摸照常穿透给引擎。
@@ -227,6 +268,16 @@ fun GameScreen(
                 if (menuOpen) {
                     GameMenu(
                         keypadEditing = keypadEditing,
+                        touchpadMode = touchpadMode,
+                        engineMenuButton = engineMenuButton,
+                        onToggleEngineMenuButton = {
+                            menuOpen = false
+                            onEngineMenuButtonChange(!engineMenuButton)
+                        },
+                        onToggleTouchpad = {
+                            menuOpen = false
+                            onTouchpadModeChange(!touchpadMode)
+                        },
                         onToggleKeypadEdit = {
                             menuOpen = false
                             onKeypadEditingChange(!keypadEditing)
@@ -247,6 +298,16 @@ fun GameScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                 }
+                if (engineMenuButton) {
+                    SmallFloatingActionButton(
+                        onClick = { engineMenuVisible = true },
+                        containerColor = Color(0xCC1F1F1F),
+                        contentColor = Color.White,
+                    ) {
+                        Icon(Icons.Filled.Menu, contentDescription = "引擎菜单")
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
                 FloatingActionButton(
                     onClick = { menuOpen = !menuOpen },
                     containerColor = Color(0xCC1F1F1F),
@@ -258,6 +319,15 @@ fun GameScreen(
                     )
                 }
             }
+        }
+
+        // 引擎菜单侧边栏：压在游戏与按键浮层之上（展开时遮罩会吃掉游戏输入）。
+        if (engineMenuVisible) {
+            EngineMenuSidebar(
+                items = engineMenuItems,
+                onInvoke = { id -> session.invokeWindowMenu(id) },
+                onClose = { engineMenuVisible = false },
+            )
         }
 
         // 运行时日志浮层：必须放最后，才是压在其它叠加层之上的那一层
@@ -276,6 +346,10 @@ fun GameScreen(
 @Composable
 private fun GameMenu(
     keypadEditing: Boolean,
+    touchpadMode: Boolean,
+    engineMenuButton: Boolean,
+    onToggleEngineMenuButton: () -> Unit,
+    onToggleTouchpad: () -> Unit,
     onToggleKeypadEdit: () -> Unit,
     onShowLogs: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -283,6 +357,26 @@ private fun GameMenu(
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xE61F1F1F))) {
         Column {
+            MenuEntry(
+                label = if (touchpadMode) "触控板模式：开" else "触控板模式：关",
+                onClick = onToggleTouchpad,
+            )
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color(0x33FFFFFF)),
+            )
+            MenuEntry(
+                label = if (engineMenuButton) "隐藏引擎菜单按钮" else "显示引擎菜单按钮",
+                onClick = onToggleEngineMenuButton,
+            )
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color(0x33FFFFFF)),
+            )
             MenuEntry(
                 label = if (keypadEditing) "完成按键编辑" else "编辑自定义按键",
                 onClick = onToggleKeypadEdit,
