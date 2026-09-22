@@ -45,37 +45,7 @@
 
 ---
 
-## 1. NEKOPARA 4（`KRKR__官中_NEKOPARA_4`）— 视频位置偏移
-
-**状态：解码已修好；剩位置问题（用户：一个位置正确、一个不正确）**
-
-已修（2026-09-22，真机确认 `AMV: color JPEG decode failed` 归零）：
-- **视频帧当 CG 显示**（`Layer.loadImages("<amv>")`）：走 core 图形路由器 → `TVPLoadAMV`。
-  载荷不是标准 JPEG（无 SOI/DHT，Huffman 用标准表，DQT 取自文件头），turbojpeg 解不了。
-  已在 core 加专用解码器 `cpp/core/visual/AlphaMovieDecoder.{h,cpp}` 并接入 `LoadAMV.cpp`。
-- **翻转动画播放**：完整移植 `cpp/plugins/alphamovie.cpp`（含 `GLAlphaMovie.dll` 别名）。
-
-未解决：**同一屏幕上的视频位置一个对、一个错。**
-
-已有证据（`engine-20260922-130028.log`）：
-```
-probe: AlphaMovie.showNextImage frame=2 pos=(0,0) frame=656x720 screen=1280x720 layer=1280x720
-（仅出现 showNextImage；copyNextImageToTexture 一条都没有）
-```
-- 该 AMV 帧是 1280×720 画布里的 **656×720 裁剪**，而 `showNextImage` 把帧画在 `_left/_top`
-  （脚本 `setPosition` 设的值）——**没有应用帧头的裁剪偏移**。
-- 注意：上面那次探针**漏打了 `crop=(l,t)`**，已补全（见 §0 探针表）。
-
-**下一步**：
-1. 装最新探针构建跑一次，取 `probe: AlphaMovie.showNextImage [<amv>] frame=n/N crop=(l,t) WxH pos=(x,y) …`。
-2. 对比"正确"与"不正确"两个 AMV 的 `crop` 与 `pos`：若正确的 `crop` 为 `(0,0)`、不正确的非零，
-   则确认是 `showNextImage` 未应用裁剪偏移；修点在 `alphamovie.cpp` 的
-   `m_BmpBits->Update(frameData, pitch, _left, _top, w, h)` 落点。
-3. 顺带确认 `_screenWidth/_screenHeight`（1280×720）与 `layer`（1280×720）一致后再动。
-
----
-
-## 2. nainiuniu5krkr（G2）— 进动画卡 4.4s + 帧率 ~43–45
+## 1. nainiuniu5krkr（G2）— 进动画卡 4.4s + 帧率 ~43–45
 
 **状态：递归与 Live2D 已修好；剩性能问题**
 
@@ -123,7 +93,7 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
 
 ---
 
-## 3. 千恋万花（`KRKR汉化高压_千恋万花`）— 多个独立问题
+## 2. 千恋万花（`KRKR汉化高压_千恋万花`）— 多个独立问题
 
 **状态：图片路径正常；三个独立问题待处理**
 
@@ -131,7 +101,7 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
 - `probe: Layer.loadImages(psb://quickmenu.pimg/*.tlg)` 一串 ⇒ 图片/E-mote 加载路径正常。
 - **`Transition handler 'wave' not found, falling back to crossfade`** ⇒ `wave` 转场未实现。
 - **卡死**：`.stall` 记 `render-thread-stall`，阶段 `Application::Run: SystemWatchTimerTimer`
-  （与 G2 同源，见 §2 未解决 ③）。
+  （与 G2 同源，见 §1 未解决 ③）。
 - `convertImage: RL decode failed … raw palette` ⇒ **已知小图标回退**
   （`cpp/plugins/psbfile/PSBMedia.cpp` 有注释：m2logo icon32/icon18 的未压缩调色图被标成 RL），非根因。
 - **SDCG 无法正确渲染在 UI 之上**（用户 2026-09-22 明确）。
@@ -139,11 +109,11 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
 **下一步**：
 1. `wave` 转场：按 KAGEX 规范补实现（确定的功能缺口，可独立做）。
 2. SDCG 层级：先定位是图层顺序问题还是 SD 图层的合成路径问题（需要具体界面/操作）。
-3. 卡死：与 §2 未解决 ③ 同一处理（`SystemWatchTimerTimer` 细阶段探针）。
+3. 卡死：与 §1 未解决 ③ 同一处理（`SystemWatchTimerTimer` 细阶段探针）。
 
 ---
 
-## 4. 渲染器架构评估（背景，非 issue）
+## 3. 渲染器架构评估（背景，非 issue）
 
 详见 `render-diff.md`。三点结论：
 - **耦合**：接口 `iTVPRenderManager` / `iTVPTexture2D` 干净，但实现层 GL 知识散落在
@@ -160,7 +130,7 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
 
 ---
 
-## 5. 本地验证命令
+## 4. 本地验证命令
 
 ```bash
 bash scripts/check_static.sh          # JNI 符号 / 移植清单 / 语法

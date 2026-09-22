@@ -2948,12 +2948,51 @@ tjs_int tTJSNI_AlphaMovie::showNextImage(tTJSVariant layer)
             std::unique_ptr<tjs_uint8[]> frameData(ready.ptrData);
             if (frameData != nullptr && ready.width > 0 && ready.height > 0)
             {
-                m_BmpBits->Update(frameData.get(), ready.width * 4, _left, _top,
-                                  ready.width, ready.height);
+                // 帧头的 left/top 是裁剪块在整幅 AMV 画布中的位置（NEKOPARA
+                // 的 c1 变体＝角色在右半屏＝(636,0)，c2 变体＝(0,0)），必须
+                // 叠加到落笔点上；只用 _left/_top 会把 c1 的帧画到左半屏。
+                // 与原版 AlphaMovie.dll 一致：反汇编可见 showNextImage 的
+                // 落笔点就是 (frame_left + _left, frame_top + _top)。
+                // 越界部分要自己裁掉——GL 的 glTexSubImage2D 遇到
+                // x+w>width 会报 GL_INVALID_VALUE 并整块丢弃，不做裁剪；
+                // 原版是软件绘制，越界部分由图层自身裁剪。
+                const tjs_int canvasWidth =
+                    static_cast<tjs_int>(m_BmpBits->GetWidth());
+                const tjs_int canvasHeight =
+                    static_cast<tjs_int>(m_BmpBits->GetHeight());
+                tjs_int srcOffsetX = 0;
+                tjs_int srcOffsetY = 0;
+                tjs_int dstX = _left + static_cast<tjs_int>(ready.left);
+                tjs_int dstY = _top + static_cast<tjs_int>(ready.top);
+                tjs_int copyWidth = static_cast<tjs_int>(ready.width);
+                tjs_int copyHeight = static_cast<tjs_int>(ready.height);
+                if (dstX < 0)
+                {
+                    srcOffsetX = -dstX;
+                    copyWidth -= srcOffsetX;
+                    dstX = 0;
+                }
+                if (dstY < 0)
+                {
+                    srcOffsetY = -dstY;
+                    copyHeight -= srcOffsetY;
+                    dstY = 0;
+                }
+                copyWidth = std::min(copyWidth, canvasWidth - dstX);
+                copyHeight = std::min(copyHeight, canvasHeight - dstY);
+                if (copyWidth > 0 && copyHeight > 0)
+                {
+                    const tjs_uint8 *framePixels =
+                        frameData.get() +
+                        (static_cast<size_t>(srcOffsetY) * ready.width +
+                         srcOffsetX) * 4;
+                    m_BmpBits->Update(framePixels, ready.width * 4, dstX, dstY,
+                                      copyWidth, copyHeight);
+                }
 #if defined(KRKR_RENDER_PROBE)
                 // 几何探针：帧尺寸正常但整体偏移时，需要知道游戏给的位置
-                // （_left/_top，由 setPosition 设）、帧自身尺寸、屏幕尺寸、
-                // 以及图层实际尺寸——四者才能定位偏移来源。
+                // （_left/_top，由 setPosition 设）、帧头裁剪偏移、帧自身
+                // 尺寸、屏幕尺寸与图层实际尺寸——五者才能定位偏移来源。
                 {
                     static int s_showGeomProbe = 0;
                     if(s_showGeomProbe < 40) {

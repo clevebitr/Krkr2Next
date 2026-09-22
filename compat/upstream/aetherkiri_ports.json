@@ -125,8 +125,8 @@
       "local": "cpp/plugins/alphamovie.cpp",
       "upstream": "cpp/plugins/alphamovie.cpp",
       "modifications": "local-fix",
-      "reason": "AlphaMovie.dll 完整实现（替换原 158 行 stub）。NEKOPARA 4 的 AMV 帧载荷不是标准 JPEG：AlphaMovie.dll 自带 Huffman 编码，载荷无 SOI/DHT（Huffman 用标准表）、DQT 取自文件头，因此 turbojpeg 报 Could not determine subsampling level。本文件内含完整 baseline JPEG 解码器与帧解析；另注册 GLAlphaMovie.dll 别名。【local-fix】仅在两处呈现路径（showNextImage / copyNextImageToTexture）加了 KRKR_RENDER_PROBE 保护的几何探针（各前 6 次），用于定位真机反馈的『视频尺寸正常但整体偏移』并确认游戏实际走哪条路径；其余逐字节同上游。",
-      "sha256_local": "137fbd1be33bb45470ad6fd7c04ff22b423b39f1b11032f3691bdd0de7de6885",
+      "reason": "AlphaMovie.dll 完整实现（替换原 158 行 stub）。NEKOPARA 4 的 AMV 帧载荷不是标准 JPEG：AlphaMovie.dll 自带 Huffman 编码，载荷无 SOI/DHT（Huffman 用标准表）、DQT 取自文件头，因此 turbojpeg 报 Could not determine subsampling level。本文件内含完整 baseline JPEG 解码器与帧解析；另注册 GLAlphaMovie.dll 别名。【local-fix】相对上游两处改动：(1) showNextImage / copyNextImageToTexture 两条呈现路径各加 KRKR_RENDER_PROBE 保护的几何探针（各前 40 次），记录 AMV 名、帧号/总帧数、帧头裁剪矩形、落笔点、屏幕与图层尺寸；(2) 修正 showNextImage 的落笔点——上游只用脚本 setPosition 的 _left/_top，丢掉帧头裁剪矩形 left/top（NEKOPARA 4 的 c1 变体＝右半屏角色＝(636,0)/656x720，c2 变体＝(0,0)），导致右半屏动画被画到左半屏；现改为 (_left+frame_left, _top+frame_top)（与原版 AlphaMovie.dll 反汇编一致：其 showNextImage 同样把帧头 left/top 与 setPosition 偏移相加），并自行裁剪越界部分（GL 的 glTexSubImage2D 对 x+w>width 报 GL_INVALID_VALUE 并丢弃整块，不做裁剪）。其余逐字节同上游。",
+      "sha256_local": "c8948376a59bbd93990e455ce31b96a4a1041c2c07f8ee2c6a1e1af0a71a0c6c",
       "sha256_upstream_at_rev": "d8be10bb14225c6dd7faee37f2e5fe65437aaa9cc5135d320c201b9a9c3b55e0"
     },
     {

@@ -10,19 +10,19 @@
 ## 0. 一句话现状（2026-09-22）
 
 **当前主战场：渲染层**。三款游戏（NEKOPARA 4 / 千恋万花 / nainiuniu5krkr=G2）的问题都已
-从"现象"推进到"可定位"，其中**两条已修好并在真机确认**：
+从"现象"推进到"可定位"，其中**四条已修好并在真机确认**、**一条已修待真机回归**：
 
 - **G2 启动期 `diffimage2.tjs` 无限递归 → 已修**（A 块回退补上方法调用路径）
 - **G2 Live2D 从未被驱动 + 图片以 ZIP 头加载失败 → 已修**（伴生脚本遮蔽游戏脚本，`TVPGetPlacedPath` 解析顺序 bug）
 - **NEKOPARA 的 AMV 解码失败（视频帧当 CG 显示）→ 已修**（AlphaMovie 解码器下沉 core）
 - **NEKOPARA 的 AMV 播放 → 已修**（完整移植 AlphaMovie 插件）
+- **NEKOPARA 翻转动画位置偏移（c1/c2 一步对一步错）→ 已修待真机回归**（`showNextImage` 补上帧头裁剪偏移 + 越界裁剪，见 §1.4）
 
 **当前未解决**（详见 `render-issues.md`）：
 
-1. **NEKOPARA 视频位置**：一个位置正确、一个不正确（几何探针已补全，待下一轮日志）
-2. **G2 进动画卡 4.4s**：已细分到 `CreateRenderer(1920x1080)` 本身 2689ms
-3. **G2 帧率 ~43–45（目标 60）**：每帧 1920×1080 GPU→CPU 回读（插件设计使然）
-4. **千恋万花 `wave` 转场缺失 + `SystemWatchTimerTimer` 卡顿 + SDCG 层级**
+1. **G2 进动画卡 4.4s**：已细分到 `CreateRenderer(1920x1080)` 本身 2689ms
+2. **G2 帧率 ~43–45（目标 60）**：每帧 1920×1080 GPU→CPU 回读（插件设计使然）
+3. **千恋万花 `wave` 转场缺失 + `SystemWatchTimerTimer` 卡顿 + SDCG 层级**
 
 其余两条目标的状态：
 
@@ -100,7 +100,26 @@ NEKOPARA 的 AMV 帧载荷**不是标准 JPEG**：`AlphaMovie.dll` 自带 Huffma
 
 **未做（下一步）**：让 `alphamovie.cpp` 改为调用 core 解码器，删掉重复的 ~1700 行实现。
 
-### 1.4 其他
+### 1.4 AlphaMovie 帧落笔点：补上帧头裁剪偏移（NEKOPARA 翻转动画位置错误）
+
+`showNextImage()` 原来把解码帧画在 `(_left, _top)`——那是脚本 `setPosition` 设的值，
+**丢掉了帧头的裁剪矩形**。NEKOPARA 4 的 AMV 把角色区域编进帧头：`c1` 变体＝角色在
+右半屏＝`crop=(636,0) 656x720`，`c2` 变体＝`(0,0)`。于是同一套代码下 c2 正常、c1 整体
+左移 636px——正是"一个位置正确、一个不正确"。
+
+证据（真机 `engine-20260922-145722.log` + 直接解析 `vol4adult.xp3` 里 `neko4_h02c1a.amv` 的帧头）：
+```
+probe: AlphaMovie.showNextImage [neko4_h02c1a.amv] frame=2/60 crop=(636,0) 656x720 pos=(0,0) screen=1280x720 layer=1280x720
+```
+所有 `*c1*` 变体首帧均为 `(636,0) 656x720`，`*c2*`/`H10*` 为 `(0,0)`。
+
+修法（`cpp/plugins/alphamovie.cpp`，属 `local-fix`）：落笔点改为
+`(_left + frame_left, _top + frame_top)`，并**自行裁剪越界部分**——GL 的
+`glTexSubImage2D` 对 `x+w>width` 报 `GL_INVALID_VALUE` 并丢弃整块，不会裁剪；c1 的
+`636+656=1292` 正好超出 1280。同一语义在校验过的两条路径上一致：core 的
+`LoadAMV.cpp`（视频帧当 CG）与插件的 `copyNextImageToTexture`（GL 路径）都用帧头裁剪偏移。
+
+### 1.5 其他
 
 - `cpp/core/visual/LayerIntf.{h,cpp}`：补 `ExchangeMainImage`（AlphaMovie 移植所需的唯一外部
   API 缺口；片段移植，落点有注释）。
@@ -212,7 +231,6 @@ NEKOPARA 的 AMV 帧载荷**不是标准 JPEG**：`AlphaMovie.dll` 自带 Huffma
 
 | 项 | 规模 | 状态/阻塞 |
 |---|---|---|
-| NEKOPARA **视频位置**（一个对一个错） | 小 | 几何探针已补全（含 AMV 名、`crop=(l,t)`、帧序号/总帧数、上限 40）；**待下一轮日志**。怀疑 `showNextImage` 只用 `_left/_top`、未应用帧头裁剪偏移 |
 | G2 **进动画卡 4.4s** | 中 | 已细分：`createRenderer=2689ms bindTexture=0ms mvp=0ms`（1920×1080，1 张纹理）⇒ 卡在 `CreateRenderer`；需继续查 Cubism 渲染器/掩码缓冲创建 |
 | G2 **帧率 ~43–45** | 中 | 每帧 1920×1080 **GPU→CPU 回读**（`capture` 路径**刻意优先 CPU**：引擎随后按 CPU 位图重传纹理会覆盖只写纹理的内容）；主窗口走 `path=GPU`，只有 Live2D 图层退化。附带：该回读用 `GL_BGRA_EXT` 调 `glReadPixels`，ES3 非法 → `err=0x0502` |
 | G2 / 千恋万花 **`SystemWatchTimerTimer` 卡顿**（1.5–1.9s） | 中 | 卡在 `DeliverEvents()` 或 `TickBeat()` 循环（内层 MarkStage 未触发）；需在该函数内加细阶段探针 |
@@ -283,7 +301,7 @@ gh run view "$RID" --repo clevebitr/Krkr2Next --log-failed | rg -i "error:|undef
 | IO 组件 | `cpp/core/io/`（`StoragePolicy.h` 策略契约；`IoPolicy.*`；`IoModuleLocator.*`；`IoVirtualFile.*` 虚拟文件注册点） |
 | 兼容层框架 | `cpp/core/compat/`（`CompatLayer.*`、`ModuleGate.*`、`AetherKiriCompanions.*`） |
 | A 块 TJS 回退 | `cpp/core/tjs2/tjsObject.cpp`（`TJSCompatResolve*`，含 **FuncCall** 链） |
-| **AlphaMovie** | 插件 `cpp/plugins/alphamovie.cpp`（上游逐字节 + `local-fix` 探针）；core 解码器 `cpp/core/visual/AlphaMovieDecoder.{h,cpp}`（`partial-extract`）；接入点 `cpp/core/visual/LoadAMV.cpp` |
+| **AlphaMovie** | 插件 `cpp/plugins/alphamovie.cpp`（上游逐字节 + `local-fix` 几何探针 + 帧落笔点裁剪偏移修复）；core 解码器 `cpp/core/visual/AlphaMovieDecoder.{h,cpp}`（`partial-extract`）；接入点 `cpp/core/visual/LoadAMV.cpp` |
 | 图形加载器注册表 | `cpp/core/visual/GraphicsLoaderIntf.cpp`（`.amv` 在第 238 行；`TVPRegisterGraphicLoadingHandler` 是对外注册 API） |
 | StallWatchdog（卡死探针） | `cpp/core/utils/StallWatchdog.h`（阈值 1500ms，卡死写 `<log>.stall`） |
 | 层专属插件 | `cpp/plugins/compat/aetherkiri/` |
@@ -294,10 +312,8 @@ gh run view "$RID" --repo clevebitr/Krkr2Next --log-failed | rg -i "error:|undef
 
 ## 9. 下一轮建议顺序
 
-1. **NEKOPARA 视频位置（最接近出结果）**：让用户装最新探针构建跑一次，取
-   `probe: AlphaMovie.showNextImage [<amv>] frame=n/N crop=(l,t) WxH pos=(x,y) screen=… layer=…`。
-   对照"正确"与"不正确"两个 AMV 的 `crop` 与 `pos`，判断是否 `showNextImage` 未应用裁剪偏移
-   （它目前只把帧画在 `_left/_top`）。若是，修法在插件内（`m_BmpBits->Update(...)` 的落点）。
+1. **NEKOPARA 翻转动画位置（已修，先做真机回归）**：装最新构建跑一次 c1/c2 变体，确认
+   右半屏角色（`neko4_h02c1a.amv` 等 `*c1*`）与左半屏角色（`*c2*`）都落在正确位置。
 2. **AlphaMovie 插件复用 core 解码器**：删掉插件内重复实现（单独提交、便于回退）。
 3. **G2 进动画 4.4s**：继续查 `CreateRenderer(1920x1080)` 为何 2689ms
    （Cubism 掩码缓冲/GL 资源创建；可在 `CreateRenderer` 前后加更细计时）。
