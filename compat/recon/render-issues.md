@@ -123,8 +123,10 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
     `AffineSource情報プール用`、目标父层不在池内）把该交付路由到交换语义。
   - 待验证：真机确认 SD 正常出现并持续（不再一两秒后消失）、残留矩形是否消失。
 - **启动 logo（`m2logo.mtn` / `yuzulogo.mtn`）**：颜色偏淡蓝而非红、播完残留两个矩形。
-  已排除「PSB 解码通道序」：`PSBMedia.cpp` 全量输出 BGRA、全游戏一致，非本资源专属；
-  很可能与上面的纹理别名同源（logo 也走 D3DEmote 交付），先看 SD 回归结果。
+  - 已排除「PSB 解码通道序」：`PSBMedia.cpp` 全量输出 BGRA、全游戏一致，非本资源专属。
+  - 已排除 `blandlogo1.png` 缺失：参考引擎在同一作同样报 85 次（游戏自带脚本引用了这个
+    不存在的品牌 logo 资源），非本仓库 IO 问题。
+  - 很可能与上面的纹理别名同源（logo 也走 D3DEmote 交付），先看 SD 回归结果。
 - **字体/文字颜色偏白**（应为厂商预设淡灰）：参考引擎为本作应用了
   `message edge argument routing`（`EdgeShadowDrawText` 的 e/ecol 参数路由）等 7 个标题
   专属 hook，KiriNext **一个都没有**（`AetherKiri cpp/core/base/ScriptMgnIntf.cpp`）。
