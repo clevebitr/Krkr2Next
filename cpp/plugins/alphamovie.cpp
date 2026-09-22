@@ -2956,14 +2956,15 @@ tjs_int tTJSNI_AlphaMovie::showNextImage(tTJSVariant layer)
                 // 以及图层实际尺寸——四者才能定位偏移来源。
                 {
                     static int s_showGeomProbe = 0;
-                    if(s_showGeomProbe < 6) {
+                    if(s_showGeomProbe < 40) {
                         ++s_showGeomProbe;
                         spdlog::info(
-                            "probe: AlphaMovie.showNextImage frame={} "
-                            "pos=({},{}) frame={}x{} screen={}x{} "
-                            "layer={}x{}",
-                            frameIndex, _left, _top, ready.width,
-                            ready.height, _screenWidth, _screenHeight,
+                            "probe: AlphaMovie.showNextImage [{}] "
+                            "frame={}/{} crop=({},{}) {}x{} pos=({},{}) "
+                            "screen={}x{} layer={}x{}",
+                            amvFileName_.AsStdString(), frameIndex, _numOfFrame,
+                            ready.left, ready.top, ready.width, ready.height,
+                            _left, _top, _screenWidth, _screenHeight,
                             (long)src->GetWidth(), (long)src->GetHeight());
                     }
                 }
@@ -3054,14 +3055,14 @@ tjs_int tTJSNI_AlphaMovie::copyNextImageToTexture(tjs_int64 textureHandle,
     // 用帧头的 left/top。这两者任一错都会表现为“尺寸正常但整体偏移”。
     {
         static int s_copyGeomProbe = 0;
-        if(s_copyGeomProbe < 6) {
+        if(s_copyGeomProbe < 40) {
             ++s_copyGeomProbe;
             spdlog::info(
-                "probe: AlphaMovie.copyNextImageToTexture frame={} "
+                "probe: AlphaMovie.copyNextImageToTexture [{}] frame={} "
                 "rect=({},{})-({},{}) frame={}x{} target={}x{} atlasTop={}",
-                frameIndex, ready.left, ready.top, ready.left + ready.width,
-                ready.top + ready.height, ready.width, ready.height,
-                targetWidth, targetHeight,
+                amvFileName_.AsStdString(), frameIndex, ready.left, ready.top,
+                ready.left + ready.width, ready.top + ready.height, ready.width,
+                ready.height, targetWidth, targetHeight,
                 static_cast<tjs_int>(targetHeight - ready.height));
         }
     }
