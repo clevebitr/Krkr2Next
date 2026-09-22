@@ -97,6 +97,12 @@ fun GameScreen(
     startupState: Int,
     statusText: String,
     /**
+     * 加载期自动日志：为真时，从进入本画面到 `startup state -> 2` 期间自动弹出
+     * 运行时日志浮层，进游戏后自动关闭。全局默认与每游戏覆盖**已在启动时合并**
+     * （见 `SHELL_HANDOVER.md §7`）。
+     */
+    autoShowLogs: Boolean = false,
+    /**
      * 本次会话生效的叠加层配置（全局默认与每游戏覆盖**已在启动时合并**）。
      * **由 MainActivity 持有并传进来**，不在本文件里读偏好设置：游戏内菜单能直接打开
      * 设置页，改完要立刻生效，而 `remember { AppPrefs... }` 只在首次组合时读一次，
@@ -155,6 +161,9 @@ fun GameScreen(
     // 悬浮菜单与运行时日志浮层
     var menuOpen by remember { mutableStateOf(false) }
     var logsVisible by remember { mutableStateOf(false) }
+    // 用户手动关过日志后，本局不再自动弹（否则进游戏前又被弹回来）。
+    // 每个会话 GameScreen 都会重新组合，所以这个标志自然按局重置。
+    var userClosedLogs by remember { mutableStateOf(false) }
     var logLines by remember { mutableStateOf<List<String>>(emptyList()) }
     // 按键浮层里当前选中的按钮（仅编辑态有意义）。
     var keypadSelectedId by remember { mutableStateOf<String?>(null) }
@@ -206,6 +215,17 @@ fun GameScreen(
         while (true) {
             logLines = AppLog.recent()
             delay(300)
+        }
+    }
+
+    // 加载期自动日志：进入游戏（startup state 2）就关掉；在此之前按开关自动弹出。
+    // 失败态（3）**不关**——那时日志正是用户要看的东西。
+    LaunchedEffect(startupState, autoShowLogs) {
+        if (startupState == NativeEngine.STARTUP_SUCCEEDED) {
+            logsVisible = false
+        } else if (autoShowLogs && !userClosedLogs) {
+            logLines = AppLog.recent()
+            logsVisible = true
         }
     }
 
@@ -487,7 +507,10 @@ fun GameScreen(
         if (logsVisible) {
             RuntimeLogOverlay(
                 lines = logLines,
-                onClose = { logsVisible = false },
+                onClose = {
+                    logsVisible = false
+                    userClosedLogs = true
+                },
             )
         }
     }

@@ -93,6 +93,21 @@ object AppPrefs {
         prefs(context).edit().putString(KEY_PERF_OVERLAY, normalized).apply()
     }
 
+    /**
+     * 加载游戏时自动弹出运行时日志浮层（进游戏后自动关）。默认**关**。
+     *
+     * 为什么需要：引擎在 `startup state -> 2` 之前出的错（缺文件、脚本异常、兼容层
+     * 没接上）往往发生在用户还没来得及点开日志浮层的时候，而问题一旦表现成“黑屏/
+     * 卡住”，用户也没有机会去点。打开这个开关就把那段时间的日志直接摊在屏幕上。
+     */
+    private const val KEY_AUTO_LOG_ON_LAUNCH = "debug.auto_log_on_launch"
+
+    fun autoLogOnLaunch(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_AUTO_LOG_ON_LAUNCH, false)
+
+    fun setAutoLogOnLaunch(context: Context, enabled: Boolean) =
+        prefs(context).edit().putBoolean(KEY_AUTO_LOG_ON_LAUNCH, enabled).apply()
+
     // ── 界面状态 ──────────────────────────────────────────────────────────
 
     /** 上次浏览的目录；不存在或已不可用就返回 null，由调用方回退到默认根目录。 */

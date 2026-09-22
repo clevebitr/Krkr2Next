@@ -150,6 +150,13 @@ class MainActivity : ComponentActivity() {
     private var sessionTouchpadIsPerGame = false
     private var sessionTouchpadSensitivity by mutableStateOf(AppPrefs.TOUCHPAD_SENSITIVITY_DEFAULT)
 
+    /**
+     * 本次会话是否在加载期自动弹出日志浮层（全局默认与每游戏覆盖已在启动时合并）。
+     * 只是显示开关，引擎不读它，所以游戏内改全局默认可以立刻跟到本局。
+     */
+    private var sessionAutoLogOnLaunch by mutableStateOf(false)
+    private var sessionAutoLogIsPerGame = false
+
     // ── 游戏库与设置状态 ──
     private lateinit var library: GameLibrary
     private var games by mutableStateOf<List<LibraryGame>>(emptyList())
@@ -160,6 +167,7 @@ class MainActivity : ComponentActivity() {
     private var touchpadDefault by mutableStateOf(false)
     private var touchpadSensitivity by mutableStateOf(AppPrefs.TOUCHPAD_SENSITIVITY_DEFAULT)
     private var engineMenuButton by mutableStateOf(true)
+    private var autoLogOnLaunch by mutableStateOf(false)
 
     private var themeMode by mutableStateOf("system")
     private var fontFallbackMode by mutableStateOf("auto")
@@ -206,6 +214,7 @@ class MainActivity : ComponentActivity() {
         touchpadDefault = AppPrefs.touchpadMode(this)
         touchpadSensitivity = AppPrefs.touchpadSensitivity(this)
         engineMenuButton = AppPrefs.engineMenuButton(this)
+        autoLogOnLaunch = AppPrefs.autoLogOnLaunch(this)
         themeMode = AppPrefs.themeMode(this)
         fontFallbackMode = AppPrefs.fontFallbackMode(this)
         oglDrawDeviceCompat = AppPrefs.oglDrawDeviceCompat(this)
@@ -268,6 +277,7 @@ class MainActivity : ComponentActivity() {
                                 startupState = startupState,
                                 statusText = statusText,
                                 overlayConfig = sessionOverlay,
+                                autoShowLogs = sessionAutoLogOnLaunch,
                                 keypadConfig = sessionKeypad,
                                 keypadEditing = keypadEditing,
                                 onKeypadChange = { sessionKeypad = it; sessionKeypadDirty = true },
@@ -518,6 +528,13 @@ class MainActivity : ComponentActivity() {
                 touchpadSensitivity = value
                 AppPrefs.setTouchpadSensitivity(this, value)
             },
+            autoLogOnLaunch = autoLogOnLaunch,
+            onAutoLogOnLaunchChange = { enabled ->
+                autoLogOnLaunch = enabled
+                AppPrefs.setAutoLogOnLaunch(this, enabled)
+                // 只是显示开关：该游戏没有独立配置时本局立刻跟着变，不用退出重进
+                if (!sessionAutoLogIsPerGame) sessionAutoLogOnLaunch = enabled
+            },
             engineMenuButton = engineMenuButton,
             onEngineMenuButtonChange = { enabled ->
                 engineMenuButton = enabled
@@ -647,6 +664,7 @@ class MainActivity : ComponentActivity() {
         overlay = overlayConfig,
         keypad = keypadConfig,
         touchpad = touchpadDefault,
+        autoLogOnLaunch = autoLogOnLaunch,
     )
 
     // ── 引擎会话 ────────────────────────────────────────────────────────────
@@ -695,6 +713,8 @@ class MainActivity : ComponentActivity() {
         sessionTouchpad = resolved.touchpad
         sessionTouchpadIsPerGame = config.touchpad != null
         sessionTouchpadSensitivity = touchpadSensitivity
+        sessionAutoLogOnLaunch = resolved.autoLogOnLaunch
+        sessionAutoLogIsPerGame = config.autoLogOnLaunch != null
 
         AppLog.i(
             TAG,

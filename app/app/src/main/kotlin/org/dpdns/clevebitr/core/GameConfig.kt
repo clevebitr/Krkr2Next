@@ -152,13 +152,15 @@ data class GameConfig(
     val keypad: KeyPadProfile? = null,
     /** null = 光标触控板模式也继承全局。 */
     val touchpad: Boolean? = null,
+    /** null = "加载期自动显示日志"也继承全局。 */
+    val autoLogOnLaunch: Boolean? = null,
     val metadata: GameMetadata = GameMetadata(),
     /** 用户备注；刮削给不了的信息（汉化组、版本、踩坑记录）放这里。 */
     val notes: String? = null,
 ) {
     val isEmpty: Boolean
         get() = engine.isEmpty && overlay == null && keypad == null && touchpad == null &&
-            metadata.isEmpty && notes.isNullOrBlank()
+            autoLogOnLaunch == null && metadata.isEmpty && notes.isNullOrBlank()
 
     fun toJson(): JSONObject = JSONObject().apply {
         put(KEY_SCHEMA, SCHEMA)
@@ -166,6 +168,7 @@ data class GameConfig(
         overlay?.let { put(KEY_OVERLAY, it.toJson()) }
         keypad?.let { put(KEY_KEYPAD, it.toJson()) }
         touchpad?.let { put(KEY_TOUCHPAD, it) }
+        autoLogOnLaunch?.let { put(KEY_AUTO_LOG_ON_LAUNCH, it) }
         if (!metadata.isEmpty) put(KEY_METADATA, metadata.toJson())
         notes?.takeIf { it.isNotBlank() }?.let { put(KEY_NOTES, it) }
     }
@@ -179,6 +182,7 @@ data class GameConfig(
         const val KEY_OVERLAY = "overlay"
         const val KEY_KEYPAD = "keypad"
         const val KEY_TOUCHPAD = "touchpad"
+        const val KEY_AUTO_LOG_ON_LAUNCH = "autoLogOnLaunch"
         const val KEY_METADATA = "metadata"
         const val KEY_NOTES = "notes"
 
@@ -192,6 +196,11 @@ data class GameConfig(
                 overlay = OverlayConfig.fromJson(json.optJSONObject(KEY_OVERLAY)),
                 keypad = KeyPadProfile.fromJson(json.optJSONObject(KEY_KEYPAD)),
                 touchpad = if (json.has(KEY_TOUCHPAD)) json.optBoolean(KEY_TOUCHPAD, false) else null,
+                autoLogOnLaunch = if (json.has(KEY_AUTO_LOG_ON_LAUNCH)) {
+                    json.optBoolean(KEY_AUTO_LOG_ON_LAUNCH, false)
+                } else {
+                    null
+                },
                 metadata = GameMetadata.fromJson(json.optJSONObject(KEY_METADATA)),
                 notes = json.optString(KEY_NOTES, "").takeIf { it.isNotEmpty() },
             )
@@ -342,6 +351,8 @@ data class GlobalDefaults(
     val keypad: KeyPadProfile = KeyPadProfile.starter(),
     /** 全局默认光标触控板模式（默认关）。 */
     val touchpad: Boolean = false,
+    /** 全局默认"加载游戏时自动显示运行时日志浮层"（默认关）。 */
+    val autoLogOnLaunch: Boolean = false,
 )
 
 /** 合并后的结果：壳各处（启动、叠加层）只认它。 */
@@ -353,6 +364,7 @@ data class ResolvedShellSettings(
     val overlay: OverlayConfig,
     val keypad: KeyPadProfile,
     val touchpad: Boolean,
+    val autoLogOnLaunch: Boolean,
 )
 
 /** 逐项合并：每游戏写了用它的，没写用全局默认。 */
@@ -364,6 +376,7 @@ fun GameConfig.resolve(global: GlobalDefaults): ResolvedShellSettings = Resolved
     overlay = overlay ?: global.overlay,
     keypad = keypad ?: global.keypad,
     touchpad = touchpad ?: global.touchpad,
+    autoLogOnLaunch = autoLogOnLaunch ?: global.autoLogOnLaunch,
 )
 
 /**

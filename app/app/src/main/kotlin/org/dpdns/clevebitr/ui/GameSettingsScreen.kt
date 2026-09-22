@@ -83,6 +83,10 @@ fun GameSettingsScreen(
     var keypad by remember(game.id) { mutableStateOf(config.keypad ?: globalDefaults.keypad) }
     var useOwnTouchpad by remember(game.id) { mutableStateOf(config.touchpad != null) }
     var touchpad by remember(game.id) { mutableStateOf(config.touchpad ?: globalDefaults.touchpad) }
+    var useOwnAutoLog by remember(game.id) { mutableStateOf(config.autoLogOnLaunch != null) }
+    var autoLog by remember(game.id) {
+        mutableStateOf(config.autoLogOnLaunch ?: globalDefaults.autoLogOnLaunch)
+    }
 
     val globalMode = RunMode.fromConfig(
         globalDefaults.compatProfile,
@@ -102,6 +106,7 @@ fun GameSettingsScreen(
         overlay = if (useOwnOverlay) overlay else null,
         keypad = if (useOwnKeypad) keypad else null,
         touchpad = if (useOwnTouchpad) touchpad else null,
+        autoLogOnLaunch = if (useOwnAutoLog) autoLog else null,
     )
 
     Scaffold(
@@ -259,6 +264,28 @@ fun GameSettingsScreen(
                     onCheckedChange = { checked ->
                         if (!useOwnTouchpad) useOwnTouchpad = true
                         touchpad = checked
+                    },
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+
+                SettingsSectionTitle("加载期日志")
+
+                SwitchRow(
+                    title = "使用独立配置",
+                    subtitle = "关掉则跟随全局默认（当前：" +
+                        "${if (globalDefaults.autoLogOnLaunch) "已开启" else "已关闭"}）。",
+                    checked = useOwnAutoLog,
+                    onCheckedChange = { useOwnAutoLog = it },
+                )
+                SwitchRow(
+                    title = "加载游戏时自动显示日志",
+                    subtitle = "从启动到游戏出第一帧期间自动弹出运行时日志，进游戏后自动关闭；" +
+                        "手动关掉后本局不再弹。启动阶段就黑屏/卡住时用得上。",
+                    checked = if (useOwnAutoLog) autoLog else globalDefaults.autoLogOnLaunch,
+                    onCheckedChange = { checked ->
+                        if (!useOwnAutoLog) useOwnAutoLog = true
+                        autoLog = checked
                     },
                 )
 

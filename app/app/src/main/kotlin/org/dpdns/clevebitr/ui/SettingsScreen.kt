@@ -92,6 +92,9 @@ fun SettingsScreen(
     onTouchpadModeChange: (Boolean) -> Unit = {},
     touchpadSensitivity: Float = AppPrefs.TOUCHPAD_SENSITIVITY_DEFAULT,
     onTouchpadSensitivityChange: (Float) -> Unit = {},
+    /** 全局默认"加载游戏时自动显示运行时日志浮层"（默认关）。 */
+    autoLogOnLaunch: Boolean = false,
+    onAutoLogOnLaunchChange: (Boolean) -> Unit = {},
     /** 游戏中右下角是否显示「引擎菜单」按钮（§4 侧边栏入口）。 */
     engineMenuButton: Boolean = true,
     onEngineMenuButtonChange: (Boolean) -> Unit = {},
@@ -234,6 +237,15 @@ fun SettingsScreen(
             }
 
             SectionTitle("调试")
+
+            SwitchRow(
+                title = "加载游戏时自动显示日志",
+                subtitle = "从启动到游戏出第一帧期间自动弹出运行时日志浮层，进游戏后自动关闭；" +
+                    "手动关掉后本局不再弹。游戏在启动阶段就黑屏/卡住时，用它把那段日志" +
+                    "直接摊在屏幕上（否则那时还没机会去点开日志）。",
+                checked = autoLogOnLaunch,
+                onCheckedChange = onAutoLogOnLaunchChange,
+            )
 
             SwitchRow(
                 title = "采集 logcat",
