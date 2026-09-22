@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -238,151 +239,156 @@ fun GameDetailScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(modifier = Modifier.fillMaxWidth().then(contentWidth)) {
-                // ── 封面 + 标题 ──
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                    contentAlignment = Alignment.Center,
+                // ── Steam 大屏式头部：封面在左，标题与操作在右 ──
+                // 左右分栏而不是上下堆叠：宽屏时封面/标题/按钮在同一屏内全部可见，
+                // "启动"不再被封面推到需要滚动才能看到的位置。
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(
+                        if (wide) 20.dp else 12.dp,
+                    ),
                 ) {
-                    // 收藏星标：点一下切换。详情页里它是"状态 + 开关"，与库页卡片一致。
-                    IconButton(
-                        onClick = onToggleFavorite,
-                        modifier = Modifier.align(Alignment.TopStart),
-                    ) {
-                        Icon(
-                            imageVector = if (game.favorite) {
-                                Icons.Filled.Favorite
-                            } else {
-                                Icons.Filled.FavoriteBorder
-                            },
-                            contentDescription = if (game.favorite) "取消收藏" else "收藏",
-                            tint = if (game.favorite) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
+                    // 左：封面。收藏星标压在封面左上角，与库页卡片的位置一致。
+                    Box {
+                        IconButton(onClick = onToggleFavorite) {
+                            Icon(
+                                imageVector = if (game.favorite) {
+                                    Icons.Filled.Favorite
+                                } else {
+                                    Icons.Filled.FavoriteBorder
+                                },
+                                contentDescription = if (game.favorite) "取消收藏" else "收藏",
+                                tint = if (game.favorite) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                        CoverImage(
+                            file = game.coverFile.takeIf { it.isNotBlank() }
+                                ?.let { File(coversDir, it) },
+                            title = title,
+                            modifier = Modifier
+                                .width(if (wide) 240.dp else 132.dp)
+                                .aspectRatio(0.72f)
+                                .clip(RoundedCornerShape(12.dp)),
                         )
                     }
-                    CoverImage(
-                        file = game.coverFile.takeIf { it.isNotBlank() }?.let { File(coversDir, it) },
-                        title = title,
-                        modifier = Modifier
-                            .widthIn(max = 200.dp)
-                            .fillMaxWidth(0.46f)
-                            .aspectRatio(0.72f)
-                            .clip(RoundedCornerShape(12.dp)),
-                    )
-                }
 
-                if (editing) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                        OutlinedTextField(
-                            value = title,
-                            onValueChange = { title = it },
-                            label = { Text("标题") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        OutlinedTextField(
-                            value = developer,
-                            onValueChange = { developer = it },
-                            label = { Text("厂商 / 汉化组") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                        )
-                        OutlinedTextField(
-                            value = notes,
-                            onValueChange = { notes = it },
-                            label = { Text("备注（版本、汉化、踩坑记录）") },
-                            maxLines = 4,
-                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                        )
+                    // 右：标题/厂商/分组 + 主操作（编辑态就地替换标题区）
+                    Column(modifier = Modifier.weight(1f)) {
+                        if (editing) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                OutlinedTextField(
+                                    value = title,
+                                    onValueChange = { title = it },
+                                    label = { Text("标题") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                OutlinedTextField(
+                                    value = developer,
+                                    onValueChange = { developer = it },
+                                    label = { Text("厂商 / 汉化组") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                )
+                                OutlinedTextField(
+                                    value = notes,
+                                    onValueChange = { notes = it },
+                                    label = { Text("备注（版本、汉化、踩坑记录）") },
+                                    maxLines = 4,
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            save()
+                                            editing = false
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                    ) { Text("保存") }
+                                    OutlinedButton(
+                                        onClick = {
+                                            // 放弃改动：把字段还原成进入编辑前的值
+                                            title = game.title
+                                            developer = game.developer
+                                            notes = game.notes
+                                            editing = false
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                    ) { Text("取消") }
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = game.title,
+                                style = MaterialTheme.typography.headlineSmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            val subtitle = listOf(game.developer, game.released)
+                                .filter { it.isNotBlank() }
+                                .joinToString(" · ")
+                            if (subtitle.isNotBlank()) {
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                                )
+                            }
+                            if (game.group.isNotBlank()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                                ) {
+                                    SuggestionChip(
+                                        onClick = onEditGroup,
+                                        label = { Text(game.group) },
+                                        icon = {
+                                            Icon(
+                                                Icons.AutoMirrored.Filled.Label,
+                                                contentDescription = null,
+                                                modifier = Modifier.padding(0.dp),
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                        }
+
+                        // ── 主操作 ──
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Button(
                                 onClick = {
-                                    save()
-                                    editing = false
+                                    // 先把界面上的改动落盘再开：否则"改完标题直接点启动"会丢改动，
+                                    // 而用户完全看不出发生了什么。
+                                    if (editing) {
+                                        save()
+                                        editing = false
+                                    }
+                                    onLaunch()
                                 },
                                 modifier = Modifier.weight(1f),
-                            ) { Text("保存") }
-                            OutlinedButton(
-                                onClick = {
-                                    // 放弃改动：把字段还原成进入编辑前的值
-                                    title = game.title
-                                    developer = game.developer
-                                    notes = game.notes
-                                    editing = false
-                                },
-                                modifier = Modifier.weight(1f),
-                            ) { Text("取消") }
-                        }
-                    }
-                } else {
-                    Text(
-                        text = game.title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                    )
-                    val subtitle = listOf(game.developer, game.released)
-                        .filter { it.isNotBlank() }
-                        .joinToString(" · ")
-                    if (subtitle.isNotBlank()) {
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                        horizontalArrangement = Arrangement.Center,
-                    ) {
-                        if (game.group.isNotBlank()) {
-                            SuggestionChip(
-                                onClick = onEditGroup,
-                                label = { Text(game.group) },
-                                icon = {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.Label,
-                                        contentDescription = null,
-                                        modifier = Modifier.padding(0.dp),
-                                    )
-                                },
-                            )
-                        }
-                    }
-                }
-
-                // ── 主操作 ──
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Button(
-                        onClick = {
-                            // 先把界面上的改动落盘再开：否则"改完标题直接点启动"会丢改动，
-                            // 而用户完全看不出发生了什么。
-                            if (editing) {
-                                save()
-                                editing = false
+                            ) {
+                                Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                                Text("启动游戏", modifier = Modifier.padding(start = 6.dp))
                             }
-                            onLaunch()
-                        },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                        Text("启动游戏", modifier = Modifier.padding(start = 6.dp))
-                    }
-                    FilledTonalButton(
-                        onClick = onOpenSettings,
-                    ) {
-                        Icon(Icons.Filled.Settings, contentDescription = null)
-                        Text("游戏设置", modifier = Modifier.padding(start = 6.dp))
+                            FilledTonalButton(onClick = onOpenSettings) {
+                                Icon(Icons.Filled.Settings, contentDescription = null)
+                                Text("游戏设置", modifier = Modifier.padding(start = 6.dp))
+                            }
+                        }
                     }
                 }
 

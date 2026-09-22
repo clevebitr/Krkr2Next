@@ -221,7 +221,7 @@ UI / 残留矩形。参考实现为此提供 `Layer.assignMotionImages`（把完
    `bash scripts/check_static.sh`（JNI 符号 / 移植清单 / 语法）。
 3. **推送会取消上一条 run**（`concurrency: cancel-in-progress`）：中间 run 显示 `cancelled`
    属**预期**；以最后一次为准。**多次提交攒成一次 push**，别每条提交都推。
-4. **Kotlin 无法本地类型检查**：壳改动必须靠 CI 的 APK 任务验证；新加跨文件符号**顺手补 import**。
+4. **壳的 Kotlin 编译本地能跑**：`bash scripts/build_shell_local.sh`（缓存的 Gradle 8.14.5 + termux 原生 aapt2 覆盖 AGP 自带的 linux-x86_64 版）。改壳**先本地编译过再推**，别为拼错一个 import 等一次 CI；新加跨文件符号仍要顺手补 import。完整 APK 仍由 CI 出（本地 jniLibs 没有 libengine_api.so）。
 5. **移植纪律**：独立新文件的移植登记 `compat/upstream/aetherkiri_ports.json`
    （片段移植用 `partial-extract` + `source_ref`），并跑 `python3 scripts/check_port_drift.py --update`；
    **既有文件内部的片段移植不进清单**，改为在落点写"移植自 AetherKiri <文件>:<行范围>"。
@@ -304,6 +304,7 @@ UI / 残留矩形。参考实现为此提供 `Layer.assignMotionImages`（把完
 **本地（每次改完都要跑）**
 ```bash
 bash scripts/check_static.sh          # JNI 符号 / 移植清单 / 语法（有失败项会硬失败）
+bash scripts/build_shell_local.sh     # 壳的 Kotlin 编译（改壳必跑）
 python3 scripts/check_port_drift.py   # 只查移植漂移（改了 ported 文件要 --update）
 git diff --check                      # 空白/冲突标记
 ```
