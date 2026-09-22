@@ -29,7 +29,9 @@
 1. **兼容层**：`cpp/core/io/` 单一 IO 组件已建成；A 块、C1、C4、B1（部分）、B2 已完成；
    `kag` 渲染档已删除（能力归 AetherKiri 层）。剩余 C3（阻塞于 C2）、C5/C6/C7、E1、M6 分批、
    以及**一项等用户裁决的 M1 尾巴（I3）**。
-2. **壳（Kotlin/Compose）**：九项改造**除"目录收藏 UI 打磨"外全部落地**。
+2. **壳（Kotlin/Compose）**：九项改造全部落地；详情页已改成 **Steam 大屏式左右分栏**；
+   壳的 Kotlin 编译**已能在本地跑通**（`scripts/build_shell_local.sh`）。
+   待做两项（自定义按键浮层 / 引擎菜单侧边栏）的规格在 **`SHELL_HANDOVER.md`**。
 
 工作区除用户自己的 `.gitignore`/`README.md` 外干净（那两个文件**始终不要 add**）。
 
@@ -209,7 +211,13 @@ UI / 残留矩形。参考实现为此提供 `Layer.assignMotionImages`（把完
 | 去掉设置里多余说明（开发测试游戏名） | ✅ 改通用表述 |
 | 文件浏览器：两个 topbar 合一 + 完整路径跳转 + 目录收藏 | 🟡 顶栏合一 ✅、路径跳转 ✅、目录收藏数据层 ✅ + UI 改动 ✅，**交互待上机确认** |
 | 游戏库：收藏游戏 + 分组（便签式） | ✅ |
-| 关于页：作者/协议/仓库/技术栈/版本号 | ✅ |
+| 关于页：作者/协议/仓库/技术栈/版本号 | ✅（版本号已带 git 短哈希：`v0.1.0-<hash6>-<YYMMDD>`） |
+| 详情页布局：**封面在左、按钮在右**（Steam 大屏式） | ✅ 2026-09-22（`ui/GameDetailScreen.kt`） |
+| 自定义按键浮层（位置/大小/文字/MD3 图标/颜色/透明度/描边，每游戏 + 全局模板） | ⬜ **未做**，规格见 `SHELL_HANDOVER.md §3` |
+| 游戏中右下角按钮 → 右侧悬浮侧边栏显示**引擎注册的窗口菜单** | ⬜ **未做**（需新增 C ABI + JNI），规格见 `SHELL_HANDOVER.md §4` |
+
+> **壳的开发交接文档是 `SHELL_HANDOVER.md`**（本地编译闭环、文件/接口索引、两项待做功能的
+> 数据模型与落点、验收标准）。改壳前先读它。
 
 ---
 
@@ -265,6 +273,7 @@ UI / 残留矩形。参考实现为此提供 `Layer.assignMotionImages`（把完
 | **虚拟文件（伴生脚本）与物理文件的优先级** | **物理优先，auto-path 次之，虚拟最后兜底**（2026-09-22 定；实现见 `TVPGetPlacedPath`） |
 | **`.amv` 解码器放哪** | **core**（`AlphaMovieDecoder`），插件复用；不允许插件反向注册 core 的格式处理项 |
 | **AlphaMovie 插件** | 按上游**完整移植**（用户明确选"一次性完整移植"） |
+| **千恋万花 SD 交付的修法** | 用户 2026-09-22 选 **B：搬参考的 `D3DEmote.tjs`** 作 `system/motion.tjs` 的覆盖（兼容性优先），而不是继续按结构打补丁（方案 A）。实施规格见 §6.1 |
 
 ---
 
@@ -278,9 +287,42 @@ UI / 残留矩形。参考实现为此提供 `Layer.assignMotionImages`（把完
 | G2 **帧率 ~43–45** | 中 | 每帧 1920×1080 **GPU→CPU 回读**（`capture` 路径**刻意优先 CPU**：引擎随后按 CPU 位图重传纹理会覆盖只写纹理的内容）；主窗口走 `path=GPU`，只有 Live2D 图层退化。附带：该回读用 `GL_BGRA_EXT` 调 `glReadPixels`，ES3 非法 → `err=0x0502` |
 | G2 / 千恋万花 **`SystemWatchTimerTimer` 卡顿**（1.5–1.9s） | 中 | 卡在 `DeliverEvents()` 或 `TickBeat()` 循环（内层 MarkStage 未触发）；需在该函数内加细阶段探针 |
 | 千恋万花 **`wave` 转场缺失** | 小-中 | 确定的功能缺口，可独立做（按 KAGEX 规范） |
-| 千恋万花 **SD/logo 交付（D3DEmote）** | 中 | 已补 `Layer.assignMotionImages` + `AssignImages` scratch 路由，见 §1.6；**待真机回归** |
+| 千恋万花 **SD/logo 交付（D3DEmote）** | 中 | 已补 `Layer.assignMotionImages` + `AssignImages` scratch/页面交换路由（均未解决本作）；**已裁决走方案 B**，见下 |
 | 千恋万花 **字体/文字颜色偏白、logo 色偏与残留矩形** | 中 | 候选根因：参考引擎为本作应用的 7 个标题 hook（含 `message edge argument routing`）KiriNext 全缺；未定位到 code path |
 | **AlphaMovie 插件复用 core 解码器** | 中 | 未做；完成后删掉重复 ~1700 行 |
+
+#### 千恋万花 SD：方案 B（搬参考的 D3DEmote.tjs）实施规格
+
+真机已排除的：纹理别名（`Independ` 已断）、目标层自身参数（`visible=1/opacity=255/ltAlpha/1920x1080`）。
+剩下的事实：SD 的目标层 `CG View LayerAffineLayer` 的 **`parentVisible=0`**（在
+`CG View Layer` → `裏メッセージレイヤ2` 这条“裏”链上），而 `ev`/`title_bg` 会被游戏换到可见页。
+根因是**游戏自带的 `system/motion.tjs` 的交付目标与本引擎的图层语义不匹配**；参考引擎
+不中招是因为它**用自己的 `D3DEmote.tjs` 替换了 `motion.tjs`**。
+
+上游源（本地已有检出）：`../AetherKiri/cpp/core/base/resources/D3DEmote.tjs`（1340 行）
+@ `bd14a986`；嵌入方式见 `../AetherKiri/cpp/core/base/CMakeLists.txt:7-13` 与
+`resources/D3DEmote_tjs.cpp.in`（`configure_file` 生成字节数组）；覆盖判定见
+`../AetherKiri/cpp/core/base/StorageIntf.cpp` 的 `TVPIsD3DEmoteCompanionScript()`
+（**只匹配 `motion.tjs` 与 `d3demote.tjs`**）与 `TVPOpenD3DEmoteCompanionScript()`。
+
+四件工作：
+
+1. **脚本落地 + 嵌入**：把上游 `D3DEmote.tjs` 拷到 `cpp/core/compat/resources/`，按上游
+   同款 `configure_file` 生成 C 数组（别手写 C++ 字符串字面量，1340 行日文脚本易错）。
+2. **覆盖优先级**：上游是在存储读取路径**早期拦截**这两个名字（不是“虚拟文件兜底”）。
+   注意本条与 §5 的“物理优先、auto-path 次之、虚拟最后兜底”不矛盾：**伴生覆盖只针对
+   这 2 个明确列出的名字**，其余仍享物理优先。落点在 `cpp/core/io/`（KiriNext 的单一 IO
+   组件），并按 §5 的裁决**只对 AetherKiri 层生效**。
+3. **D3DAdaptor 壳成员**：参考脚本会调 `setPresentationTarget(target)` /
+   `clearPresentationTarget()` / `presentationHold` —— KiriNext 的 D3DAdaptor 壳都没有
+   （目前只有 `captureCanvas`/`unloadUnusedTextures`/`canvasCaptureEnabled`/`clearEnabled`）。
+   参考实现：`../AetherKiri/cpp/plugins/motionplayer/D3DAdaptor.h:145-176` 与 218。
+4. **清理**：方案 B 生效后，本会话为方案 A 加的那些兜底（pool 判据 `TVPIsAffineSourceMotionScratch`、
+   按结构改投的 KAG 页面交换路由、`Independ` 断开别名）要重新评估是否还需要：
+   脚本不再走那条路时它们是死代码，但**删除前先真机回归**至少一作。
+
+验证：SD 是否正常显示、logo 颜色与残留矩形是否消失、字体颜色是否正常；
+并跑一遍其它 Yuzusoft 作品（NEKOPARA 4、咖啡馆）确保伴生覆盖不伤它们。
 
 ### 6.2 兼容层 / 插件 / 壳
 
@@ -337,7 +379,8 @@ gh run view "$RID" --repo clevebitr/Krkr2Next --log-failed | rg -i "error:|undef
 | 东西 | 位置 |
 |---|---|
 | 兼容层事实/约束/阶段表/差异清单/裁决记录 | `compat/README.md`（§1 层与选择、§2 依赖不变量、§3 目录边界、§4 阶段、§5 差异+裁决、§6 移植溯源、§7 恢复指引） |
-| **渲染问题追踪（open issues + 探针清单 + 取证命令）** | **`compat/recon/render-issues.md`** |
+| **壳开发交接（本地编译闭环 + 两项待做功能规格）** | **`SHELL_HANDOVER.md`** |
+| 渲染问题追踪（open issues + 探针清单 + 取证命令） | **`compat/recon/render-issues.md`** |
 | IO 对照证据 | `compat/recon/io-loading-diff.md` |
 | KAG 脚本层对照证据 | `compat/recon/kag-script-diff.md` |
 | 插件层对照证据（约 100 个模块覆盖表） | `compat/recon/plugin-compat-diff.md` |
@@ -366,7 +409,7 @@ gh run view "$RID" --repo clevebitr/Krkr2Next --log-failed | rg -i "error:|undef
    `capture` 的 CPU 回读能否改走 GPU（改动面较大，用户要求渲染改动小，需先确认收益）。
 5. **`SystemWatchTimerTimer` 卡顿**：在 `cpp/core/environ/win32/SystemControl.cpp` 的
    `DeliverEvents()` 与 `TickBeat()` 循环内加 MarkStage（当前内层阶段一条都不触发）。
-6. **千恋万花**：SD/logo 交付（已改待回归，见 §1.6）→ 字体/logo 颜色与 7 个标题 hook → `wave` 转场。
+6. **千恋万花**：按**方案 B** 搬参考的 `D3DEmote.tjs`（规格见 §6.1）→ 字体/logo 颜色与 7 个标题 hook → `wave` 转场。
 7. **兼容层**：若用户回了 **I3**，接完 `mountSiblingsForArchiveProject`（M1 收尾）；
    否则继续 **M6 小模块批次**（每批 2–4 个，机械可验证）。
-8. **C3 已阻塞**于 C2；壳侧：目录收藏交互打磨 → 平板双栏 → MD3 细节。
+8. **C3 已阻塞**于 C2；壳侧见 **`SHELL_HANDOVER.md §7`**（自定义按键浮层 → 引擎菜单侧边栏）。
