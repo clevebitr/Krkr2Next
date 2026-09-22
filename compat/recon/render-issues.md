@@ -241,21 +241,34 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
 
 ## 2.5 おっぱいスパイ学園（`おっぱいスパイ学園`）— 切 CG 视频严重卡顿
 
-**状态：已修（2026-09-23），待真机回归**
+**状态：已修两轮（2026-09-23），第二轮待真机回归**
 
-根因（修正版）：`TVPMoviePlayer::Release()` 先有界等 4s 再销毁，但**没有任何路径
-叫停播放线程** —— `BasePlayer::Process()` 的循环条件只有 `m_bAbortRequest`，而该标志
-原先只在 `CloseInputStream()` 里置位，`CloseInputStream()` 又只从 `~BasePlayer` 调用。
-也就是说等的是一个没人叫停的线程，必然等满整个窗口，然后走"泄漏"分支。
+### 第一轮（已证实不够）
 
-修法：
-- `BasePlayer::RequestStop()`（新）：置 `m_bAbortRequest`、`m_pDemuxer->Abort()`、
-  唤醒 `m_ready`；`m_bAbortRequest` 改 `std::atomic`。`Release()` 先请求再有界等待，
-  并打一条 `movie: 停播请求→影片线程退出耗时 Nms`（每关一片一行，真机判据）。
-- `CDVDMessageQueue`：`Put`/`Abort` 先自增唤醒序号再在 `m_mtxEvent` 上通知，`Get`
-  同锁求值谓词 —— 去掉"解锁 `m_section` 后、挂到条件变量前"丢唤醒而空等 timeout
-  的路径；被中断时立即返回。
-- `CThread::StopThread` 在 `m_mtxStopEvent` 锁内改 `m_bStop`。
+根因：`TVPMoviePlayer::Release()` 先有界等 4s 再销毁，但**没有任何路径叫停播放线程** ——
+`BasePlayer::Process()` 的循环条件只有 `m_bAbortRequest`，而该标志原先只在
+`CloseInputStream()` 里置位，`CloseInputStream()` 又只从 `~BasePlayer` 调用。
+修法：新增 `BasePlayer::RequestStop()`；`CDVDMessageQueue` 等待改为可中断（唤醒序号 + 中断标志）。
+
+### 第二轮（真机 `engine-20260923-000714.log` 定位）
+
+第一轮后仍每次卡满 4s：
+```
+[00:07:39.449] movie: 停播请求后影片线程 4000ms 仍未退出，放弃销毁并泄漏该影片对象
+[00:07:37.093] 卡死探针：渲染线程 1.6s 没推进，最后阶段＝movie: Close→Release()
+              （影片线程阶段＝movie: 解码线程→处理消息/解码）
+[00:07:34.950] MoviePlayer Flush: 丢弃 4 帧待呈现缓冲（curPicture=3）
+```
+停播请求发出去了，但解码线程仍停在"处理消息/解码"里。真因：`AddVideoPicture()`
+的 50ms 分片等待**只认 `m_pictureWaitAbort`**，不认 `m_bAbortRequest`/`m_bAbortOutput`；
+消费者是渲染线程每帧的 `GetFrontBuffer()` —— 渲染线程此刻正卡在 `Release()` 里，队列必然
+填满，于是 `OnExit → CloseStream(video) → StopThread()` 的 join 永远回不来。
+`AbortPictureWait()` 原先只在 `Stop()` 与析构里调，而 `VideoOvlImpl::Close()` 走的是
+`Pause() → Release()`，**从不经过 `Stop()`**。
+
+修法：`Release()` 在有界等待**之前**调 `AbortPictureWait()`（与 `RequestStop()` 并列，
+缺一不可）；并在 `AddVideoPicture` 的两个槽位等待循环与 `BasePlayer::OnExit` 里加
+阶段标记，若下次仍卡，`.stall` 能直接指出是哪个 join。
 
 原始证据（真机 `engine-20260922-224405.log`，classic 层）：
 ```
@@ -267,10 +280,6 @@ frame_perf: fps=3.5  update_max=4731.04ms
 frame_perf: fps=2.5  update_max=4152.34ms
 ```
 
-补充（为什么还要动消息队列）：即使叫停了，解码/音频线程本身也可能阻塞在
-`CDVDMsgQueue` 的等待上；上一轮的判断“解码线程不响应停止信号”对应的是
-`Get()` 里那条会丢唤醒、只能空等到 timeout 的等待路径，现已一并修掉。
-
 验收：连续切 8 段 CG 视频，`update_max` 不再出现 4000ms 量级；不再出现
 `影片线程 …ms 未退出，放弃销毁并泄漏`；出现 `movie: 停播请求→影片线程退出耗时 Nms`
 且 N 远小于 4000。
@@ -279,7 +288,12 @@ frame_perf: fps=2.5  update_max=4152.34ms
 
 ## 2.6 猫娘乐园（NEKOPARA 4）— 游戏内 E-mote/Live2D 立绘加载不出
 
-**状态：已修（2026-09-23），待真机回归**
+**状态：已修（2026-09-23），真机日志已确认生效**
+
+真机验证（`engine-20260923-000530.log`，AetherKiri 层）：`PSB lazy-load error: Not supported
+media type ""` **3230 → 0**、`drawFallback: no image loaded` **2321 → 0**、`drawFallback`
+本身也不再出现；新增 8 条 `PSB lazy-load archive: lzfs:/e-mote*.psb` + `PSB objectTree` +
+`Stored 12 layer positions`，`drawAnimated` 2600 次。（立绘是否肉眼正常请用户确认。）
 
 根因：`PSBMedia::tryLazyLoadArchive()` 按**第一个 '/'** 切档案名。motionplayer 发的是
 嵌套存储名 `psb://lzfs://./x.psb/motion/...`，经存储层规范化后是 `lzfs:/x.psb/motion/...`，

@@ -268,17 +268,25 @@ FATAL SIGNAL 6
 现象：每次切视频 `frame_perf update_max=4382/4553/4731ms`、fps 掉到 3–18，每次都打
 `movie: 影片线程 4000ms 未退出，放弃销毁并泄漏该影片对象`。
 
-根因：上一轮的兜底只做了「有界等」，**没有任何路径叫停播放线程**。
-`BasePlayer::Process()` 的循环条件只有 `m_bAbortRequest`，而该标志原先只在
-`CloseInputStream()` 里置位，`CloseInputStream()` 又只从 `~BasePlayer` 调用 ——
-等的是一个没人叫停的线程，必然等满整个窗口然后泄漏。
+根因（两轮才定位准）：
+1. `Release()` 先有界等 4s 再销毁，但**没有任何路径叫停播放线程**：
+   `BasePlayer::Process()` 的循环条件只有 `m_bAbortRequest`，而该标志原先只在
+   `CloseInputStream()` 里置位，`CloseInputStream()` 又只从 `~BasePlayer` 调用。
+2. 加了 `RequestStop()` 后真机仍卡满 4s（`engine-20260923-000714.log`：
+   `停播请求后影片线程 4000ms 仍未退出`）：解码线程卡在 `AddVideoPicture()` 的
+   "等空 picture 槽位"里 —— 那个 50ms 分片等待**只认 `m_pictureWaitAbort`**，不认
+   播放线程的中断标志；消费者是渲染线程每帧的 `GetFrontBuffer()`，而渲染线程正卡在
+   `Release()` 里。`AbortPictureWait()` 原先只在 `Stop()` 与析构里调，但
+   `VideoOvlImpl::Close()` 走的是 `Pause() → Release()`，**从不经过 `Stop()`**。
 
 修法：
 - 新增 `BasePlayer::RequestStop()`（置 `m_bAbortRequest`、`m_pDemuxer->Abort()`、唤醒
-  `m_ready`；`m_bAbortRequest` 改 `std::atomic`）。`Release()` 先请求再有界等待，并打一条
-  `movie: 停播请求→影片线程退出耗时 Nms`；`~TVPMoviePlayer` / `~MoviePlayerOverlay` 也先请求（幂等）。
+  `m_ready`；`m_bAbortRequest` 改 `std::atomic`）；`Release()` 先 `AbortPictureWait()`
+  + `RequestStop()` 再有界等待，并打一条 `movie: 停播请求→影片线程退出耗时 Nms`。
 - `CDVDMessageQueue`：`Put`/`Abort` 先自增唤醒序号再在 `m_mtxEvent` 上通知，`Get` 同锁求值谓词
   （去掉丢唤醒、只能空等 timeout 的路径）；`CThread::StopThread` 在锁内改 `m_bStop`。
+- 阶段标记：`AddVideoPicture` 的槽位等待循环 + `BasePlayer::OnExit` 的两次 CloseStream，
+  下次若仍卡，`.stall` 能直接指出是哪个 join。
 
 验收：连续切 8 段 CG，`update_max` 不再出现 4000ms 量级，且不再出现「未退出，放弃销毁」。
 
@@ -293,6 +301,10 @@ FATAL SIGNAL 6
 修法：移植 AetherKiri 的 `ArchiveBoundaryKey()`（先按 `.mtn/`/`.psb/`/`.pimg/` 扩展名定位边界，
 找不到才退回第一个 '/'）。`lzfs:/x.psb/…` 因此切出 `lzfs:/x.psb`，`TVPCreateStream` 会把它
 还原成 `lzfs://./x.psb`。同一处也修掉了子目录档案（`motion/mono_loop.mtn/…`）被切成 `motion`。
+
+真机已确认生效（`engine-20260923-000530.log`）：错误计数 3230 → **0**、
+`drawFallback: no image loaded` 2321 → **0**，出现 `PSB lazy-load archive: lzfs:/e-mote*.psb` ×8
+与 `Stored 12 layer positions`；`drawAnimated` 2600 次。
 
 ---
 
@@ -421,10 +433,10 @@ FATAL SIGNAL 6
 | 千恋万花 **SD/logo 交付（D3DEmote）** | 中 | 已补 `Layer.assignMotionImages` + `AssignImages` scratch/页面交换路由（均未解决本作）；**已裁决走方案 B**，见下 |
 | 千恋万花 **字体/文字颜色偏白、logo 色偏与残留矩形** | 中 | 候选根因：参考引擎为本作应用的 7 个标题 hook（含 `message edge argument routing`）KiriNext 全缺；未定位到 code path |
 | **AlphaMovie 插件复用 core 解码器** | 中 | 未做；完成后删掉重复 ~1700 行 |
-| おっぱいスパイ学園 **切 CG 视频严重卡顿** | 中 | ✅ **已修（§1.10.1），待真机回归**。根因是 `Release()` 等的是一个**没人叫停**的播放线程（`m_bAbortRequest` 只在 `~BasePlayer` 里置位），必然等满 4s 并泄漏 |
+| おっぱいスパイ学園 **切 CG 视频严重卡顿** | 中 | 🟡 **已修两轮（§1.10.1），第二轮待真机回归**。第一轮补了 `RequestStop()`（原来根本没人叫停播放线程）；真机日志显示仍卡满 4s，第二轮定位到解码线程卡在 `AddVideoPicture()` 的"等空 picture 槽位"（只认 `m_pictureWaitAbort`，而 `Close()` 走 `Pause()→Release()` 从不经过 `Stop()`），已在 `Release()` 里补 `AbortPictureWait()` |
 | チート緊縛術（classic）**`Member "showLayers" does not exist` → 引擎退出** | 小-中 | 脚本层成员缺失：`showLayers` 在本仓库与 AetherKiri 都**未注册**（`grep -rn showLayers cpp/` 两边都空）。日志：`trace : mainwindow.tjs(5777)[(function expression)] <-- conductor.tjs(440)[onTag]`、`scenario.ks 行 223 タグ eval`。该作目录带 `patch.xp3` + `claude-3-5-sonnet-…翻译补丁备份` + `hook.ini` + `FONTCHANGER.dll`（加载失败），**疑似翻译补丁替换的 `mainwindow.tjs` 少了该函数**。需要用户提供 `data.xp3>mainwindow.tjs` 与 `patch.xp3` 里的同名文件对照 |
 | チート緊縛術（AetherKiri）**字体渲染不正确** | 小-中 | **缺日志**：该游戏目录里只有 classic 层那次 `engine-*.log`。要 AetherKiri 层那次的 `FontSystem: 已注册字体 N 个`、`font_fallback_mode=`、缺字/`GetBeingFont` 行。该作自带 `ShiraYukiNoa.otf` + `FONTCHANGER.dll`（本引擎加载失败）⇒ 字体很可能靠该插件换 |
-| **猫娘乐园（NEKOPARA 4）游戏内 E-mote/Live2D 立绘加载不出** | 中 | ✅ **已修（§1.10.2），待真机回归**。`PSBMedia::tryLazyLoadArchive()` 按第一个 '/' 切档案名，把 `lzfs:/x.psb/...` 切成假档案 `lzfs:`；已换成 AetherKiri 的 `ArchiveBoundaryKey()`（按 `.psb/` 等扩展名定位边界） |
+| **猫娘乐园（NEKOPARA 4）游戏内 E-mote/Live2D 立绘加载不出** | 中 | ✅ **已修（§1.10.2），真机日志已确认生效**（错误计数 3230→0、`no image loaded` 2321→0、档案正常加载；立绘是否肉眼正常待用户确认） |
 
 #### 千恋万花 SD：方案 B（搬参考的 D3DEmote.tjs）实施规格
 
