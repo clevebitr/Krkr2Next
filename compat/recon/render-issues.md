@@ -154,6 +154,23 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
     - 同时加了一个与参考一致的定向修复：目标层与「隐藏无名工作层」交付后若共享同一张
       纹理，则 `MainImage->Independ()` 断开别名（参考对 KAG `syslay` scratch 就是这么做的，
       且 `Independ()` 是 GPU 侧拷贝、不丢像素）。
+  - **第五轮真机（`engine-20260922-173215.log`，交付对去重生效）**：
+    - **SD 不走 `assignImages`**：去重后全部「可见有名目标 ← 隐藏无名源」只有
+      `target='ev'`（事件 CG）与 `target='title_bg'`（标题背景），源都在 `トップレイヤ` 下，
+      **没有任何一条目标层是 SD 角色层**。
+    - 全日志计数：`D3DAdaptor.captureCanvas` 4 次 / `drawOnto` 4 次 / `Player_clear` 6 次
+      —— **全部发生在 logo 阶段**；SD 窗口只有 `drawPSBImages`(24) → `drawAnimated` →
+      `compositeStatic`(19)，**没有 captureCanvas / drawOnto / assignImages**。
+    - 所有 motion（logo / title / SD）都画进同一个共用工作层
+      `realLayer=0xb400007859e4c6e0`；而 assignImages 的源是另外两个层指针
+      （`0xb40000785afa6e00`/`0xb40000786605dc80`，即 `captureCanvas(work)` 的 `work`）。
+      ⇒ 交付链是：drawPSBImages→共用工作层 → captureCanvas(work) → assignImages(目标, work)。
+      **SD 在第一步之后就没有后续**，所以帧永远没离开工作层。
+    - 待确认的关键量：SD 的绘制目标（`target=0xb4000076e7b1ef40`）与共用工作层
+      `0xb400007859e4c6e0` 的**名字与父层**。已给 motionplayer 的
+      `DescribeLayerState` 加 `name/parent`、接入 `drawPSBImages`，并加
+      `probe: resolveRealLayer target=… isSeparateAdaptor=… adaptorTarget=… adaptorOwner=…`
+      （每种目标只记一次），下一轮即可判定 SD 走的是哪条分支、帧落在哪一层。
 - **启动 logo（`m2logo.mtn` / `yuzulogo.mtn`）**：颜色偏淡蓝而非红、播完残留两个矩形。
   - 已排除「PSB 解码通道序」：`PSBMedia.cpp` 全量输出 BGRA、全游戏一致，非本资源专属。
   - 已排除 `blandlogo1.png` 缺失：参考引擎在同一作同样报 85 次（游戏自带脚本引用了这个

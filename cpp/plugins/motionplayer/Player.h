@@ -7,6 +7,7 @@
 #include <string>
 #include <iterator>
 #include <set>
+#include <mutex>
 #include <unordered_map>
 #include <algorithm>
 #include <atomic>
@@ -339,7 +340,33 @@ namespace motion {
             const int height = readInt(TJS_W("height"), -1);
             const int left = readInt(TJS_W("left"), -1);
             const int top = readInt(TJS_W("top"), -1);
-            return "layer(visible=" + std::to_string(visible) + ",opacity=" +
+            // 名字与父层名：定位“帧画进了哪一层”（层级/交付问题的判定点）。
+            // TEMP DIAGNOSTIC（千恋万花 SD 不可见）。
+            auto readString = [layer](const tjs_char *prop) {
+                tTJSVariant v;
+                if(TJS_SUCCEEDED(layer->PropGet(0, prop, nullptr, &v, layer)) &&
+                   v.Type() == tvtString) {
+                    return ttstr(v).AsStdString();
+                }
+                return std::string();
+            };
+            std::string parentName;
+            {
+                tTJSVariant pv;
+                if(TJS_SUCCEEDED(layer->PropGet(0, TJS_W("parent"), nullptr, &pv,
+                                                layer)) &&
+                   pv.Type() == tvtObject && pv.AsObjectNoAddRef()) {
+                    auto *parent = pv.AsObjectNoAddRef();
+                    tTJSVariant nv;
+                    if(TJS_SUCCEEDED(parent->PropGet(0, TJS_W("name"), nullptr,
+                                                     &nv, parent)) &&
+                       nv.Type() == tvtString)
+                        parentName = ttstr(nv).AsStdString();
+                }
+            }
+            return "layer(name='" + readString(TJS_W("name")) + "',parent='" +
+                parentName + "',visible=" + std::to_string(visible) +
+                ",opacity=" +
                 std::to_string(opacity) + ",count=" + std::to_string(count) +
                 ",size=" + std::to_string(width) + "x" + std::to_string(height) +
                 ",pos=" + std::to_string(left) + "," + std::to_string(top) + ")";
@@ -3046,9 +3073,11 @@ namespace motion {
             iTJSDispatch2 *tempParent = realLayer;
 
             if(logger) {
-                logger->info("drawPSBImages: {} images, target={} realLayer={}",
-                             _psbImages.size(), static_cast<void *>(target),
-                             static_cast<void *>(realLayer));
+                logger->info(
+                    "drawPSBImages: {} images, target={} realLayer={} {}",
+                    _psbImages.size(), static_cast<void *>(target),
+                    static_cast<void *>(realLayer),
+                    DescribeLayerState(realLayer));
             }
 
             // M2 animation: when the per-motion frame time-lines are available,
@@ -3410,6 +3439,35 @@ namespace motion {
             auto *adaptor =
                 ncbInstanceAdaptor<SeparateLayerAdaptor>::GetNativeInstance(
                     target);
+            // TEMP DIAGNOSTIC（千恋万花 SD 不可见）：每种绘制目标只记一次，标明走的是
+            // 哪条解析分支（SeparateLayerAdaptor 的 target/owner，或普通 Layer）。
+            {
+                static std::mutex s_rrlMutex;
+                static std::set<const void *> s_rrlSeen;
+                bool logIt = false;
+                {
+                    std::lock_guard<std::mutex> lock(s_rrlMutex);
+                    if(s_rrlSeen.size() < 40 &&
+                       s_rrlSeen.insert(static_cast<const void *>(target))
+                           .second)
+                        logIt = true;
+                }
+                if(logIt) {
+                    if(auto lg = spdlog::get("plugin"))
+                        lg->info(
+                            "probe: resolveRealLayer target={} "
+                            "isSeparateAdaptor={} adaptorTarget={} "
+                            "adaptorOwner={}",
+                            static_cast<const void *>(target),
+                            adaptor ? 1 : 0,
+                            (adaptor && adaptor->getTarget())
+                                ? static_cast<const void *>(adaptor->getTarget())
+                                : nullptr,
+                            (adaptor && adaptor->getOwner())
+                                ? static_cast<const void *>(adaptor->getOwner())
+                                : nullptr);
+                }
+            }
             if(adaptor) {
                 auto *rt = adaptor->getTarget();
                 if(rt)
