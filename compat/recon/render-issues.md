@@ -99,7 +99,16 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
 
 已核实的现状：
 - `probe: Layer.loadImages(psb://quickmenu.pimg/*.tlg)` 一串 ⇒ 图片/E-mote 加载路径正常。
-- **`Transition handler 'wave' not found, falling back to crossfade`** ⇒ `wave` 转场未实现。
+- **`wave` 转场** ⇒ **已实施待真机回归**（2026-09-23）：`wave` 转场此前未实现，
+  `TVPFindTransHandlerProvider` 找不到就回退 crossfade。现已从 AetherKiri
+  `cpp/plugins/extrans_precise/{wave.cpp,wave.h,common.h}` **逐字节移植**（`modifications: none`，
+  已登记 `compat/upstream/aetherkiri_ports.json`），`cpp/plugins/extrans.cpp` 的
+  `extrans.dll` 注册点从空桩改为 `RegisterWaveTransHandlerProvider()`，
+  `cpp/plugins/CMakeLists.txt` 加入 `extrans_precise/wave.cpp`。
+  `extrans.dll` **不按层门控**（它是原版 KiriKiri 的标准插件，不是层专属模块），
+  因此两层都拿到 wave。
+  验收：本作不再出现 `Transition handler 'wave' not found`，wave 转场按
+  `time`/`maxh`/`maxomega`/`bgcolor1`/`bgcolor2`/`wavetype` 选项生效。
 - **卡死**：`.stall` 记 `render-thread-stall`，阶段 `Application::Run: SystemWatchTimerTimer`
   （与 G2 同源，见 §1 未解决 ③）。
 - `convertImage: RL decode failed … raw palette` ⇒ **已知小图标回退**
@@ -223,7 +232,7 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
 1. **SDCG / D3DEmote 交付**：已按参考实现补 `AssignMotionImages` + scratch 路由（见上），
    **待真机回归**；若仍不对，再对照上面的 hook 清单逐项补。
 2. 启动 logo 颜色/残留、字体颜色：先看 SD 回归结果，再按 hook 清单定位。
-3. `wave` 转场：按 KAGEX 规范补实现（确定的功能缺口，可独立做）。
+3. `wave` 转场：**已实施**（见上），待 CI 构建 + 真机回归确认。
 3. 卡死：与 §1 未解决 ③ 同一处理（`SystemWatchTimerTimer` 细阶段探针）。
 
 ---
