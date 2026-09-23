@@ -2038,7 +2038,16 @@ public:
     static tjs_error setEnableD3D(tTJSVariant *, tjs_int count, tTJSVariant **p,
                                   iTJSDispatch2 *) {
         if(count == 1 && (*p)->Type() == tvtInteger) {
+            // 吸收脚本的赋值，不让它影响 getter（见 getEnableD3D 的说明）。
             _enableD3D = static_cast<bool>(**p);
+            if(_enableD3D) {
+                static std::atomic<bool> warned{ false };
+                if(!warned.exchange(true)) {
+                    if(auto logger = spdlog::get("plugin"))
+                        logger->info("Motion.enableD3D: 脚本请求开启 D3D 路径，"
+                                     "已忽略（Android 无 D3D，见 getEnableD3D）");
+                }
+            }
             return TJS_S_OK;
         }
         return TJS_E_INVALIDPARAM;
@@ -2067,13 +2076,24 @@ public:
 
     static tjs_error getEnableD3D(tTJSVariant *r, tjs_int, tTJSVariant **,
                                   iTJSDispatch2 *) {
-        iTJSDispatch2 *obj = TJSCreateDictionaryObject();
-        if(obj) {
-            *r = tTJSVariant(obj);
-            obj->Release();
-        } else {
-            *r = tTJSVariant();
-        }
+        // 恒为 false（Integer 0）。
+        //
+        // 为什么（2026-09-23 探针实测）：Yuzusoft/NEKOPARA 系作品的
+        // `system/AffineSourceMotion.tjs`（字节码）用
+        // `_useD3D = Motion.enableD3D && (typeof window.d3dMotion != "undefined") &&
+        // window.d3dMotion` 选路。以前这里返回一个**字典 stub 对象**（“truthy 但可当对象用”），
+        // 于是 _useD3D 恒为真，游戏一律走 D3DAdaptor 的 captureCanvas 交付链——而本壳的
+        // D3D 只是空壳（没有参考实现那种 render texture），真机表现为：帧画好了、也
+        // assignImages 出去了，但目标整条链在隐藏页（NEKOPARA `裏-背景(vis=0)`，千恋万花
+        // `CG View Layer` 链 `parentVisible=0`）⇒ SD / m2logo / 立绘全看不到。
+        //
+        // Android 上根本没有 D3D，而这些作品的工具链自带非 D3D 路径（游戏自己的菜单项
+        // “モーション表示にDirect3D描画を使用しない”="-nod3dm"，千恋万花 patch.tjs 还
+        // 显式写 `&Motion.Player.useD3D = 0;`）——那才是本引擎能真正实现的
+        // SeparateLayerAdaptor + 私有渲染层路径（见 §1.5）。所以这里老老实实报“不提供
+        // D3D motion”，让游戏自己降级。
+        if(r)
+            *r = tTJSVariant(static_cast<tjs_int>(0));
         return TJS_S_OK;
     }
 

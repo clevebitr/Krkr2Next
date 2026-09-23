@@ -558,6 +558,51 @@ SeparateLayerAdaptor 的私有渲染层，而它们从来没在日志里出现�
 `LayerAssign route=reparent-hidden-page` 日志、`probe: exch-route denied reason=page-busy/
 streak-not-reached`）。
 
+### 1.13.5 第六轮：探针给出答案 —— 文字已修好，剩下的全部是 D3D 路径选错了
+
+**用户真机反馈（probe 构建 de1450b）**：
+
+| 问题 | 现象 |
+|---|---|
+| 千恋万花 消息文字/字体 | **基本修好**（msghack 钩子 + 原生 `Layer.EdgeShadowDrawText` 生效）；只剩“CG9 页面的音乐名称”一处 |
+| 千恋万花 SD CG | 完全看不到 |
+| 千恋万花 m2logo | 有色块 / 残留矩形 |
+| NEKOPARA 4 立绘 | 完全看不到 |
+
+**探针实测（19:56/19:57 日志）**：
+
+1. `probe: exch-route denied reason=not-known-stale`（NEKOPARA `ショコラ`/`バニラ`）、
+   `reason=page-visible`（当前可见页，正常）、
+   `reason=no-page-root`（千恋万花 SD：`target='CG View LayerAffineLayer'`，
+   `page='CG View Layer'`，`root='裏メッセージレイヤ2'` —— 目标在“消息层页面”里，
+   而源工作层挂在 `トップレイヤ`，参考实现的 `source->GetParent() == page_root` 判据
+   天然不成立，参考实现也只覆盖 `表/裏-背景` 这一对）。
+2. `page-busy` / `streak-not-reached` / `LayerAssign route=reparent-hidden-page` **一次都没有** →
+   说明上一轮刚补的“把孤儿层搬回可见页”从来没被执行到。根因是移植时多加了
+   `if(!known_stale) return nullptr;`（参考实现只在“同名兄弟层改投”那一支用 known_stale，
+   兜底搬页路径不看它）。**已修（e45d941）**。
+3. `probe: motion d3d decision` 第一次实现整段抛异常（`String(stub 对象)` 触发 E_CONVERT），
+   已改为逐项 try；但即使没有这些值，`D3DAdaptor.captureCanvas` 仍在跑、`SeparateLayerAdaptor`
+   0 次，足以确认两作都走了 D3D 路径。
+
+**本轮做法（真正的选路修复）**：`motionplayer` 的 `Motion.enableD3D` 以前返回一个**字典 stub
+对象**（truthy），于是游戏脚本的
+`_useD3D = Motion.enableD3D && (typeof window.d3dMotion != "undefined") && window.d3dMotion`
+恒为真，一律走 D3DAdaptor 的 `captureCanvas` 交付链。本壳的 D3D 只是空壳（没有参考实现那种
+render texture），帧画出来也 assign 出去，却停在隐藏页 —— 这就是 SD / m2logo / 立绘共同的现象。
+
+现在 `Motion.enableD3D` 恒返回 `0`（Integer；setter 吸收脚本赋值并只记一条日志），让游戏按
+自己的降级路径走：`SeparateLayerAdaptor` + 私有渲染层（§1.5 已移植，层挂在 owner 之下、z 序与
+页面归属都是游戏自己的）。依据：Android 上根本没有 D3D；这些作品的工具链自带非 D3D 路径
+（游戏自己的菜单项“モーション表示にDirect3D描画を使用しない”=`-nod3dm`，千恋万花 `patch.tjs`
+还显式 `&Motion.Player.useD3D = 0;`）。
+
+**回滚办法**：把 `getEnableD3D` 改回返回字典 stub 即回到 D3D 路径（一行）。
+
+**下一步看什么**：真机日志里应出现 `Motion.enableD3D: 脚本请求开启 D3D 路径，已忽略`，
+`SeparateLayerAdaptor` 计数 > 0、`D3DAdaptor.captureCanvas` 归零，
+以及 `motion: SeparateLayerAdaptor 渲染层路由 owner=… parent=…`（§1.5 的路由日志）。
+
 **同一轮日志里的另两条线索**：
 
 - 千恋万花：`convertImage: key='m2logo.mtn/source/logo/icon/icon32/pixel.png' RL decode
