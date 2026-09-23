@@ -268,25 +268,26 @@ FATAL SIGNAL 6
 现象：每次切视频 `frame_perf update_max=4382/4553/4731ms`、fps 掉到 3–18，每次都打
 `movie: 影片线程 4000ms 未退出，放弃销毁并泄漏该影片对象`。
 
-根因（两轮才定位准）：
-1. `Release()` 先有界等 4s 再销毁，但**没有任何路径叫停播放线程**：
-   `BasePlayer::Process()` 的循环条件只有 `m_bAbortRequest`，而该标志原先只在
-   `CloseInputStream()` 里置位，`CloseInputStream()` 又只从 `~BasePlayer` 调用。
-2. 加了 `RequestStop()` 后真机仍卡满 4s（`engine-20260923-000714.log`：
-   `停播请求后影片线程 4000ms 仍未退出`）：解码线程卡在 `AddVideoPicture()` 的
-   "等空 picture 槽位"里 —— 那个 50ms 分片等待**只认 `m_pictureWaitAbort`**，不认
-   播放线程的中断标志；消费者是渲染线程每帧的 `GetFrontBuffer()`，而渲染线程正卡在
-   `Release()` 里。`AbortPictureWait()` 原先只在 `Stop()` 与析构里调，但
-   `VideoOvlImpl::Close()` 走的是 `Pause() → Release()`，**从不经过 `Stop()`**。
+根因（**三轮**才定位准，前两轮均已被真机证伪）：
+1. `Release()` 先有界等 4s 再销毁，但**没有任何路径叫停播放线程**（`m_bAbortRequest`
+   只在 `CloseInputStream()` 里置位，而它只从 `~BasePlayer` 调）。
+2. 补了 `AbortPictureWait()` 后仍卡满 4s —— 因为真因不是等待逻辑，而是**跨线程死锁**：
+   - 渲染线程：`engine_tick` **整帧持有 `g_registry_mutex`** → 脚本 → `VideoOverlay.Close()`
+     → `Release()` → 等播放线程退出；
+   - 解码线程：`CRenderManager::DiscardBuffer()` → `TVPMoviePlayer::Flush()`，
+     **持着 `m_mtxPicture` 调 `spdlog::info`** → `StartupLogSink` 要取 `g_registry_mutex`
+     （`engine_api.cpp:748`）→ 永久阻塞。
+   于是解码线程回不到 `Process()` 顶部看中断，`StopThread()` 的 join 永远回不来。
+   **只在切换时发生 seek（有 Flush）的那些切换上复现** —— 没有 Flush 就没有锁内日志。
 
 修法：
-- 新增 `BasePlayer::RequestStop()`（置 `m_bAbortRequest`、`m_pDemuxer->Abort()`、唤醒
-  `m_ready`；`m_bAbortRequest` 改 `std::atomic`）；`Release()` 先 `AbortPictureWait()`
-  + `RequestStop()` 再有界等待，并打一条 `movie: 停播请求→影片线程退出耗时 Nms`。
-- `CDVDMessageQueue`：`Put`/`Abort` 先自增唤醒序号再在 `m_mtxEvent` 上通知，`Get` 同锁求值谓词
-  （去掉丢唤醒、只能空等 timeout 的路径）；`CThread::StopThread` 在锁内改 `m_bStop`。
-- 阶段标记：`AddVideoPicture` 的槽位等待循环 + `BasePlayer::OnExit` 的两次 CloseStream，
-  下次若仍卡，`.stall` 能直接指出是哪个 join。
+- **所有 `m_mtxPicture` 临界区改成“锁内只取值，日志在锁外打”**（与 `g_movieStatsMutex`
+  同一条纪律）：`Flush`/`AddVideoPicture`/`PresentPicture`/两个 `OnContinuousCallback`。
+- 新增 `BasePlayer::RequestStop()`（置 `m_bAbortRequest` + `m_bStop` + 中断 demuxer）；
+  `Release()` 先 `AbortPictureWait()` + `RequestStop()` 再有界等待。
+- `OutputPicture()` 在 `m_bStop` 时直接返回 `EOS_ABORT`（它开头会把 `m_bAbortOutput` 清掉）。
+- `CDVDMessageQueue` 等待改为可中断；`StallWatchdog` 的影片阶段拆成
+  **player / video / audio 三个槽位**（`.stall` 四行，能直接回答“哪条线程卡在哪”）。
 
 验收：连续切 8 段 CG，`update_max` 不再出现 4000ms 量级，且不再出现「未退出，放弃销毁」。
 
@@ -433,7 +434,7 @@ FATAL SIGNAL 6
 | 千恋万花 **SD/logo 交付（D3DEmote）** | 中 | 已补 `Layer.assignMotionImages` + `AssignImages` scratch/页面交换路由（均未解决本作）；**已裁决走方案 B**，见下 |
 | 千恋万花 **字体/文字颜色偏白、logo 色偏与残留矩形** | 中 | 候选根因：参考引擎为本作应用的 7 个标题 hook（含 `message edge argument routing`）KiriNext 全缺；未定位到 code path |
 | **AlphaMovie 插件复用 core 解码器** | 中 | 未做；完成后删掉重复 ~1700 行 |
-| おっぱいスパイ学園 **切 CG 视频严重卡顿** | 中 | 🟡 **已修两轮（§1.10.1），第二轮待真机回归**。第一轮补了 `RequestStop()`（原来根本没人叫停播放线程）；真机日志显示仍卡满 4s，第二轮定位到解码线程卡在 `AddVideoPicture()` 的"等空 picture 槽位"（只认 `m_pictureWaitAbort`，而 `Close()` 走 `Pause()→Release()` 从不经过 `Stop()`），已在 `Release()` 里补 `AbortPictureWait()` |
+| おっぱいスパイ学園 **切 CG 视频严重卡顿** | 中 | 🟡 **已修三轮（§1.10.1），第三轮待真机回归**。前两轮（`RequestStop()`、`AbortPictureWait()`）均被真机证伪；真因是**跨线程死锁**：解码线程在 `Flush()` 里持 `m_mtxPicture` 打 spdlog，而 `engine_tick` 整帧持有 `StartupLogSink` 要的 `g_registry_mutex`，而渲染线程正在 `Release()` 里等它退出。已把所有 `m_mtxPicture` 临界区改成“锁内取值、锁外打日志” |
 | チート緊縛術（classic）**`Member "showLayers" does not exist` → 引擎退出** | 小-中 | 脚本层成员缺失：`showLayers` 在本仓库与 AetherKiri 都**未注册**（`grep -rn showLayers cpp/` 两边都空）。日志：`trace : mainwindow.tjs(5777)[(function expression)] <-- conductor.tjs(440)[onTag]`、`scenario.ks 行 223 タグ eval`。该作目录带 `patch.xp3` + `claude-3-5-sonnet-…翻译补丁备份` + `hook.ini` + `FONTCHANGER.dll`（加载失败），**疑似翻译补丁替换的 `mainwindow.tjs` 少了该函数**。需要用户提供 `data.xp3>mainwindow.tjs` 与 `patch.xp3` 里的同名文件对照 |
 | チート緊縛術（AetherKiri）**字体渲染不正确** | 小-中 | **缺日志**：该游戏目录里只有 classic 层那次 `engine-*.log`。要 AetherKiri 层那次的 `FontSystem: 已注册字体 N 个`、`font_fallback_mode=`、缺字/`GetBeingFont` 行。该作自带 `ShiraYukiNoa.otf` + `FONTCHANGER.dll`（本引擎加载失败）⇒ 字体很可能靠该插件换 |
 | **猫娘乐园（NEKOPARA 4）游戏内 E-mote/Live2D 立绘加载不出** | 中 | ✅ **已修（§1.10.2），真机日志已确认生效**（错误计数 3230→0、`no image loaded` 2321→0、档案正常加载；立绘是否肉眼正常待用户确认） |

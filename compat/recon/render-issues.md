@@ -241,34 +241,38 @@ frame_perf: fps=45.5 update_avg=9.62ms post_avg=0.87ms update_max=133.98ms slow(
 
 ## 2.5 おっぱいスパイ学園（`おっぱいスパイ学園`）— 切 CG 视频严重卡顿
 
-**状态：已修两轮（2026-09-23），第二轮待真机回归**
+**状态：已修三轮（2026-09-23），第三轮待真机回归**
 
 ### 第一轮（已证实不够）
 
-根因：`TVPMoviePlayer::Release()` 先有界等 4s 再销毁，但**没有任何路径叫停播放线程** ——
-`BasePlayer::Process()` 的循环条件只有 `m_bAbortRequest`，而该标志原先只在
-`CloseInputStream()` 里置位，`CloseInputStream()` 又只从 `~BasePlayer` 调用。
-修法：新增 `BasePlayer::RequestStop()`；`CDVDMessageQueue` 等待改为可中断（唤醒序号 + 中断标志）。
+`Release()` 先有界等 4s 再销毁，但**没有任何路径叫停播放线程**（`m_bAbortRequest` 只在
+`CloseInputStream()` 里置位，而它只从 `~BasePlayer` 调）。修法：新增
+`BasePlayer::RequestStop()`；`CDVDMessageQueue` 等待改为可中断。
 
-### 第二轮（真机 `engine-20260923-000714.log` 定位）
+### 第二轮（已证实不够）
 
-第一轮后仍每次卡满 4s：
-```
-[00:07:39.449] movie: 停播请求后影片线程 4000ms 仍未退出，放弃销毁并泄漏该影片对象
-[00:07:37.093] 卡死探针：渲染线程 1.6s 没推进，最后阶段＝movie: Close→Release()
-              （影片线程阶段＝movie: 解码线程→处理消息/解码）
-[00:07:34.950] MoviePlayer Flush: 丢弃 4 帧待呈现缓冲（curPicture=3）
-```
-停播请求发出去了，但解码线程仍停在"处理消息/解码"里。真因：`AddVideoPicture()`
-的 50ms 分片等待**只认 `m_pictureWaitAbort`**，不认 `m_bAbortRequest`/`m_bAbortOutput`；
-消费者是渲染线程每帧的 `GetFrontBuffer()` —— 渲染线程此刻正卡在 `Release()` 里，队列必然
-填满，于是 `OnExit → CloseStream(video) → StopThread()` 的 join 永远回不来。
-`AbortPictureWait()` 原先只在 `Stop()` 与析构里调，而 `VideoOvlImpl::Close()` 走的是
-`Pause() → Release()`，**从不经过 `Stop()`**。
+又补了 `Release()` 里的 `AbortPictureWait()`。真机 `engine-20260923-003051.log`
+（**含第二轮的构建**，`.stall` 里已能看到 `OnExit→CloseStream(视频)` 标记）仍卡满 4s。
 
-修法：`Release()` 在有界等待**之前**调 `AbortPictureWait()`（与 `RequestStop()` 并列，
-缺一不可）；并在 `AddVideoPicture` 的两个槽位等待循环与 `BasePlayer::OnExit` 里加
-阶段标记，若下次仍卡，`.stall` 能直接指出是哪个 join。
+### 第三轮（当前）
+
+真因是**跨线程死锁**，与等待逻辑无关：
+
+- 渲染线程：`engine_tick` **整帧持有 `g_registry_mutex`** → 脚本 → `VideoOverlay.Close()`
+  → `Release()` → 等播放线程退出；
+- 解码线程：`CRenderManager::DiscardBuffer()` → `TVPMoviePlayer::Flush()`，
+  **持着 `m_mtxPicture` 调 `spdlog::info`** → `StartupLogSink` 要取 `g_registry_mutex`
+  （`bridge/engine_api/src/engine_api.cpp:748`）→ 永久阻塞。
+
+于是解码线程回不到 `Process()` 顶部看中断，`StopThread()` 的 join 永远回不来。
+**只在切换时发生 seek（有 Flush）的那些切换上复现** —— 没有 Flush 就没有锁内日志。
+
+修法：所有 `m_mtxPicture` 临界区改成“锁内只取值，日志在锁外打”（与 `g_movieStatsMutex`
+同一条纪律）：`TVPMoviePlayer::Flush/AddVideoPicture`、
+`VideoPresentOverlay::PresentPicture/OnContinuousCallback`、
+`VideoPresentLayer::OnContinuousCallback`。另：`RequestStop()` 同时置 `m_bStop`；
+`OutputPicture()` 在 `m_bStop` 时直接返回 `EOS_ABORT`（它开头会清掉 `m_bAbortOutput`）。
+诊断：`StallWatchdog` 的影片阶段拆成 **player / video / audio 三个槽位**，`.stall` 现在四行。
 
 原始证据（真机 `engine-20260922-224405.log`，classic 层）：
 ```
