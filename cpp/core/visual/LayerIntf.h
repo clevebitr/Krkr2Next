@@ -291,6 +291,9 @@ public:
 
     tjs_uint GetCount() { return Children.GetActualCount(); }
 
+    // 供 KAG 页面改投判据使用（移植自 AetherKiri LayerIntf.h 的同名访问器）。
+    bool DebugIsInTransition() const { return InTransition; }
+
     tTJSNI_BaseLayer *GetChildren(tjs_int idx) {
         Children.Compact();
         return Children[idx];

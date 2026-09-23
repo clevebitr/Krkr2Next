@@ -537,6 +537,37 @@ SeparateLayerAdaptor 的私有渲染层，而它们从来没在日志里出现�
 `&Motion.Player.useD3D = 0;`（即作者本意就是不要 D3D 路径），而真机日志显示 D3D
 路径仍在跑（`D3DAdaptor.captureCanvas` 累计 901 次，`SeparateLayerAdaptor` 0 次）。
 
+### 1.13.4 第五轮：把参考实现的“隐藏页孤儿层搬回可见页”补齐
+
+真机（19:26/19:27，非探针构建）与上一轮完全同形：NEKOPARA 头两帧交付到
+`表-背景(vis=1)`，随后全部变成 `裏-背景(vis=0)`；千恋万花 SD 交付到
+`CG View LayerAffineLayer`（`parent='CG View Layer(vis=1)'`，但整条链 `parentVisible=0`），
+标题图是 `裏-背景(vis=0)` + 一份 `trans_title_bg`。即图像已加载、帧已画好，但停在隐藏页。
+
+对照参考实现（AetherKiri `LayerIntf.cpp:359-535`）发现本仓库的移植**只搬了一半**：
+原版除了“改投到可见页同名同尺寸的兄弟层”之外，还有两道兑底：
+
+1. 可见页里**没有**同名兄弟时，若该隐藏层被**持续交付**（同一目标连续 12 次、相邻两次
+   间隔 ≤ 250ms），且可见页没有压得住它的内容层、两页都不在转场中 ⇒ 把**层本身**
+   `SetParent` 搬到可见页（保持 order，记入 `TVPMotionSwapAssignmentTargets`）；
+2. 可见页里的 `trans_*` 兄弟是即将到来的 crossfade 目标，转场前要**让路**；且后续交付
+   要走 `AssignMotionImages` 交换语义（`visible_target == this` 分支）。
+
+本轮把这三块补齐（`LayerIntf.{h,cpp}`：新增 `DebugIsInTransition()` 访问器、
+`TVPHiddenKagAssignmentStreaks`/`TVPMotionSwapAssignmentTargets` 状态、
+`LayerAssign route=reparent-hidden-page` 日志、`probe: exch-route denied reason=page-busy/
+streak-not-reached`）。
+
+**同一轮日志里的另两条线索**：
+
+- 千恋万花：`convertImage: key='m2logo.mtn/source/logo/icon/icon32/pixel.png' RL decode
+  failed for 3x16 raw=48B; falling back to raw palette decoding` —— “m2logo 动效颜色异常”
+  的可疑点（该资源标 RL 却解不出 RLE；上一轮已改成回退原始字节 + 格式推断，若颜色仍不对
+  就要查调色板字节序/格式推断，而不是继续调 RL 解码）。
+- NEKOPARA：`stencil mask label '■耳L/R' not found for 'stencil'` 与大量
+  `expandSubMotionNodes: no nodes for 'motion/general_obj_*'` —— E-mote 节点树有分支没被
+  展开，属于“立绘只剩部分部件”方向的待查点。
+
 ---
 
 ## 2. 目标一：KAG 兼容层对齐 AetherKiri

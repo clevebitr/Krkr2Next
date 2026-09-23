@@ -14,7 +14,9 @@
 
 #include "tjsCommHead.h"
 
+#include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cmath>
@@ -2446,6 +2448,17 @@ static std::map<const tTJSNI_BaseLayer *, bool>
     TVPKagPageLastObservedVisibility;
 static std::set<const tTJSNI_BaseLayer *> TVPExchangedHiddenKagPages;
 
+// 连续被交付到隐藏页的次数/时刻：只有“持续一段时间都在往隐藏页里交付”才认定为
+// 页面交换后遗留的孤儿层（参考实现的同名状态，移植自 AetherKiri LayerIntf.cpp）。
+struct TVPKagAssignmentStreak {
+    int count = 0;
+    std::chrono::steady_clock::time_point last;
+};
+static std::map<const tTJSNI_BaseLayer *, TVPKagAssignmentStreak>
+    TVPHiddenKagAssignmentStreaks;
+// 被本函数**搬回可见页**的层：它们后续的交付要走交换语义（AssignMotionImages）。
+static std::set<const tTJSNI_BaseLayer *> TVPMotionSwapAssignmentTargets;
+
 #if defined(KRKR_RENDER_PROBE)
 // 改投判定的拒绝原因探针：每个 (目标名, 原因) 只记一条。
 //
@@ -2562,12 +2575,82 @@ TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
            cand->GetWidth() != target->GetWidth() ||
            cand->GetHeight() != target->GetHeight())
             continue;
+        // 可见页里的 `trans_*` 子是即将进行的 crossfade 的目标层。转场开始前把隐藏页的
+        // 运动帧改投进去，会让新帧多显示一帧（new → fade → new）；转场进行中则由下面的
+        // DebugIsInTransition() 判据兜住。参考实现同样在这里让路。
+        const std::string candidate_name = cand->GetName().AsStdString();
+        const bool candidate_is_transition_layer =
+            candidate_name.rfind("trans_", 0) == 0;
+        if(known_stale && candidate_is_transition_layer &&
+           !hidden_page->DebugIsInTransition() &&
+           !visible_page->DebugIsInTransition())
+            return nullptr;
         return cand;
     }
+
+    // 可见页里已经有内容层（尺寸压得住目标层）或者任一页正在转场：不能搬——搬了会
+    // 破坏转场要拍的 old/new 页顺序。
+    bool visible_page_has_content_layer = false;
+    for(tjs_uint i = 0; i < visible_page->GetCount(); ++i) {
+        auto *cand = visible_page->GetChildren(static_cast<tjs_int>(i));
+        if(cand && cand->GetVisible() && cand->GetParentVisible() &&
+           cand->GetWidth() >= target->GetWidth() / 2 &&
+           cand->GetHeight() >= target->GetHeight() / 2) {
+            visible_page_has_content_layer = true;
+            break;
+        }
+    }
+    if(visible_page_has_content_layer ||
+       hidden_page->DebugIsInTransition() ||
+       visible_page->DebugIsInTransition()) {
 #if defined(KRKR_RENDER_PROBE)
-    TVPProbeExchangeRouteDenied(target, "no-name-match");
+        TVPProbeExchangeRouteDenied(target, "page-busy");
 #endif
-    return nullptr;
+        std::lock_guard<std::mutex> lock(TVPExchangedKagPageMutex);
+        TVPHiddenKagAssignmentStreaks.erase(target);
+        return nullptr;
+    }
+
+    // 页面交换可能在可见页里留下同名同尺寸的兄弟层都找不到的情形（脚本在交换前新建了
+    // 层）。此时只有当“这个隐藏层被持续交付”时才认定它是遗留孤儿，把**层本身**搬回可见
+    // 页；后续的 KAG 页面交换会正常带着它走。参考实现：同一个目标连续 12 次交付，且相邻
+    // 两次间隔不超过 250ms。
+    const auto now = std::chrono::steady_clock::now();
+    bool persistent_hidden_target = false;
+    {
+        std::lock_guard<std::mutex> lock(TVPExchangedKagPageMutex);
+        auto &streak = TVPHiddenKagAssignmentStreaks[target];
+        if(streak.count == 0 ||
+           now - streak.last > std::chrono::milliseconds(250))
+            streak.count = 0;
+        streak.last = now;
+        persistent_hidden_target = ++streak.count >= 12;
+    }
+    if(!persistent_hidden_target) {
+#if defined(KRKR_RENDER_PROBE)
+        TVPProbeExchangeRouteDenied(target, "streak-not-reached");
+#endif
+        return nullptr;
+    }
+
+    const auto target_order = target->GetOrderIndex();
+    {
+        std::lock_guard<std::mutex> lock(TVPExchangedKagPageMutex);
+        TVPHiddenKagAssignmentStreaks.erase(target);
+        TVPMotionSwapAssignmentTargets.insert(target);
+    }
+    target->SetParent(visible_page);
+    if(visible_page->GetCount() > 0) {
+        target->SetOrderIndex(std::min<tjs_int>(
+            static_cast<tjs_int>(target_order),
+            static_cast<tjs_int>(visible_page->GetCount() - 1)));
+    }
+    spdlog::info("LayerAssign route=reparent-hidden-page target='{}' "
+                 "page='{}' order={}",
+                 target->GetName().AsStdString(),
+                 visible_page->GetName().AsStdString(),
+                 target->GetOrderIndex());
+    return target;
 }
 
 //---------------------------------------------------------------------------
@@ -2648,12 +2731,26 @@ void tTJSNI_BaseLayer::AssignImages(tTJSNI_BaseLayer *src) {
     // KAG 页面交换：运动帧被 assign 到**隐藏页**里的层时，改投到可见页里同名同尺寸的
     // 兄弟层，否则画面留在隐藏页上永远不显示（参考同判据）。必须在普通赋值之前。
     if(src != this) {
+        bool use_motion_swap = false;
+        {
+            std::lock_guard<std::mutex> lock(TVPExchangedKagPageMutex);
+            use_motion_swap =
+                TVPMotionSwapAssignmentTargets.find(this) !=
+                TVPMotionSwapAssignmentTargets.end();
+        }
+        if(use_motion_swap) {
+            // 已经由上面的判据搬回可见页：后续帧走交换语义（参考实现同分支）。
+            AssignMotionImages(src);
+            return;
+        }
         if(auto *visible_target =
                TVPResolveExchangedKagAssignmentTarget(this, src)) {
             if(visible_target != this) {
                 visible_target->AssignImages(src);
                 return;
             }
+            AssignMotionImages(src);
+            return;
         }
     }
 
