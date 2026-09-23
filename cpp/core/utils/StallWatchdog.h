@@ -90,6 +90,21 @@ inline void MarkMovieAudioStage(const char *stage) {
     g_movieAudioStage.store(stage, std::memory_order_relaxed);
 }
 
+/**
+ * 读当前影片三条线程的阶段。给“停播超时”那条 error 用：看门狗要等渲染线程
+ * 1500ms 没有**推进**，而 tick 内其它 `MarkStage` 会不断刷新心跳，长帧不一定触发；
+ * 超时点自己把阶段打出来就不依赖看门狗了。
+ */
+inline const char *GetMovieStage() {
+    return g_movieStage.load(std::memory_order_relaxed);
+}
+inline const char *GetMovieVideoStage() {
+    return g_movieVideoStage.load(std::memory_order_relaxed);
+}
+inline const char *GetMovieAudioStage() {
+    return g_movieAudioStage.load(std::memory_order_relaxed);
+}
+
 /** 引擎日志路径设定后调用；卡死转储写到 <path>.stall（内部拷贝，路径可临时）。 */
 inline void SetDumpPath(const char *path) {
     if(path == nullptr || path[0] == '\0') {

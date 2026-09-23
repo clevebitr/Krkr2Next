@@ -16,6 +16,8 @@ target_sources(${PROJECT_NAME} PUBLIC
     saveStruct.cpp
     getabout.cpp
     addFont.cpp
+    # FONTCHANGER.dll 兼容：读 hook.ini 把汉化补丁自带的字体设为强制字面（见文件头）。
+    fontchanger_compat.cpp
     wutcwf.cpp
     windowEx.cpp
     getSample.cpp

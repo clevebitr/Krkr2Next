@@ -14,6 +14,7 @@
 #include "ncb_invoke.hpp"
 #include <map>
 #include <list>
+#include <set> // `TVPRegisteredPlugins` 是 std::set；本头文件直接用它，必须自己包含
 
 inline std::set<ttstr> TVPRegisteredPlugins;
 

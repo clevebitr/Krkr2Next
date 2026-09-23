@@ -220,10 +220,16 @@ void TVPMoviePlayer::Release() {
                     std::chrono::steady_clock::now() - t0)
                     .count();
             if(!exited) {
+                // 把三条影片线程的阶段一并打出来：看门狗要等渲染线程 1500ms 没有
+                // “推进”，而 tick 内其它 MarkStage 会不断刷新心跳，长帧不一定触发
+                // （真机 2026-09-23 11:44 就没留下 `.stall`）。超时点自己打最可靠。
                 spdlog::error(
                     "movie: 停播请求后影片线程 {}ms 仍未退出，放弃销毁并泄漏该影片"
-                    "对象（渲染线程绝不 join 它；否则整机卡死，只能杀进程）",
-                    kTeardownWaitMs);
+                    "对象（渲染线程绝不 join 它；否则整机卡死，只能杀进程）"
+                    "｜player={}｜video={}｜audio={}",
+                    kTeardownWaitMs, krkr::stall::GetMovieStage(),
+                    krkr::stall::GetMovieVideoStage(),
+                    krkr::stall::GetMovieAudioStage());
                 return; // 故意不 delete：对象与线程都继续存活
             }
             // 正常应在百毫秒内。每关一片一行，用来验证"切视频卡顿已消失"。

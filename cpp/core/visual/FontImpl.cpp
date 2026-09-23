@@ -30,9 +30,12 @@
 
 tTJSHashTable<ttstr, TVPFontNamePathInfo, tTVPttstrHash> TVPFontNames;
 static ttstr TVPDefaultFontName;
+static ttstr TVPForcedFontName;
 static bool TVPFontNamesInit =
     false; // 文件作用域，供 TVPResetFontImplForRestart 复位
 const ttstr &TVPGetDefaultFontName() { return TVPDefaultFontName; }
+void TVPSetForcedFontName(const ttstr &name) { TVPForcedFontName = name; }
+const ttstr &TVPGetForcedFontName() { return TVPForcedFontName; }
 void TVPGetAllFontList(std::vector<ttstr> &list) {
     auto itend = TVPFontNames.GetLast();
     for(auto it = TVPFontNames.GetFirst(); it != itend; ++it) {
@@ -68,6 +71,8 @@ void TVPResetFontImplForRestart() { // 对照上游 PR#12
         nullptr; // 本地 TVPReleaseFontLibrary 不置空，二次 init 需重建
     TVPFontNames.Clear();
     TVPDefaultFontName.Clear();
+    // 强制字面也要清：它是按游戏目录的 hook.ini 设的，换个游戏必须重新判定。
+    TVPForcedFontName.Clear();
     TVPFontNamesInit = false;
 }
 //---------------------------------------------------------------------------

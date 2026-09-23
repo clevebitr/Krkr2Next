@@ -3,6 +3,7 @@
 #include "tjsCommHead.h"
 
 #include "FontSystem.h"
+#include "FontImpl.h"
 #include "StringUtil.h"
 #include "MsgIntf.h"
 #include "DebugIntf.h"
@@ -86,6 +87,18 @@ ttstr FontSystem::GetBeingFont(ttstr fonts) {
         vfont = true;
     } else {
         vfont = false;
+    }
+
+    // FONTCHANGER 兼容：hook.ini 里 `CHANGEFONT=1` 时补丁要求**所有**文字都用指定
+    // 字面（游戏原字体没有中文字形，不换就是方块）。强制字面优先于一切候选，包括
+    // 下面的 `PrerenderFont(...)` 剥离与 `force_default_font` 开关。
+    {
+        const ttstr &forced = TVPGetForcedFontName();
+        if(!forced.IsEmpty()) {
+            if(vfont && forced.c_str()[0] != TJS_W('@'))
+                return TJS_W("@") + forced;
+            return forced;
+        }
     }
 
     // Strip a leading "PrerenderFont(...)" / "PreRenderFont(...)" directive.
