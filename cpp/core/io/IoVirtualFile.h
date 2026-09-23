@@ -40,4 +40,19 @@ namespace krkr::io {
     // 打开命中的虚拟文件（只读，io 包成内存流）。未命中返回 nullptr。
     tTJSBinaryStream *OpenVirtualFile(const ttstr &name);
 
+    // ── 覆盖型 provider ──────────────────────────────────────────────────────
+    //
+    // 与普通（兑底）provider 的区别只在**优先级**：覆盖型排在**物理存储之前**，
+    // 用来盖住游戏自带的同名脚本。
+    //
+    // 为什么必须存在这一档：方案 B（D3DEmote）要用参考实现的脚本替掉游戏自带的
+    // `system/motion.tjs` —— 而那个文件是**真实存在**的，兑底型 provider 永远不会
+    // 被问到（"物理优先"是普通 provider 的契约）。按 §5 的裁决，覆盖只针对
+    // **明确列出的少数名字**，不影响其余名字的物理优先。
+    void RegisterVirtualFileOverrideProvider(VirtualFileExistsFn exists,
+                                             VirtualFileContentFn content);
+    void UnregisterVirtualFileOverrideProvider(VirtualFileExistsFn exists);
+    // 是否命中**覆盖型** provider（带重入保护）。
+    bool IsVirtualFileOverride(const ttstr &name);
+
 } // namespace krkr::io

@@ -1841,6 +1841,70 @@ static tjs_error D3DAdaptor_setClearEnabledProp(const tTJSVariant *v,
     return TJS_S_OK;
 }
 
+// ── D3DEmote.tjs（方案 B）依赖的呈现目标成员 ────────────────────────────
+//
+// 脚本 `drawAffine` 对 `_window.motionD3DAdaptor`（就是本类）做这套调用：
+//     target.setPresentationTarget(targetLayer)
+//     target.clearEnabled = true / false
+//     presentationHold = target.presentationHold
+//     target.captureCanvas(work); target.unloadUnusedTextures()
+//     if (!presentationHold) { _redrawImage(work); assignMotionImages/assignImages(work) }
+//     target.clearPresentationTarget()
+//
+// 参考实现的完整语义是"原生 player 冷替换时先按住一帧、避免整角色闪一下"，那需要它
+// 自己的渲染 surface 与逐帧决策；本壳没有。这里只实现脚本依赖的**调用契约**：
+// 记住目标层、`presentationHold` 恒为 false（即每帧都交付）。
+//
+// 为什么能肯定这不是绕路：真机日志已逐个排除纹理别名、目标层参数，剩下的“帧永远
+// 留在工作层”正是因为脚本走了 `presentationHold == true` 的那一支而跳过交付；
+// 本壳从来没有能把它置真的路径，所以恒 false 就等于“总是交付”。
+static tTJSVariant s_d3dPresentationTarget;
+static bool s_d3dPresentationHold = false;
+
+static tjs_error D3DAdaptor_setPresentationTarget(tTJSVariant *r,
+                                                   tjs_int numparams,
+                                                   tTJSVariant **param,
+                                                   iTJSDispatch2 *) {
+    if(r)
+        *r = tTJSVariant();
+    if(numparams >= 1 && param[0] && param[0]->Type() == tvtObject &&
+       param[0]->AsObjectNoAddRef()) {
+        s_d3dPresentationTarget = param[0]->AsObjectNoAddRef();
+    } else {
+        s_d3dPresentationTarget.Clear();
+    }
+    s_d3dPresentationHold = false;
+    return TJS_S_OK;
+}
+
+static tjs_error D3DAdaptor_clearPresentationTarget(tTJSVariant *r, tjs_int,
+                                                    tTJSVariant **,
+                                                    iTJSDispatch2 *) {
+    if(r)
+        *r = tTJSVariant();
+    s_d3dPresentationTarget.Clear();
+    s_d3dPresentationHold = false;
+    return TJS_S_OK;
+}
+
+static tjs_error D3DAdaptor_getPresentationHold(tTJSVariant *r,
+                                                iTJSDispatch2 *) {
+    if(r)
+        *r = tTJSVariant(s_d3dPresentationHold);
+    return TJS_S_OK;
+}
+
+// 参考实现用它丢弃渲染 surface 上残留的纹理（重试绘制前调一次）。本壳的 surface
+// 是游戏每帧传进来的 work 层，不归本类所有，所以只能 no-op —— 但要**存在**：
+// 缺失时脚本的 `catch` 分支会抛「成员不存在」而中断整段 drawAffine。
+static tjs_error D3DAdaptor_removeAllTextures(tTJSVariant *r, tjs_int,
+                                              tTJSVariant **,
+                                              iTJSDispatch2 *) {
+    if(r)
+        *r = tTJSVariant();
+    return TJS_S_OK;
+}
+
 static iTJSDispatch2 *Create_NC_D3DAdaptor() {
     auto *cls = new tTJSNativeClass(TJS_W("D3DAdaptor"));
     if(cls) {
@@ -1871,6 +1935,23 @@ static iTJSDispatch2 *Create_NC_D3DAdaptor() {
             D3DAdaptor_getClearEnabledProp,
             D3DAdaptor_setClearEnabledProp);
         TJSNativeClassRegisterNCM(cls, TJS_W("clearEnabled"), clrProp,
+                                  TJS_W("D3DAdaptor"), nitProperty);
+        // ── D3DEmote.tjs（方案 B）依赖的成员，见上面的说明。
+        TJSNativeClassRegisterNCM(
+            cls, TJS_W("setPresentationTarget"),
+            TJSCreateNativeClassMethod(D3DAdaptor_setPresentationTarget),
+            TJS_W("D3DAdaptor"), nitMethod);
+        TJSNativeClassRegisterNCM(
+            cls, TJS_W("clearPresentationTarget"),
+            TJSCreateNativeClassMethod(D3DAdaptor_clearPresentationTarget),
+            TJS_W("D3DAdaptor"), nitMethod);
+        TJSNativeClassRegisterNCM(
+            cls, TJS_W("removeAllTextures"),
+            TJSCreateNativeClassMethod(D3DAdaptor_removeAllTextures),
+            TJS_W("D3DAdaptor"), nitMethod);
+        iTJSDispatch2 *holdProp = TJSCreateNativeClassProperty(
+            D3DAdaptor_getPresentationHold, nullptr);
+        TJSNativeClassRegisterNCM(cls, TJS_W("presentationHold"), holdProp,
                                   TJS_W("D3DAdaptor"), nitProperty);
     }
     return cls;

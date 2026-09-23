@@ -15,6 +15,8 @@ namespace krkr::io {
         struct ProviderEntry {
             VirtualFileExistsFn exists;
             VirtualFileContentFn content;
+            // 覆盖型：排在物理存储之前（见 IoVirtualFile.h 的说明）。
+            bool isOverride;
         };
 
         // 函数局部静态：避免跨 TU 的静态初始化顺序问题（provider 的静态注册可能
@@ -40,58 +42,88 @@ namespace krkr::io {
             ProviderDepthGuard &operator=(const ProviderDepthGuard &) = delete;
         };
 
-        std::vector<ProviderEntry> SnapshotProviders() {
+        std::vector<ProviderEntry> SnapshotProviders(bool overrides) {
             std::lock_guard<std::mutex> lock(ProviderMutex());
-            return Providers();
+            std::vector<ProviderEntry> out;
+            out.reserve(Providers().size());
+            for(const auto &entry : Providers()) {
+                if(entry.isOverride == overrides)
+                    out.push_back(entry);
+            }
+            return out;
+        }
+
+        void RegisterProvider(VirtualFileExistsFn exists,
+                              VirtualFileContentFn content, bool isOverride) {
+            if(!exists)
+                return;
+            std::lock_guard<std::mutex> lock(ProviderMutex());
+            auto &providers = Providers();
+            for(auto &entry : providers) {
+                if(entry.exists == exists) {
+                    entry.content = content; // 重复注册：更新 content
+                    entry.isOverride = isOverride;
+                    return;
+                }
+            }
+            providers.push_back({ exists, content, isOverride });
+        }
+
+        void UnregisterProvider(VirtualFileExistsFn exists) {
+            std::lock_guard<std::mutex> lock(ProviderMutex());
+            auto &providers = Providers();
+            providers.erase(
+                std::remove_if(providers.begin(), providers.end(),
+                               [exists](const ProviderEntry &entry) {
+                                   return entry.exists == exists;
+                               }),
+                providers.end());
+        }
+
+        bool AnyProviderMatches(const ttstr &name, bool overrides) {
+            if(name.IsEmpty() || g_providerDepth != 0)
+                return false;
+
+            ProviderDepthGuard guard;
+            for(const auto &entry : SnapshotProviders(overrides)) {
+                if(!entry.exists)
+                    continue;
+                try {
+                    if(entry.exists(name))
+                        return true;
+                } catch(...) {
+                    // provider 不得让普通存储查询失败；它自己的诊断留在别处。
+                }
+            }
+            return false;
         }
 
     } // namespace
 
     void RegisterVirtualFileProvider(VirtualFileExistsFn exists,
                                      VirtualFileContentFn content) {
-        if(!exists)
-            return;
-        std::lock_guard<std::mutex> lock(ProviderMutex());
-        auto &providers = Providers();
-        for(auto &entry : providers) {
-            if(entry.exists == exists) {
-                entry.content = content; // 重复注册：更新 content
-                return;
-            }
-        }
-        providers.push_back({ exists, content });
+        RegisterProvider(exists, content, /*isOverride=*/false);
     }
 
     void UnregisterVirtualFileProvider(VirtualFileExistsFn exists) {
-        std::lock_guard<std::mutex> lock(ProviderMutex());
-        auto &providers = Providers();
-        providers.erase(
-            std::remove_if(providers.begin(), providers.end(),
-                           [exists](const ProviderEntry &entry) {
-                               return entry.exists == exists;
-                           }),
-            providers.end());
+        UnregisterProvider(exists);
+    }
+
+    void RegisterVirtualFileOverrideProvider(VirtualFileExistsFn exists,
+                                             VirtualFileContentFn content) {
+        RegisterProvider(exists, content, /*isOverride=*/true);
+    }
+
+    void UnregisterVirtualFileOverrideProvider(VirtualFileExistsFn exists) {
+        UnregisterProvider(exists);
     }
 
     bool IsVirtualFile(const ttstr &name) {
-        if(name.IsEmpty() || g_providerDepth != 0)
-            return false;
+        return AnyProviderMatches(name, /*overrides=*/false);
+    }
 
-        ProviderDepthGuard guard;
-        bool found = false;
-        for(const auto &entry : SnapshotProviders()) {
-            if(!entry.exists)
-                continue;
-            try {
-                if(entry.exists(name)) {
-                    found = true;
-                    break;
-                }
-            } catch(...) {
-                // provider 不得让普通存储查询失败；它自己的诊断留在别处。
-            }
-        }
-        return found;
+    bool IsVirtualFileOverride(const ttstr &name) {
+        return AnyProviderMatches(name, /*overrides=*/true);
     }
 
     tTJSBinaryStream *OpenVirtualFile(const ttstr &name) {
@@ -99,30 +131,33 @@ namespace krkr::io {
             return nullptr;
 
         ProviderDepthGuard guard;
-        for(const auto &entry : SnapshotProviders()) {
-            if(!entry.content)
-                continue;
-            std::string content;
-            bool handled = false;
-            try {
-                handled = entry.content(name, content);
-            } catch(...) {
-                handled = false;
-            }
-            if(!handled)
-                continue;
+        // 覆盖型先试（与 IsVirtualFileOverride 的优先级一致）。
+        for(bool overrides : { true, false }) {
+            for(const auto &entry : SnapshotProviders(overrides)) {
+                if(!entry.content)
+                    continue;
+                std::string content;
+                bool handled = false;
+                try {
+                    handled = entry.content(name, content);
+                } catch(...) {
+                    handled = false;
+                }
+                if(!handled)
+                    continue;
 
-            // io 负责包流：provider 不认识流类型，也不依赖 base 的流实现。
-            auto *stream = new tTVPMemoryStream();
-            try {
-                if(!content.empty())
-                    stream->Write(content.data(),
-                                  static_cast<tjs_uint>(content.size()));
-                stream->Seek(0, TJS_BS_SEEK_SET);
-                return stream;
-            } catch(...) {
-                delete stream;
-                throw;
+                // io 负责包流：provider 不认识流类型，也不依赖 base 的流实现。
+                auto *stream = new tTVPMemoryStream();
+                try {
+                    if(!content.empty())
+                        stream->Write(content.data(),
+                                      static_cast<tjs_uint>(content.size()));
+                    stream->Seek(0, TJS_BS_SEEK_SET);
+                    return stream;
+                } catch(...) {
+                    delete stream;
+                    throw;
+                }
             }
         }
         return nullptr;

@@ -1,0 +1,12 @@
+// 由 CMake 的 configure_file 生成：把 resources/D3DEmote.tjs 变成字节数组。
+//
+// 不要手写 C++ 字符串字面量：1340 行日文脚本，转义一旦写错就是静默的语法错误。
+// 与 AetherKiri `cpp/core/base/resources/D3DEmote_tjs.cpp.in` 同一做法。
+#include <cstddef>
+
+extern const unsigned char kKrkr2NextD3DEmoteTjs[] = {
+@COMPAT_D3DEMOTE_BYTES@
+};
+
+extern const std::size_t kKrkr2NextD3DEmoteTjsSize =
+    sizeof(kKrkr2NextD3DEmoteTjs);

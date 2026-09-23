@@ -10,11 +10,17 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <map>
 #include <mutex>
 #include <string>
 
 #include <spdlog/spdlog.h>
+
+// 由 compat/CMakeLists.txt 的 configure_file 生成（D3DEmote.tjs 的字节数组）。
+// 声明放这里而不是头文件：这个符号不存在于公开接口里，只有本文件的 provider 用它。
+extern const unsigned char kKrkr2NextD3DEmoteTjs[];
+extern const std::size_t kKrkr2NextD3DEmoteTjsSize;
 
 namespace krkr::compat {
     namespace {
@@ -163,6 +169,26 @@ namespace krkr::compat {
             return ActiveLayer() == LayerId::AetherKiri;
         }
 
+        // ── D3DEmote/motion.tjs 覆盖（方案 B）────────────────────────────────
+        //
+        // 为什么需要：Yuzusoft 的 SD/logo 交付靠游戏自带的 `system/motion.tjs`，其交付
+        // 目标与本引擎的图层语义不匹配（真机已逐项排除：纹理别名、目标层参数、
+        // `parentVisible=0` 的“裏”页 ── 帧落在隐藏页里，永远不显示）。参考实现不吃这个
+        // 亏是因为它**用自己的 `D3DEmote.tjs` 替掉了 `motion.tjs`**。
+        //
+        // 与上游 `cpp/core/base/StorageIntf.cpp` 的 `TVPIsD3DEmoteCompanionScript` /
+        // `TVPOpenD3DEmoteCompanionScript` 同名同语义；区别是本仓库把它注册成**覆盖型**
+        // provider（排在物理之前）—— 游戏自带的 `motion.tjs` 是真实存在的，兑底型
+        // provider 永远不会被问到。
+        constexpr char kD3DEmoteCompatPrefix[] =
+            "// AetherKiri D3DEmote/motion.tjs compatibility bridge.\n"
+            "try { Plugins.link(\"emoteplayer.dll\"); } catch(e) { }\n";
+
+        bool IsD3DEmoteOverrideScript(const ttstr &name) {
+            const std::string storage = ExtractLowerName(name);
+            return storage == "motion.tjs" || storage == "d3demote.tjs";
+        }
+
         // 每个名字只打一次，且总量封顶：companion 命中是低频事件，但同一脚本会被反复
         // 探测，motion 类名还可能很多；高频日志必须采样/去重（AGENTS §9）。
         void LogCompanionOnce(const char *kind, const std::string &name) {
@@ -220,15 +246,40 @@ namespace krkr::compat {
             return false;
         }
 
+        bool AetherKiriCompanionOverrideExists(const ttstr &name) {
+            if(!IsAetherKiriLayer())
+                return false;
+            return IsD3DEmoteOverrideScript(name);
+        }
+
+        bool AetherKiriCompanionOverrideContent(const ttstr &name,
+                                                std::string &content) {
+            if(!IsAetherKiriLayer())
+                return false;
+            if(!IsD3DEmoteOverrideScript(name))
+                return false;
+            LogCompanionOnce("d3demote-override", ExtractLowerName(name));
+            content.assign(kD3DEmoteCompatPrefix,
+                           sizeof(kD3DEmoteCompatPrefix) - 1);
+            content.append(
+                reinterpret_cast<const char *>(kKrkr2NextD3DEmoteTjs),
+                kKrkr2NextD3DEmoteTjsSize);
+            return true;
+        }
+
     } // namespace
 
     void RegisterAetherKiriCompanions() {
         io::RegisterVirtualFileProvider(&AetherKiriCompanionExists,
                                         &AetherKiriCompanionContent);
+        io::RegisterVirtualFileOverrideProvider(&AetherKiriCompanionOverrideExists,
+                                                &AetherKiriCompanionOverrideContent);
     }
 
     void UnregisterAetherKiriCompanions() {
         io::UnregisterVirtualFileProvider(&AetherKiriCompanionExists);
+        io::UnregisterVirtualFileOverrideProvider(
+            &AetherKiriCompanionOverrideExists);
     }
 
     namespace {

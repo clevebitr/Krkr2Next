@@ -115,10 +115,10 @@
     {
       "local": "cpp/core/compat/AetherKiriCompanions.cpp",
       "upstream": "cpp/core/base/StorageIntf.cpp",
-      "source_ref": "cpp/core/base/StorageIntf.cpp:368-403（谓词）、:406-438（打开器）、:1299-1305/1832-1865/2023-2035/2178-2210（消费点）；GPU 占位脚本本体来自 cpp/core/base/impl/GpuCompatScript.h",
+      "source_ref": "cpp/core/base/StorageIntf.cpp:368-403（谓词）、:406-438（打开器）、:1299-1305/1832-1865/2023-2035/2178-2210（消费点）；GPU 占位脚本本体来自 cpp/core/base/impl/GpuCompatScript.h；D3DEmote 覆盖：cpp/core/base/StorageIntf.cpp:43-45（前缀）、:395-399（谓词）、:424-438（打开器）、:2178-2183（消费点），脚本本体来自 cpp/core/base/resources/D3DEmote.tjs",
       "modifications": "partial-extract",
-      "reason": "AetherKiri 层的伴生脚本虚拟文件：GPU 占位脚本（11 名，含 live2d.tjs）、motion_<asset>.psb/.mtn.tjs → %[\"storage\" => …]、*emo 虚拟存储。上游把这套逻辑直接写在 StorageIntf.cpp 里（io 层因此耦合了发行版知识）；本仓库改为 io 只提供泛型注册点 cpp/core/io/IoVirtualFile.*，由 compat 层注册 provider（见 compat/README.md §2）。local-fix：provider 只在 ActiveLayer()==AetherKiri 时生效；每个名字只打一条命中日志。gfxEffect / logwindow / D3DEmote 三类伴生脚本本轮未移（分别依赖模块存在性检查、~90 行内嵌脚本、36KB 生成 blob）。",
-      "sha256_local": "cd8bb584193324e01c9824891b56e5a5feacf57307604ba28d77e81f67d76b57",
+      "reason": "AetherKiri 层的伴生脚本虚拟文件：GPU 占位脚本（11 名，含 live2d.tjs）、motion_<asset>.psb/.mtn.tjs → %[\"storage\" => …]、*emo 虚拟存储、以及 D3DEmote.tjs 对 motion.tjs/d3demote.tjs 的**覆盖**。上游把这套逻辑直接写在 StorageIntf.cpp 里（io 层因此耦合了发行版知识）；本仓库改为 io 只提供泛型注册点 cpp/core/io/IoVirtualFile.*（含“覆盖型 provider”，排在物理之前），由 compat 层注册 provider（见 compat/README.md §2、§5 关于覆盖只针对明确列出的名字）。local-fix：provider 只在 ActiveLayer()==AetherKiri 时生效；每个名字只打一条命中日志。gfxEffect / logwindow 两类伴生脚本本轮未移（分别依赖模块存在性检查与 ~90 行内嵌脚本）。",
+      "sha256_local": "a99badf9140de880e0d86f3e78ca6aa501a26684ecb588513165286051a97ed0",
       "sha256_upstream_at_rev": "de2300aadb7e05e087fa6f539ae721f2478647afeef45b5f9a1ddc2c86d278c4"
     },
     {
@@ -137,6 +137,14 @@
       "reason": "AlphaMovie(AJPM) 帧载荷解码器。放 core 而非插件的理由：.amv 由 core 的 tTVPGraphicType 注册（GraphicsLoaderIntf.cpp:238），图形与头部两条路径都在 core；core 不能依赖插件、插件可以依赖 core（compat/README.md §2），所以解码器在 core、插件复用，才能让 Layer.loadImages(\"*.amv\") 这类 core 路径也拿到帧。相对上游的改动：成员变量改为参数（qtbl/isZlib/zlibBufSize/geo/payload）、filePtr->ReadBuffer 改为带边界检查的载荷 memcpy、失败 return 改为 return false、amvImageConvertContext_ 改为函数内 static、产出写进 outRgba。另：YUV→RGBA 沿用上游的 swscale（故 core/visual 新增 find_package(FFMPEG swscale)；不能反向依赖 core_movie_module，会成环）。",
       "sha256_local": "a4891641a72fada0f8394544dc3a60f2c85beed6998588490392002febe110e6",
       "sha256_upstream_at_rev": "d8be10bb14225c6dd7faee37f2e5fe65437aaa9cc5135d320c201b9a9c3b55e0"
+    },
+    {
+      "local": "cpp/core/compat/resources/D3DEmote.tjs",
+      "upstream": "cpp/core/base/resources/D3DEmote.tjs",
+      "modifications": "none",
+      "reason": "方案 B 的脚本本体：用参考实现的 D3DEmote 覆盖游戏自带的 system/motion.tjs。逐字节拷贝，由 compat/CMakeLists.txt 的 configure_file 生成字节数组嵌入。",
+      "sha256_local": "d396bd695d6b16d5a1e6e0d22c548e71a28dad3db2e7dd6e449c96459d6d32de",
+      "sha256_upstream_at_rev": "d396bd695d6b16d5a1e6e0d22c548e71a28dad3db2e7dd6e449c96459d6d32de"
     }
   ],
   "not_ported": [
