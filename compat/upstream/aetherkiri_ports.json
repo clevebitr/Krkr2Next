@@ -122,6 +122,15 @@
       "sha256_upstream_at_rev": "de2300aadb7e05e087fa6f539ae721f2478647afeef45b5f9a1ddc2c86d278c4"
     },
     {
+      "local": "cpp/plugins/textrender.cpp",
+      "upstream": "cpp/plugins/textrender.cpp",
+      "source_ref": "cpp/plugins/textrender.cpp:79-500（variant/色值/参数辅助）、:507-660（EdgeShadowDrawTextCompat）、:1772-1773（Layer.EdgeShadowDrawText / …KinsokuRect 注册）",
+      "modifications": "partial-extract",
+      "reason": "Yuzusoft 系（含汉化整合包）的消息文字靠 TextRender 插件的原生 `Layer.EdgeShadowDrawText` / `Layer.EdgeShadowDrawTextKinsokuRect`：`msghack.tjs` 是编译字节码（源码改写补丁对它不生效），原生方法缺失时会退回脚本自己的“渐变图层 + drawPathString”路径，在本引擎渲染成纯白（千恋万花汉化版文字颜色异常）。本仓库只取这两个方法及其所需的辅助函数；颜色解码按游戏 `custom.tjs` 的“顶 0xFFFFFF → 底 col”语义传顶/底两色（上游两遍都传顶色）。local-fix：探针改用 `KRKR_RENDER_PROBE`、只记前 8 次且不记录文本内容。",
+      "sha256_local": "11232144964f96ae4248f0021b8b11da0f0ef0e6b6fe09b5c67d92fbbbac4382",
+      "sha256_upstream_at_rev": "7145057cb0036230ce471a9c180ede111925f147f0b37a337927900b979c8413"
+    },
+    {
       "local": "cpp/plugins/alphamovie.cpp",
       "upstream": "cpp/plugins/alphamovie.cpp",
       "modifications": "local-fix",
