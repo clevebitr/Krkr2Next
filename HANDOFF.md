@@ -359,6 +359,53 @@ FATAL SIGNAL 6
 
 ---
 
+## 1.12 千恋万花：字体颜色与 SD 交付（本轮照搬上游，待真机回归）
+
+### 1.12.1 消息文字颜色（`Layer.drawTextVerticalGradient` + 脚本源码改写）
+
+根因：`EdgeShadowDrawText` **不是引擎 API，而是游戏自带 `custom.tjs` 里的函数**，它用
+「渐变图层 + `operateRect`」画字（顶 `0xFFFFFF` → 底 `col`），在本引擎里渲染成纯白。
+上游的解法是**在脚本加载时改写这段源码**，换成一次原生渐变文字绘制。
+
+两件都补齐了：
+- `visual/FontBaseline.h` 补 `ComputeGlyphOriginY` / `ClampTextOriginToClipTop` /
+  `ComputeTextShadowTopPadding`；`impl/LayerBitmapImpl.*` 实现
+  `InternalBlendTextVerticalGradient` / `DrawTextVerticalGradient`
+  （混合取上游的**软件分支**写法：逐行复用 `InternalBlendText`，它自带 GPU/软件两条路径的选择，
+  于是不必再引入上游那条 `AlphaBlend_d` + scratch 纹理的批量分支）；
+  `LayerIntf.*` 加 `tTJSNI_BaseLayer::DrawTextVerticalGradient` 与原生方法
+  `Layer.drawTextVerticalGradient`（`TJS_END_NATIVE_METHOD_DECL` 自注册，不用改方法表）。
+- `base/ScriptMgnIntf.cpp`：新增 `TVPApplyScriptCompatibilityPatches(shortname, buffer)`，
+  在 `TVPExecuteStorage` 读完源码、`ExecScript` **之前**调用；首个补丁是 `custom.tjs` 的
+  `EdgeShadowDrawText` 块替换。匹配用**结构化锚点**（函数签名 + 块内 `MakeGradationLayer`
+  与 `d.operateRect` 特征串 + 括号配对），**不用行号** —— 整合包/汉化版会增删行。
+
+日志判据：`Applied compatibility patch for native gradient text drawing (custom.tjs)`。
+
+### 1.12.2 SD CG 不可见（方案 B：D3DEmote.tjs 覆盖）
+
+四件工作全部落地：
+1. `cpp/core/compat/resources/D3DEmote.tjs`（上游 1340 行，逐字节一致，已登记进移植清单
+   `modifications: none`）；compat/CMakeLists.txt 按上游同款 `configure_file` + hex 字节数组
+   生成 `D3DEmote_tjs.cpp`。
+2. `io/IoVirtualFile.*` 新增**覆盖型 provider**（排在物理存储**之前**），
+   `IoStorage.cpp` 的 `TVPGetPlacedPath` 与 `_TVPCreateStream` 各加一处判定。
+   **为什么必须有这一档**：游戏自带的 `motion.tjs` 是**真实存在**的，兜底型 provider 永远
+   不会被问到（“物理优先”是普通 provider 的契约）；按 §5 的裁决，覆盖只针对
+   `motion.tjs` / `d3demote.tjs` 两个明确列出的名字。注册在 `AetherKiriCompanions.cpp`，
+   **只对 AetherKiri 层生效**。
+3. `plugins/motionplayer/main.cpp` 的 `D3DAdaptor` 类补
+   `setPresentationTarget` / `clearPresentationTarget` / `presentationHold` /
+   `removeAllTextures`。脚本 `drawAffine` 的写入路径是
+   `if (!presentationHold) { _redrawImage(work); assignMotionImages(work) }`；参考实现会在
+   原生 player 冷替换时把 hold 置真（需要它自己的渲染 surface），本壳没那条路径，
+   所以 `presentationHold` **恒为 false ⇒ 每帧都交付**。
+4. 清理（删方案 A 的兜底）留到真机确认方案 B 生效之后再动。
+
+日志判据：`compat companion: 虚拟提供 motion.tjs [d3demote-override]`。
+
+---
+
 ## 2. 目标一：KAG 兼容层对齐 AetherKiri
 
 用户确认的范围是五块（原话概括）：
@@ -482,8 +529,8 @@ FATAL SIGNAL 6
 | G2 **帧率 ~43–45** | 中 | 每帧 1920×1080 **GPU→CPU 回读**（`capture` 路径**刻意优先 CPU**：引擎随后按 CPU 位图重传纹理会覆盖只写纹理的内容）；主窗口走 `path=GPU`，只有 Live2D 图层退化。附带：该回读用 `GL_BGRA_EXT` 调 `glReadPixels`，ES3 非法 → `err=0x0502` |
 | G2 / 千恋万花 **`SystemWatchTimerTimer` 卡顿**（1.5–1.9s） | 中 | 卡在 `DeliverEvents()` 或 `TickBeat()` 循环（内层 MarkStage 未触发）；需在该函数内加细阶段探针 |
 | 千恋万花 **`wave` 转场缺失** | 中 | **需按 GPU render method 重做**：2026-09-23 试过逐字节移植 AetherKiri 的 CPU 扫描线实现，CI 编译失败（`iTVPScanLineProvider::GetScanLine*` 在本仓库被 `#if 0`）；根因与结论见 `render-issues.md §2` |
-| 千恋万花 **SD/logo 交付（D3DEmote）** | 中 | 已补 `Layer.assignMotionImages` + `AssignImages` scratch/页面交换路由（均未解决本作）；**已裁决走方案 B**，见下 |
-| 千恋万花 **字体/文字颜色偏白、logo 色偏与残留矩形** | 中 | 候选根因：参考引擎为本作应用的 7 个标题 hook（含 `message edge argument routing`）KiriNext 全缺；未定位到 code path |
+| 千恋万花 **SD/logo 交付（D3DEmote）** | 中 | 方案 B **已实施（§1.12.2）**：`D3DEmote.tjs` 覆盖 `motion.tjs`（覆盖型虚拟文件，仅 AetherKiri 层）+ `D3DAdaptor` 的 `presentationHold` 等成员；待真机回归。方案 A 的兜底保留待评估 |
+| 千恋万花 **字体/文字颜色偏白、logo 色偏与残留矩形** | 中 | 文字颜色 **已修（§1.12.1）**：`Layer.drawTextVerticalGradient` + `custom.tjs` 源码改写；logo 色偏/残留矩形待看结果 |
 | **AlphaMovie 插件复用 core 解码器** | 中 | 未做；完成后删掉重复 ~1700 行 |
 | おっぱいスパイ学園 **切 CG 视频严重卡顿** | 中 | 🟡 **已修三轮（§1.10.1），第三轮待真机回归**。前两轮（`RequestStop()`、`AbortPictureWait()`）均被真机证伪；真因是**跨线程死锁**：解码线程在 `Flush()` 里持 `m_mtxPicture` 打 spdlog，而 `engine_tick` 整帧持有 `StartupLogSink` 要的 `g_registry_mutex`，而渲染线程正在 `Release()` 里等它退出。已把所有 `m_mtxPicture` 临界区改成“锁内取值、锁外打日志” |
 | チート緊縛術（classic）**`Member "showLayers" does not exist` → 引擎退出** | 小-中 | 脚本层成员缺失：`showLayers` 在本仓库与 AetherKiri 都**未注册**（`grep -rn showLayers cpp/` 两边都空）。日志：`trace : mainwindow.tjs(5777)[(function expression)] <-- conductor.tjs(440)[onTag]`、`scenario.ks 行 223 タグ eval`。该作目录带 `patch.xp3` + `claude-3-5-sonnet-…翻译补丁备份` + `hook.ini` + `FONTCHANGER.dll`（加载失败），**疑似翻译补丁替换的 `mainwindow.tjs` 少了该函数**。需要用户提供 `data.xp3>mainwindow.tjs` 与 `patch.xp3` 里的同名文件对照 |
