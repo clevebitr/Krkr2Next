@@ -309,6 +309,56 @@ FATAL SIGNAL 6
 
 ---
 
+## 1.11 图形设置（本轮新增，用户要求）
+
+**结论：这些高级图形功能引擎里早已实现（与 AetherKiri 一致），缺的是壳暴露 + 一条能
+真正生效的通道。** 对照结果（两边的引擎配置键几乎相同，KiriNext 还多一个
+`font_fallback_mode`）：
+
+| 键 | 含义 | 取值 |
+|---|---|---|
+| `ogl_compress_tex` | 纹理压缩 | `none` / `half` / `etc2` / `pvrtc` |
+| `software_compress_tex` | 软件渲染的纹理压缩 | `none` / `halfline` / `lz4` / `lz4+tlg5` |
+| `ogl_accurate_render` | 精确渲染 | 布尔 |
+| `ogl_max_texsize` | 最大纹理尺寸 | 整数，0 = 不覆盖 |
+| `memusage` | 内存占用档 | `unlimited` / `low` / `medium` / `high` |
+| `software_draw_thread` | 软件绘制线程（仅 `renderer=software`） | 整数 |
+
+`astcrt.cpp` / `etcpak.cpp` / `imagepacker.cpp` / `pvrtc.cpp` 也都已在
+`cpp/core/visual/CMakeLists.txt` 里编着。
+
+### 两处真正的缺口
+
+1. **通道是断的**：`engine_set_option` 结尾的通用分支只把键写进**命令行参数**
+   （`TVPProgramArguments`），而渲染层这些键是通过 `IndividualConfigManager::GetValue`
+   从 `Kirikiroid2Preference.xml` / 全局配置读的（`TVPGetCommandLine` 只认 `-xxx` 与
+   `renderer`）。
+   修法：新增“壳选项覆盖”表（`GlobalConfigManager.h` 的 `TVPSetShellOption` 等），由
+   `IndividualConfigManager` 的四个 `GetValue<T>` 特化**最高优先级**查询。
+   **不能**用 `SetValue()` 写进 `AllConfig`：`UsePreferenceAt(游戏目录)` 会先 `Clear()`
+   再 `Initialize()`，壳在开游戏前设的值会被整份清掉。
+2. **渲染器是进程级单例**：`TVPGetRenderManager(name)` 把实例缓存在工厂表里，而这些
+   选项原先只在 `InitGL()` / `static` 局部里读一次 ⇒ “每游戏一套设置”只对第一个游戏
+   生效。修法：惰性重算 + 可失效（`TVPInvalidateGraphicsOptionCaches()`，由
+   `engine_set_option` 调用）：
+   - `ogl_compress_tex`：`_CreateStaticTexture2D` 固定指向
+     `CreateStaticTexture2D_auto`，每次创建静态纹理时按档位分发（带 GL 扩展校验）；
+   - `ogl_max_texsize`：`GetMaxTextureWidth/Height` 惰性叠加用户上限；
+   - `ogl_accurate_render`：收敛成 `TVPIsAccurateRenderEnabled()` 一处缓存，
+     `LayerIntf.cpp` 的 `IsGPU()` / `LayerBitmapImpl.cpp` 的 `fastGPURoute` 不再各自存
+     `static`。
+
+### 壳侧
+
+`core/GraphicsConfig.kt`（模型 + JSON）、`AppPrefs.graphicsConfig`（全局默认）、
+`GameConfig.graphics`（null = 继承）、`ui/GraphicsConfigEditor.kt`（全局页与游戏页共用）、
+`EngineSession.graphics`（`start()` 与 `openGame()` 里下发，只发非默认项）。
+
+验收：设置 → 图形 改纹理压缩为 `etc2`，开游戏日志应有
+`engine_set_option: ogl_compress_tex=etc2`；**换游戏后仍生效**（不必重启应用）。
+
+---
+
 ## 2. 目标一：KAG 兼容层对齐 AetherKiri
 
 用户确认的范围是五块（原话概括）：
@@ -359,6 +409,7 @@ FATAL SIGNAL 6
 | 退出/强制退出（红色 + 二次确认） | ✅ 2026-09-23（`ui/GameScreen.kt`） |
 | 引擎无响应看门狗 + 强制退出/进程重启 | ✅ 2026-09-23（`EngineSession.stalledMs/shutdown(onDone)` + `MainActivity.forceExitGame/restartProcess`；新增 `engine_is_modal_active` 豁免模态） |
 | 加载游戏时自动显示日志浮层、进游戏后自动关闭 | ✅ 2026-09-23（`debug.auto_log_on_launch` + 每游戏覆盖；`GameScreen` 的 `autoShowLogs`，规格见 `SHELL_HANDOVER.md §7`） |
+| 图形设置页（纹理压缩 / 精确渲染 / 最大纹理尺寸 / 内存档） | ✅ 2026-09-23（`core/GraphicsConfig.kt` + `ui/GraphicsConfigEditor.kt`；引擎侧见 §1.11，含“壳选项覆盖”通道与惰性缓存失效） |
 
 > **壳的开发交接文档是 `SHELL_HANDOVER.md`**（本地编译闭环、文件/接口索引、各项功能的
 > 数据模型与落点、验收标准）。改壳前先读它。
@@ -536,6 +587,9 @@ gh run view "$RID" --repo clevebitr/Krkr2Next --log-failed | rg -i "error:|undef
 | 移植溯源清单 | `compat/upstream/aetherkiri_ports.json`（12 个文件） |
 | IO 组件 | `cpp/core/io/`（`StoragePolicy.h` 策略契约；`IoPolicy.*`；`IoModuleLocator.*`；`IoVirtualFile.*` 虚拟文件注册点） |
 | 兼容层框架 | `cpp/core/compat/`（`CompatLayer.*`、`ModuleGate.*`、`AetherKiriCompanions.*`） |
+| **壳选项通道** | `cpp/core/environ/ConfigManager/GlobalConfigManager.h`（`TVPSetShellOption` 等）+ `IndividualConfigManager.cpp` 的四个 `GetValue<T>` 特化 |
+| **图形设置** | 壳 `core/GraphicsConfig.kt` / `ui/GraphicsConfigEditor.kt`；引擎 `cpp/core/visual/RenderManager.{h,cpp}`（`TVPInvalidateGraphicsOptionCaches`）、`ogl/RenderManager_ogl.cpp`（`CreateStaticTexture2D_auto`） |
+| **FONTCHANGER 兼容** | `cpp/plugins/fontchanger_compat.cpp`（读 `hook.ini` 注册字体 + 强制字面）；强制字面在 `visual/FontImpl.{h,cpp}`、`FontSystem.cpp` |
 | A 块 TJS 回退 | `cpp/core/tjs2/tjsObject.cpp`（`TJSCompatResolve*`，含 **FuncCall** 链） |
 | **AlphaMovie** | 插件 `cpp/plugins/alphamovie.cpp`（上游逐字节 + `local-fix` 几何探针 + 帧落笔点裁剪偏移修复）；core 解码器 `cpp/core/visual/AlphaMovieDecoder.{h,cpp}`（`partial-extract`）；接入点 `cpp/core/visual/LoadAMV.cpp` |
 | 图形加载器注册表 | `cpp/core/visual/GraphicsLoaderIntf.cpp`（`.amv` 在第 238 行；`TVPRegisterGraphicLoadingHandler` 是对外注册 API） |
