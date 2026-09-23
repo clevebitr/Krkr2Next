@@ -5,6 +5,9 @@ import android.os.Build
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -372,22 +375,23 @@ fun GameScreen(
                     Spacer(Modifier.height(12.dp))
                 }
 
-                // 按钮抽屉：一个宽矩形。收起时只露出这一条（箭头 + 文字），展开后
-                // 矩形里多出「引擎菜单」与「更多」两个同尺寸按钮；再点收起。
+                // 按钮抽屉：**一个矩形**，展开/收起按钮就是它自己的一段（把手）。
+                // 收起时只露出把手那一段，展开时矩形整体向左长出来，把「引擎菜单」
+                // 与「更多」两个按钮一起露出来 —— 不要把手柄做成矩形外面单独的一行，
+                // 那样看起来就是两个控件。
                 Surface(
                     shape = RoundedCornerShape(18.dp),
                     color = Color(0xCC1F1F1F),
                     contentColor = Color.White,
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        if (drawerExpanded) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AnimatedVisibility(
+                            visible = drawerExpanded,
+                            enter = expandHorizontally(expandFrom = Alignment.End),
+                            exit = shrinkHorizontally(shrinkTowards = Alignment.End),
+                        ) {
                             Row(
-                                modifier = Modifier.padding(
-                                    start = 10.dp,
-                                    end = 10.dp,
-                                    top = 10.dp,
-                                    bottom = 6.dp,
-                                ),
+                                modifier = Modifier.padding(start = 10.dp, end = 2.dp),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -411,22 +415,16 @@ fun GameScreen(
                                     )
                                 }
                             }
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(1.dp)
-                                    .background(Color(0x33FFFFFF)),
-                            )
                         }
 
-                        Row(
+                        // 把手：矩形自己的一段，点它=展开/收起整个矩形。
+                        Box(
                             modifier = Modifier
                                 .clickable {
                                     drawerExpanded = !drawerExpanded
                                     if (!drawerExpanded) menuOpen = false
                                 }
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
                         ) {
                             Icon(
                                 imageVector = if (drawerExpanded) {
@@ -436,12 +434,6 @@ fun GameScreen(
                                 },
                                 contentDescription = if (drawerExpanded) "收起按钮抽屉" else "展开按钮抽屉",
                                 tint = Color.White,
-                            )
-                            Text(
-                                text = if (drawerExpanded) "收起" else "菜单",
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelLarge,
-                                modifier = Modifier.padding(start = 6.dp),
                             )
                         }
                     }
