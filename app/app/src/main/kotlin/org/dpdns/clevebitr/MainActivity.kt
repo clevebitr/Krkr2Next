@@ -1,5 +1,6 @@
 package org.dpdns.clevebitr
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
@@ -886,6 +887,17 @@ class MainActivity : ComponentActivity() {
 
     // ── 按键 ──────────────────────────────────────────────────────────────
 
+    /**
+     * 覆写 `dispatchKeyEvent` 而不是 `onKeyDown`：后者只在前台视图不消费事件时才轮到
+     * Activity，而 Compose 会把方向键/确认键吃掉做焦点导航，引擎就收不到按键了。
+     * 这个入口能拦在最前面，正是转发引擎输入需要的。
+     *
+     * `ComponentActivity.dispatchKeyEvent`（androidx.core）带
+     * `@RestrictTo(LIBRARY_GROUP_PREFIX)`，因此 lint 的 RestrictedApi 会报 error。
+     * 这是有意的覆写，且该签名多年稳定，所以就地抑制这一条检查——而不是全局关掉
+     * RestrictedApi（那样会漏掉其它真正的受限 API 误用）。
+     */
+    @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val s = session
         if (s == null) {

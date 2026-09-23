@@ -50,7 +50,6 @@ import org.dpdns.clevebitr.core.LogFiles
 
 private const val TAG = "KrKr2Next/Settings"
 
-/** 主题三档。值即 `AppPrefs.THEME_MODES`。 */
 private val THEME_CHOICES = listOf(
     "system" to "跟随系统",
     "light" to "浅色",
@@ -58,14 +57,7 @@ private val THEME_CHOICES = listOf(
 )
 
 /**
- * 设置页：**全局默认值**与调试开关。
- *
- * 分界很清楚——这里改的是"所有游戏默认怎么跑"，某个游戏要单独一套就去它的
- * 「游戏设置」页（`GameSettingsScreen`）；只读信息（作者/仓库/协议/版本）在
- * 「关于」页。三类内容混在一页时，用户分不清哪个开关会影响别的游戏。
- *
- * 设置项都服务于"把问题现场原样带出来"：日志怎么收、怎么导出、引擎跑多快、
- * 画面上叠什么。
+ * 设置页：全局默认值与调试开关。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,7 +65,7 @@ fun SettingsScreen(
     logDirPath: String,
     onBack: () -> Unit,
     onShareLogs: () -> Unit,
-    /** 当前**全局默认**叠加层配置（每游戏覆盖在各自的 `krkr2next.json` 里）。 */
+    /** 当前全局默认叠加层配置（每游戏覆盖在各自的 `krkr2next.json` 里）。 */
     overlayConfig: OverlayConfig = OverlayConfig.default(),
     /**
      * 叠加层配置变化时回调。壳层据此立刻应用——设置页也能在游戏里打开
@@ -243,7 +235,7 @@ fun SettingsScreen(
             SectionTitle("图形")
 
             Text(
-                text = "这里改的是**默认值**；某个游戏想单独一套，去它的详情页打开" +
+                text = "这里改的是默认值；某个游戏想单独一套，去它的详情页打开" +
                     "「使用独立配置」。这些项都对应引擎已有的渲染配置，换游戏即生效。",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -285,9 +277,6 @@ fun SettingsScreen(
                 },
             )
 
-            // 旧版是三档（off/summary/detail），新版是"字段集合 + 外观"：档位永远少一项，
-            // 而用户要的是"这个游戏我想看 tick，那个游戏只想看 FPS"。旧档位仍然可读
-            // （AppPrefs 负责翻译），但设置页只写新配置。
             Text(
                 text = "性能叠加层（全局默认）",
                 style = MaterialTheme.typography.titleMedium,
@@ -316,7 +305,7 @@ fun SettingsScreen(
             )
             Text(
                 text = "在游戏画面上叠一组按钮，点它等于按键盘上的对应键。" +
-                    "这里改的是**默认值**；某个游戏想单独一套，去它的详情页打开" +
+                    "这里改的是默认值；某个游戏想单独一套，去它的详情页打开" +
                     "「使用独立配置」。游戏中可从悬浮菜单进「编辑自定义按键」直接拖拽定位。",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -407,7 +396,7 @@ fun SettingsScreen(
                 },
             )
             Text(
-                text = "引擎日志**按游戏分开**：每个游戏在 games/ 下有自己的一份，" +
+                text = "引擎日志按游戏分开：每个游戏在 games/ 下有自己的一份，" +
                     "文件名为 engine-<时间戳>.log，最近几轮的现场都在那里。" +
                     "分享日志会带上最近玩过的几个游戏各自最新的一份。",
                 style = MaterialTheme.typography.bodySmall,
@@ -468,10 +457,6 @@ fun SettingsScreen(
 
 /**
  * 最近玩过的游戏各自的日志落点。
- *
- * 为什么要在设置页列出来：引擎日志按游戏分开之后，"日志在哪"不再是一个固定路径，
- * 而排障时第一个问题恰恰是"这个游戏那份在哪"。这里直接列出**最近一次**的路径，
- * 用户能照着找，也能整段复制。
  */
 @Composable
 private fun RecentGameLogs() {

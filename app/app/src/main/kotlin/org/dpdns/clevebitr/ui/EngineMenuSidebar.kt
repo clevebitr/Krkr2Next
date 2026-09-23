@@ -42,18 +42,10 @@ import androidx.compose.ui.unit.dp
 import org.dpdns.clevebitr.core.EngineMenuNode
 
 /**
- * 引擎菜单侧边栏（§4）。
+ * 引擎菜单侧边栏。
  *
  * 列出游戏通过 KiriKiri 的 `tTVPMenuItem` / `Window.menu` 注册的窗口菜单项——Windows
  * 版标题栏下方那一栏在 Android 上没有系统菜单栏可放，所以由壳自己渲染。
- *
- * 带子项的条目可以**折叠/展开**（箭头 + 旋转动画）；默认全部展开，用户收起哪一项
- * 只记在本次会话里（菜单本身由游戏动态维护，持久化展开状态没有意义）。
- *
- * 交互取舍：展开时铺一层**消费触摸**的遮罩，即"打开时暂停游戏输入"。另一条路是让
- * 遮罩穿透、只有条目消费事件，但那样在侧边栏上滑动会误触到下面的游戏，反而更难用。
- *
- * 空态必须显式：很多游戏根本没注册菜单项，空白侧边栏会让人以为功能坏了。
  */
 @Composable
 fun EngineMenuSidebar(
@@ -220,7 +212,6 @@ private fun EngineMenuItemRow(
     }
 }
 
-/** 没有菜单项：说清楚是"游戏没注册"，而不是功能坏了。 */
 @Composable
 private fun EmptyEngineMenu() {
     Column(
@@ -234,7 +225,7 @@ private fun EmptyEngineMenu() {
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "游戏通过 Window.menu 注册的菜单（Windows 版标题栏下方那一栏）会显示在这里。" +
+            text = "游戏通过 Window.menu 注册的菜单会显示在这里。" +
                 "本作没有注册，属于正常情况。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

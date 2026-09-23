@@ -1,6 +1,3 @@
-// Kotlin DSL 注意：Gradle 已把 `java` 注册为项目扩展，脚本里直接写 `java.text.*` /
-// `java.util.*` 会被当成对该扩展取成员而报 Unresolved reference（CI 实证）。
-// 所以用顶部 import + 简单名。
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -11,15 +8,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
-
-// ── 构建版本号（用于在真机上辨别装的是哪个提交）──────────────────────────────
-// versionName 会出现在「关于」页、设置页、app.log 与崩溃报告里，所以把 git 短哈希
-// 与构建日期编进去。格式：
-//     v<base>-<git 短哈希 6 位>-<YYMMDD>      例：v0.1.0-7a7579-260922
-// 拿不到 git（无 .git 的源码包）时退化为 v<base>-nogit-<YYMMDD>，不阻断构建。
-//
-// 注意：git 仓库根在上一层（KiriNext/），而 Gradle root 在 app/；git 会自己向上
-// 找到仓库，不需要额外传路径。
 fun gitShortHash(dir: File): String = try {
     val process = ProcessBuilder("git", "rev-parse", "--short=6", "HEAD")
         .directory(dir)
@@ -39,11 +27,6 @@ val stampedVersionName: String = run {
 
 android {
     namespace = "org.dpdns.clevebitr"
-    // compose 1.11.4 与 material3 1.5.0-alpha18 只要求 compileSdk 35；这里取 36
-    // （CI 已装 platforms;android-36）。
-    //
-    // 不要为了"用更新的东西"升到 37：compileSdk 37 与 AGP 9.1.0 是同一条门槛上的
-    // 两半，见下面 dependencies 里的版本表。
     compileSdk = 36
 
     defaultConfig {
@@ -51,21 +34,13 @@ android {
         minSdk = 24
         targetSdk = 35
         versionCode = 1
-        // 形如 v0.1.0-7a7579-260922（见顶部 stampedVersionName）
+        // 形如 v0.1.0-7a7579-260922
         versionName = stampedVersionName
 
-        // 只构建 arm64-v8a。引擎（vcpkg triplet arm64-android）与 NDK 运行时
-        // 都按此 ABI 配置，32 位/模拟器 ABI 不在支持范围。
         ndk {
             abiFilters += "arm64-v8a"
         }
     }
-
-    // 引擎共享库在 Gradle 之外构建（scripts/build_engine_android.sh）后投放到
-    // src/main/jniLibs/arm64-v8a/libengine_api.so，Gradle 自动打包进 APK。
-    //
-    // 这里刻意不使用 externalNativeBuild：根 CMakeLists.txt 会设置 vcpkg 的
-    // CMAKE_TOOLCHAIN_FILE，与 Gradle 传入的 NDK toolchain file 冲突。
 
     buildTypes {
         release {
@@ -75,7 +50,7 @@ android {
                 "proguard-rules.pro",
             )
             // 自用工程：release 也用 debug 签名。不加这一行 `assembleRelease` 出的是
-            // **未签名** APK，装不上——而"引擎性能"这类问题必须在 release 引擎上量：
+            // 未签名 APK，装不上——而"引擎性能"这类问题必须在 release 引擎上量：
             // debug 构建的 -O0 与渲染探针会把数字带偏几倍。真要对外发布时换成自己的
             // keystore。
             signingConfig = signingConfigs.getByName("debug")
@@ -105,52 +80,24 @@ android {
 }
 
 dependencies {
-    // ── 全部走稳定版，不引入任何 alpha ──────────────────────────────────────
-    // BOM 2026.06.01 锁 compose ui/foundation/runtime = 1.11.4、material3 = 1.4.0。
-    // 这是**最后一批配 AGP 8.x 的稳定组合**：compose 1.12.0-alpha02 起与 material3
-    // 1.5.0-alpha19 起都把 minAndroidGradlePluginVersion 抬到 9.1.0、minCompileSdk
-    // 抬到 37，而本工程是 AGP 8.13.2 / compileSdk 36——越过去 Gradle 的 AAR 元数据
-    // 检查会直接失败（报 "requires Android Gradle plugin 9.1.0 or higher" 之类，
-    // 不是编译错误）。
-    //
-    // 之所以放弃 Material 3 Expressive：它的 MaterialExpressiveTheme / MotionScheme
-    // / ToggleButton 只在 material3 1.5.0-alpha 里是 public（稳定版里是
-    // `internal fun`，调不到），而 alpha 又被上面那条 AGP 9 门槛卡住。为三个 API 把
-    // AGP 连跳大版本、连带 Gradle 与 JDK 一起动不划算，UI 已改用标准 MD3 的等价物
-    // （MaterialTheme / SegmentedButton）。
-    //
-    // 要动这些版本：先把 AAR 里的 META-INF/com/android/build/gradle/
-    // aar-metadata.properties 拉下来看一眼 minCompileSdk 与
-    // minAndroidGradlePluginVersion（0.1 MB 的 material3-ripple AAR 就够，门槛与
-    // material3 本体一致）。
     implementation(platform("androidx.compose:compose-bom:2026.06.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.material3:material3")
-    // 图标必须留 extended：本 App 用的 ArrowBack / Close / MoreVert / PlayArrow /
-    // Settings 都在 core 里，但 **Folder 不在**——core 只有 49 个 filled 图标，目录
-    // 列表那一行的文件夹图标就靠它。删掉 extended 会让 Folder 变成 unresolved
-    // reference（只在 Kotlin 编译期暴露，Gradle 依赖检查看不出来）。
     implementation("androidx.compose.material:material-icons-extended")
+    // @Preview 注解（编译期需要；渲染由下面的 debugImplementation ui-tooling 提供）
+    implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
     // ── 导航 ────────────────────────────────────────────────────────────────
-    // 2.10.x 起 minCompileSdk=37 / minAgp=9.1（本工程是 36 / 8.13.2），跨过去
-    // Gradle 的 AAR 元数据检查会直接失败。2.9.8 是能用的最后一档：
-    // minCompileSdk=35 / minAgp=8.6.0，它带进来的 navigation-* 也都在 34/35。
     implementation("androidx.navigation:navigation-compose:2.9.8")
 
     // ── 图片加载（封面）与网络 ──────────────────────────────────────────────
-    // Coil 3.6.x 同样要 compileSdk 37；3.5.0 是 minCompileSdk=36 的最后一档。
-    // 网络栈用 OkHttp（coil-network-okhttp 也会带一个），VNDB 的 JSON 请求共用
-    // 同一个 client：一套连接池、一套超时设置。
     implementation("io.coil-kt.coil3:coil-compose:3.5.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.5.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    // Dispatchers.IO 来自 coroutines-core，Android 主线程调度器来自 -android；
-    // compose/lifecycle 会间接带进来，但刮削直接用它，显式声明免得靠传递依赖。
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     debugImplementation("androidx.compose.ui:ui-tooling")

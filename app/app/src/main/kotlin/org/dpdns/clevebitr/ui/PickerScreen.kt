@@ -78,15 +78,7 @@ import org.dpdns.clevebitr.core.GameScanner
 private const val TAG = "KrKr2Next/Picker"
 
 /**
- * 「添加游戏」用的目录浏览器。
- *
- * 与旧启动器（`LauncherScreen`）的差别：**它不再是主入口**，而是库里那个"+"的下游。
- * 因此它多做了三件事：每个子目录可以直接一键入库、当前目录可以"扫描整棵树"、
- * 已经在库里的目录会标出来（避免用户重复添加后才发现列表里有一条一模一样的）。
- *
- * 保留旧启动器的两条关键设计：入口判定用 [GameEntry]（引擎只在选中目录本层找
- * `startup.tjs` / `.xp3`，选错一层就只是"打不开"），以及手动跳转对话框（逐级返回
- * 只能向上，用户在深层目录迷路时要能直接输路径）。
+ * 目录浏览器。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

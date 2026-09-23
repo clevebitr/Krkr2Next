@@ -50,13 +50,6 @@ import org.dpdns.clevebitr.core.scrape.TitleMatch
 
 /**
  * 刮削候选选择页。
- *
- * 流程：详情页/菜单进来 → 用推断出的关键词自动搜一次 → 列候选（封面 + 匹配度）→
- * 用户点一条 → 回到详情页。**必须由用户点**：匹配度只用于排序，自动选中一旦出错，
- * 用户要在一堆字段里找出哪条是错的。
- *
- * 错误如实显示：PocketKrKr 把异常吞成空列表，"数据源不可用"的文案因此永远不会出现
- * （规格 §6 有据）；这里把 `ScrapeException.message` 直接摆出来。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

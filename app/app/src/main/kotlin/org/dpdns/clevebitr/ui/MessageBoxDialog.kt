@@ -27,10 +27,6 @@ import org.dpdns.clevebitr.core.MessageBoxHost
 
 /**
  * 宿主机消息框对话框：引擎的 `System.inform` / 致命错误框 / 输入框走这里显示。
- *
- * **模态**：不允许返回键或点击外部关闭——引擎线程此刻正阻塞等这个结果，
- * 桌面的模态消息框同样不能无按钮关闭。按钮为 0 个时按单个 "OK" 处理
- * （引擎对空按钮数组的约定与桌面一致，返回下标 0）。
  */
 @Composable
 fun MessageBoxDialog(

@@ -29,11 +29,7 @@ import org.dpdns.clevebitr.core.OverlayCorner
 import org.dpdns.clevebitr.core.OverlayField
 
 /**
- * 叠加层自定义编辑器。全局默认与每游戏覆盖共用同一个组件——两处的可见项、取值范围、
- * 预览必须完全一致，否则"我在这里调好了，那里显示不一样"会变成常态。
- *
- * 预览是真的画一遍 [PerformanceOverlay]（用固定假数据），不是示意图：字号与透明度
- * 这类东西只有按真实排版渲染出来才知道够不够看。
+ * 叠加层自定义编辑器。
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
