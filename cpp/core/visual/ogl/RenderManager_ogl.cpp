@@ -11,6 +11,7 @@
 #include "../RenderManager.h"
 #include "WindowImpl.h"
 #include "MsgIntf.h"
+#include <atomic>
 #include <string>
 #include "../tvpgl.h"
 #include "SysInitIntf.h"
@@ -504,8 +505,68 @@ static GLuint _CurrentRenderTarget = 0;
 static GLenum _glCompressedTexFormat = GL_RGBA;
 unsigned int TVPMaxTextureSize;
 static uint64_t _totalVMemSize = 0;
-static unsigned int GetMaxTextureWidth() { return TVPMaxTextureSize; }
-static unsigned int GetMaxTextureHeight() { return TVPMaxTextureSize; }
+
+// ── 图形选项的“可重算”缓存（`ogl_compress_tex` / `ogl_max_texsize`）────────────
+// 这两个选项原先只在 `InitGL()`（渲染管理器构造）里读一次，而渲染管理器是
+// **进程级单例**（`TVPGetRenderManager(name)` 把实例缓存在工厂表里），于是
+// “每游戏一套图形设置”永远只对第一个游戏生效。改成惰性重算：选项变了就把缓存置为
+// 未定（`TVPInvalidateGLGraphicsOptionCaches`），下次用到时重新解析（并校验 GL
+// 扩展支持）。
+static std::atomic<int> g_glCompressTexMethod{ -1 }; // -1 未定；0 none 1 half 2 etc2 3 pvrtc
+static std::atomic<int> g_glMaxTexSizeOverride{ -2 }; // -2 未定；<=0 表示不覆盖
+
+/** 解析当前静态纹理压缩档位（带 GL 扩展校验，结果缓存）。 */
+static int ResolveGLCompressTexMethod() {
+    int cached = g_glCompressTexMethod.load(std::memory_order_relaxed);
+    if(cached >= 0)
+        return cached;
+    const std::string name =
+        IndividualConfigManager::GetInstance()->GetValue<std::string>(
+            "ogl_compress_tex", "none");
+    int resolved = 0;
+    if(name == "half")
+        resolved = 1;
+    else if(name == "etc2" &&
+            TVPIsSupportTextureFormat(GL_COMPRESSED_RGB8_ETC2))
+        resolved = 2;
+    else if(name == "pvrtc" &&
+            TVPIsSupportTextureFormat(GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG))
+        resolved = 3;
+    g_glCompressTexMethod.store(resolved, std::memory_order_relaxed);
+    return resolved;
+}
+
+/** 用户在配置里设的最大纹理尺寸（0 = 不覆盖）。 */
+static unsigned int ResolveGLMaxTexSizeOverride() {
+    int cached = g_glMaxTexSizeOverride.load(std::memory_order_relaxed);
+    if(cached == -2) {
+        cached = IndividualConfigManager::GetInstance()->GetValue<int>(
+            "ogl_max_texsize", 0);
+        g_glMaxTexSizeOverride.store(cached, std::memory_order_relaxed);
+    }
+    return cached > 0 ? static_cast<unsigned int>(cached) : 0;
+}
+
+/** 选项变了：置为未定，下次用到时重算。 */
+void TVPInvalidateGLGraphicsOptionCaches() {
+    g_glCompressTexMethod.store(-1, std::memory_order_relaxed);
+    g_glMaxTexSizeOverride.store(-2, std::memory_order_relaxed);
+}
+
+// 与 `InitGL()` 里原来的语义一致：只在“比 GL 上限小”或“GL 上限小得可疑
+// （<1024）”时才让用户值覆盖。
+static unsigned int ApplyMaxTexSizeOverride(unsigned int glMax) {
+    const unsigned int user = ResolveGLMaxTexSizeOverride();
+    if(user > 0 && (user < glMax || glMax < 1024))
+        return user;
+    return glMax;
+}
+static unsigned int GetMaxTextureWidth() {
+    return ApplyMaxTexSizeOverride(TVPMaxTextureSize);
+}
+static unsigned int GetMaxTextureHeight() {
+    return ApplyMaxTexSizeOverride(TVPMaxTextureSize);
+}
 static unsigned int power_of_two(unsigned int input, unsigned int value = 32) {
     while(value < input) {
         value <<= 1;
@@ -2891,6 +2952,30 @@ protected:
         return CreateStaticTexture2D(dib, w, h, pitch, fmt, tw, th, isOpaque);
     }
 
+    /**
+     * 按 `ogl_compress_tex` 分发静态纹理创建。**每次创建都走这里**（而不是在
+     * `InitGL()` 里一次性选好函数指针），这样换游戏/改设置后不必重启应用。
+     */
+    static iTVPTexture2D *CreateStaticTexture2D_auto(const void *dib, tjs_uint w,
+                                                     tjs_uint h, tjs_int pitch,
+                                                     TVPTextureFormat::e fmt,
+                                                     bool isOpaque) {
+        switch(ResolveGLCompressTexMethod()) {
+            case 1:
+                return CreateStaticTexture2D_half(dib, w, h, pitch, fmt,
+                                                  isOpaque);
+            case 2:
+                return CreateStaticTexture2D_ETC2(dib, w, h, pitch, fmt,
+                                                  isOpaque);
+            case 3:
+                return CreateStaticTexture2D_PVRTC(dib, w, h, pitch, fmt,
+                                                   isOpaque);
+            default:
+                return CreateStaticTexture2D_normal(dib, w, h, pitch, fmt,
+                                                    isOpaque);
+        }
+    }
+
     static iTVPTexture2D *CreateStaticTexture2D_solid(const void *dib,
                                                       tjs_uint w, tjs_uint h,
                                                       tjs_int pitch,
@@ -3107,32 +3192,14 @@ protected:
         glGetIntegerv(GL_FRAMEBUFFER_BINDING, &_screenFrameBuffer);
         TVPInitTextureFormatList();
 
-        _CreateStaticTexture2D = CreateStaticTexture2D_normal;
+        _CreateStaticTexture2D = CreateStaticTexture2D_auto;
         _CreateMutableTexture2D = CreateMutableTexture2D_normal;
-        std::string compTexMethod =
-            IndividualConfigManager::GetInstance()->GetValue<std::string>(
-                "ogl_compress_tex", "none");
-        if(compTexMethod == "half") {
-            _CreateStaticTexture2D = CreateStaticTexture2D_half;
-            //	_CreateMutableTexture2D = CreateMutableTexture2D_half;
-        } else if(compTexMethod == "etc2") {
-            if(TVPIsSupportTextureFormat(GL_COMPRESSED_RGB8_ETC2)) {
-                _CreateStaticTexture2D = CreateStaticTexture2D_ETC2;
-            }
-        } else if(compTexMethod == "pvrtc") {
-            if(TVPIsSupportTextureFormat(GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG)) {
-                _CreateStaticTexture2D = CreateStaticTexture2D_PVRTC;
-            }
-        }
+        // `ogl_compress_tex` 的分发在 CreateStaticTexture2D_auto 里惰性完成；
+        // `ogl_max_texsize` 由 GetMaxTextureWidth/Height 惰性叠加 —— 两者都能
+        // 在换游戏后重新生效（见文件顶部“可重算缓存”的说明）。
         GLint maxTextSize;
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextSize);
         TVPMaxTextureSize = maxTextSize;
-        maxTextSize = IndividualConfigManager::GetInstance()->GetValue<int>(
-            "ogl_max_texsize", 0);
-        if(maxTextSize > 0 &&
-           (maxTextSize < TVPMaxTextureSize || TVPMaxTextureSize < 1024)) {
-            TVPMaxTextureSize = maxTextSize; // override by user config
-        }
         GLint _maxTextureUnits;
         glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &_maxTextureUnits);
 

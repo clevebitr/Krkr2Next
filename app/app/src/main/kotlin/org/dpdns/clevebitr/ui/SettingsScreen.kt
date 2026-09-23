@@ -45,6 +45,7 @@ import org.dpdns.clevebitr.core.OverlayConfig
 import org.dpdns.clevebitr.core.KeyPadProfile
 import org.dpdns.clevebitr.core.AppPrefs
 import org.dpdns.clevebitr.core.BuildInfo
+import org.dpdns.clevebitr.core.GraphicsConfig
 import org.dpdns.clevebitr.core.LogFiles
 
 private const val TAG = "KrKr2Next/Settings"
@@ -95,6 +96,9 @@ fun SettingsScreen(
     /** 全局默认"加载游戏时自动显示运行时日志浮层"（默认关）。 */
     autoLogOnLaunch: Boolean = false,
     onAutoLogOnLaunchChange: (Boolean) -> Unit = {},
+    /** 当前**全局默认**图形设置（每游戏覆盖在各自的 `krkr2next.json` 里）。 */
+    graphicsConfig: GraphicsConfig = GraphicsConfig.default(),
+    onGraphicsConfigChanged: (GraphicsConfig) -> Unit = {},
     /** 游戏中右下角是否显示「引擎菜单」按钮（§4 侧边栏入口）。 */
     engineMenuButton: Boolean = true,
     onEngineMenuButtonChange: (Boolean) -> Unit = {},
@@ -235,6 +239,27 @@ fun SettingsScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
+
+            SectionTitle("图形")
+
+            Text(
+                text = "这里改的是**默认值**；某个游戏想单独一套，去它的详情页打开" +
+                    "「使用独立配置」。这些项都对应引擎已有的渲染配置，换游戏即生效。",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+            GraphicsConfigEditor(
+                config = graphicsConfig,
+                onConfigChange = {
+                    onGraphicsConfigChanged(it)
+                    AppLog.i(
+                        TAG,
+                        "graphics: compress=${it.textureCompression.key} " +
+                            "accurate=${it.accurateRender} maxTex=${it.maxTextureSize} " +
+                            "mem=${it.memoryUsage.key}",
+                    )
+                },
+            )
 
             SectionTitle("调试")
 

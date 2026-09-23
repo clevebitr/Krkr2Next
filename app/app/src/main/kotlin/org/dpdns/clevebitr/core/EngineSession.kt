@@ -57,6 +57,16 @@ class EngineSession(
      */
     private val gameCompatProfile: String = "auto",
     /**
+     * 本局生效的图形设置（全局默认与每游戏覆盖**已在启动时合并**，见
+     * [GraphicsConfig]）。
+     *
+     * 这些键都通过 `engine_set_option` 下发。注意它们走的**不是**命令行参数通道：
+     * 引擎侧读的是 `IndividualConfigManager`，所以 `engine_set_option` 会额外写进
+     * "壳选项覆盖"表并失效渲染层的惰性缓存（见 `GlobalConfigManager.h` 的说明）——
+     * 否则壳设了也不生效（这是本功能要修的那个 bug）。
+     */
+    private val graphics: GraphicsConfig = GraphicsConfig.default(),
+    /**
      * 引擎日志。**在渲染线程回调**——只做日志落盘/打印，不要在这里碰 UI 状态。
      */
     private val onLog: (String) -> Unit = {},
@@ -448,6 +458,7 @@ class EngineSession(
 
             applyOption("fps_limit", fpsLimit.toString())
             applyOption("font_fallback_mode", fontFallbackMode)
+            applyGraphicsOptions()
             // 手动档位（非 off）优先下发：引擎侧也是"显式值优先于判档结果"。
             // off 视为"没手动指定"，交给 openGame() 的兼容档判档决定。
             if (oglDrawDeviceCompat != "off") {
@@ -505,6 +516,9 @@ class EngineSession(
             // 游戏根目录才能按血脉标记决定。
             applyOption("game_compat_profile", gameCompatProfile)
             applyOption("game_compat_game_root", gameRootPath)
+            // 图形设置再下一次：渲染器的惰性缓存会在换游戏时失效，这里保证本局用的是
+            // 本局的值（与 [start] 里那一次不重复也无害）。
+            applyGraphicsOptions()
             val rc = NativeEngine.engineOpenGameAsync(handle, gameRootPath, startupScript)
             if (rc != NativeEngine.RESULT_OK) {
                 AppLog.e(TAG, "engineOpenGameAsync failed: rc=$rc err=${lastError()}")
@@ -980,6 +994,27 @@ class EngineSession(
         val rc = NativeEngine.engineSetOption(handle, key, value)
         if (rc != NativeEngine.RESULT_OK) {
             AppLog.w(TAG, "engineSetOption($key=$value) rc=$rc err=${lastError()}")
+        }
+    }
+
+    /**
+     * 下发图形设置（见 [GraphicsConfig]）。
+     *
+     * 只在**非默认**时下发：默认值就是引擎缺省行为，多传一条只会让
+     * `Specified option(s)` 日志变长、也给"壳选项优先"那条通道多一个无意义的条目。
+     */
+    private fun applyGraphicsOptions() {
+        if (graphics.textureCompression != TextureCompression.NONE) {
+            applyOption("ogl_compress_tex", graphics.textureCompression.key)
+        }
+        if (graphics.accurateRender) {
+            applyOption("ogl_accurate_render", "true")
+        }
+        if (graphics.maxTextureSize > 0) {
+            applyOption("ogl_max_texsize", graphics.maxTextureSize.toString())
+        }
+        if (graphics.memoryUsage != MemoryUsage.UNLIMITED) {
+            applyOption("memusage", graphics.memoryUsage.key)
         }
     }
 

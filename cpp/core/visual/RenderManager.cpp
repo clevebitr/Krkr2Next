@@ -4995,6 +4995,32 @@ bool TVPIsSoftwareRenderManager() {
     return s_renderManagerSoftware;
 }
 
+// ── `ogl_accurate_render` 的惰性缓存 ──────────────────────────────────────────
+// 为什么需要缓存：这个值在绘制热路径上被查（`IsGPU()` / `fastGPURoute`），每次都读
+// 配置表（unordered_map + 锁）不划算。为什么必须能失效：渲染器是**进程级单例**，
+// 而“每游戏一套图形设置”要求换游戏后新值生效。
+static int s_accurateRenderCached = -1; // -1 未定；0 关；1 开
+
+bool TVPIsAccurateRenderEnabled() {
+    int cached = s_accurateRenderCached;
+    if(cached < 0) {
+        cached = IndividualConfigManager::GetInstance()->GetValue<bool>(
+                     "ogl_accurate_render", false)
+                     ? 1
+                     : 0;
+        s_accurateRenderCached = cached;
+    }
+    return cached != 0;
+}
+
+// 由 RenderManager_ogl.cpp 实现（纹理压缩档位 / 最大纹理尺寸的惰性缓存）。
+void TVPInvalidateGLGraphicsOptionCaches();
+
+void TVPInvalidateGraphicsOptionCaches() {
+    s_accurateRenderCached = -1;
+    TVPInvalidateGLGraphicsOptionCaches();
+}
+
 iTVPRenderManager *TVPGetSoftwareRenderManager() { // for province image process
     static tTVPSoftwareRenderManager *mgr = []() {
         auto *m = new tTVPSoftwareRenderManager;

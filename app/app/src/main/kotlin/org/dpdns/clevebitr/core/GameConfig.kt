@@ -154,13 +154,16 @@ data class GameConfig(
     val touchpad: Boolean? = null,
     /** null = "加载期自动显示日志"也继承全局。 */
     val autoLogOnLaunch: Boolean? = null,
+    /** null = 图形设置也继承全局。 */
+    val graphics: GraphicsConfig? = null,
     val metadata: GameMetadata = GameMetadata(),
     /** 用户备注；刮削给不了的信息（汉化组、版本、踩坑记录）放这里。 */
     val notes: String? = null,
 ) {
     val isEmpty: Boolean
         get() = engine.isEmpty && overlay == null && keypad == null && touchpad == null &&
-            autoLogOnLaunch == null && metadata.isEmpty && notes.isNullOrBlank()
+            autoLogOnLaunch == null && graphics == null && metadata.isEmpty &&
+            notes.isNullOrBlank()
 
     fun toJson(): JSONObject = JSONObject().apply {
         put(KEY_SCHEMA, SCHEMA)
@@ -169,6 +172,7 @@ data class GameConfig(
         keypad?.let { put(KEY_KEYPAD, it.toJson()) }
         touchpad?.let { put(KEY_TOUCHPAD, it) }
         autoLogOnLaunch?.let { put(KEY_AUTO_LOG_ON_LAUNCH, it) }
+        graphics?.let { put(KEY_GRAPHICS, it.toJson()) }
         if (!metadata.isEmpty) put(KEY_METADATA, metadata.toJson())
         notes?.takeIf { it.isNotBlank() }?.let { put(KEY_NOTES, it) }
     }
@@ -183,6 +187,7 @@ data class GameConfig(
         const val KEY_KEYPAD = "keypad"
         const val KEY_TOUCHPAD = "touchpad"
         const val KEY_AUTO_LOG_ON_LAUNCH = "autoLogOnLaunch"
+        const val KEY_GRAPHICS = "graphics"
         const val KEY_METADATA = "metadata"
         const val KEY_NOTES = "notes"
 
@@ -201,6 +206,7 @@ data class GameConfig(
                 } else {
                     null
                 },
+                graphics = GraphicsConfig.fromJson(json.optJSONObject(KEY_GRAPHICS)),
                 metadata = GameMetadata.fromJson(json.optJSONObject(KEY_METADATA)),
                 notes = json.optString(KEY_NOTES, "").takeIf { it.isNotEmpty() },
             )
@@ -353,6 +359,8 @@ data class GlobalDefaults(
     val touchpad: Boolean = false,
     /** 全局默认"加载游戏时自动显示运行时日志浮层"（默认关）。 */
     val autoLogOnLaunch: Boolean = false,
+    /** 全局默认图形设置。 */
+    val graphics: GraphicsConfig = GraphicsConfig.default(),
 )
 
 /** 合并后的结果：壳各处（启动、叠加层）只认它。 */
@@ -365,6 +373,7 @@ data class ResolvedShellSettings(
     val keypad: KeyPadProfile,
     val touchpad: Boolean,
     val autoLogOnLaunch: Boolean,
+    val graphics: GraphicsConfig,
 )
 
 /** 逐项合并：每游戏写了用它的，没写用全局默认。 */
@@ -377,6 +386,7 @@ fun GameConfig.resolve(global: GlobalDefaults): ResolvedShellSettings = Resolved
     keypad = keypad ?: global.keypad,
     touchpad = touchpad ?: global.touchpad,
     autoLogOnLaunch = autoLogOnLaunch ?: global.autoLogOnLaunch,
+    graphics = graphics ?: global.graphics,
 )
 
 /**

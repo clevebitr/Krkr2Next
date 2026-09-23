@@ -87,6 +87,10 @@ fun GameSettingsScreen(
     var autoLog by remember(game.id) {
         mutableStateOf(config.autoLogOnLaunch ?: globalDefaults.autoLogOnLaunch)
     }
+    var useOwnGraphics by remember(game.id) { mutableStateOf(config.graphics != null) }
+    var graphics by remember(game.id) {
+        mutableStateOf(config.graphics ?: globalDefaults.graphics)
+    }
 
     val globalMode = RunMode.fromConfig(
         globalDefaults.compatProfile,
@@ -107,6 +111,7 @@ fun GameSettingsScreen(
         keypad = if (useOwnKeypad) keypad else null,
         touchpad = if (useOwnTouchpad) touchpad else null,
         autoLogOnLaunch = if (useOwnAutoLog) autoLog else null,
+        graphics = if (useOwnGraphics) graphics else null,
     )
 
     Scaffold(
@@ -266,6 +271,33 @@ fun GameSettingsScreen(
                         touchpad = checked
                     },
                 )
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+
+                SettingsSectionTitle("图形")
+
+                SwitchRow(
+                    title = "使用独立配置",
+                    subtitle = "关掉则跟随全局默认（纹理压缩、精确渲染、纹理尺寸、内存档" +
+                        "都用全局那一份）。",
+                    checked = useOwnGraphics,
+                    onCheckedChange = { useOwnGraphics = it },
+                )
+                if (useOwnGraphics) {
+                    GraphicsConfigEditor(
+                        config = graphics,
+                        onConfigChange = { graphics = it },
+                    )
+                } else {
+                    Text(
+                        text = "当前跟随全局默认：纹理压缩=" +
+                            "${globalDefaults.graphics.textureCompression.label}、" +
+                            "精确渲染=${if (globalDefaults.graphics.accurateRender) "开" else "关"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
 
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 

@@ -39,6 +39,7 @@ import org.dpdns.clevebitr.core.GameConfig
 import org.dpdns.clevebitr.core.GameConfigStore
 import org.dpdns.clevebitr.core.GameLibrary
 import org.dpdns.clevebitr.core.GlobalDefaults
+import org.dpdns.clevebitr.core.GraphicsConfig
 import org.dpdns.clevebitr.core.InputEvent
 import org.dpdns.clevebitr.core.KeyPadProfile
 import org.dpdns.clevebitr.core.LibraryGame
@@ -157,6 +158,10 @@ class MainActivity : ComponentActivity() {
     private var sessionAutoLogOnLaunch by mutableStateOf(false)
     private var sessionAutoLogIsPerGame = false
 
+    /** 本次会话生效的图形设置（全局默认与每游戏覆盖已在启动时合并）。 */
+    private var sessionGraphics by mutableStateOf(GraphicsConfig.default())
+    private var sessionGraphicsIsPerGame = false
+
     // ── 游戏库与设置状态 ──
     private lateinit var library: GameLibrary
     private var games by mutableStateOf<List<LibraryGame>>(emptyList())
@@ -168,6 +173,7 @@ class MainActivity : ComponentActivity() {
     private var touchpadSensitivity by mutableStateOf(AppPrefs.TOUCHPAD_SENSITIVITY_DEFAULT)
     private var engineMenuButton by mutableStateOf(true)
     private var autoLogOnLaunch by mutableStateOf(false)
+    private var graphicsConfig by mutableStateOf(GraphicsConfig.default())
 
     private var themeMode by mutableStateOf("system")
     private var fontFallbackMode by mutableStateOf("auto")
@@ -215,6 +221,7 @@ class MainActivity : ComponentActivity() {
         touchpadSensitivity = AppPrefs.touchpadSensitivity(this)
         engineMenuButton = AppPrefs.engineMenuButton(this)
         autoLogOnLaunch = AppPrefs.autoLogOnLaunch(this)
+        graphicsConfig = AppPrefs.graphicsConfig(this)
         themeMode = AppPrefs.themeMode(this)
         fontFallbackMode = AppPrefs.fontFallbackMode(this)
         oglDrawDeviceCompat = AppPrefs.oglDrawDeviceCompat(this)
@@ -535,6 +542,13 @@ class MainActivity : ComponentActivity() {
                 // 只是显示开关：该游戏没有独立配置时本局立刻跟着变，不用退出重进
                 if (!sessionAutoLogIsPerGame) sessionAutoLogOnLaunch = enabled
             },
+            graphicsConfig = graphicsConfig,
+            onGraphicsConfigChanged = { updated ->
+                graphicsConfig = updated
+                AppPrefs.setGraphicsConfig(this, updated)
+                // 图形选项会在换游戏时重新下发；该游戏没有独立配置时本局也立刻跟着变
+                if (!sessionGraphicsIsPerGame) sessionGraphics = updated
+            },
             engineMenuButton = engineMenuButton,
             onEngineMenuButtonChange = { enabled ->
                 engineMenuButton = enabled
@@ -665,6 +679,7 @@ class MainActivity : ComponentActivity() {
         keypad = keypadConfig,
         touchpad = touchpadDefault,
         autoLogOnLaunch = autoLogOnLaunch,
+        graphics = graphicsConfig,
     )
 
     // ── 引擎会话 ────────────────────────────────────────────────────────────
@@ -715,6 +730,8 @@ class MainActivity : ComponentActivity() {
         sessionTouchpadSensitivity = touchpadSensitivity
         sessionAutoLogOnLaunch = resolved.autoLogOnLaunch
         sessionAutoLogIsPerGame = config.autoLogOnLaunch != null
+        sessionGraphics = resolved.graphics
+        sessionGraphicsIsPerGame = config.graphics != null
 
         AppLog.i(
             TAG,
@@ -732,6 +749,7 @@ class MainActivity : ComponentActivity() {
             fontFallbackMode = resolved.fontFallbackMode,
             oglDrawDeviceCompat = resolved.oglDrawDeviceCompat,
             gameCompatProfile = resolved.compatProfile,
+            graphics = sessionGraphics,
             onLog = { log ->
                 log.lines().forEach { if (it.isNotBlank()) AppLog.i(ENGINE_LOG_TAG, it) }
             },

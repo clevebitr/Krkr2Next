@@ -76,6 +76,7 @@ extern "C" void krkr_GetSurfaceDimensions(uint32_t *, uint32_t *);
 #include "visual/ogl/krkr_egl_context.h"
 #include "visual/impl/WindowImpl.h"
 #include "visual/RenderManager.h"
+#include "ConfigManager/GlobalConfigManager.h"
 #include "visual/WindowIntf.h"
 #include "visual/impl/MenuItemImpl.h"
 #include "visual/TransIntf.h"
@@ -2591,6 +2592,33 @@ engine_result_t engine_set_option(engine_handle_t handle,
         }
         spdlog::info("engine_set_option: ogldrawdevice_compat={}{}", mode,
                      known ? "" : " (unknown, treated as off)");
+    }
+
+    // ── 图形选项 ──────────────────────────────────────────────────────────────
+    // 这些键由渲染层通过 `IndividualConfigManager::GetValue` 读，而本函数结尾的通用
+    // 分支只把它们写进**命令行参数**（`TVPProgramArguments`）—— 两条路互不相通，
+    // 所以必须额外写进"壳选项覆盖"表（见 GlobalConfigManager.h 的说明），否则壳设了
+    // 也不生效。渲染器是进程级单例、这些值又带惰性缓存，所以还要显式失效。
+    //
+    // 取值（引擎侧语义，见各自的读取点）：
+    //   ogl_compress_tex      纹理压缩：none / half / etc2 / pvrtc
+    //   software_compress_tex 软件渲染的纹理压缩：none / halfline / lz4 / lz4+tlg5
+    //   ogl_accurate_render   精确渲染（关掉"快速 GPU 路径"）：true / false
+    //   ogl_max_texsize       最大纹理尺寸，0 = 不覆盖
+    //   memusage              内存占用档：unlimited / low / medium / high
+    {
+        static const char *const kGraphicsOptions[] = {
+            "ogl_compress_tex", "software_compress_tex",
+            "ogl_accurate_render", "ogl_max_texsize", "memusage",
+        };
+        for(const char *graphics_key : kGraphicsOptions) {
+            if(key != graphics_key)
+                continue;
+            TVPSetShellOption(key, option->value_utf8);
+            TVPInvalidateGraphicsOptionCaches();
+            spdlog::info("engine_set_option: {}=", key, option->value_utf8);
+            break;
+        }
     }
 
     TVPSetCommandLine(ttstr(option->key_utf8).c_str(),

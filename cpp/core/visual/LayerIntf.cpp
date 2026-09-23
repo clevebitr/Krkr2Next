@@ -88,10 +88,10 @@ static int64_t TVPCalcMainImageBytes(tTVPBaseTexture *img) {
 //---------------------------------------------------------------------------
 
 static bool IsGPU() {
-    static bool isGPU = !TVPIsSoftwareRenderManager() &&
-        !IndividualConfigManager::GetInstance()->GetValue<bool>(
-            "ogl_accurate_render", false);
-    return isGPU;
+    // 两个查询内部都有缓存（渲染器类型 / `ogl_accurate_render`），所以这里不再另存
+    // `static` —— 那样会让“每游戏一套图形设置”里的 `ogl_accurate_render` 在换游戏后
+    // 仍沿用上一局的判定（`TVPInvalidateGraphicsOptionCaches()` 只失效了内层缓存）。
+    return !TVPIsSoftwareRenderManager() && !TVPIsAccurateRenderEnabled();
 }
 
 //---------------------------------------------------------------------------

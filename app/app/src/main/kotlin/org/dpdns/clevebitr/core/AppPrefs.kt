@@ -307,6 +307,32 @@ object AppPrefs {
             .apply()
     }
 
+    // ── 图形设置 ──────────────────────────────────────────────────────────
+
+    /** 全局默认图形设置的 JSON，见 [GraphicsConfig]。 */
+    private const val KEY_GRAPHICS_CONFIG = "graphics.config"
+
+    /**
+     * **全局默认**图形设置。每游戏覆盖存在各自的 `krkr2next.json` 里。
+     * 解析失败或从未设过时返回 [GraphicsConfig.default]。
+     */
+    fun graphicsConfig(context: Context): GraphicsConfig {
+        val raw = prefs(context).getString(KEY_GRAPHICS_CONFIG, null)
+        if (raw.isNullOrBlank()) return GraphicsConfig.default()
+        return try {
+            GraphicsConfig.fromJson(JSONObject(raw)) ?: GraphicsConfig.default()
+        } catch (t: Throwable) {
+            AppLog.w(TAG, "图形设置解析失败，按默认处理：$t")
+            GraphicsConfig.default()
+        }
+    }
+
+    fun setGraphicsConfig(context: Context, config: GraphicsConfig) {
+        prefs(context).edit()
+            .putString(KEY_GRAPHICS_CONFIG, config.toJson().toString())
+            .apply()
+    }
+
     // ── 光标触控板模式 ────────────────────────────────────────────────────
 
     /** 光标触控板模式（模拟触控板驱动光标，而不是直接把手指标成绝对坐标）。 */

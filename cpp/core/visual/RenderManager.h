@@ -331,6 +331,20 @@ namespace TJS {
 iTVPRenderManager *TVPGetRenderManager(const TJS::tTJSString &name);
 bool TVPIsSoftwareRenderManager();
 
+/**
+ * `ogl_accurate_render`（精确渲染）：为真时禁用“快速 GPU 路径”，走精确的软件合成
+ * 分支。结果带缓存（见实现处的说明），换游戏/改设置后由
+ * `TVPInvalidateGraphicsOptionCaches()` 失效。
+ */
+bool TVPIsAccurateRenderEnabled();
+
+/**
+ * 图形选项（`ogl_compress_tex` / `ogl_max_texsize` / `ogl_accurate_render`）变了：
+ * 把各处的惰性缓存置为未定，使“每游戏一套图形设置”无需重启应用即可生效。
+ * 由 `engine_set_option` 在写入壳选项后调用。
+ */
+void TVPInvalidateGraphicsOptionCaches();
+
 // 复位 RenderManager 单例与已创建的渲染器实例，使 runtime-restart
 // 二次 open_game 时能干净重建。
 void TVPResetRenderManagerForRestart();
