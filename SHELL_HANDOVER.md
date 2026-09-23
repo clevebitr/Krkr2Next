@@ -54,6 +54,16 @@ git diff --check
 依赖都在 `~/.gradle/caches`（离线可编译）。**本地 jniLibs 没有 `libengine_api.so`**，
 所以 `--assemble` 出的 APK 不含引擎、只能看 UI；要真机跑游戏仍然用 CI 产物。
 
+**`app/gradle/wrapper/gradle-wrapper.properties` 里钉的是官方源**
+（`https://services.gradle.org/distributions/gradle-8.14.5-bin.zip`）：CI（`gradle/actions/
+setup-gradle@v4` + `gradle-version: '8.14.5'`，见 `.github/workflows/android_build.yml`）
+与公开克隆都按它走。国内本地要提速就把那一行临时换成腾讯镜像
+（`https://mirrors.cloud.tencent.com/gradle/…`）——Gradle 官方**不支持**在
+`distributionUrl` 里用环境变量/占位符（gradle#8477、#4463 都没实现），所以只能本地改、
+别提交；换 URL 会连同 `~/.gradle/wrapper/dists` 的缓存目录（按 URL 哈希分）一起换，
+第一次会重新下一份。本地编译实际上走 `build_shell_local.sh`（直接用已缓存的发行版，
+根本不读这个文件），或在 IDE 里把 Gradle 发行版指到本地安装。
+
 > 引擎侧（`cpp/`）改动**不能**用这条链路验证——`cpp/` 依赖 vcpkg 三方库，只能靠 CI。
 > 但 `cpp/core/visual/LayerIntf.cpp` 这类可以通过 `clang++ -fsyntax-only` + 最小
 > spdlog/boost/fmt/freetype 垫片做语法检查（本会话用过，垫片在
