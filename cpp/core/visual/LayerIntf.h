@@ -802,6 +802,16 @@ public:
                   tjs_uint32 shadowcolor, tjs_int shadowwidth,
                   tjs_int shadowofsx, tjs_int shadowofsy);
 
+    /**
+     * 垂直渐变文字（顶部 topcolor → 底部 bottomcolor，渐变高度 gradientHeight）。
+     * 移植自 AetherKiri `LayerIntf.{h,cpp}`，供 `custom.tjs` 的 `EdgeShadowDrawText`
+     * 补丁使用（千恋万花消息文字颜色）。
+     */
+    void DrawTextVerticalGradient(tjs_int x, tjs_int y, const ttstr &text,
+                                  tjs_uint32 topcolor,
+                                  tjs_uint32 bottomcolor, tjs_int opa,
+                                  bool aa, tjs_int gradientHeight);
+
     void DrawGlyph(tjs_int x, tjs_int y, iTJSDispatch2 *glyph, tjs_uint32 color,
                    tjs_int opa, bool aa, tjs_int shadowlevel,
                    tjs_uint32 shadowcolor, tjs_int shadowwidth,

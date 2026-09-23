@@ -1268,6 +1268,169 @@ void tTVPNativeBaseBitmap::DrawGlyph(
         shadow->Release();
 }
 //---------------------------------------------------------------------------
+// 垂直渐变文字（`Layer.drawTextVerticalGradient`）
+//
+// 为什么需要：千恋万花等 Yuzusoft 作品自带 `custom.tjs` 的 `EdgeShadowDrawText`
+// 用「渐变图层 + operateRect」画消息文字，在本引擎里渲染成纯白；参考实现直接把那段
+// 脚本改写成调用本方法（见 ScriptMgnIntf 的 `custom.tjs` 补丁）。
+// 移植自 AetherKiri `impl/LayerBitmapImpl.cpp` 的同名函数（取它的软件分支写法：
+// 逐行复用 `InternalBlendText`，后者自带 GPU/软件两条路径的选择）。
+//---------------------------------------------------------------------------
+static tjs_uint32 TVPLerpColor24(tjs_uint32 top, tjs_uint32 bottom,
+                                 tjs_int row, tjs_int rowCount) {
+    if(rowCount <= 1)
+        return top;
+    const tjs_int den = rowCount - 1;
+    const tjs_int inv = den - row;
+    tjs_uint32 result = 0;
+    for(int shift = 0; shift <= 16; shift += 8) {
+        const tjs_int a = static_cast<tjs_int>((top >> shift) & 0xff);
+        const tjs_int b = static_cast<tjs_int>((bottom >> shift) & 0xff);
+        const tjs_int v = (a * inv + b * row + den / 2) / den;
+        result |= static_cast<tjs_uint32>(std::max(0, std::min(255, v)))
+                  << shift;
+    }
+    return result;
+}
+
+bool tTVPNativeBaseBitmap::InternalBlendTextVerticalGradient(
+    tTVPCharacterData *data, tTVPDrawTextData *dtdata, tjs_uint32 topcolor,
+    tjs_uint32 bottomcolor, const tTVPRect &srect, tTVPRect &drect,
+    tjs_int gradientTop, tjs_int gradientHeight) {
+    (void)gradientTop;
+    if(dtdata->bltmode != bmAlphaOnAlpha || dtdata->opa <= 0)
+        return InternalBlendText(data, dtdata, bottomcolor, srect, drect);
+
+    gradientHeight = std::max<tjs_int>(1, gradientHeight);
+    const tjs_int h = drect.bottom - drect.top;
+    bool drawn = false;
+    for(tjs_int y = 0; y < h; ++y) {
+        tTVPRect row_srect(srect.left, srect.top + y, srect.right,
+                           srect.top + y + 1);
+        tTVPRect row_drect(drect.left, drect.top + y, drect.right,
+                           drect.top + y + 1);
+        // 行号按**源图内**的行算（与参考实现一致），不按目标坐标。
+        const tjs_int row = std::max<tjs_int>(
+            0, std::min<tjs_int>(gradientHeight - 1, srect.top + y));
+        const tjs_uint32 color =
+            TVPLerpColor24(topcolor, bottomcolor, row, gradientHeight);
+        drawn = InternalBlendText(data, dtdata, color, row_srect,
+                                  row_drect) ||
+            drawn;
+    }
+    return drawn;
+}
+
+bool tTVPNativeBaseBitmap::InternalDrawTextVerticalGradient(
+    tTVPCharacterData *data, tjs_int x, tjs_int y, tjs_uint32 topcolor,
+    tjs_uint32 bottomcolor, tTVPDrawTextData *dtdata, tTVPRect &drect,
+    tjs_int gradientHeight) {
+    drect.left = x + data->OriginX;
+    drect.top = y + data->OriginY;
+    drect.right = drect.left + data->BlackBoxX;
+    drect.bottom = drect.top + data->BlackBoxY;
+
+    tTVPRect srect;
+    srect.left = srect.top = 0;
+    srect.right = data->BlackBoxX;
+    srect.bottom = data->BlackBoxY;
+
+    if(drect.left < dtdata->rect.left) {
+        srect.left += (dtdata->rect.left - drect.left);
+        drect.left = dtdata->rect.left;
+    }
+    if(drect.right > dtdata->rect.right) {
+        srect.right -= (drect.right - dtdata->rect.right);
+        drect.right = dtdata->rect.right;
+    }
+    if(srect.left >= srect.right)
+        return false;
+
+    if(drect.top < dtdata->rect.top) {
+        srect.top += (dtdata->rect.top - drect.top);
+        drect.top = dtdata->rect.top;
+    }
+    if(drect.bottom > dtdata->rect.bottom) {
+        srect.bottom -= (drect.bottom - dtdata->rect.bottom);
+        drect.bottom = dtdata->rect.bottom;
+    }
+    if(srect.top >= srect.bottom)
+        return false;
+
+    return InternalBlendTextVerticalGradient(data, dtdata, topcolor, bottomcolor,
+                                             srect, drect, drect.top,
+                                             gradientHeight);
+}
+
+void tTVPNativeBaseBitmap::DrawTextVerticalGradient(
+    const tTVPRect &destrect, tjs_int x, tjs_int y, const ttstr &text,
+    tjs_uint32 topcolor, tjs_uint32 bottomcolor, tTVPBBBltMethod bltmode,
+    tjs_int opa, bool holdalpha, bool aa, tjs_int gradientHeight,
+    tTVPComplexRect *updaterects) {
+    if(!Is32BPP())
+        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+
+    if(bltmode == bmAlphaOnAlpha) {
+        if(opa < -255)
+            opa = -255;
+        if(opa > 255)
+            opa = 255;
+    } else {
+        if(opa < 0)
+            opa = 0;
+        if(opa > 255)
+            opa = 255;
+    }
+    if(opa == 0)
+        return;
+
+    Independ();
+    ApplyFont();
+
+    tTVPDrawTextData dtdata;
+    dtdata.rect = destrect;
+    dtdata.bmppitch = GetPitchBytes();
+    dtdata.bltmode = bltmode;
+    dtdata.opa = opa;
+    dtdata.holdalpha = holdalpha;
+
+    tTVPFontAndCharacterData font;
+    font.Font = Font;
+    font.Antialiased = aa;
+    font.Hinting = true;
+    font.BlurLevel = 0;
+    font.BlurWidth = 0;
+    font.FontHash = FontHash;
+    font.Blured = false;
+
+    const tjs_char *p = text.c_str();
+    const tjs_int len = text.GetLen();
+    tjs_int cursorX = x;
+    for(tjs_int i = 0; i < len; ++i) {
+        font.Character = p[i];
+        tTVPCharacterData *data = TVPGetCharacter(
+            font, this, PrerenderedFont, AscentOfsX, AscentOfsY);
+        try {
+            if(data && data->BlackBoxX != 0 && data->BlackBoxY != 0) {
+                tTVPRect drect;
+                const bool drawn = InternalDrawTextVerticalGradient(
+                    data, cursorX, y, topcolor, bottomcolor, &dtdata, drect,
+                    gradientHeight);
+                if(drawn && updaterects)
+                    updaterects->Or(drect);
+            }
+            if(data)
+                cursorX += data->Metrics.CellIncX;
+        } catch(...) {
+            if(data)
+                data->Release();
+            throw;
+        }
+        if(data)
+            data->Release();
+    }
+}
+//---------------------------------------------------------------------------
 void tTVPNativeBaseBitmap::DrawTextSingle(
     const tTVPRect &destrect, tjs_int x, tjs_int y, const ttstr &text,
     tjs_uint32 color, tTVPBBBltMethod bltmode, tjs_int opa, bool holdalpha,

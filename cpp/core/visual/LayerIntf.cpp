@@ -26,6 +26,7 @@
 
 #include "tjsArray.h"
 #include "LayerIntf.h"
+#include "FontBaseline.h"
 #include "MsgIntf.h"
 #include "LayerBitmapIntf.h"
 #include "LayerTreeOwner.h"
@@ -4901,6 +4902,51 @@ void tTJSNI_BaseLayer::DrawText(tjs_int x, tjs_int y, const ttstr &text,
     Update(r);
 }
 
+void tTJSNI_BaseLayer::DrawTextVerticalGradient(
+    tjs_int x, tjs_int y, const ttstr &text, tjs_uint32 topcolor,
+    tjs_uint32 bottomcolor, tjs_int opa, bool aa, tjs_int gradientHeight) {
+    // 与 DrawText 同一套 DrawFace → bltmode 映射，只是把颜色换成渐变的两端。
+    if(!MainImage)
+        TVPThrowExceptionMessage(TVPNotDrawableLayerType);
+
+    tTVPBBBltMethod met;
+    switch(DrawFace) {
+        case dfAlpha:
+            met = bmAlphaOnAlpha;
+            break;
+        case dfAddAlpha:
+            if(opa < 0)
+                TVPThrowExceptionMessage(
+                    TVPNegativeOpacityNotSupportedOnThisFace);
+            met = bmAlphaOnAddAlpha;
+            break;
+        case dfOpaque:
+            met = bmAlpha;
+            break;
+        default:
+            TVPThrowExceptionMessage(TVPNotDrawableFaceType, TJS_W("drawText"));
+    }
+
+    ApplyFont();
+
+    tTVPComplexRect r;
+    topcolor = TVPToActualColor(topcolor);
+    bottomcolor = TVPToActualColor(bottomcolor);
+
+    MainImage->DrawTextVerticalGradient(ClipRect, x, y, text,
+                                        TVP_REVRGB(topcolor),
+                                        TVP_REVRGB(bottomcolor), met, opa,
+                                        HoldAlpha, aa, gradientHeight, &r);
+
+    if(r.GetCount())
+        ImageModified = true;
+
+    if(ImageLeft != 0 || ImageTop != 0) {
+        r.AddOffsets(ImageLeft, ImageTop);
+    }
+    Update(r);
+}
+
 //---------------------------------------------------------------------------
 void tTJSNI_BaseLayer::DrawGlyph(tjs_int x, tjs_int y, iTJSDispatch2 *glyph,
                                  tjs_uint32 color, tjs_int opa, bool aa,
@@ -8862,6 +8908,41 @@ tTJSNC_Layer::tTJSNC_Layer() : tTJSNativeClass(TJS_W("Layer")) {
         return TJS_S_OK;
     }
     TJS_END_NATIVE_METHOD_DECL(/*func. name*/ drawText)
+    //----------------------------------------------------------------------
+    // 垂直渐变文字：`drawTextVerticalGradient(x, y, text, topcolor,
+    // bottomcolor [, opa [, aa [, gradientHeight]]])`。
+    // 供 `custom.tjs` 的 `EdgeShadowDrawText` 补丁使用（见 ScriptMgnIntf）。
+    TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ drawTextVerticalGradient) {
+        TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
+                                /*var. type*/ tTJSNI_Layer);
+        if(numparams < 5)
+            return TJS_E_BADPARAMCOUNT;
+
+        // 参考实现会把绘制起点向下推到裁剪框内：脚本助手常在很小、透明的图层最顶端
+        // 画字，而字面的设计 ascender 可能高于逻辑行框（字形 top 为负）。
+        tjs_int y = *param[1];
+        tTVPRect glyphBounds;
+        _this->GetFontGlyphDrawRect(*param[2], glyphBounds);
+        y = krkr::font::ClampTextOriginToClipTop(
+            y, glyphBounds.top, 0, _this->GetClipTop());
+
+        _this->DrawTextVerticalGradient(
+            *param[0], y, *param[2],
+            static_cast<tjs_uint32>((tjs_int64)*param[3]),
+            static_cast<tjs_uint32>((tjs_int64)*param[4]),
+            (numparams >= 6 && param[5]->Type() != tvtVoid)
+                ? (tjs_int)*param[5]
+                : (tjs_int)255,
+            (numparams >= 7 && param[6]->Type() != tvtVoid)
+                ? param[6]->operator bool()
+                : true,
+            (numparams >= 8 && param[7]->Type() != tvtVoid)
+                ? (tjs_int)*param[7]
+                : _this->GetTextHeight(*param[2]));
+
+        return TJS_S_OK;
+    }
+    TJS_END_NATIVE_METHOD_DECL(/*func. name*/ drawTextVerticalGradient)
     //----------------------------------------------------------------------
     TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ drawGlyph) {
         TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,

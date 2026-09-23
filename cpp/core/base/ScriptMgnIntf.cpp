@@ -11,6 +11,10 @@
 
 #include "tjsCommHead.h"
 
+#include <string>
+
+#include <spdlog/spdlog.h>
+
 #include "tjs.h"
 #include "tjsDebug.h"
 #include "tjsArray.h"
@@ -727,6 +731,74 @@ void TVPExecuteStorage(const ttstr &name, tTJSVariant *result,
 #include <fstream>
 #include <tjsByteCodeLoader.h>
 //---------------------------------------------------------------------------
+//---------------------------------------------------------------------------
+// 脚本源码兼容改写（按脚本名）
+//---------------------------------------------------------------------------
+// 为什么需要：不少作品的脚本本身依赖 Windows/参考引擎的某些行为，靠脚本层改写
+// 比在引擎里加特例可控得多（改了哪些行一目了然，且只影响匹配到的脚本）。
+// 移植自 AetherKiri `cpp/core/base/ScriptMgnIntf.cpp` 的同名机制
+// （`TVPApplyScriptCompatibilityPatches`），目前只搬了千恋万花需要的
+// `custom.tjs` 那一条，后续按需追加。
+//
+// 匹配一律用**结构化锚点**（函数签名 + 块内特征串），不用行号：整合包/汉化版会
+// 增删行，行号匹配一旦偏了就静默改错地方。
+static void TVPApplyScriptCompatibilityPatches(const ttstr &shortname,
+                                               ttstr &buffer) {
+    const ttstr lower = shortname.AsLowerCase();
+
+    if(lower == TJS_W("custom.tjs")) {
+        // 千恋万花（Yuzusoft）的消息文字颜色：
+        // 游戏自带 `custom.tjs` 的 `EdgeShadowDrawText` 用「渐变图层 +
+        // operateRect」画字（顶部 0xFFFFFF → 底部 col），而本引擎里这条路径渲染成
+        // 纯白。参考实现直接把那个 `if (d) { … }` 块换成一次原生渐变文字绘制调用。
+        //
+        // 只在块内同时出现 `MakeGradationLayer` 与 `d.operateRect` 时才改，避免
+        // 误伤版本不同的同名函数。
+        std::basic_string<tjs_char> source(buffer.c_str(), buffer.GetLen());
+        const std::basic_string<tjs_char> functionMarker(
+            TJS_W("function EdgeShadowDrawText(dt, d,x,y,text,col,opa,aa, "
+                  "s,scol,sw,sx,sy, e,ecol,eemp,eext) {"));
+        const std::basic_string<tjs_char> blockMarker(TJS_W("\tif (d) {"));
+        const std::basic_string<tjs_char> gradientMarker(
+            TJS_W("var grad = MakeGradationLayer"));
+        const std::basic_string<tjs_char> compositeMarker(
+            TJS_W("d.operateRect(x, y, tmp"));
+
+        const auto functionPos = source.find(functionMarker);
+        const auto blockPos = functionPos == std::basic_string<tjs_char>::npos
+            ? std::basic_string<tjs_char>::npos
+            : source.find(blockMarker, functionPos + functionMarker.size());
+        if(blockPos != std::basic_string<tjs_char>::npos) {
+            const auto openPos = source.find(TJS_W('{'), blockPos);
+            size_t blockEnd = std::basic_string<tjs_char>::npos;
+            int depth = 0;
+            for(size_t i = openPos; i < source.size(); ++i) {
+                if(source[i] == TJS_W('{'))
+                    ++depth;
+                else if(source[i] == TJS_W('}') && --depth == 0) {
+                    blockEnd = i + 1;
+                    break;
+                }
+            }
+            const auto gradientPos = source.find(gradientMarker, blockPos);
+            const auto compositePos = source.find(compositeMarker, blockPos);
+            if(blockEnd != std::basic_string<tjs_char>::npos &&
+               gradientPos < blockEnd && compositePos < blockEnd) {
+                const std::basic_string<tjs_char> replacement(
+                    TJS_W("\tif (d) {\r\n"
+                          "\t\tvar h = d.font.getTextHeight(text);\r\n"
+                          "\t\td.drawTextVerticalGradient(x, y, text, "
+                          "0xFFFFFF, col & 0xFFFFFF, opa, aa, h);\r\n"
+                          "\t}"));
+                source.replace(blockPos, blockEnd - blockPos, replacement);
+                buffer = ttstr(source);
+                spdlog::info("Applied compatibility patch for native gradient "
+                             "text drawing (custom.tjs)");
+            }
+        }
+    }
+}
+
 void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
                        tTJSVariant *result, bool isexpression,
                        const tjs_char *modestr) {
@@ -812,6 +884,8 @@ void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
         place, modestr) };
     ttstr buffer;
     stream->Read(buffer, 0);
+    // 按脚本名做源码级兼容改写（见上面的说明）。必须在 ExecScript 之前。
+    TVPApplyScriptCompatibilityPatches(shortname, buffer);
 
     // save extract script file for debug!
     //    auto tmpPlace = place.AsStdString();
