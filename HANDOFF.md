@@ -497,6 +497,46 @@ Layer 方法：认参数里的 text / x / y / col / opa，再加上 `edgeColor` 
 **验收标准**：探针构建下出现 `probe: textrender EdgeShadowDrawText len=… x=… y=… color=…`，
 且消息文字与设置/回想界面文字颜色正常（不再是纯白）。
 
+### 1.13.3 第四轮（2026-09-23 18:51–18:56 真机日志）：§1.13.1 生效，剩下的是交付/描边
+
+**§1.13.1 已生效**（新日志证据）：`Member "MotionResourceManager" does not exist` 由 32 条降为 **0**；
+NEKOPARA `lzfs://./e-mote*.psb` → `PSB lazy-load archive` + `Stored 12 layer positions`；
+千恋万花 `sd301.mtn` → `Stored 21 layer positions` / `cachePSBImages: 21 layer positions`，
+`TVPLoadGraphic` 在拉 `psb://…/pixel.png`。即“图像加载”这一段已经通了。
+
+但仍然看不到画面，日志指向两条不同的东西：
+
+1. **运动帧被交付到不可见层**（两作同构）：
+   - NEKOPARA：首次 `AssignImages` → `target='ショコラ' parent='表-背景(vis=1)'`，
+     之后同一层变成 `parent='裏-背景'(vis=0)`；
+   - 千恋万花：`target='CG View LayerAffineLayer'`，`parent='CG View Layer : SDxxxAA'(vis=0)`
+     （标题图则是 `parent='裏-背景'(vis=0)`，另有一份到 `表-背景` 的 `trans_title_bg`）。
+   而 `CG View Layer` / `表-背景` 里都有同名同尺寸的可见兄弟层 —— 正是
+   `TVPResolveExchangedKagAssignmentTarget`（KAG 表/裏 页面改投）要处理的形状，但它
+   **一条 `LayerAssign route=`/拒绝原因都没打**（该函数当时既无 route 日志也无拒绝原因日志）。
+   本轮补上 `probe: exch-route denied reason=…`（`bad-signature` / `no-page-root` /
+   `page-visible` / `not-known-stale` / `no-visible-page` / `no-name-match`，每个
+   (目标名,原因) 一条，封顶 40），下一份 **探针构建**日志就能定死是哪道门拦的。
+2. **文字描边颜色参数路由**（真正的修法）：本作的 `msghack.tjs` 是字节码，
+   AetherKiri 对它的处理是“脚本跑完后再包一层 `global.EdgeShadowDrawText`”（把看起来
+   是颜色值的 `e`/`ecol` 换回 `owner.edge`/`owner.edgeColor`）。本仓库原先**只有前置
+   源码改写、没有后置钩子**，所以这条修复一直缺失。本轮新增
+   `TVPApplyPostScriptCompatibilityPatches(shortname)`（移植自 AetherKiri
+   `ScriptMgnIntf.cpp`），在字节码/明文两条执行路径**之后**调用；首个钩子就是
+   `msghack.tjs` 的那条，日志判据：
+   `Applied compatibility hook for message edge argument routing (msghack.tjs)`。
+
+**还需要的下一步（探针构建）**：`Motion.enableD3D` / `Motion.Player.useD3D` /
+`window.d3dMotion` 这三个值决定游戏走 D3DAdaptor 的 `captureCanvas` 还是
+SeparateLayerAdaptor 的私有渲染层，而它们从来没在日志里出现过。本轮把它们加进
+`KRKR_RENDER_PROBE` 快照：`probe: motion d3d decision after motion.tjs: …`
+（脚本 `motion.tjs` / `affinesourcemotion.tjs` / `d3daffinesourcemotion.tjs` 执行后各一条）。
+
+相关事实：两作的 `system/motion.tjs`（字节码）都带 `-nod3dm | System | getArgument | yes`
+与 `motionplayer_nod3d.dll`；千恋万花自带 `patch.tjs`（明文）会显式
+`&Motion.Player.useD3D = 0;`（即作者本意就是不要 D3D 路径），而真机日志显示 D3D
+路径仍在跑（`D3DAdaptor.captureCanvas` 累计 901 次，`SeparateLayerAdaptor` 0 次）。
+
 ---
 
 ## 2. 目标一：KAG 兼容层对齐 AetherKiri

@@ -799,6 +799,87 @@ static void TVPApplyScriptCompatibilityPatches(const ttstr &shortname,
     }
 }
 
+//---------------------------------------------------------------------------
+// 脚本执行**之后**的兼容补丁（按脚本名）
+//---------------------------------------------------------------------------
+// 为什么需要后置钩子：这些脚本在数据包里是**编译字节码**（汉化组把实现搬进了
+// msghack.tjs 之类的字节码），源码改写无从下手；能做的只有“脚本跑完、全局符号已
+// 就位”之后在 TJS 侧包一层。移植自 AetherKiri
+// `cpp/core/base/ScriptMgnIntf.cpp` 的 `TVPApplyPostScriptCompatibilityPatches`。
+static void TVPApplyPostScriptCompatibilityPatches(const ttstr &shortname) {
+    const ttstr lower = shortname.AsLowerCase();
+
+    // 汉化整合包（msgHack 工具链）的描边颜色参数路由。
+    //
+    // 现象：描边/阴影颜色被当成普通颜色传下去（"字体渲染异常"）。msgHack 的
+    // `EdgeShadowDrawText` 把描边色与描边宽度放错了参数位（`e`/`ecol` 收到的是
+    // 颜色值而不是布尔/宽度），参考实现因此在脚本层包一层：当 `e` 看起来是颜色值
+    // 而 `ecol` 缺失时，改用消息层的 `edge`/`edgeColor` 再交给原函数。
+    if(lower == TJS_W("msghack.tjs")) {
+        try {
+            TVPExecuteScript(
+                TJS_W(
+                    "(function() {\r\n"
+                    "\tif (typeof global.EdgeShadowDrawText == \"undefined\") return;\r\n"
+                    "\tif (typeof global.__krkr2NextOrigEdgeShadowDrawText != \"undefined\") return;\r\n"
+                    "\tglobal.__krkr2NextOrigEdgeShadowDrawText = &global.EdgeShadowDrawText;\r\n"
+                    "\tglobal.EdgeShadowDrawText = function(dt, d, x, y, text, col, opa, aa, s, scol, sw, sx, sy, e, ecol, eemp, eext) {\r\n"
+                    "\t\tif (typeof e == \"Integer\" && e != 0 && e != 1 && (ecol === void || ecol == 0 || ecol == 1)) {\r\n"
+                    "\t\t\ttry {\r\n"
+                    "\t\t\t\tvar owner = global.kag.fore.messages[0];\r\n"
+                    "\t\t\t\tif (typeof owner != \"undefined\" && owner.edge !== void && owner.edgeColor !== void && e == owner.edgeColor && e != owner.edge) {\r\n"
+                    "\t\t\t\t\te = owner.edge;\r\n"
+                    "\t\t\t\t\tecol = owner.edgeColor;\r\n"
+                    "\t\t\t\t}\r\n"
+                    "\t\t\t} catch(ex) {}\r\n"
+                    "\t\t}\r\n"
+                    "\t\treturn (global.__krkr2NextOrigEdgeShadowDrawText incontextof this)(dt, d, x, y, text, col, opa, aa, s, scol, sw, sx, sy, e, ecol, eemp, eext);\r\n"
+                    "\t};\r\n"
+                    "})();\r\n"),
+                TJS_W("Krkr2NextMessageEdgeArgumentPatch"), 0,
+                (tTJSVariant *)nullptr);
+            spdlog::info("Applied compatibility hook for message edge argument "
+                         "routing (msghack.tjs)");
+        } catch(...) {
+            spdlog::warn("Failed to apply compatibility hook for message edge "
+                         "argument routing (msghack.tjs)");
+        }
+    }
+
+#if defined(KRKR_RENDER_PROBE)
+    // D3D/分离渲染路径的判定快照。
+    //
+    // 为什么需要：两作（千恋万花 / NEKOPARA 4）的 motion 贴图都已经加载，但帧交付到
+    // 了不可见页；先要弄清游戏到底选了哪条路径（D3DAdaptor 的 captureCanvas vs
+    // SeparateLayerAdaptor 的私有渲染层）——这个选择由游戏脚本根据
+    // `Motion.enableD3D` / `Motion.Player.useD3D` / `window.d3dMotion` 决定，
+    // 而它在日志里从来没有痕迹。
+    if(lower == TJS_W("motion.tjs") ||
+       lower == TJS_W("affinesourcemotion.tjs") ||
+       lower == TJS_W("d3daffinesourcemotion.tjs")) {
+        try {
+            tTJSVariant snapshot;
+            TVPExecuteExpression(
+                TJS_W("(function(){var g=global;"
+                      "var m=(typeof g.Motion!=\"undefined\")?g.Motion:void;"
+                      "var p=(m!==void && typeof m.Player!=\"undefined\")?m.Player:void;"
+                      "return \"enableD3D=\"+((m!==void)?typeof m.enableD3D+\":\"+m.enableD3D:\"n/a\")"
+                      "+\" useD3D=\"+((p!==void)?typeof p.useD3D+\":\"+p.useD3D:\"n/a\")"
+                      "+\" d3dMotion=\"+((g.window!==void && typeof g.window.d3dMotion!=\"undefined\")?typeof g.window.d3dMotion+\":\"+g.window.d3dMotion:\"undefined\")"
+                      "+\" D3DAdaptor=\"+((m!==void)?typeof m.D3DAdaptor:\"n/a\")"
+                      "+\" SeparateAdaptor=\"+((m!==void)?typeof m.SeparateLayerAdaptor:\"n/a\");})()"),
+                &snapshot);
+            spdlog::info("probe: motion d3d decision after {}: {}",
+                         shortname.AsStdString(),
+                         ttstr(snapshot).AsStdString());
+        } catch(...) {
+            spdlog::warn("probe: motion d3d decision snapshot failed after {}",
+                         shortname.AsStdString());
+        }
+    }
+#endif
+}
+
 void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
                        tTJSVariant *result, bool isexpression,
                        const tjs_char *modestr) {
@@ -825,6 +906,7 @@ void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
                 stream.get(), result, context, shortname.c_str());
 
             if(isbytecode) {
+                TVPApplyPostScriptCompatibilityPatches(shortname);
                 // save extract binary file for debug!
                 //                auto loader =
                 //                std::make_unique<tTJSByteCodeLoader>(); auto
@@ -908,6 +990,8 @@ void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
         else
             TVPScriptEngine->EvalExpression(buffer, result, context,
                                             &shortname);
+
+        TVPApplyPostScriptCompatibilityPatches(shortname);
     }
 }
 

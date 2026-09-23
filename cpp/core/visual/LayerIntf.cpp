@@ -2446,18 +2446,61 @@ static std::map<const tTJSNI_BaseLayer *, bool>
     TVPKagPageLastObservedVisibility;
 static std::set<const tTJSNI_BaseLayer *> TVPExchangedHiddenKagPages;
 
+#if defined(KRKR_RENDER_PROBE)
+// 改投判定的拒绝原因探针：每个 (目标名, 原因) 只记一条。
+//
+// 为什么需要：真机上运动帧明明已画好却看不到，而“为什么不改投到可见页”只看得到
+// 结果（没有 `LayerAssign route=` 行）。这里把每道门播出来，下一次真机日志就能定死是
+// “可见页没找到”还是“判据认为不该改”。
+static void TVPProbeExchangeRouteDenied(const tTJSNI_BaseLayer *target,
+                                        const char *reason) {
+    static std::mutex mutex;
+    static std::set<std::string> seen;
+    if(!target)
+        return;
+    const std::string key = target->GetName().AsStdString() + "|" + reason;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        if(seen.size() >= 40 || !seen.insert(key).second)
+            return;
+    }
+    auto *page = target->GetParent();
+    auto *root = page ? page->GetParent() : nullptr;
+    spdlog::info("probe: exch-route denied reason={} target='{}' "
+                 "visible={} parentVisible={} page='{}'(vis={}) "
+                 "root='{}' size={}x{}",
+                 reason, target->GetName().AsStdString(),
+                 target->GetVisible() ? 1 : 0,
+                 target->GetParentVisible() ? 1 : 0,
+                 page ? page->GetName().AsStdString() : std::string("<none>"),
+                 page && page->GetVisible() && page->GetParentVisible() ? 1 : 0,
+                 root ? root->GetName().AsStdString() : std::string("<none>"),
+                 target->GetWidth(), target->GetHeight());
+}
+#endif
+
 static tTJSNI_BaseLayer *
 TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
                                        tTJSNI_BaseLayer *source) {
     if(!target || !source || target->GetName().IsEmpty() ||
        !target->GetVisible() || !source->GetName().IsEmpty() ||
-       source->GetVisible())
+       source->GetVisible()) {
+#if defined(KRKR_RENDER_PROBE)
+        if(target && source && !source->GetVisible() &&
+           source->GetName().IsEmpty())
+            TVPProbeExchangeRouteDenied(target, "bad-signature");
+#endif
         return nullptr;
+    }
 
     auto *hidden_page = target->GetParent();
     auto *page_root = hidden_page ? hidden_page->GetParent() : nullptr;
-    if(!hidden_page || !page_root || source->GetParent() != page_root)
+    if(!hidden_page || !page_root || source->GetParent() != page_root) {
+#if defined(KRKR_RENDER_PROBE)
+        TVPProbeExchangeRouteDenied(target, "no-page-root");
+#endif
         return nullptr;
+    }
 
     const bool page_visible =
         hidden_page->GetVisible() && hidden_page->GetParentVisible();
@@ -2468,6 +2511,9 @@ TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
         if(page_visible) {
             last_visible = true;
             TVPExchangedHiddenKagPages.erase(hidden_page);
+#if defined(KRKR_RENDER_PROBE)
+            TVPProbeExchangeRouteDenied(target, "page-visible");
+#endif
             return nullptr;
         }
         if(last_visible)
@@ -2476,8 +2522,12 @@ TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
         known_stale = TVPExchangedHiddenKagPages.find(hidden_page) !=
                       TVPExchangedHiddenKagPages.end();
     }
-    if(!known_stale)
+    if(!known_stale) {
+#if defined(KRKR_RENDER_PROBE)
+        TVPProbeExchangeRouteDenied(target, "not-known-stale");
+#endif
         return nullptr;
+    }
 
     tTJSNI_BaseLayer *visible_page = nullptr;
     for(tjs_uint i = 0; i < page_root->GetCount(); ++i) {
@@ -2489,8 +2539,12 @@ TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
         visible_page = cand;
         break;
     }
-    if(!visible_page)
+    if(!visible_page) {
+#if defined(KRKR_RENDER_PROBE)
+        TVPProbeExchangeRouteDenied(target, "no-visible-page");
+#endif
         return nullptr;
+    }
 
     const auto normalized = [](const ttstr &name) {
         std::string value = name.AsStdString();
@@ -2510,6 +2564,9 @@ TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
             continue;
         return cand;
     }
+#if defined(KRKR_RENDER_PROBE)
+    TVPProbeExchangeRouteDenied(target, "no-name-match");
+#endif
     return nullptr;
 }
 
