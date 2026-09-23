@@ -859,17 +859,20 @@ static void TVPApplyPostScriptCompatibilityPatches(const ttstr &shortname) {
        lower == TJS_W("d3daffinesourcemotion.tjs")) {
         try {
             tTJSVariant snapshot;
+            // 每一项单独 try：`enableD3D` 可能是 stub 对象，`+` 转换会抛 E_CONVERT，
+            // 整段写在一个表达式里就会得到一个什么都没说的 “snapshot failed”。
             TVPExecuteExpression(
-                TJS_W("(function(){var g=global;"
-                      "var m=(typeof g.Motion!=\"undefined\")?g.Motion:void;"
-                      "var p=(m!==void && typeof m.Player!=\"undefined\")?m.Player:void;"
-                      "return \"enableD3D=\"+((m!==void)?typeof m.enableD3D+\":\"+m.enableD3D:\"n/a\")"
-                      "+\" useD3D=\"+((p!==void)?typeof p.useD3D+\":\"+p.useD3D:\"n/a\")"
-                      "+\" d3dMotion=\"+((g.window!==void && typeof g.window.d3dMotion!=\"undefined\")?typeof g.window.d3dMotion+\":\"+g.window.d3dMotion:\"undefined\")"
-                      "+\" D3DAdaptor=\"+((m!==void)?typeof m.D3DAdaptor:\"n/a\")"
-                      "+\" SeparateAdaptor=\"+((m!==void)?typeof m.SeparateLayerAdaptor:\"n/a\");})()"),
+                TJS_W("(function(){var g=global;var out=\"\";\r\n"
+                      "try { out += \"enableD3D=\" + ((typeof g.Motion!=\"undefined\") ? String(g.Motion.enableD3D) : \"n/a\"); } catch(e) { out += \"enableD3D=err\"; }\r\n"
+                      "try { out += \" useD3D=\" + ((typeof g.Motion!=\"undefined\" && typeof g.Motion.Player!=\"undefined\") ? String(g.Motion.Player.useD3D) : \"n/a\"); } catch(e) { out += \" useD3D=err\"; }\r\n"
+                      "try { var w=(typeof g.window!=\"undefined\" && g.window!==void)?g.window:((typeof g.Window!=\"undefined\")?g.Window:void);\r\n"
+                      "      out += \" d3dMotion=\" + ((w!==void && typeof w.d3dMotion!=\"undefined\") ? String(w.d3dMotion) : \"undefined\"); } catch(e) { out += \" d3dMotion=err\"; }\r\n"
+                      "try { out += \" D3DAdaptor=\" + ((typeof g.Motion!=\"undefined\") ? typeof g.Motion.D3DAdaptor : \"n/a\"); } catch(e) { out += \" D3DAdaptor=err\"; }\r\n"
+                      "try { out += \" SeparateAdaptor=\" + ((typeof g.Motion!=\"undefined\") ? typeof g.Motion.SeparateLayerAdaptor : \"n/a\"); } catch(e) { out += \" SeparateAdaptor=err\"; }\r\n"
+                      "try { out += \" useLzfs=\" + ((typeof g.MotionResourceManager!=\"undefined\") ? \"yes\" : \"no\"); } catch(e) {}\r\n"
+                      "return out;})()"),
                 &snapshot);
-            spdlog::info("probe: motion d3d decision after {}: {}",
+            spdlog::info("probe: motion d3d decision after {}:{}",
                          shortname.AsStdString(),
                          ttstr(snapshot).AsStdString());
         } catch(...) {

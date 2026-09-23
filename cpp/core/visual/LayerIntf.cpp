@@ -2535,12 +2535,14 @@ TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
         known_stale = TVPExchangedHiddenKagPages.find(hidden_page) !=
                       TVPExchangedHiddenKagPages.end();
     }
-    if(!known_stale) {
-#if defined(KRKR_RENDER_PROBE)
-        TVPProbeExchangeRouteDenied(target, "not-known-stale");
-#endif
-        return nullptr;
-    }
+    // 注意：`!known_stale` **不能**在这里提前返回。
+    //
+    // 参考实现只用 known_stale 决定“同名兄弟层改投”要不要真的改（下面那句
+    // `return known_stale ? candidate : nullptr`），而“可见页没有同名兄弟”这条兑底
+    // 路径（内容层判据 → 持续交付计数 → 把层本身搬回可见页）**不看** known_stale。
+    // 上一轮移植多加了提前返回，兑底路径就永远走不到：真机探针里只出现
+    // `reason=not-known-stale`，从未出现 `page-busy` / `streak-not-reached` /
+    // `LayerAssign route=reparent-hidden-page`。
 
     tTJSNI_BaseLayer *visible_page = nullptr;
     for(tjs_uint i = 0; i < page_root->GetCount(); ++i) {
