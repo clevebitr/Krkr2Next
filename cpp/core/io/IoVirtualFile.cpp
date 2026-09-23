@@ -122,18 +122,17 @@ namespace krkr::io {
             if(!handled)
                 continue;
 
-                // io 负责包流：provider 不认识流类型，也不依赖 base 的流实现。
-                auto *stream = new tTVPMemoryStream();
-                try {
-                    if(!content.empty())
-                        stream->Write(content.data(),
-                                      static_cast<tjs_uint>(content.size()));
-                    stream->Seek(0, TJS_BS_SEEK_SET);
-                    return stream;
-                } catch(...) {
-                    delete stream;
-                    throw;
-                }
+            // io 负责包流：provider 不认识流类型，也不依赖 base 的流实现。
+            auto *stream = new tTVPMemoryStream();
+            try {
+                if(!content.empty())
+                    stream->Write(content.data(),
+                                  static_cast<tjs_uint>(content.size()));
+                stream->Seek(0, TJS_BS_SEEK_SET);
+                return stream;
+            } catch(...) {
+                delete stream;
+                throw;
             }
         }
         return nullptr;
