@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 24–25：旧版整图（自带圆角方形），矢量即可，不需要各密度 PNG。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="@color/ic_launcher_background"
+        android:pathData="M18,8 H90 A10,10 0 0 1 100,18 V90 A10,10 0 0 1 90,100 H18 A10,10 0 0 1 8,90 V18 A10,10 0 0 1 18,8 Z" />
+
+    <path
+        android:fillColor="@color/ic_launcher_foreground"
+        android:pathData="M34,28 H44 V50 L64,28 H76 L54,52 L77,80 H64 L44,56 V80 H34 Z" />
+</vector>

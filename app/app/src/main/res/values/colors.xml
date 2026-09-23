@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 启动图标（自适应图标的底与前景）配色，与 Compose 主题无关。 -->
+    <color name="ic_launcher_background">#1B1B2F</color>
+    <color name="ic_launcher_foreground">#6C7BFF</color>
+</resources>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    单色层（Android 13+ 主题图标）。字形状与 ic_launcher_foreground 对齐，
+    颜色由系统重着色，这里只提供 alpha。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="@color/ic_launcher_foreground"
+        android:pathData="M34,28 H44 V50 L64,28 H76 L54,52 L77,80 H64 L44,56 V80 H34 Z" />
+</vector>
