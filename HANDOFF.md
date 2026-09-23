@@ -558,6 +558,39 @@ SeparateLayerAdaptor 的私有渲染层，而它们从来没在日志里出现�
 `LayerAssign route=reparent-hidden-page` 日志、`probe: exch-route denied reason=page-busy/
 streak-not-reached`）。
 
+### 1.13.6 第七轮：非 D3D 路径上线后暴露的真因 —— 私有渲染层是 0×0
+
+`Motion.enableD3D` 恒返回 0 之后（§1.13.5），真机（20:50/20:51）确认选路成功：
+
+- `Motion.enableD3D: 脚本请求开启 D3D 路径，已忽略`；
+- `D3DAdaptor.captureCanvas` **归零**、`drawOnto` 归零；
+- `motion: SeparateLayerAdaptor 渲染层路由 owner=… parent=… parentIsOwner=1
+  parentName='ショコラ' / 'バニラ' / 'ev'` —— 私有渲染层确实挂到了游戏自己的 owner 层下；
+- `probe: exch-route denied` 里终于出现 `reason=streak-not-reached` 与 `reason=page-busy`
+  （说明 §1.13.4/§1.13.5 补的兜底路径已经可达）。
+
+但画面依旧全黑，日志给出最后一环：
+
+```
+drawAnimated: drew 39 images at tick=0 (…) real[layer(name='ショコラ',parent='ショコラ',
+    visible=1,opacity=255,count=-1,size=0x0,pos=0,0)]
+```
+
+**私有渲染层的 size 是 `0×0`** —— 帧照样“画”，但没有一个像素能落地。原因是本壳只是把
+owner 的 `width`/`height` 抄给渲染层，而 owner 是角色的 AffineLayer（NEKOPARA
+`ショコラ`/`バニラ`、千恋万花 `ev`），它的 width/height 常为 0；参考实现的
+`queryLayerCanvasSize` 会退到 **image 尺寸**并要求非零（拿不到就不建渲染层），随后
+`SetSize/SetClip/SetHasImage/SetImageSize` 显式定尺寸。
+
+修法（`motionplayer/main.cpp` 的 `GetSeparateAdaptorRenderTarget`）：尺寸按
+owner width/height → owner imageWidth/imageHeight → `window.scWidth/scHeight`
+（游戏自己的 `motionWorkLayer` 就是 `setSize(scWidth, scHeight)`）逐级兜底，拿不到就
+不建渲染层并警告；然后用 `setSize(canvasW, canvasH)` 一次性定 box+image，补上
+`type=ltAlpha(2)`，路由日志带上 `canvas=WxH visible=… type=…` 便于下一轮核对。
+
+**下一轮判据**：`motion: SeparateLayerAdaptor 渲染层路由 … canvas=1920x1080 visible=1
+type=2`，且 `drawAnimated: drew N images … size=1920x1080`。
+
 ### 1.13.5 第六轮：探针给出答案 —— 文字已修好，剩下的全部是 D3D 路径选错了
 
 **用户真机反馈（probe 构建 de1450b）**：
