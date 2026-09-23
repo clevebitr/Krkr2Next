@@ -567,6 +567,7 @@ void BasePlayer::Process() {
     while(!m_bAbortRequest) {
         // handle messages send to this thread, like seek or demuxer
         // reset requests
+        krkr::stall::MarkMovieStage("movie: Process→HandleMessages");
         HandleMessages();
 
         if(m_bAbortRequest)
@@ -574,6 +575,7 @@ void BasePlayer::Process() {
 
         // should we open a new demuxer?
         if(!m_pDemuxer) {
+            krkr::stall::MarkMovieStage("movie: Process→OpenDemuxStream");
             if(OpenDemuxStream() == false) {
                 m_bAbortRequest = true;
                 break;
@@ -588,9 +590,11 @@ void BasePlayer::Process() {
         }
 
         // handle eventual seeks due to playspeed
+        krkr::stall::MarkMovieStage("movie: Process→HandlePlaySpeed");
         HandlePlaySpeed();
 
         // update player state
+        krkr::stall::MarkMovieStage("movie: Process→UpdatePlayState");
         UpdatePlayState(200);
 
         // update application with our state
@@ -620,7 +624,9 @@ void BasePlayer::Process() {
 
         DemuxPacket *pPacket = nullptr;
         CDemuxStream *pStream = nullptr;
+        krkr::stall::MarkMovieStage("movie: Process→ReadPacket(解复用读取)");
         ReadPacket(pPacket, pStream);
+        krkr::stall::MarkMovieStage("movie: Process→处理包");
         if(pPacket && !pStream) {
             /* probably a empty packet, just free it and move on */
             DemuxPacket::Free(pPacket);

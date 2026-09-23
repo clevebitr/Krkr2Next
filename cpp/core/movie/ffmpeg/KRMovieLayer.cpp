@@ -92,12 +92,19 @@ int VideoPresentLayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
         // 与 overlay 链路同样的有界/可中止等待：消费者是渲染线程每帧的
         // GetFrontBuffer()，无界等待会把解码线程永久钉住，进而让停播/析构路径的
         // StopThread() 挂死渲染线程（真机：播 CG 视频时无响应并被 ANR）。
-        std::unique_lock<std::mutex> lk(m_mtxPicture);
+        // 两层界限：中止标志（停播/析构）+ 总时长上限（消费者长时间不来就丢帧）。
+        std::unique_lock<std::mutex> lk(m_mtxPicture, std::defer_lock);
+        if(!LockPictureBounded(lk, 2000))
+            return -1;
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::milliseconds(2000);
         while(m_usedPicture >= MAX_BUFFER_COUNT &&
               !m_pictureWaitAbort.load(std::memory_order_acquire)) {
             // 阶段标记写在循环里（不是进循环前）：只有真卡在这里时它才会成为
             // `.stall` 里最后一条影片阶段，卡在别处时不会被它盖掉。
             krkr::stall::MarkMovieVideoStage("movie: video→等空 picture 槽位(layer)");
+            if(std::chrono::steady_clock::now() >= deadline)
+                return -1;
             m_condPicture.wait_for(lk, std::chrono::milliseconds(50));
         }
         if(m_pictureWaitAbort.load(std::memory_order_acquire))

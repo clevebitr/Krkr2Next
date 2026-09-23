@@ -196,7 +196,7 @@ void TVPMoviePlayer::Release() {
         //
         // 退不出去时**宁可泄漏整个影片对象**（什么都不释放，线程还在用它），也绝不
         // 让渲染线程卡住 —— 泄漏一个影片对象，换来的是游戏还能继续玩。
-        constexpr unsigned kTeardownWaitMs = 4000;
+        constexpr unsigned kTeardownWaitMs = 1500;
         if(m_pPlayer) {
             // **先唤醒可能卡在"等空 picture 槽位"的解码线程**。
             //
@@ -347,13 +347,34 @@ void TVPMoviePlayer::GetEnableVideoStreamNum(long *num) {
     *num = m_pPlayer->GetVideoStream();
 }
 
+bool TVPMoviePlayer::LockPictureBounded(std::unique_lock<std::mutex> &lk,
+                                        int timeoutMs) {
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(std::max(timeoutMs, 50));
+    while(!lk.try_lock()) {
+        if(m_pictureWaitAbort.load(std::memory_order_acquire))
+            return false;
+        if(std::chrono::steady_clock::now() >= deadline)
+            return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    return true;
+}
+
 int TVPMoviePlayer::WaitForBuffer(volatile std::atomic_bool &bStop,
                                   int timeout) {
+    // 停播/析构已请求：直接放弃，不去抢 picture 锁。
+    if(bStop || m_pictureWaitAbort.load(std::memory_order_acquire))
+        return -1;
     int remainBuf = MAX_BUFFER_COUNT - m_usedPicture;
     if(remainBuf > 0)
         return remainBuf;
-    std::unique_lock<std::mutex> lk(m_mtxPicture);
-    while(!bStop && MAX_BUFFER_COUNT <= m_usedPicture && timeout > 0) {
+    // 有界抢锁 + 循环内同时看 bStop 与中止标志：解码线程必须在有界时间内离开本函数。
+    std::unique_lock<std::mutex> lk(m_mtxPicture, std::defer_lock);
+    if(!LockPictureBounded(lk, std::max(timeout, 50)))
+        return -1;
+    while(!bStop && !m_pictureWaitAbort.load(std::memory_order_acquire) &&
+          MAX_BUFFER_COUNT <= m_usedPicture && timeout > 0) {
         timeout -= 10;
         m_condPicture.wait_for(lk, std::chrono::milliseconds(10));
     }
@@ -460,10 +481,17 @@ int TVPMoviePlayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
         // 进而让停播路径的 StopThread()（join 这条线程）无限期挂住渲染线程 ——
         // 真机表现就是播 CG 视频时整机无响应、十几秒后被 ANR。停播/析构会调用
         // AbortPictureWait() 置位并唤醒，这里每 50ms 复查一次。
-        std::unique_lock<std::mutex> lk(m_mtxPicture);
+        std::unique_lock<std::mutex> lk(m_mtxPicture, std::defer_lock);
+        if(!LockPictureBounded(lk, 2000))
+            return -1;
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::milliseconds(2000);
         while(m_usedPicture >= MAX_BUFFER_COUNT &&
               !m_pictureWaitAbort.load(std::memory_order_acquire)) {
-            krkr::stall::MarkMovieVideoStage("movie: video→等空 picture 槽位(overlay)");
+            krkr::stall::MarkMovieVideoStage(
+                "movie: video→等空 picture 槽位(overlay)");
+            if(std::chrono::steady_clock::now() >= deadline)
+                return -1;
             m_condPicture.wait_for(lk, std::chrono::milliseconds(50));
         }
         if(m_pictureWaitAbort.load(std::memory_order_acquire))

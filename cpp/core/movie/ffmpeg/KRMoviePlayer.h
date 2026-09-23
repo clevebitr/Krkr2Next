@@ -203,6 +203,17 @@ public:
     int WaitForBuffer(volatile std::atomic_bool &bStop,
                       int timeout = 0) override;
 
+    /**
+     * 有界地拿 picture 锁。拿不到（或期间收到停播/中止）返回 false，调用方按
+     * "没有可用缓冲"处理。
+     *
+     * 为什么不能用无界的 `unique_lock lk(m_mtxPicture)`：解码线程一旦卡在这把锁上，
+     * 停播路径的 `StopThread()`（join 它）就永远回不来，级联到渲染线程就是整帧卡死
+     * （真机 2026-09-23 10:55 的 `.stall`：video 停在 `video→等 render 缓冲`、
+     * player 停在 `video CloseStream→StopThread(join 视频线程)`）。
+     */
+    bool LockPictureBounded(std::unique_lock<std::mutex> &lk, int timeoutMs);
+
     void Flush() override;
 
     bool IsPlaying() const { return m_pPlayer->IsPlaying(); }
