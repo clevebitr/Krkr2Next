@@ -540,6 +540,7 @@ void tTVPSystemControl::DeliverEvents() {
         TVPProcessContinuousHandlerEventFlag = true; // set flag
 
     if(EventEnable) {
+        krkr::stall::MarkStage("定时器: TVPDeliverAllEvents（执行排队事件）");
         TVPDeliverAllEvents();
     }
 }
@@ -588,9 +589,11 @@ void tTVPSystemControl::SystemWatchTimerTimer() {
 	}
 #endif
     // check status and deliver events
+    krkr::stall::MarkStage("定时器: DeliverEvents（事件派发/脚本回调）");
     DeliverEvents();
 
     // call TickBeat
+    krkr::stall::MarkStage("定时器: TickBeat（窗口节拍）");
     tjs_int count = TVPGetWindowCount();
     for(tjs_int i = 0; i < count; i++) {
         tTJSNI_Window *win = TVPGetWindowListAt(i);

@@ -215,7 +215,11 @@ namespace {
     bool g_runtime_active = false;
     bool g_runtime_started_once = false;
     bool g_engine_bootstrapped = false;
-    bool g_runtime_startup_active = false;
+    /**
+     * “启动期日志转发”是否在跑。**原子**：sink 在抢 `g_registry_mutex` **之前**先看它
+     * （见 `PushRuntimeSpdlogToStartupQueue` 的说明）。
+     */
+    std::atomic<bool> g_runtime_startup_active{ false };
     engine_handle_t g_runtime_startup_owner = nullptr;
     std::once_flag g_loggers_init_once;
     std::shared_ptr<spdlog::sinks::sink> g_startup_log_sink;
@@ -739,6 +743,18 @@ namespace {
     }
 
     void PushRuntimeSpdlogToStartupQueue(const spdlog::details::log_msg &msg) {
+        // **先看原子标志再抢锁**。
+        //
+        // 为什么这一步是必须的：下面要取 `g_registry_mutex`，而 `engine_tick`
+        // **整帧持有它**。而启动期之外这个 sink 其实是**空操作**（直接 return）——
+        // 却仍要为每条日志抢一次整帧的锁，于是任何线程在一帧内打日志都会阻塞到
+        // 该帧结束。真机实证（2026-09-23 13:00，おっぱいスパイ学園）：影片停播路径
+        // 里渲染线程等解码线程退出，而解码线程正要打一条统计日志 → 等渲染线程手里
+        // 的锁 → **跨线程死锁**，卡满整个 `WaitForExit` 窗口
+        // （日志里的 1500ms/4000ms 与窗口完全相等，是死锁而不是“活儿慢”）。
+        if(!g_runtime_startup_active.load(std::memory_order_acquire))
+            return;
+
         // 锁必须覆盖到 PushStartupLog 为止。engine_destroy 在同一把锁内把
         // handle 从 g_live_handles 摘除（此后才 delete impl），所以只要持锁
         // 期间 IsHandleLiveLocked 为真，impl 就不会被释放。反之若先解锁再推送，
@@ -747,7 +763,8 @@ namespace {
         // 关停或重开游戏时即为间歇性崩溃。锁是 recursive 的：从已持锁线程
         // （例如整帧持锁的 engine_tick）重入是安全的。
         std::lock_guard<std::recursive_mutex> registry_guard(g_registry_mutex);
-        if(!g_runtime_startup_active || g_runtime_startup_owner == nullptr) {
+        if(!g_runtime_startup_active.load(std::memory_order_relaxed) ||
+           g_runtime_startup_owner == nullptr) {
             return;
         }
         if(!IsHandleLiveLocked(g_runtime_startup_owner)) {
