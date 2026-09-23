@@ -46,6 +46,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,21 +70,7 @@ import org.dpdns.clevebitr.core.LibraryGame
 import org.dpdns.clevebitr.core.RunMode
 
 /**
- * 游戏详情页：**这个游戏是什么 + 现在要不要开**。
- *
- * 布局按 Material 3 的详情页惯例排：封面 → 标题/厂商 → 主操作 → 元数据 →
- * 次要信息。三块内容各自的位置都有理由：
- *
- * - **启动按钮在封面正下方**，是整页唯一的大按钮。玩家进来十有八九是要开游戏，
- *   而"启动"此前挂在库页的长按菜单里（长按没有视觉提示，等于藏起来）。
- * - **改配置不在这里直接摊开**：引擎覆盖与叠加层覆盖在 [GameSettingsScreen] 单独一页。
- *   详情页是"看"的页面，塞进十来个单选行之后，"启动"会被挤到屏幕外。
- * - **移出游戏库在右上角菜单里，并且要二次确认**：它是本页唯一有破坏性的动作
- *   （只删记录、不删文件，但用户在菜单里点错时并不会读完说明），所以既不放主按钮
- *   旁边，也不允许一击即中。
- *
- * 编辑标题/厂商/备注用"编辑模式"就地切换，而不是再开一页：这三个字段就是本页已经
- * 展示的内容，就地编辑时用户看得见自己在改什么。
+ * 游戏详情页
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -237,9 +224,6 @@ fun GameDetailScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(modifier = Modifier.fillMaxWidth().then(contentWidth)) {
-                // ── Steam 大屏式头部：封面在左，标题与操作在右 ──
-                // 左右分栏而不是上下堆叠：宽屏时封面/标题/按钮在同一屏内全部可见，
-                // "启动"不再被封面推到需要滚动才能看到的位置。
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -271,9 +255,11 @@ fun GameDetailScreen(
                             title = title,
                             modifier = Modifier
                                 .width(if (wide) 240.dp else 132.dp)
+                                .padding(bottom = 20.dp)
                                 .aspectRatio(0.72f)
                                 .clip(RoundedCornerShape(12.dp)),
                         )
+                        VerticalDivider()
                     }
 
                     // 右：标题/厂商/分组 + 主操作（编辑态就地替换标题区）
@@ -373,7 +359,7 @@ fun GameDetailScreen(
                             }
                         }
 
-                        // ── 简介：可折叠。右侧三块（标签/简介/按钮）可能比封面高，
+                        // ── 简介：可折叠。右栏（标签/简介）可能比封面高，
                         // 所以默认只显示几行，需要时再展开。 ──
                         if (game.description.isNotBlank()) {
                             Text(
@@ -391,34 +377,36 @@ fun GameDetailScreen(
                                 Text(if (descriptionExpanded) "收起简介" else "展开简介")
                             }
                         }
+                    }
+                }
 
-                        // ── 主操作（在简介下面） ──
-                        // 用 FlowRow 而不是 Row：窄屏（小手机竖屏）上封面已占 132dp，
-                        // 两个带图标的按钮并排会挤到文字换行；换行比截断好。
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Button(
-                                onClick = {
-                                    // 先把界面上的改动落盘再开：否则"改完标题直接点启动"会丢改动，
-                                    // 而用户完全看不出发生了什么。
-                                    if (editing) {
-                                        save()
-                                        editing = false
-                                    }
-                                    onLaunch()
-                                },
-                            ) {
-                                Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                                Text("启动游戏", modifier = Modifier.padding(start = 6.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Button(
+                        onClick = {
+                            // 先把界面上的改动落盘再开：否则"改完标题直接点启动"会丢改动，
+                            // 而用户完全看不出发生了什么。
+                            if (editing) {
+                                save()
+                                editing = false
                             }
-                            FilledTonalButton(onClick = onOpenSettings) {
-                                Icon(Icons.Filled.Settings, contentDescription = null)
-                                Text("游戏设置", modifier = Modifier.padding(start = 6.dp))
-                            }
-                        }
+                            onLaunch()
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                        Text("启动游戏", modifier = Modifier.padding(start = 6.dp))
+                    }
+                    FilledTonalButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Filled.Settings, contentDescription = null)
+                        Text("游戏设置", modifier = Modifier.padding(start = 6.dp))
                     }
                 }
 
@@ -508,14 +496,6 @@ fun GameDetailScreen(
                     Text("打开游戏设置", modifier = Modifier.padding(start = 6.dp))
                 }
 
-                // 移出游戏库 = **只删记录**（GameLibrary.remove 只改库文件，不碰游戏目录）。
-                // 这里给二次确认：它是本页唯一的破坏性动作，而用户点错时不会读说明。
-                Text(
-                    text = "移出游戏库只删记录，不会删除游戏文件；游戏库里的条目可以随时重新添加。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
-                )
                 TextButton(
                     onClick = { confirmRemove = true },
                     modifier = Modifier.padding(start = 8.dp, bottom = 24.dp),
@@ -597,10 +577,6 @@ private fun TagPill(text: String) {
 
 /**
  * 信息行：上标签下值。
- *
- * 不用 `ListItem`：它自带 56dp 最小高度与固定缩进，而这里是十来个紧挨着的
- * "字段 → 值"，用 ListItem 会把页面拉得很长，且左侧缩进与页内其它内容对不齐。
- * 值允许换行——排查问题时完整路径比排版好看重要。
  */
 @Composable
 private fun InfoRow(label: String, value: String) {

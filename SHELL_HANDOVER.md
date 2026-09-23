@@ -20,7 +20,7 @@
 - **按键自动对齐参考线**（`ui/KeyPadOverlay.kt` 的 `snapPosition`）→ 已完成；
 - **右下角宽矩形按钮抽屉** + **「更多」菜单收窄**（`ui/GameScreen.kt`）→ 已完成；
 - **退出/强制退出（error 色 + 二次确认）** + **无响应看门狗 / 进程重启**（`HANDOFF.md §1.8`）→ 已完成；
-- **详情页右侧改为 标签 → 简介（可折叠）→ 主按钮**（`ui/GameDetailScreen.kt`）→ 已完成；
+- **详情页右侧改为 标签 → 简介（可折叠）；主按钮另起一行全宽横排**（`ui/GameDetailScreen.kt`）→ 已完成；
 - **触控板光标不显示** → 已修（`HANDOFF.md §1.9.1`）。
 
 **2026-09-23 第三批（已落地，待真机回归）**：
@@ -58,6 +58,35 @@ git diff --check
 > 但 `cpp/core/visual/LayerIntf.cpp` 这类可以通过 `clang++ -fsyntax-only` + 最小
 > spdlog/boost/fmt/freetype 垫片做语法检查（本会话用过，垫片在
 > `$TMPDIR/mp/shim`，可随时重建）。
+
+### 1.1 UI 预览层（`src/debug/kotlin`，只属于 debug 变体）
+
+改 UI 布局不必装 APK、不必真机：预览代码全在
+`app/app/src/debug/kotlin/org/dpdns/clevebitr/ui/preview/`，Android Studio 里打开
+对应 `*Previews.kt` 的 Split / Design 即可看效果。
+
+| 文件 | 覆盖页面 |
+| --- | --- |
+| `PreviewFixtures.kt` | 共享假数据（`previewGame` / `previewGames` / `previewConfig` / `previewGlobalDefaults`） |
+| `GameDetailPreviews.kt` | 详情页：411dp 浅色/深色 + 平板 800dp |
+| `LibraryPreviews.kt` | 库页：三条数据（超长标题/无封面/未刮削）+ 空库 |
+| `GameSettingsPreviews.kt` | 单游戏设置页（独立覆盖态） |
+| `SettingsPreviews.kt` | 全局设置页 + 关于页 |
+| `OverlayPreviews.kt` | 性能叠加层：默认 / 全字段 2.0x 右下 / 0.6x 半透明 |
+
+规则（违反任一条，预览就从“零成本”变成“构建负担”）：
+
+1. **一个页面一个 `*Previews.kt`，文件里只放 `@Preview` 函数**，不写业务逻辑；
+   假数据统一放 `PreviewFixtures.kt`，改一个字段只改一处。
+2. `coversDir` 一律指向不存在的目录 → `CoverImage` 退化成占位封面，
+   预览因此既不依赖真实文件、也不联网。
+3. **`src/main` 里不要再写 `@Preview`**。预览层靠 `app/app/build.gradle.kts` 里的
+   `getByName("debug") { kotlin.srcDirs("src/debug/kotlin") }`（:82）+ 两行
+   `debugImplementation("androidx.compose.ui:ui-tooling-preview")` /
+   `ui-tooling`（:96–97）生效；主源码集一旦又冒出 `@Preview`，release 就重新需要 ui-tooling。
+4. 验证：`bash scripts/build_shell_local.sh`（即 `:app:compileDebugKotlin`）通过；
+   再跑一次 `:app:compileReleaseKotlin`，并在 `app/build/tmp/kotlin-classes/release`
+   下确认搜不到 `ui/preview`（release 一行预览代码都不带）。
 
 ---
 
@@ -273,9 +302,79 @@ data class KeyPadProfile(val buttons: List<KeyButton>, val enabled: Boolean = fa
 改动的理由：详情页的第一诉求是"开游戏"，主按钮必须和封面同屏可见；左右分栏在
 平板/横屏上也能一屏放下"封面 + 标题 + 按钮"。
 
-**2026-09-23 布局微调**：右侧改为自上而下 **标题 → 标签 → 简介（可折叠）→ 主按钮**
-（封面在左，标签/简介/按钮三块都在封面右侧）；简介默认只显示 5 行，点"展开简介"
-看全文——否则右侧三块很容易比封面高出一大截。
+**2026-09-23 布局微调**：右侧改为自上而下 **标题 → 标签 → 简介（可折叠）**
+（封面在左，标签/简介两块在封面右侧）；简介默认只显示 5 行，点"展开简介"
+看全文——否则右侧两块很容易比封面高出一大截。
+
+**2026-09-23 按钮落点修正**：主按钮从右栏移出，改成**封面/简介整块下面的全宽横排**
+（`Row` + 两枚各 `weight(1f)`，左右各留 16dp）。原因是窄屏（411dp）右栏只剩约 220dp，
+两枚"图标 + 文字"按钮并排必然换行或截断；提到整行宽度（约 380dp）后两枚各占一半，
+竖屏/横屏、手机/平板都不变形，也不再需要 `FlowRow` 兜底换行。
+
+**2026-09-23 库页分组便签定位**（`ui/LibraryScreen.kt`）：卡片上的分组芯片原来用
+`align(BottomStart)` + `padding(bottom = 60.dp)` 贴在卡片底部上方，那个 `60.dp` 是照
+“标题两行 + 有副标题”量出来的写死值，标题一行或没副标题时便签就飘离标题栏。
+现在把**封面和便签放进同一个 `Box`**，便签对齐该 Box 底边并留
+`GROUP_CHIP_TITLE_GAP`（5dp）——该 Box 的底边就是标题栏的顶边（两者上下相邻），
+所以便签永远压在标题栏上方 5dp，与标题行数、有无副标题、字号都无关。
+
+**2026-09-23 库页分组便签边框颜色**（`ui/LibraryScreen.kt`）：`SuggestionChip` 的
+容器色默认是 `Transparent`（便签浮在封面上，边线是它唯一的“框”），而默认边线
+取 `SuggestionChipTokens.FlatOutlineColor = OutlineVariant`。本项目
+dark 配色里 `outlineVariant == surfaceVariant == 0xFF45464F`，便签压在封面上
+完全看不出边界。现改为显式传入
+`SuggestionChipDefaults.suggestionChipBorder(enabled = true, borderColor = colorScheme.outline)`
+（`Theme.kt`，浅 `:94` `0xFF777589` / 深 `:61` `0xFF918EA4`）：颜色由配色方案给出，
+随明暗主题自动切换，宽度仍沿用 token 的 1dp。
+
+**2026-09-24 配色方案重做 + 关于页重组**：
+1) `ui/Theme.kt` 里 `LightScheme` 沿用的是 M3 **基线紫调**中性色
+   （`#FBF8FF`/`#F5F2FA`/`#E2E1EC`/`#C6C5D0`/`#767680` 全是紫的），而 `DarkScheme`
+   是自调的蓝调灰（`#121318`/`#1A1B21`/`#45464F`/`#90909A`）——两套皮肤不同源，
+   浅色是“紫白底 + 蓝主色”，叠起来看着很怪。现在两套**由同一个种子色推导**
+   （种子 = 品牌蓝 `#6C7BFF`，色相 ≈ 295°，按 M3 的 tone 体系取值，每个色值尾行
+   标了 `// P80` 这类 tone 注释）：P=种子色相（彩度上限 64），S=同色相彩度 20，
+   T=色相 +60，N=彩度 4 的灰（所有 surface/background），NV=彩度 12（surfaceVariant/
+   outline/分割线）；`error*` 有意不写（红是语义色，交给 `lightColorScheme`/
+   `darkColorScheme` 兜底）。**底色不能换色相**是这次的教训。
+   深色主色从 `#6C7BFF`(tone≈57) 改成 tone80 的浅紫 `#C4C0FF` —— 原先深色
+   `primary` 比 `secondary` 还暗，把 M3 的主/次明度关系倒过来了；代价是深色下
+   填充按钮从“深底白字”变成“浅底深字”（`FilledTonalButton`/`Button` 看起来更"亮"）。
+   生成脚本在仓库外（CIELCh 近似推导 tone、裁 sRGB 色域、核对 WCAG），
+   改色请连带核对对比度（现全部 ≥ 4.5:1）。
+2) 设置页的那段“关于”（名称/版本/包名/系统/ABI/机型）**搬到 `ui/AboutScreen.kt`**，
+   设置页删掉，只留一行注释指向关于页——只读信息不该和“改一项就生效”的设置项混在同一屏。
+   `SettingsScreen.kt` 因此去掉了 `android.os.Build` 与 `core.BuildInfo` 两个 import。
+3) `ui/AboutScreen.kt` 新增「相关链接」区：四个全宽 `OutlinedButton`（仓库 +
+   Kirikiroid2 / krkrz / AetherKiri），点击用
+   `Intent(ACTION_VIEW, Uri.parse(url))` 交给系统浏览器；捕获
+   `ActivityNotFoundException` → `AppLog.w` + Toast（精简 ROM 真会没有浏览器）。
+   不开内置 WebView：多一个要维护的组件，还会把人关在没有地址栏的窗口里。
+4) `ui/AboutScreen.kt` 也换成 `Scaffold` + `TopAppBar`（原来是个裸 `Column` + 手写
+   标题行）。原因：`MaterialTheme` 只传颜色值，**不画背景也不改文字默认色**
+   （`LocalContentColor` 默认就是 `Color.Black`）；裸 `Column` 在应用里被
+   `ShellScaffold` 的 Scaffold 兜底还能看，一旦单独渲染（IDE 预览）就是“宿主底色 +
+   一片黑字”。现在全仓 7 个页面都是 `Scaffold` 起手，不再有例外。
+
+**2026-09-24 自适应图标 + MD3 主题图标**（`res/`）：原 `drawable/ic_launcher.xml`
+是一张把圆角方形底画死在里面的整图，被启动器遮罩套上去就成了“双圆角”，
+而且没有单色层，Android 13 的主题图标用不了。现在拆成标准三层：
+
+| 资源 | 作用 |
+| --- | --- |
+| `mipmap-anydpi-v26/ic_launcher.xml` | `<adaptive-icon>`：background + foreground + **monochrome** |
+| `mipmap-anydpi/ic_launcher.xml` | API 24–25 用的旧版整图（自带圆角方形，矢量，不用切 PNG） |
+| `drawable/ic_launcher_foreground.xml` | 前景层的 “K”，不带底 |
+| `drawable/ic_launcher_monochrome.xml` | 单色层（形状与前景层对齐，颜色由系统重着色） |
+| `values/colors.xml` | `ic_launcher_background` #1B1B2F、`ic_launcher_foreground` #6C7BFF |
+
+要点：自适应图标的视图是 108×108，但只显示**中心 72×72**（安全区是直径 66 的圆），
+所以前景层不画底、不画圆角——形状交给遮罩；“K”占 x∈[34,77]、y∈[28,80]，
+离中心最远 ≈34.7 < 72 圆半径 36，圆遮罩下也不缺角。`<monochrome>` 放在 -v26 里
+即可（API 26–32 只记一条日志后忽略），不必再拆 -v33。Manifest 的 `android:icon`
+也从 `@drawable/ic_launcher` 改成了 `@mipmap/ic_launcher`（旧的那个 drawable 已删）。
+验证：`:app:assembleDebug` 后 `aapt2 dump xmltree --file res/mipmap-anydpi-v26/ic_launcher.xml`
+能看到 background/foreground/monochrome 三层，`dump badging` 的 application-icon 指向它。
 
 ---
 

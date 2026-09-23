@@ -1,6 +1,5 @@
 package org.dpdns.clevebitr.ui
 
-import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,7 +43,6 @@ import org.dpdns.clevebitr.core.RunMode
 import org.dpdns.clevebitr.core.OverlayConfig
 import org.dpdns.clevebitr.core.KeyPadProfile
 import org.dpdns.clevebitr.core.AppPrefs
-import org.dpdns.clevebitr.core.BuildInfo
 import org.dpdns.clevebitr.core.GraphicsConfig
 import org.dpdns.clevebitr.core.LogFiles
 
@@ -419,36 +417,8 @@ fun SettingsScreen(
                 ) { Text("清空日志") }
             }
 
-            SectionTitle("关于")
-
-            ListItem(
-                headlineContent = { Text("KrKr2-Next-Compose") },
-                supportingContent = {
-                    Column {
-                        Text(
-                            text = "版本 ${BuildInfo.appVersion(context)}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
-                            text = "包名 ${context.packageName}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
-                            text = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
-                            text = "ABI ${Build.SUPPORTED_ABIS.joinToString()}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
-                            text = "${Build.MANUFACTURER} ${Build.MODEL}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                },
-            )
-
+            // 「关于」不在这里：版本/包名/ABI/机型这些只读信息统一放在关于页，
+            // 免得和“改一项就生效”的设置项混在同一屏里。
             Column(modifier = Modifier.padding(bottom = 24.dp)) {}
             }
         }

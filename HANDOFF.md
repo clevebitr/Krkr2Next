@@ -15,7 +15,8 @@
 
 - **壳：自定义按键浮层 / 光标触控板模式 / 按键自动对齐参考线 / 引擎菜单侧边栏** → 已落地
   （详见 `SHELL_HANDOVER.md`）
-- **壳：详情页左右分栏（封面左；标签→简介→按钮右）、库页/详情页 MD3 细节** → 已落地
+- **壳：详情页左右分栏（封面左；标签→简介右；主按钮全宽横排在最下）、库页/详情页 MD3 细节** → 已落地
+- **壳：UI 预览层独立到 `app/app/src/debug/kotlin/.../ui/preview/`**（只 debug 变体编译，release 不带一行） → 已落地（`SHELL_HANDOVER.md §1.1`）
 - **触控板光标不显示** → 已修（§1.9.1：SurfaceView 监听按值捕获普通参数）
 - **侧边栏点菜单项 SIGABRT（NEKOPARA 4）** → 已修（§1.9.2：`EAbort` 逸出 `engine_tick`）
 - **classic 层缺 A 块常量回退（おっぱいスパイ学園 `Member "llsUserDirs"` 起不来）** → 已修（§1.9.3）
@@ -397,7 +398,8 @@ FATAL SIGNAL 6
 | 去掉设置里多余说明（开发测试游戏名） | ✅ 改通用表述 |
 | 文件浏览器：两个 topbar 合一 + 完整路径跳转 + 目录收藏 | 🟡 顶栏合一 ✅、路径跳转 ✅、目录收藏数据层 ✅ + UI 改动 ✅，**交互待上机确认** |
 | 游戏库：收藏游戏 + 分组（便签式） | ✅ |
-| 关于页：作者/协议/仓库/技术栈/版本号 | ✅（版本号已带 git 短哈希：`v0.1.0-<hash6>-<YYMMDD>`） |
+| 关于页：作者/协议/仓库/技术栈/版本号 + 运行环境（包名/系统/ABI/机型） | ✅（版本号已带 git 短哈希：`v0.1.0-<hash6>-<YYMMDD>`；仓库/Kirikiroid2/krkrz/AetherKiri 可点按钮跳系统浏览器） |
+| 启动图标：自适应（API 26+）+ MD3 主题图标（API 33+ 单色层） | ✅ 2026-09-24（`mipmap-anydpi-v26/ic_launcher.xml` 三层；API 24–25 用 `mipmap-anydpi/ic_launcher.xml`），见 `SHELL_HANDOVER.md §5` |
 | 详情页布局：**封面在左、按钮在右**（Steam 大屏式） | ✅ 2026-09-22（`ui/GameDetailScreen.kt`） |
 | 自定义按键浮层（位置/大小/文字/MD3 图标/颜色/透明度/描边，每游戏 + 全局模板） | ✅ 2026-09-23，规格与实现落点见 `SHELL_HANDOVER.md §3` |
 | 游戏中右下角按钮 → 右侧悬浮侧边栏显示**引擎注册的窗口菜单** | ✅ 2026-09-23（`engine_list_window_menu` / `engine_invoke_window_menu` + JNI + `ui/EngineMenuSidebar.kt`），规格见 `SHELL_HANDOVER.md §4` |

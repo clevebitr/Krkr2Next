@@ -49,6 +49,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -273,6 +274,11 @@ private val SORT_LABELS = listOf(
 /** 库页给"新分组"的常用建议。分组是自由文本，这几个只是省打字。 */
 private val GROUP_SUGGESTIONS = listOf("在玩", "待玩", "已通关", "搁置")
 
+/**
+ * 分组便签底边与标题栏顶边的间距。
+ */
+private val GROUP_CHIP_TITLE_GAP = 5.dp
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LibraryCard(
@@ -297,15 +303,44 @@ private fun LibraryCard(
     ) {
         Box {
             Column {
-                CoverImage(
-                    file = game.coverFile.takeIf { it.isNotBlank() }
-                        ?.let { File(coversDir, it) },
-                    title = game.title,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(0.72f)
-                        .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
-                )
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    CoverImage(
+                        file = game.coverFile.takeIf { it.isNotBlank() }
+                            ?.let { File(coversDir, it) },
+                        title = game.title,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(0.72f)
+                            .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
+                    )
+                    if (game.group.isNotBlank()) {
+                        SuggestionChip(
+                            onClick = onEditGroup,
+                            label = {
+                                Text(
+                                    text = game.group,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
+                            icon = {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Label,
+                                    contentDescription = null,
+                                    modifier = Modifier.padding(0.dp),
+                                )
+                            },
+                            border = SuggestionChipDefaults.suggestionChipBorder(
+                                enabled = true,
+                                borderColor = MaterialTheme.colorScheme.outline,
+                            ),
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(start = 6.dp, bottom = GROUP_CHIP_TITLE_GAP),
+                        )
+                    }
+                }
                 Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                     Text(
                         text = game.title,
@@ -326,8 +361,6 @@ private fun LibraryCard(
                 }
             }
 
-            // 收藏星标：左上角。收藏是"置顶"的语义，按钮直接标在卡片上比埋进菜单好找。
-            // 封面颜色不可控（可能恰好是白色），所以垫一层半透明圆底保证图标对比度。
             IconButton(
                 onClick = onToggleFavorite,
                 modifier = Modifier
@@ -350,32 +383,6 @@ private fun LibraryCard(
                 )
             }
 
-            // 分组便签：右下角压一行，不占标题空间
-            if (game.group.isNotBlank()) {
-                SuggestionChip(
-                    onClick = onEditGroup,
-                    label = {
-                        Text(
-                            text = game.group,
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                    icon = {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Label,
-                            contentDescription = null,
-                            modifier = Modifier.padding(0.dp),
-                        )
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = 6.dp, bottom = 6.dp),
-                )
-            }
-
-            // 右上角的"更多"按钮：长按也能出菜单，但按钮更易发现（长按没有视觉提示）
             Box(modifier = Modifier.align(Alignment.TopEnd)) {
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(
@@ -445,10 +452,6 @@ private fun LibraryCard(
 
 /**
  * 分组编辑器。
- *
- * 用对话框而不是新页面：一个自由文本字段加几个建议值，页面级别的导航太重。
- * 已有分组以 chip 形式给出，是因为"把两个游戏放进同一组"靠手打容易打错一个字，
- * 然后就变成两个组了。
  */
 @Composable
 internal fun GroupEditorDialog(
@@ -579,7 +582,7 @@ private fun EmptyLibrary(onAddGame: () -> Unit, modifier: Modifier = Modifier) {
             // 这里用普通按钮而不是第二个 FAB：Scaffold 已经有「添加游戏」FAB，
             // 同屏两个 FAB 违反 MD3 的单一主操作原则，也会让人不知道点哪个。
             OutlinedButton(onClick = onAddGame) {
-                Icon(Icons.Filled.Refresh, contentDescription = null)
+                Icon(Icons.Filled.Add, contentDescription = null)
                 Text("浏览并添加", modifier = Modifier.padding(start = 6.dp))
             }
         }

@@ -17,10 +17,6 @@ add_compile_definitions(
 # Android-only project。宿主壳是原生 Kotlin/Compose 应用（app/），引擎在 Gradle
 # 之外独立构建，产物投放到 app/app/src/main/jniLibs。
 # 第三方依赖通过 vcpkg toolchain 提供。
-#
-# 带守卫：Gradle 的 externalNativeBuild 会传入 NDK 自己的 toolchain file，
-# 无条件覆盖会被 CMake 判定为 toolchain 重定义而行为异常。保留守卫以便将来
-# 接入 externalNativeBuild，也便于调用方显式指定别的 toolchain。
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     # Android 走 vcpkg 官方推荐的两段式：CMAKE_TOOLCHAIN_FILE 必须是 vcpkg 自己，
     # NDK 的 android.toolchain.cmake 经 VCPKG_CHAINLOAD_TOOLCHAIN_FILE 串在它后面，
@@ -36,11 +32,6 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
             message(FATAL_ERROR
                 "Android 构建需要 ANDROID_NDK_HOME 环境变量（见 scripts/build_engine_android.sh）")
         endif()
-        # C++ 运行时用静态（preset 里显式写死 ANDROID_STL=c++_static）：引擎是**一个**
-        # 自包含的 .so，没有共享 libc++ 的理由；而 vcpkg 的端口是按 NDK 默认值编的、
-        # 也是静态，混用会让同一个 .so 里出现两份 libc++（链接期被
-        # --allow-multiple-definition 盖住，运行期才可能以异常/本地化的怪象暴露）。
-        # 另外静态还能省掉随 APK 打包 libc++_shared.so —— 少一个必须正确打包的文件。
         set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE
             "$ENV{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake"
             CACHE STRING "NDK android.toolchain.cmake, chainloaded by vcpkg")
@@ -54,10 +45,6 @@ set(APP_NAME krkr2)
 
 project(${APP_NAME})
 
-# Android 目标自检。上面那段注释描述的退化（宿主 clang、无 sysroot、无
-# __ANDROID__）不会让 configure 失败，只会在编译到某个引用了 EGL/GLES 头的
-# 文件时才报错——那时已经烧掉大半轮 CI。这里在 configure 期就编译一小段探针，
-# 同时验证 __ANDROID__ 与 EGL 头，把这类问题压到几秒内暴露。
 if(ANDROID)
     include(CheckCXXSourceCompiles)
     check_cxx_source_compiles("
@@ -84,7 +71,7 @@ option(BUILD_TOOLS "build tools (excluded on Android)" ON)
 option(BUILD_ENGINE_API "build engine_api bridge library" ON)
 
 # 统一诊断探针（渲染、字体、PSB 和 MotionPlayer）编译开关。
-# 默认 OFF：release 不含探针、零性能开销与日志刷屏。黑屏/渲染问题排查时
+# 默认 OFF：release
 # cmake -DENABLE_RENDER_PROBE=ON 开启。
 option(ENABLE_RENDER_PROBE "enable diagnostic probes" OFF)
 if(ENABLE_RENDER_PROBE)
