@@ -169,22 +169,25 @@ namespace krkr::compat {
             return ActiveLayer() == LayerId::AetherKiri;
         }
 
-        // ── D3DEmote/motion.tjs 覆盖（方案 B）────────────────────────────────
-        //
-        // 为什么需要：Yuzusoft 的 SD/logo 交付靠游戏自带的 `system/motion.tjs`，其交付
-        // 目标与本引擎的图层语义不匹配（真机已逐项排除：纹理别名、目标层参数、
-        // `parentVisible=0` 的“裏”页 ── 帧落在隐藏页里，永远不显示）。参考实现不吃这个
-        // 亏是因为它**用自己的 `D3DEmote.tjs` 替掉了 `motion.tjs`**。
+        // ── D3DEmote 伴生脚本（参考实现的 `D3DEmote.tjs`）────────────────────
         //
         // 与上游 `cpp/core/base/StorageIntf.cpp` 的 `TVPIsD3DEmoteCompanionScript` /
-        // `TVPOpenD3DEmoteCompanionScript` 同名同语义；区别是本仓库把它注册成**覆盖型**
-        // provider（排在物理之前）—— 游戏自带的 `motion.tjs` 是真实存在的，兑底型
-        // provider 永远不会被问到。
+        // `TVPOpenD3DEmoteCompanionScript` 同名同语义：**只在游戏自己没有这个脚本时**
+        // 才提供。上游的两个判定点都带 `!TVPIsRealStorageNoSearchNoNormalize(name)`，
+        // 即物理/auto-path 命中时虚拟脚本永远不参与 —— 本文件注册成普通（兑底）
+        // provider，由 io 保证同样的优先级。
+        //
+        // 曾经的“覆盖型”注册（方案 B，2026-09-23）**是个错误**：`system/motion.tjs`
+        // 是所有 Yuzusoft/NEKOPARA 作品自带的 Motion 库，它定义了全局类
+        // `MotionResourceManager` 并 exec `AffineSourceMotion.tjs`；D3DEmote.tjs 反过来
+        // **依赖** `global.MotionResourceManager`（`new global.MotionResourceManager(...)`）。
+        // 把游戏自带的 motion.tjs 顶掉后，该全局类从未定义，`_loadImages` 一律抛异常，
+        // MTN/PSB 图像（SD、m2logo、E-mote 立绘）全部加载不出来。
         constexpr char kD3DEmoteCompatPrefix[] =
             "// AetherKiri D3DEmote/motion.tjs compatibility bridge.\n"
             "try { Plugins.link(\"emoteplayer.dll\"); } catch(e) { }\n";
 
-        bool IsD3DEmoteOverrideScript(const ttstr &name) {
+        bool IsD3DEmoteCompanionScript(const ttstr &name) {
             const std::string storage = ExtractLowerName(name);
             return storage == "motion.tjs" || storage == "d3demote.tjs";
         }
@@ -212,6 +215,8 @@ namespace krkr::compat {
                 return false;
             if(IsGpuCompanionScript(name))
                 return true;
+            if(IsD3DEmoteCompanionScript(name))
+                return true;
             if(IsSplitEmoteVirtualStorage(name))
                 return true;
             ttstr source;
@@ -234,6 +239,15 @@ namespace krkr::compat {
                 content.clear(); // 空文件
                 return true;
             }
+            if(IsD3DEmoteCompanionScript(name)) {
+                LogCompanionOnce("d3demote-script", ExtractLowerName(name));
+                content.assign(kD3DEmoteCompatPrefix,
+                               sizeof(kD3DEmoteCompatPrefix) - 1);
+                content.append(
+                    reinterpret_cast<const char *>(kKrkr2NextD3DEmoteTjs),
+                    kKrkr2NextD3DEmoteTjsSize);
+                return true;
+            }
             ttstr source;
             if(GetMotionParameterSource(name, source)) {
                 LogCompanionOnce("motion-parameter", ExtractLowerName(name));
@@ -246,40 +260,15 @@ namespace krkr::compat {
             return false;
         }
 
-        bool AetherKiriCompanionOverrideExists(const ttstr &name) {
-            if(!IsAetherKiriLayer())
-                return false;
-            return IsD3DEmoteOverrideScript(name);
-        }
-
-        bool AetherKiriCompanionOverrideContent(const ttstr &name,
-                                                std::string &content) {
-            if(!IsAetherKiriLayer())
-                return false;
-            if(!IsD3DEmoteOverrideScript(name))
-                return false;
-            LogCompanionOnce("d3demote-override", ExtractLowerName(name));
-            content.assign(kD3DEmoteCompatPrefix,
-                           sizeof(kD3DEmoteCompatPrefix) - 1);
-            content.append(
-                reinterpret_cast<const char *>(kKrkr2NextD3DEmoteTjs),
-                kKrkr2NextD3DEmoteTjsSize);
-            return true;
-        }
-
     } // namespace
 
     void RegisterAetherKiriCompanions() {
         io::RegisterVirtualFileProvider(&AetherKiriCompanionExists,
                                         &AetherKiriCompanionContent);
-        io::RegisterVirtualFileOverrideProvider(&AetherKiriCompanionOverrideExists,
-                                                &AetherKiriCompanionOverrideContent);
     }
 
     void UnregisterAetherKiriCompanions() {
         io::UnregisterVirtualFileProvider(&AetherKiriCompanionExists);
-        io::UnregisterVirtualFileOverrideProvider(
-            &AetherKiriCompanionOverrideExists);
     }
 
     namespace {

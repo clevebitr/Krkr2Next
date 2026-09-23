@@ -1126,14 +1126,6 @@ ttstr TVPGetPlacedPath(const ttstr &name) {
 
     ttstr normalized(TVPNormalizeStorageName(name));
 
-    // 覆盖型虚拟文件（方案 B 的 `motion.tjs` / `d3demote.tjs`）必须排在**物理之前**：
-    // 它们就是要盖住游戏自带的同名脚本。只针对明确列出的少数名字，其余名字仍是
-    // 物理优先（见 `IoVirtualFile.h` 的“覆盖型 provider”与 compat/README §5）。
-    if(krkr::io::IsVirtualFileOverride(normalized)) {
-        TVPAutoPathCache.Add(name, normalized);
-        return normalized;
-    }
-
     // 这里**只查物理存储**：虚拟文件（伴生脚本）必须等 auto-path 搜索也失败后才兜底。
     // 否则会顶掉游戏自己放在 system/ 下的同名脚本：KAG 用裸名 `live2d.tjs` 请求，
     // 而真实文件在 `data.xp3>system/live2d.tjs`；若把虚拟命中当成“当前目录已找到”，
@@ -1162,8 +1154,7 @@ ttstr TVPGetPlacedPath(const ttstr &name) {
 
     // 物理与 auto-path 都没找到：最后才问虚拟文件 provider（伴生脚本）。
     // 返回裸名，由 TVPCreateStream 的 `!TVPIsRealStorage…` 分支打开虚拟流。
-    if(krkr::io::IsVirtualFile(normalized) ||
-       krkr::io::IsVirtualFileOverride(normalized)) {
+    if(krkr::io::IsVirtualFile(normalized)) {
         TVPAutoPathCache.Add(name, normalized);
         return normalized;
     }
@@ -1223,17 +1214,6 @@ static tTJSBinaryStream *_TVPCreateStream(const ttstr &_name,
         if(access >= 1)
             TVPRemoveFromStorageCache(_name);
         TVPThrowExceptionMessage(TVPCannotOpenStorage, _name);
-    }
-
-    // 覆盖型虚拟文件（方案 B 的 `motion.tjs` / `d3demote.tjs`）：名字命中就直接打开，
-    // **不要求物理缺失** —— 它本来就是用来盖住游戏自带的同名脚本的。
-    // 必须先于下面的兑底分支，也必须先于归档分隔符解析。
-    if(access == TJS_BS_READ && krkr::io::IsVirtualFileOverride(name)) {
-        if(tTJSBinaryStream *virtual_stream = krkr::io::OpenVirtualFile(name)) {
-            if(access >= 1)
-                TVPRemoveFromStorageCache(_name);
-            return virtual_stream;
-        }
     }
 
     // 虚拟文件（伴生脚本等）：只在**物理文件缺失**时接管。
