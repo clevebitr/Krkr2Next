@@ -1287,10 +1287,28 @@ namespace motion {
             // 两块画布大小的离屏层（内容→组层、蒙版→蒙版层）。
             bool stencilActive = false;
             if(anyStencil) {
-                for(int gi = 0; gi < n && !stencilActive; gi++) {
+                int compositeGroups = 0;
+                for(int gi = 0; gi < n; gi++) {
                     if(_motionNodes[gi].hasStencil &&
                        !_motionNodes[gi].stencilMaskNodeIndices.empty())
-                        stencilActive = true;
+                        compositeGroups++;
+                }
+                // 本壳的离屏组层是**单缓冲**：所有 type-12 组的内容都会画进同一块组层，
+                // 所以只能对“唯一一个合成组”做折叠。多组时若仍折叠，就会把第一个组的
+                // 蒙版乘到**全部组**的内容上 ⇒ 整层几乎全透明。
+                //
+                // 真机（NEKOPARA 4，2026-09-24 19:08）每帧都有
+                // `drawAnimatedTree stencil: multiple composites (2..6), only first
+                // folded`，而立绘完全看不到 —— 多组时宁可不做蒙版折叠（直接画到目标
+                // 层，蒙版效果不精确，但画面可见）。
+                if(compositeGroups > 1) {
+                    if(logger)
+                        logger->info("drawAnimatedTree stencil: {} composite "
+                                     "groups; skipping stencil fold "
+                                     "(single-buffered scratch)",
+                                     compositeGroups);
+                } else if(compositeGroups == 1) {
+                    stencilActive = true;
                 }
                 if(stencilActive) {
                     iTJSDispatch2 *gl =
@@ -2815,7 +2833,8 @@ namespace motion {
                 // 蒙版节点画进**蒙版层**（即使作者把蒙版放在组子树外——蒙版是专用
                 // 精灵）；两者在本轮末尾合成。
                 iTJSDispatch2 *drawTarget = dest;
-                if(anyStencil && (stencilMaskOf[i] || stencilGroupOf[i] >= 0)) {
+                if(stencilActive &&
+                   (stencilMaskOf[i] || stencilGroupOf[i] >= 0)) {
                     if(stencilMaskOf[i]) {
                         drawTarget =
                             getOrCreateStencilLayer(dest, true, cw, ch);
