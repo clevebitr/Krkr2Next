@@ -7,9 +7,11 @@
 
 ---
 
-## 0. 一句话现状（2026-09-23，第二轮）
+## 0. 一句话现状（2026-09-23，第三轮）
 
-**本轮主线：上一轮真机新报的三条问题的修复**（两条引擎、一条壳），均已落地、待真机回归。
+**本轮主线：用户 2026-09-23 17:56–17:57 两次真机日志里的四条问题**（千恋万花 SD CG / 字体 /
+logo 动效 + NEKOPARA 4 立绘），已定位到**一个共同根因**（§1.13.1）+ 一个引擎缺口（§1.13.2），
+代码已落地、待真机回归。
 
 已真机确认的（上一轮）：
 
@@ -36,8 +38,9 @@
    + Claude 翻译补丁，疑似补丁替换的 `mainwindow.tjs` 少了该函数（§6.1）
 2. **チート緊縛術（AetherKiri 层）字体渲染不正确**：**缺日志**，需要用户提供 AetherKiri
    层那次 `engine-*.log`（现目录里只有 classic 层那次）
-3. 旧账未动：**G2 进动画卡 4.4s / 帧率 43–45**、**千恋万花 `wave` 转场缺失 + SD/logo 交付**、
-   **`SystemWatchTimerTimer` 卡顿**
+3. 旧账未动：**G2 进动画卡 4.4s / 帧率 43–45**、**千恋万花 `wave` 转场缺失**（需按 GPU render
+   method 重做）、**`SystemWatchTimerTimer` 卡顿**；千恋万花 SD/logo 与 NEKOPARA 立绘已归入
+   本轮 §1.13.1。
 
 其余两条目标的状态：
 
@@ -405,6 +408,244 @@ FATAL SIGNAL 6
 
 日志判据：`compat companion: 虚拟提供 motion.tjs [d3demote-override]`。
 
+> ⚠️ **2026-09-23 第三轮真机证伪：这一条注册方式是错的**（见 §1.13.1）。
+> 覆盖型 provider 把**游戏自带的** `system/motion.tjs` 顶掉了，而那个脚本定义了全局类
+> `MotionResourceManager`，D3DEmote.tjs 又反过来 `new global.MotionResourceManager(...)`
+> 依赖它 —— 结果千恋万花与 NEKOPARA 的 MTN/PSB 图像全部加载失败。已改回**兑底型**
+> （物理/auto-path 优先，与上游 `!TVPIsRealStorageNoSearchNoNormalize` 同语义），并且把
+> io 的“覆盖型 provider”整档删除。上方“日志判据”应读作 `compat companion: 虚拟提供
+> d3demote.tjs [d3demote-script]`（只在游戏自己没有这个脚本时）。
+
+---
+
+## 1.13 第三轮（2026-09-23）：两条真机新报问题的根因修复
+
+### 1.13.1 千恋万花 SD CG / m2logo 动效 / NEKOPARA E-mote 立绘：同一个根因（§1.12.2 的覆盖）
+
+**现象**（用户 2026-09-23 17:56–17:57 两次真机日志）：
+
+- 千恋万花：SD CG 不显示、m2logo 开场动效颜色异常（字体另见 §1.13.2）；
+- NEKOPARA 4：E-mote 立绘不显示（上一轮 §1.10.2 已把 `PSB lazy-load error` 归零，
+  这次是“图像加载正常但立绘不出”之外的另一种表现）。
+
+**证据**：两次日志里同一条 TJS 异常反复出现（千恋万花 32 条、NEKOPARA 6 条）：
+
+```
+==== An exception occurred at motion.tjs(604)[(function) _loadImages], VM ip = 179 ====
+#(604)  _motion_manager = new global.MotionResourceManager(_window);
+Member "MotionResourceManager" does not exist at motion.tjs(604)[(function) _loadImages]
+```
+
+并且伴随 `script exception … at affinelayer.tjs(1)[(function) loadImages]`、`画像ロード失敗`。
+千恋万花那次 `drawFallback: no image loaded` 归零的“好结果”是上一轮（覆盖之前）的。
+
+**根因**：`MSGHACK`/Yuzusoft 的 `system/motion.tjs`（数据包里是**编译字节码**，标识符表可见
+`MotionResourceManager` / `AffineSourceMotion.tjs` / `Motion.ResourceManager` / `lzfs://./`）
+是 Motion 库本体：它定义全局类 `MotionResourceManager` 并 `execStorage("AffineSourceMotion.tjs")`。
+而参考实现的 `D3DEmote.tjs` **依赖**这个全局类（`new global.MotionResourceManager(_window)`）。
+方案 B 用覆盖型 provider 把这个文件顶掉，等于把库本体换成了库的**使用者**，于是所有走
+`MotionResourceManager` 的图像加载（SD `sdNNN.mtn`、`m2logo.mtn`、`e-mote*.psb` 立绘）全部抛异常。
+
+**参考实现到底怎么做**（读 AetherKiri `cpp/core/base/StorageIntf.cpp`）：
+`TVPIsD3DEmoteCompanionScript` 的两个消费点（`TVPGetPlacedPath` 2023 行附近、
+`_TVPCreateStream` 2178 行附近）都带 `!TVPIsRealStorageNoSearchNoNormalize(name)` —— 即
+**物理/auto-path 命中时虚拟脚本永远不参与**；D3DEmote.tjs 是给“游戏自己没有这个脚本”的
+作品用的伴生脚本（它的另一个真实用途：游戏 `D3DaffineSourceEmote.tjs` 会去要
+`D3DEmote.tjs`，而数据包里没有）。参考实现对千恋万花这类游戏改的是**加载后**打补丁
+（`TVPGetD3DEmoteGpuBatchPatchScript`，包 `AffineSourceMotion.drawAffine` 做 GPU 批处理），
+不是换文件。
+
+**做法**：`AetherKiriCompanions.cpp` 把 D3DEmote 从覆盖型 provider 改成普通（兑底）provider
+（命中日志 `d3demote-script`）；`IoVirtualFile.{h,cpp}` 删掉覆盖型 provider 那一档，
+`IoStorage.cpp` 的三处消费点回到“只查物理 → auto-path → 最后虚拟兑底”。`D3DAdaptor` 的
+`setPresentationTarget` / `presentationHold` 等成员保留（D3DEmote.tjs 一旦被用到仍需要）。
+
+**验收标准**（真机日志）：
+
+- 不再出现 `Member "MotionResourceManager" does not exist` 与 `画像ロード失敗`；
+- 千恋万花应看到 `motion.tjs を読み込みました`（游戏自己的那份，字节码）+ 首帧里的
+  `AffineSourceMotion.tjs`；SD 与 m2logo 有图像；
+- NEKOPARA 4：`e-mote*.psb` 立绘出现；
+- 若某作品确实没有 `motion.tjs`/`D3DEmote.tjs`，日志里才应出现 `虚拟提供 d3demote.tjs`。
+
+### 1.13.2 千恋万花消息文字颜色：补上原生 `Layer.EdgeShadowDrawText`
+
+**现象**：消息文字颜色异常（§1.12.1 试图用源码改写修的“渲染成纯白”）。
+
+**为何 §1.12.1 在这份整合包上必然不生效**：那个补丁只匹配**明文** `custom.tjs` 里的
+`function EdgeShadowDrawText(...) + MakeGradationLayer + d.operateRect` 锚点。但本作的
+`patch.xp3` 里 `custom.tjs` 是 147 KB UTF-16 明文且**没有这个函数定义**（只有两处调用；
+`grep` 全包也找不到 `function EdgeShadowDrawText`）—— 真正的实现被汉化搬到了
+`sysscn/msghack.tjs`，而那是**编译字节码**（`TJS2100` 段，标识符表里有
+`Layer` / `drawPathString` / `MakeGradationLayer` / `DrawTextWithGradationColor` /
+`EdgeShadowDrawText` / `EdgeShadowDrawTextKinsokuRect`）。真机日志也从没出现
+`Applied compatibility patch for native gradient text drawing (custom.tjs)`。
+
+**根因**：`msghack.tjs` 走的是 TextRender 插件的原生契约 —— 先看
+`Layer.EdgeShadowDrawTextKinsokuRect` 在不在，在就用原生描边+渐变文字，不在就退回脚本的
+“渐变图层 + drawPathString”路径；本仓库的 `textrender.cpp` 从未注册过这两个名字
+（`grep EdgeShadowDrawText cpp/` 只命中 `ScriptMgnIntf.cpp` 的补丁与两处注释），所以真机
+永远走脚本退化路径。
+
+**做法**：按 AetherKiri `plugins/textrender.cpp`（`EdgeShadowDrawTextCompat`）移植这两个
+Layer 方法：认参数里的 text / x / y / col / opa，再加上 `edgeColor` 描边光量（按半径圆内
+偏移逐点 `DrawText`）；打包渐变颜色（bit63 置位）走 `Layer.DrawTextVerticalGradient(x, y,
+"顶 0xFFFFFF → 底 col")`，普通色走 `DrawText`。命名层文字（5 参调用）保留
+`GetFontGlyphDrawRect` + `ClampTextOriginToClipTop` 的顶部裁剪修正。探针用
+`KRKR_RENDER_PROBE` 且只记前 8 次、不记文本内容。
+
+**验收标准**：探针构建下出现 `probe: textrender EdgeShadowDrawText len=… x=… y=… color=…`，
+且消息文字与设置/回想界面文字颜色正常（不再是纯白）。
+
+### 1.13.3 第四轮（2026-09-23 18:51–18:56 真机日志）：§1.13.1 生效，剩下的是交付/描边
+
+**§1.13.1 已生效**（新日志证据）：`Member "MotionResourceManager" does not exist` 由 32 条降为 **0**；
+NEKOPARA `lzfs://./e-mote*.psb` → `PSB lazy-load archive` + `Stored 12 layer positions`；
+千恋万花 `sd301.mtn` → `Stored 21 layer positions` / `cachePSBImages: 21 layer positions`，
+`TVPLoadGraphic` 在拉 `psb://…/pixel.png`。即“图像加载”这一段已经通了。
+
+但仍然看不到画面，日志指向两条不同的东西：
+
+1. **运动帧被交付到不可见层**（两作同构）：
+   - NEKOPARA：首次 `AssignImages` → `target='ショコラ' parent='表-背景(vis=1)'`，
+     之后同一层变成 `parent='裏-背景'(vis=0)`；
+   - 千恋万花：`target='CG View LayerAffineLayer'`，`parent='CG View Layer : SDxxxAA'(vis=0)`
+     （标题图则是 `parent='裏-背景'(vis=0)`，另有一份到 `表-背景` 的 `trans_title_bg`）。
+   而 `CG View Layer` / `表-背景` 里都有同名同尺寸的可见兄弟层 —— 正是
+   `TVPResolveExchangedKagAssignmentTarget`（KAG 表/裏 页面改投）要处理的形状，但它
+   **一条 `LayerAssign route=`/拒绝原因都没打**（该函数当时既无 route 日志也无拒绝原因日志）。
+   本轮补上 `probe: exch-route denied reason=…`（`bad-signature` / `no-page-root` /
+   `page-visible` / `not-known-stale` / `no-visible-page` / `no-name-match`，每个
+   (目标名,原因) 一条，封顶 40），下一份 **探针构建**日志就能定死是哪道门拦的。
+2. **文字描边颜色参数路由**（真正的修法）：本作的 `msghack.tjs` 是字节码，
+   AetherKiri 对它的处理是“脚本跑完后再包一层 `global.EdgeShadowDrawText`”（把看起来
+   是颜色值的 `e`/`ecol` 换回 `owner.edge`/`owner.edgeColor`）。本仓库原先**只有前置
+   源码改写、没有后置钩子**，所以这条修复一直缺失。本轮新增
+   `TVPApplyPostScriptCompatibilityPatches(shortname)`（移植自 AetherKiri
+   `ScriptMgnIntf.cpp`），在字节码/明文两条执行路径**之后**调用；首个钩子就是
+   `msghack.tjs` 的那条，日志判据：
+   `Applied compatibility hook for message edge argument routing (msghack.tjs)`。
+
+**还需要的下一步（探针构建）**：`Motion.enableD3D` / `Motion.Player.useD3D` /
+`window.d3dMotion` 这三个值决定游戏走 D3DAdaptor 的 `captureCanvas` 还是
+SeparateLayerAdaptor 的私有渲染层，而它们从来没在日志里出现过。本轮把它们加进
+`KRKR_RENDER_PROBE` 快照：`probe: motion d3d decision after motion.tjs: …`
+（脚本 `motion.tjs` / `affinesourcemotion.tjs` / `d3daffinesourcemotion.tjs` 执行后各一条）。
+
+相关事实：两作的 `system/motion.tjs`（字节码）都带 `-nod3dm | System | getArgument | yes`
+与 `motionplayer_nod3d.dll`；千恋万花自带 `patch.tjs`（明文）会显式
+`&Motion.Player.useD3D = 0;`（即作者本意就是不要 D3D 路径），而真机日志显示 D3D
+路径仍在跑（`D3DAdaptor.captureCanvas` 累计 901 次，`SeparateLayerAdaptor` 0 次）。
+
+### 1.13.4 第五轮：把参考实现的“隐藏页孤儿层搬回可见页”补齐
+
+真机（19:26/19:27，非探针构建）与上一轮完全同形：NEKOPARA 头两帧交付到
+`表-背景(vis=1)`，随后全部变成 `裏-背景(vis=0)`；千恋万花 SD 交付到
+`CG View LayerAffineLayer`（`parent='CG View Layer(vis=1)'`，但整条链 `parentVisible=0`），
+标题图是 `裏-背景(vis=0)` + 一份 `trans_title_bg`。即图像已加载、帧已画好，但停在隐藏页。
+
+对照参考实现（AetherKiri `LayerIntf.cpp:359-535`）发现本仓库的移植**只搬了一半**：
+原版除了“改投到可见页同名同尺寸的兄弟层”之外，还有两道兑底：
+
+1. 可见页里**没有**同名兄弟时，若该隐藏层被**持续交付**（同一目标连续 12 次、相邻两次
+   间隔 ≤ 250ms），且可见页没有压得住它的内容层、两页都不在转场中 ⇒ 把**层本身**
+   `SetParent` 搬到可见页（保持 order，记入 `TVPMotionSwapAssignmentTargets`）；
+2. 可见页里的 `trans_*` 兄弟是即将到来的 crossfade 目标，转场前要**让路**；且后续交付
+   要走 `AssignMotionImages` 交换语义（`visible_target == this` 分支）。
+
+本轮把这三块补齐（`LayerIntf.{h,cpp}`：新增 `DebugIsInTransition()` 访问器、
+`TVPHiddenKagAssignmentStreaks`/`TVPMotionSwapAssignmentTargets` 状态、
+`LayerAssign route=reparent-hidden-page` 日志、`probe: exch-route denied reason=page-busy/
+streak-not-reached`）。
+
+### 1.13.6 第七轮：非 D3D 路径上线后暴露的真因 —— 私有渲染层是 0×0
+
+`Motion.enableD3D` 恒返回 0 之后（§1.13.5），真机（20:50/20:51）确认选路成功：
+
+- `Motion.enableD3D: 脚本请求开启 D3D 路径，已忽略`；
+- `D3DAdaptor.captureCanvas` **归零**、`drawOnto` 归零；
+- `motion: SeparateLayerAdaptor 渲染层路由 owner=… parent=… parentIsOwner=1
+  parentName='ショコラ' / 'バニラ' / 'ev'` —— 私有渲染层确实挂到了游戏自己的 owner 层下；
+- `probe: exch-route denied` 里终于出现 `reason=streak-not-reached` 与 `reason=page-busy`
+  （说明 §1.13.4/§1.13.5 补的兜底路径已经可达）。
+
+但画面依旧全黑，日志给出最后一环：
+
+```
+drawAnimated: drew 39 images at tick=0 (…) real[layer(name='ショコラ',parent='ショコラ',
+    visible=1,opacity=255,count=-1,size=0x0,pos=0,0)]
+```
+
+**私有渲染层的 size 是 `0×0`** —— 帧照样“画”，但没有一个像素能落地。原因是本壳只是把
+owner 的 `width`/`height` 抄给渲染层，而 owner 是角色的 AffineLayer（NEKOPARA
+`ショコラ`/`バニラ`、千恋万花 `ev`），它的 width/height 常为 0；参考实现的
+`queryLayerCanvasSize` 会退到 **image 尺寸**并要求非零（拿不到就不建渲染层），随后
+`SetSize/SetClip/SetHasImage/SetImageSize` 显式定尺寸。
+
+修法（`motionplayer/main.cpp` 的 `GetSeparateAdaptorRenderTarget`）：尺寸按
+owner width/height → owner imageWidth/imageHeight → `window.scWidth/scHeight`
+（游戏自己的 `motionWorkLayer` 就是 `setSize(scWidth, scHeight)`）逐级兜底，拿不到就
+不建渲染层并警告；然后用 `setSize(canvasW, canvasH)` 一次性定 box+image，补上
+`type=ltAlpha(2)`，路由日志带上 `canvas=WxH visible=… type=…` 便于下一轮核对。
+
+**下一轮判据**：`motion: SeparateLayerAdaptor 渲染层路由 … canvas=1920x1080 visible=1
+type=2`，且 `drawAnimated: drew N images … size=1920x1080`。
+
+### 1.13.5 第六轮：探针给出答案 —— 文字已修好，剩下的全部是 D3D 路径选错了
+
+**用户真机反馈（probe 构建 de1450b）**：
+
+| 问题 | 现象 |
+|---|---|
+| 千恋万花 消息文字/字体 | **基本修好**（msghack 钩子 + 原生 `Layer.EdgeShadowDrawText` 生效）；只剩“CG9 页面的音乐名称”一处 |
+| 千恋万花 SD CG | 完全看不到 |
+| 千恋万花 m2logo | 有色块 / 残留矩形 |
+| NEKOPARA 4 立绘 | 完全看不到 |
+
+**探针实测（19:56/19:57 日志）**：
+
+1. `probe: exch-route denied reason=not-known-stale`（NEKOPARA `ショコラ`/`バニラ`）、
+   `reason=page-visible`（当前可见页，正常）、
+   `reason=no-page-root`（千恋万花 SD：`target='CG View LayerAffineLayer'`，
+   `page='CG View Layer'`，`root='裏メッセージレイヤ2'` —— 目标在“消息层页面”里，
+   而源工作层挂在 `トップレイヤ`，参考实现的 `source->GetParent() == page_root` 判据
+   天然不成立，参考实现也只覆盖 `表/裏-背景` 这一对）。
+2. `page-busy` / `streak-not-reached` / `LayerAssign route=reparent-hidden-page` **一次都没有** →
+   说明上一轮刚补的“把孤儿层搬回可见页”从来没被执行到。根因是移植时多加了
+   `if(!known_stale) return nullptr;`（参考实现只在“同名兄弟层改投”那一支用 known_stale，
+   兜底搬页路径不看它）。**已修（e45d941）**。
+3. `probe: motion d3d decision` 第一次实现整段抛异常（`String(stub 对象)` 触发 E_CONVERT），
+   已改为逐项 try；但即使没有这些值，`D3DAdaptor.captureCanvas` 仍在跑、`SeparateLayerAdaptor`
+   0 次，足以确认两作都走了 D3D 路径。
+
+**本轮做法（真正的选路修复）**：`motionplayer` 的 `Motion.enableD3D` 以前返回一个**字典 stub
+对象**（truthy），于是游戏脚本的
+`_useD3D = Motion.enableD3D && (typeof window.d3dMotion != "undefined") && window.d3dMotion`
+恒为真，一律走 D3DAdaptor 的 `captureCanvas` 交付链。本壳的 D3D 只是空壳（没有参考实现那种
+render texture），帧画出来也 assign 出去，却停在隐藏页 —— 这就是 SD / m2logo / 立绘共同的现象。
+
+现在 `Motion.enableD3D` 恒返回 `0`（Integer；setter 吸收脚本赋值并只记一条日志），让游戏按
+自己的降级路径走：`SeparateLayerAdaptor` + 私有渲染层（§1.5 已移植，层挂在 owner 之下、z 序与
+页面归属都是游戏自己的）。依据：Android 上根本没有 D3D；这些作品的工具链自带非 D3D 路径
+（游戏自己的菜单项“モーション表示にDirect3D描画を使用しない”=`-nod3dm`，千恋万花 `patch.tjs`
+还显式 `&Motion.Player.useD3D = 0;`）。
+
+**回滚办法**：把 `getEnableD3D` 改回返回字典 stub 即回到 D3D 路径（一行）。
+
+**下一步看什么**：真机日志里应出现 `Motion.enableD3D: 脚本请求开启 D3D 路径，已忽略`，
+`SeparateLayerAdaptor` 计数 > 0、`D3DAdaptor.captureCanvas` 归零，
+以及 `motion: SeparateLayerAdaptor 渲染层路由 owner=… parent=…`（§1.5 的路由日志）。
+
+**同一轮日志里的另两条线索**：
+
+- 千恋万花：`convertImage: key='m2logo.mtn/source/logo/icon/icon32/pixel.png' RL decode
+  failed for 3x16 raw=48B; falling back to raw palette decoding` —— “m2logo 动效颜色异常”
+  的可疑点（该资源标 RL 却解不出 RLE；上一轮已改成回退原始字节 + 格式推断，若颜色仍不对
+  就要查调色板字节序/格式推断，而不是继续调 RL 解码）。
+- NEKOPARA：`stencil mask label '■耳L/R' not found for 'stencil'` 与大量
+  `expandSubMotionNodes: no nodes for 'motion/general_obj_*'` —— E-mote 节点树有分支没被
+  展开，属于“立绘只剩部分部件”方向的待查点。
+
 ---
 
 ## 2. 目标一：KAG 兼容层对齐 AetherKiri
@@ -517,7 +758,7 @@ FATAL SIGNAL 6
 | **虚拟文件（伴生脚本）与物理文件的优先级** | **物理优先，auto-path 次之，虚拟最后兜底**（2026-09-22 定；实现见 `TVPGetPlacedPath`） |
 | **`.amv` 解码器放哪** | **core**（`AlphaMovieDecoder`），插件复用；不允许插件反向注册 core 的格式处理项 |
 | **AlphaMovie 插件** | 按上游**完整移植**（用户明确选"一次性完整移植"） |
-| **千恋万花 SD 交付的修法** | 用户 2026-09-22 选 **B：搬参考的 `D3DEmote.tjs`** 作 `system/motion.tjs` 的覆盖（兼容性优先），而不是继续按结构打补丁（方案 A）。实施规格见 §6.1 |
+| **千恋万花 SD 交付的修法** | 用户 2026-09-22 选 **B：搬参考的 `D3DEmote.tjs`**。**2026-09-23 修正**：只把它当**兑底伴生脚本**（游戏自己没有 `motion.tjs`/`D3DEmote.tjs` 时才提供）；**不得**覆盖游戏自带的 `system/motion.tjs`（它定义 `MotionResourceManager`，而 D3DEmote.tjs 依赖它）—— 见 §1.13.1 |
 
 ---
 
@@ -531,13 +772,13 @@ FATAL SIGNAL 6
 | G2 **帧率 ~43–45** | 中 | 每帧 1920×1080 **GPU→CPU 回读**（`capture` 路径**刻意优先 CPU**：引擎随后按 CPU 位图重传纹理会覆盖只写纹理的内容）；主窗口走 `path=GPU`，只有 Live2D 图层退化。附带：该回读用 `GL_BGRA_EXT` 调 `glReadPixels`，ES3 非法 → `err=0x0502` |
 | G2 / 千恋万花 **`SystemWatchTimerTimer` 卡顿**（1.5–1.9s） | 中 | 卡在 `DeliverEvents()` 或 `TickBeat()` 循环（内层 MarkStage 未触发）；需在该函数内加细阶段探针 |
 | 千恋万花 **`wave` 转场缺失** | 中 | **需按 GPU render method 重做**：2026-09-23 试过逐字节移植 AetherKiri 的 CPU 扫描线实现，CI 编译失败（`iTVPScanLineProvider::GetScanLine*` 在本仓库被 `#if 0`）；根因与结论见 `render-issues.md §2` |
-| 千恋万花 **SD/logo 交付（D3DEmote）** | 中 | 方案 B **已实施（§1.12.2）**：`D3DEmote.tjs` 覆盖 `motion.tjs`（覆盖型虚拟文件，仅 AetherKiri 层）+ `D3DAdaptor` 的 `presentationHold` 等成员；待真机回归。方案 A 的兜底保留待评估 |
-| 千恋万花 **字体/文字颜色偏白、logo 色偏与残留矩形** | 中 | 文字颜色 **已修（§1.12.1）**：`Layer.drawTextVerticalGradient` + `custom.tjs` 源码改写；logo 色偏/残留矩形待看结果 |
+| 千恋万花 **SD/logo 交付（D3DEmote）** | 中 | **已回退覆盖、改为兑底（§1.13.1）**：旧方案把游戏自己的 `system/motion.tjs` 顶掉，导致 `MotionResourceManager` 未定义、图像加载全部失败。参考实现对这两作改的是“加载后打补丁”而非换文件（`TVPGetD3DEmoteGpuBatchPatchScript` 尚未移植）。待真机回归；方案 A 的兜底（`assignMotionImages` 路由）保留 |
+| 千恋万花 **字体/文字颜色偏白、logo 色偏与残留矩形** | 中 | 文字颜色：§1.12.1 的**源码改写补丁在本整合包上不生效**（`custom.tjs` 里没那个函数，实现已被搬到字节码 `msghack.tjs`）→ 改为**移植原生 `Layer.EdgeShadowDrawText` / `…KinsokuRect`（§1.13.2）**，同理修复 logo 色偏（同一根因：MotionResourceManager 缺失会让 `m2logo.mtn` 取不到图）。待真机回归 |
 | **AlphaMovie 插件复用 core 解码器** | 中 | 未做；完成后删掉重复 ~1700 行 |
 | おっぱいスパイ学園 **切 CG 视频严重卡顿** | 中 | 🟡 **已修三轮（§1.10.1），第三轮待真机回归**。前两轮（`RequestStop()`、`AbortPictureWait()`）均被真机证伪；真因是**跨线程死锁**：解码线程在 `Flush()` 里持 `m_mtxPicture` 打 spdlog，而 `engine_tick` 整帧持有 `StartupLogSink` 要的 `g_registry_mutex`，而渲染线程正在 `Release()` 里等它退出。已把所有 `m_mtxPicture` 临界区改成“锁内取值、锁外打日志” |
 | チート緊縛術（classic）**`Member "showLayers" does not exist` → 引擎退出** | 小-中 | 脚本层成员缺失：`showLayers` 在本仓库与 AetherKiri 都**未注册**（`grep -rn showLayers cpp/` 两边都空）。日志：`trace : mainwindow.tjs(5777)[(function expression)] <-- conductor.tjs(440)[onTag]`、`scenario.ks 行 223 タグ eval`。该作目录带 `patch.xp3` + `claude-3-5-sonnet-…翻译补丁备份` + `hook.ini` + `FONTCHANGER.dll`（加载失败），**疑似翻译补丁替换的 `mainwindow.tjs` 少了该函数**。需要用户提供 `data.xp3>mainwindow.tjs` 与 `patch.xp3` 里的同名文件对照 |
 | チート緊縛術（AetherKiri）**字体渲染不正确** | 小-中 | **缺日志**：该游戏目录里只有 classic 层那次 `engine-*.log`。要 AetherKiri 层那次的 `FontSystem: 已注册字体 N 个`、`font_fallback_mode=`、缺字/`GetBeingFont` 行。该作自带 `ShiraYukiNoa.otf` + `FONTCHANGER.dll`（本引擎加载失败）⇒ 字体很可能靠该插件换 |
-| **猫娘乐园（NEKOPARA 4）游戏内 E-mote/Live2D 立绘加载不出** | 中 | ✅ **已修（§1.10.2），真机日志已确认生效**（错误计数 3230→0、`no image loaded` 2321→0、档案正常加载；立绘是否肉眼正常待用户确认） |
+| **猫娘乐园（NEKOPARA 4）游戏内 E-mote/Live2D 立绘加载不出** | 中 | §1.10.2 修好了 PSB 档案名切分（错误计数 3230→0，该轮日志确认）；但 2026-09-23 17:57 真机日志里立绘仍不出来，根因是 §1.12.2 的覆盖把 `system/motion.tjs` 顶掉、`MotionResourceManager` 未定义（`motion.tjs(604) _loadImages` 抛异常）—— **已修（§1.13.1），待真机回归** |
 
 #### 千恋万花 SD：方案 B（搬参考的 D3DEmote.tjs）实施规格
 
@@ -633,7 +874,7 @@ gh run view "$RID" --repo clevebitr/Krkr2Next --log-failed | rg -i "error:|undef
 | KAG 脚本层对照证据 | `compat/recon/kag-script-diff.md` |
 | 插件层对照证据（约 100 个模块覆盖表） | `compat/recon/plugin-compat-diff.md` |
 | 渲染层对照证据（兼容层↔渲染耦合、ES2-only 残留） | `compat/recon/render-diff.md` |
-| 移植溯源清单 | `compat/upstream/aetherkiri_ports.json`（12 个文件） |
+| 移植溯源清单 | `compat/upstream/aetherkiri_ports.json`（14 个文件） |
 | IO 组件 | `cpp/core/io/`（`StoragePolicy.h` 策略契约；`IoPolicy.*`；`IoModuleLocator.*`；`IoVirtualFile.*` 虚拟文件注册点） |
 | 兼容层框架 | `cpp/core/compat/`（`CompatLayer.*`、`ModuleGate.*`、`AetherKiriCompanions.*`） |
 | **壳选项通道** | `cpp/core/environ/ConfigManager/GlobalConfigManager.h`（`TVPSetShellOption` 等）+ `IndividualConfigManager.cpp` 的四个 `GetValue<T>` 特化 |
@@ -653,16 +894,18 @@ gh run view "$RID" --repo clevebitr/Krkr2Next --log-failed | rg -i "error:|undef
 
 ## 9. 下一轮建议顺序
 
-1. **真机回归本轮三项修复**（都要看日志，不能只看“感觉好了”）：
+1. **真机回归本轮修复**（都要看日志，不能只看“感觉好了”）：
+   - **§1.13.1（两作）**：`Member "MotionResourceManager" does not exist` 与 `画像ロード失敗` 归零；
+     千恋万花看到游戏自己的 `motion.tjs を読み込みました`、SD 与 m2logo 出图；NEKOPARA 4 E-mote 立绘出图；
+   - **§1.13.2（探针构建）**：`probe: textrender EdgeShadowDrawText len=…` 出现，消息文字颜色正常；
    - おっぱいスパイ学園连续切 8 段 CG：`update_max` 不再出现 4000ms 量级、不再出现
      「未退出，放弃销毁」、出现 `movie: 停播请求→影片线程退出耗时 Nms`（N 应远小于 4000）；
-   - NEKOPARA 4：立绘显示出来、`PSB lazy-load error: Not supported media type ""` 归零、
-     每个档案一条 `PSB lazy-load archive: lzfs:/e-mote*.psb`；
    - 壳：打开「加载游戏时自动显示日志」→ 开游戏立即看到日志、`startup state -> 2` 后自动消失。
 2. **チート緊縛術**：等用户给 AetherKiri 层日志（字体）+ `mainwindow.tjs`/`patch.xp3` 对照
    （`showLayers`）。
 3. **NEKOPARA 翻转动画位置**（上一轮已修）：真机回归确认 `*c1*`/`*c2*` 变体位置。
-4. **千恋万花**：按**方案 B** 搬参考的 `D3DEmote.tjs`（规格见 §6.1）→ 字体/logo 颜色与 7 个标题 hook；
+4. **千恋万花**：若 SD 仍“显示一两秒后消失”，接着查方案 A 的 `assignMotionImages` 路由（§1.6）；
+   参考实现对这两作的 `motion.tjs` 是**加载后打补丁**（`TVPGetD3DEmoteGpuBatchPatchScript`），尚未移植；
    `wave` 转场需**按 GPU render method 重做**（CPU 扫描线移植已证实不适用，见 §6.1）。
 5. **G2**：进动画 4.4s（`CreateRenderer` 计时细分）→ 帧率（普通构建复测基线）。
 6. **`SystemWatchTimerTimer` 卡顿**：`SystemControl.cpp` 的 `DeliverEvents()`/`TickBeat()` 加 MarkStage。

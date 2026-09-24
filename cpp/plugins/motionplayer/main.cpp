@@ -369,6 +369,47 @@ GetSeparateAdaptorRenderTarget(motion::SeparateLayerAdaptor *adaptor) {
         return owner;
     }
 
+    auto readIntProp = [](iTJSDispatch2 *obj, const tjs_char *name) -> int {
+        if(!obj)
+            return 0;
+        tTJSVariant v;
+        if(TJS_SUCCEEDED(obj->PropGet(0, name, nullptr, &v, obj)) &&
+           v.Type() == tvtInteger)
+            return static_cast<int>(v);
+        return 0;
+    };
+
+    // 渲染层尺寸（真机 20:51 定位到的真因）。
+    //
+    // 参考实现的 `queryLayerCanvasSize` 用 owner 的 width/height，退到 image 尺寸，
+    // 并**要求非零**（拿不到就不建渲染层）；本壳原来只是照抄 owner 的 width/height。
+    // 真机上 owner 是角色的 AffineLayer（NEKOPARA `ショコラ`/`バニラ`、千恋万花 `ev`），
+    // 它的 width/height 是 0×0，于是渲染层也是 0×0：`drawAnimated: drew 39 images`
+    // 照旧打印，但整层没有任何像素 —— SD / m2logo / 立绘全部“看不到”。
+    //
+    // 兜底顺序：owner 的 width/height → owner 的 imageWidth/imageHeight →
+    // 窗口的 scWidth/scHeight（游戏自己的 `motionWorkLayer` 就是
+    // `setSize(_window.scWidth, _window.scHeight)`；D3DEmote.tjs 的 workLayer 同理）。
+    int canvasW = readIntProp(owner, TJS_W("width"));
+    int canvasH = readIntProp(owner, TJS_W("height"));
+    if(canvasW <= 0 || canvasH <= 0) {
+        canvasW = readIntProp(owner, TJS_W("imageWidth"));
+        canvasH = readIntProp(owner, TJS_W("imageHeight"));
+    }
+    if(canvasW <= 0 || canvasH <= 0) {
+        canvasW = readIntProp(windowObj, TJS_W("scWidth"));
+        canvasH = readIntProp(windowObj, TJS_W("scHeight"));
+    }
+    if(canvasW <= 0 || canvasH <= 0) {
+        static std::atomic<int> s_noCanvasSize{ 0 };
+        if(s_noCanvasSize.fetch_add(1) < 4) {
+            if(auto lg = spdlog::get("plugin"))
+                lg->warn("motion: SeparateLayerAdaptor 拿不到画布尺寸（owner "
+                         "width/height 与 window.scWidth/scHeight 均非正）");
+        }
+        return owner;
+    }
+
     auto syncProp = [&](const tjs_char *name) {
         tTJSVariant value;
         if(TJS_SUCCEEDED(owner->PropGet(0, name, nullptr, &value, owner))) {
@@ -388,14 +429,27 @@ GetSeparateAdaptorRenderTarget(motion::SeparateLayerAdaptor *adaptor) {
         syncProp(TJS_W("left"));
         syncProp(TJS_W("top"));
     }
-    syncProp(TJS_W("width"));
-    syncProp(TJS_W("height"));
+    // setSize 同时定下 box 与 image 尺寸（参考实现：SetSize + SetHasImage +
+    // 必要时 SetImageSize）；不能只 sync owner 的 width/height（可能是 0×0）。
+    {
+        tTJSVariant sizeArgs[2] = { tTJSVariant(static_cast<tjs_int>(canvasW)),
+                                    tTJSVariant(static_cast<tjs_int>(canvasH)) };
+        tTJSVariant *sizeArgv[] = { &sizeArgs[0], &sizeArgs[1] };
+        layerObj->FuncCall(0, TJS_W("setSize"), nullptr, nullptr, 2, sizeArgv,
+                           layerObj);
+    }
     syncProp(TJS_W("visible"));
     syncProp(TJS_W("opacity"));
     syncProp(TJS_W("name"));
+    // 渲染层是游戏自己控制的一块画布：ltAlpha=2（参考实现 SetType(ltAlpha)）。
+    {
+        tTJSVariant typeVal(static_cast<tjs_int>(2));
+        layerObj->PropSet(TJS_MEMBERENSURE, TJS_W("type"), nullptr, &typeVal,
+                          layerObj);
+    }
 
     // 一次性路由日志（每个 adaptor 一条，封顶 8 条）：回答「SD/emote 渲染层挂在
-    // 谁下面」——层级类问题的判定点。状态边沿日志，不是高频探针。
+    // 谁下面、多大」—— 层级/尺寸类问题的判定点。状态边沿日志，不是高频探针。
     {
         static std::atomic<int> s_targetRoute{0};
         if(s_targetRoute.fetch_add(1) < 8) {
@@ -407,10 +461,14 @@ GetSeparateAdaptorRenderTarget(motion::SeparateLayerAdaptor *adaptor) {
                                                     &nameVar, parentObj)))
                     parentName = ttstr(nameVar);
                 lg->info("motion: SeparateLayerAdaptor 渲染层路由 owner={} "
-                         "parent={} parentIsOwner={} parentName='{}'",
+                         "parent={} parentIsOwner={} parentName='{}' "
+                         "canvas={}x{} visible={} type={}",
                          static_cast<const void *>(owner),
                          static_cast<const void *>(parentObj),
-                         parentIsOwner ? 1 : 0, parentName.AsStdString());
+                         parentIsOwner ? 1 : 0, parentName.AsStdString(),
+                         canvasW, canvasH, readIntProp(layerObj,
+                                                       TJS_W("visible")),
+                         readIntProp(layerObj, TJS_W("type")));
             }
         }
     }
@@ -2038,7 +2096,16 @@ public:
     static tjs_error setEnableD3D(tTJSVariant *, tjs_int count, tTJSVariant **p,
                                   iTJSDispatch2 *) {
         if(count == 1 && (*p)->Type() == tvtInteger) {
+            // 吸收脚本的赋值，不让它影响 getter（见 getEnableD3D 的说明）。
             _enableD3D = static_cast<bool>(**p);
+            if(_enableD3D) {
+                static std::atomic<bool> warned{ false };
+                if(!warned.exchange(true)) {
+                    if(auto logger = spdlog::get("plugin"))
+                        logger->info("Motion.enableD3D: 脚本请求开启 D3D 路径，"
+                                     "已忽略（Android 无 D3D，见 getEnableD3D）");
+                }
+            }
             return TJS_S_OK;
         }
         return TJS_E_INVALIDPARAM;
@@ -2067,13 +2134,24 @@ public:
 
     static tjs_error getEnableD3D(tTJSVariant *r, tjs_int, tTJSVariant **,
                                   iTJSDispatch2 *) {
-        iTJSDispatch2 *obj = TJSCreateDictionaryObject();
-        if(obj) {
-            *r = tTJSVariant(obj);
-            obj->Release();
-        } else {
-            *r = tTJSVariant();
-        }
+        // 恒为 false（Integer 0）。
+        //
+        // 为什么（2026-09-23 探针实测）：Yuzusoft/NEKOPARA 系作品的
+        // `system/AffineSourceMotion.tjs`（字节码）用
+        // `_useD3D = Motion.enableD3D && (typeof window.d3dMotion != "undefined") &&
+        // window.d3dMotion` 选路。以前这里返回一个**字典 stub 对象**（“truthy 但可当对象用”），
+        // 于是 _useD3D 恒为真，游戏一律走 D3DAdaptor 的 captureCanvas 交付链——而本壳的
+        // D3D 只是空壳（没有参考实现那种 render texture），真机表现为：帧画好了、也
+        // assignImages 出去了，但目标整条链在隐藏页（NEKOPARA `裏-背景(vis=0)`，千恋万花
+        // `CG View Layer` 链 `parentVisible=0`）⇒ SD / m2logo / 立绘全看不到。
+        //
+        // Android 上根本没有 D3D，而这些作品的工具链自带非 D3D 路径（游戏自己的菜单项
+        // “モーション表示にDirect3D描画を使用しない”="-nod3dm"，千恋万花 patch.tjs 还
+        // 显式写 `&Motion.Player.useD3D = 0;`）——那才是本引擎能真正实现的
+        // SeparateLayerAdaptor + 私有渲染层路径（见 §1.5）。所以这里老老实实报“不提供
+        // D3D motion”，让游戏自己降级。
+        if(r)
+            *r = tTJSVariant(static_cast<tjs_int>(0));
         return TJS_S_OK;
     }
 

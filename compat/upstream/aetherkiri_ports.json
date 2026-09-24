@@ -117,9 +117,18 @@
       "upstream": "cpp/core/base/StorageIntf.cpp",
       "source_ref": "cpp/core/base/StorageIntf.cpp:368-403（谓词）、:406-438（打开器）、:1299-1305/1832-1865/2023-2035/2178-2210（消费点）；GPU 占位脚本本体来自 cpp/core/base/impl/GpuCompatScript.h；D3DEmote 覆盖：cpp/core/base/StorageIntf.cpp:43-45（前缀）、:395-399（谓词）、:424-438（打开器）、:2178-2183（消费点），脚本本体来自 cpp/core/base/resources/D3DEmote.tjs",
       "modifications": "partial-extract",
-      "reason": "AetherKiri 层的伴生脚本虚拟文件：GPU 占位脚本（11 名，含 live2d.tjs）、motion_<asset>.psb/.mtn.tjs → %[\"storage\" => …]、*emo 虚拟存储、以及 D3DEmote.tjs 对 motion.tjs/d3demote.tjs 的**覆盖**。上游把这套逻辑直接写在 StorageIntf.cpp 里（io 层因此耦合了发行版知识）；本仓库改为 io 只提供泛型注册点 cpp/core/io/IoVirtualFile.*（含“覆盖型 provider”，排在物理之前），由 compat 层注册 provider（见 compat/README.md §2、§5 关于覆盖只针对明确列出的名字）。local-fix：provider 只在 ActiveLayer()==AetherKiri 时生效；每个名字只打一条命中日志。gfxEffect / logwindow 两类伴生脚本本轮未移（分别依赖模块存在性检查与 ~90 行内嵌脚本）。",
-      "sha256_local": "a99badf9140de880e0d86f3e78ca6aa501a26684ecb588513165286051a97ed0",
+      "reason": "AetherKiri 层的伴生脚本虚拟文件：GPU 占位脚本（11 名，含 live2d.tjs）、motion_<asset>.psb/.mtn.tjs → %[\"storage\" => …]、*emo 虚拟存储，以及 D3DEmote.tjs 伴生脚本（`motion.tjs`/`d3demote.tjs`）。上游把这套逻辑直接写在 StorageIntf.cpp 里（io 层因此耦合了发行版知识）；本仓库改为 io 只提供泛型注册点 cpp/core/io/IoVirtualFile.*，由 compat 层注册 provider。D3DEmote 与上游同语义：只在物理/auto-path 未命中时提供（上游两个消费点都带 `!TVPIsRealStorageNoSearchNoNormalize(name)`）。2026-09-23 曾把它误注册成 io 的“覆盖型 provider”（排在物理之前，现已删除该档），把游戏自带的 `system/motion.tjs` 顶掉 —— 该脚本定义了全局类 `MotionResourceManager`，而 D3DEmote.tjs 反过来依赖它，结果千恋万花/NEKOPARA 的 MTN/PSB 图像（SD、m2logo、E-mote 立绘）全部加载失败（一次运行 32 条 `Member \"MotionResourceManager\" does not exist`），已改回兑底型。local-fix：provider 只在 ActiveLayer()==AetherKiri 时生效；每个名字只打一条命中日志。gfxEffect / logwindow 两类伴生脚本本轮未移（分别依赖模块存在性检查与 ~90 行内嵌脚本）。",
+      "sha256_local": "dab05455744e97161f0bdb222e31ca02cc2d6c786ac00c1fbb702c18c1a14693",
       "sha256_upstream_at_rev": "de2300aadb7e05e087fa6f539ae721f2478647afeef45b5f9a1ddc2c86d278c4"
+    },
+    {
+      "local": "cpp/plugins/textrender.cpp",
+      "upstream": "cpp/plugins/textrender.cpp",
+      "source_ref": "cpp/plugins/textrender.cpp:79-500（variant/色值/参数辅助）、:507-660（EdgeShadowDrawTextCompat）、:1772-1773（Layer.EdgeShadowDrawText / …KinsokuRect 注册）",
+      "modifications": "partial-extract",
+      "reason": "Yuzusoft 系（含汉化整合包）的消息文字靠 TextRender 插件的原生 `Layer.EdgeShadowDrawText` / `Layer.EdgeShadowDrawTextKinsokuRect`：`msghack.tjs` 是编译字节码（源码改写补丁对它不生效），原生方法缺失时会退回脚本自己的“渐变图层 + drawPathString”路径，在本引擎渲染成纯白（千恋万花汉化版文字颜色异常）。本仓库只取这两个方法及其所需的辅助函数；颜色解码按游戏 `custom.tjs` 的“顶 0xFFFFFF → 底 col”语义传顶/底两色（上游两遍都传顶色）。local-fix：探针改用 `KRKR_RENDER_PROBE`、只记前 8 次且不记录文本内容。",
+      "sha256_local": "11232144964f96ae4248f0021b8b11da0f0ef0e6b6fe09b5c67d92fbbbac4382",
+      "sha256_upstream_at_rev": "7145057cb0036230ce471a9c180ede111925f147f0b37a337927900b979c8413"
     },
     {
       "local": "cpp/plugins/alphamovie.cpp",

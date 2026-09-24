@@ -1,12 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    自适应图标的**单色层**（Android 13 / API 33 起的"主题图标"）。
-
-    系统会把这一层整体重新着色成桌面的主题色，背景由系统自己铺，所以：
-      * 只能有形状、不能有底——否则会糊成一整块色斑；
-      * 里面填什么颜色无所谓，起作用的是 alpha（这里用纯黑，语义上"会被替换掉"）。
-    形状与前景层对齐（同一个 "K"、同一套 108/72/66 安全区），这样主题图标和普通
-    图标切换时不会跳一下。
+    单色层（Android 13+ 主题图标）。字形状与 ic_launcher_foreground 对齐，
+    颜色由系统重着色，这里只提供 alpha。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -15,6 +10,6 @@
     android:viewportHeight="108">
 
     <path
-        android:fillColor="#000000"
+        android:fillColor="@color/ic_launcher_foreground"
         android:pathData="M34,28 H44 V50 L64,28 H76 L54,52 L77,80 H64 L44,56 V80 H34 Z" />
 </vector>

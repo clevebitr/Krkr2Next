@@ -1,10 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 应用图标用色（自适应图标的三层都从这里取色）。 -->
 <resources>
-    <!-- 背景层：品牌深蓝（形状交给启动器的遮罩，自己不画圆角）。 -->
+    <!-- 启动图标（自适应图标的底与前景）配色，与 Compose 主题无关。 -->
     <color name="ic_launcher_background">#1B1B2F</color>
-
-    <!-- 前景层 / 单色层：品牌蓝。单色层实际由系统重新着色，这里的值只是"占位"，
-         真正起作用的是形状的 alpha。 -->
     <color name="ic_launcher_foreground">#6C7BFF</color>
 </resources>

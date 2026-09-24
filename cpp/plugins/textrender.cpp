@@ -8,11 +8,17 @@
  */
 
 #include "ncbind.hpp"
+#include "FontBaseline.h"
 #include "FreeTypeFontRasterizer.h"
+#include "LayerIntf.h"
 #include "RectItf.h"
 #include "tvpfontstruc.h"
 #include "WindowIntf.h"
 #include "krkr_egl_context.h"
+
+#if defined(KRKR_RENDER_PROBE)
+#include <spdlog/spdlog.h>
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -22,6 +28,10 @@
 #include <vector>
 
 #define NCB_MODULE_NAME TJS_W("textrender.dll")
+
+#ifndef TJS_INTF_METHOD
+#define TJS_INTF_METHOD
+#endif
 
 using tjs_ustring = std::basic_string<tjs_char>;
 using RgbColor = uint32_t;
@@ -275,6 +285,296 @@ struct CharacterInfo {
     }
 
 #define property_delegate(name) NCB_PROPERTY(name, get_##name, set_##name);
+
+// ── Layer.EdgeShadowDrawText / EdgeShadowDrawTextKinsokuRect ────────────────
+//
+// 为什么在引擎侧提供：Yuzusoft 系作品（含汉化整合包）的 `msghack.tjs` 是编译字节码，
+// 改不了源码，它画消息文字前会先看 `Layer.EdgeShadowDrawTextKinsokuRect` 在不在：在就走
+// 原生描边 + 渐变文字，不在就退回脚本自己的“渐变图层 + drawPathString”路径 —— 后一条
+// 在本引擎会画成纯白。参考实现（AetherKiri `plugins/textrender.cpp`）把这两个名字注册
+// 到 Layer 上，参数布局与脚本调用一致。
+//
+// `col` 是 64 位整型：bit63 置位 = 打包渐变（bit24-47 顶色、bit0-23 底色），
+// 未置位 = 普通 24 位色（游戏自带 custom.tjs 的渐变就是“顶 0xFFFFFF → 底 col”）。
+using TextColor = uint64_t;
+
+static bool textRenderVariantIsNumeric(const tTJSVariant &value) {
+    const tTJSVariantType type = value.Type();
+    return type != tvtVoid && type != tvtString && type != tvtObject;
+}
+
+static bool textRenderVariantIsString(const tTJSVariant &value) {
+    return value.Type() == tvtString || value.Type() == tvtOctet;
+}
+
+static TextColor textRenderColorRaw(const tTJSVariant &value,
+                                    TextColor fallback) {
+    if(!textRenderVariantIsNumeric(value))
+        return fallback;
+    return static_cast<TextColor>(static_cast<tjs_int64>(value));
+}
+
+static tjs_uint32 textRenderColor24(TextColor color) {
+    return static_cast<tjs_uint32>(color) & 0x00ffffff;
+}
+
+static tjs_uint32 textRenderColorTop24(TextColor color) {
+    return static_cast<tjs_uint32>((color >> 24) & 0x00ffffff);
+}
+
+static bool textRenderIsPackedGradient(TextColor color) {
+    return (color & 0x8000000000000000ULL) != 0;
+}
+
+static tjs_int textRenderFindStringArg(tjs_int numparams, tTJSVariant **param) {
+    for(tjs_int i = 0; i < numparams; ++i) {
+        if(param && param[i] && textRenderVariantIsString(*param[i]))
+            return i;
+    }
+    return -1;
+}
+
+static bool textRenderTryIntArg(tjs_int numparams, tTJSVariant **param,
+                                tjs_int index, tjs_int &value) {
+    if(index < 0 || index >= numparams || !param || !param[index] ||
+       !textRenderVariantIsNumeric(*param[index]))
+        return false;
+    value = static_cast<tjs_int>(*param[index]);
+    return true;
+}
+
+static bool textRenderTryObjectProp(iTJSDispatch2 *object,
+                                    const tjs_char *name, tTJSVariant &value) {
+    return object &&
+        TJS_SUCCEEDED(object->PropGet(0, name, nullptr, &value, object)) &&
+        value.Type() != tvtVoid;
+}
+
+static bool textRenderTryNumericObjectProp(iTJSDispatch2 *object,
+                                           const tjs_char *name,
+                                           TextColor &value) {
+    tTJSVariant prop;
+    if(!textRenderTryObjectProp(object, name, prop) ||
+       !textRenderVariantIsNumeric(prop))
+        return false;
+    value = textRenderColorRaw(prop, value);
+    return true;
+}
+
+static bool textRenderTryIntObjectProp(iTJSDispatch2 *object,
+                                       const tjs_char *name, tjs_int &value) {
+    tTJSVariant prop;
+    if(!textRenderTryObjectProp(object, name, prop) ||
+       !textRenderVariantIsNumeric(prop))
+        return false;
+    value = static_cast<tjs_int>(prop);
+    return true;
+}
+
+static tTJSNI_BaseLayer *textRenderGetNativeLayer(iTJSDispatch2 *obj) {
+    if(!obj)
+        return nullptr;
+    tTJSNI_BaseLayer *layer = nullptr;
+    if(TJS_SUCCEEDED(obj->NativeInstanceSupport(
+           TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID,
+           reinterpret_cast<iTJSNativeInstance **>(&layer))))
+        return layer;
+    return nullptr;
+}
+
+static tTJSNI_BaseLayer *textRenderFindLayerArg(tjs_int numparams,
+                                                tTJSVariant **param,
+                                                iTJSDispatch2 *objthis) {
+    if(auto *layer = textRenderGetNativeLayer(objthis))
+        return layer;
+    for(tjs_int i = 0; i < numparams; ++i) {
+        if(!param || !param[i] || param[i]->Type() != tvtObject)
+            continue;
+        if(auto *layer = textRenderGetNativeLayer(param[i]->AsObjectNoAddRef()))
+            return layer;
+    }
+    return nullptr;
+}
+
+static void textRenderDrawTextWithColor(tTJSNI_BaseLayer *layer, tjs_int x,
+                                        tjs_int y, const tTJSVariant &text,
+                                        TextColor color, tjs_int opacity,
+                                        tjs_int textHeight) {
+    if(opacity <= 0)
+        return;
+    opacity = std::clamp<tjs_int>(opacity, 0, 255);
+    if(!textRenderIsPackedGradient(color)) {
+        layer->DrawText(x, y, text, textRenderColor24(color), opacity, true, 0, 0,
+                        0, 0, 0);
+        return;
+    }
+    layer->DrawTextVerticalGradient(x, y, text, textRenderColorTop24(color),
+                                    textRenderColor24(color), opacity, true,
+                                    std::clamp<tjs_int>(textHeight, 8, 128));
+}
+
+// 脚本调用形态（见游戏 custom.tjs）：
+//   EdgeShadowDrawText(dt, d, x, y, text, col, opa, aa,
+//                      s, scol, sw, sx, sy, e, ecol, eemp, eext)
+// 前两个参数可能是图层对象或渲染器对象，这里只认 x/y/text/col/opa 与描边色宽。
+static tjs_error TJS_INTF_METHOD
+EdgeShadowDrawTextCompat(tTJSVariant *result, tjs_int numparams,
+                         tTJSVariant **param, iTJSDispatch2 *objthis) {
+    if(!objthis || numparams < 3)
+        return TJS_E_BADPARAMCOUNT;
+
+    const tjs_int textIndex = textRenderFindStringArg(numparams, param);
+    if(textIndex < 0)
+        return TJS_E_BADPARAMCOUNT;
+
+    tTJSNI_BaseLayer *layer = textRenderFindLayerArg(numparams, param, objthis);
+    if(!layer) {
+        if(result)
+            *result = true;
+        return TJS_S_OK;
+    }
+
+    tjs_int x = 0;
+    tjs_int y = 0;
+    bool haveX = false;
+    bool haveY = false;
+    for(tjs_int i = 0; i < textIndex; ++i) {
+        tjs_int value = 0;
+        if(!textRenderTryIntArg(numparams, param, i, value))
+            continue;
+        if(!haveX) {
+            x = value;
+            haveX = true;
+        } else if(!haveY) {
+            y = value;
+            haveY = true;
+            break;
+        }
+    }
+
+    const tjs_int colorIndex = textIndex + 1;
+    const bool isNameLayerTextCall = numparams == 5 && textIndex == 2;
+    TextColor color = 0xffffff;
+    if(colorIndex < numparams && param[colorIndex] &&
+       textRenderVariantIsNumeric(*param[colorIndex]))
+        color = textRenderColorRaw(*param[colorIndex], color);
+
+    tjs_int textOpacity = 255;
+    textRenderTryIntArg(numparams, param, colorIndex + 1, textOpacity);
+    textOpacity = std::clamp<tjs_int>(textOpacity, 0, 255);
+
+    TextColor edgeColor = 0xffffff;
+    tjs_int edgeWidth = 0;
+    tjs_int textHeight = 24;
+    if(numparams >= 15 && param[14] &&
+       textRenderVariantIsNumeric(*param[14])) {
+        edgeColor = textRenderColorRaw(*param[14], 0xffffff);
+        tjs_int edgeX = 0;
+        tjs_int edgeY = 0;
+        if(textRenderTryIntArg(numparams, param, 11, edgeX) &&
+           textRenderTryIntArg(numparams, param, 12, edgeY))
+            edgeWidth = std::max(edgeX, edgeY);
+    } else {
+        for(tjs_int i = numparams - 1; i > colorIndex; --i) {
+            if(!param[i] || !textRenderVariantIsNumeric(*param[i]))
+                continue;
+            const TextColor candidate = textRenderColorRaw(*param[i], 0);
+            if(candidate > 0xff) {
+                edgeColor = candidate;
+                break;
+            }
+        }
+    }
+
+    for(tjs_int i = 0; i < numparams; ++i) {
+        if(!param || !param[i] || param[i]->Type() != tvtObject)
+            continue;
+        iTJSDispatch2 *object = param[i]->AsObjectNoAddRef();
+        if(i > textIndex) {
+            if(isNameLayerTextCall) {
+                textRenderTryNumericObjectProp(object, TJS_W("color"), edgeColor);
+                textRenderTryNumericObjectProp(object,
+                                               TJS_W("nameLayerDefaultColor"),
+                                               edgeColor);
+            } else {
+                textRenderTryNumericObjectProp(object, TJS_W("color"), color);
+                textRenderTryNumericObjectProp(object, TJS_W("chColor"), color);
+                textRenderTryNumericObjectProp(object, TJS_W("fontColor"), color);
+                textRenderTryNumericObjectProp(object, TJS_W("textColor"), color);
+            }
+        }
+        TextColor objectEdgeColor = edgeColor;
+        if(textRenderTryNumericObjectProp(object, TJS_W("edgeColor"),
+                                          objectEdgeColor))
+            edgeColor = objectEdgeColor;
+        textRenderTryIntObjectProp(object, TJS_W("edgeExtent"), edgeWidth);
+        textRenderTryIntObjectProp(object, TJS_W("edgeWidth"), edgeWidth);
+        textRenderTryIntObjectProp(object, TJS_W("fontheight"), textHeight);
+        textRenderTryIntObjectProp(object, TJS_W("fontHeight"), textHeight);
+        textRenderTryIntObjectProp(object, TJS_W("fontSize"), textHeight);
+        textRenderTryIntObjectProp(object, TJS_W("size"), textHeight);
+    }
+    edgeWidth = std::clamp<tjs_int>(edgeWidth, 0, 12);
+    textHeight = std::clamp<tjs_int>(textHeight, 8, 128);
+
+#if defined(KRKR_RENDER_PROBE)
+    { // 一次性探针：确认这一次绘制确实走了原生路径（不记录文本内容）。
+        static int logged = 0;
+        if(logged < 8) {
+            ++logged;
+            spdlog::info(
+                "probe: textrender EdgeShadowDrawText len={} x={} y={} "
+                "color=0x{:06x} edgeColor=0x{:06x} edgeWidth={} opacity={} "
+                "packed={}",
+                ttstr(*param[textIndex]).GetLen(), x, y,
+                static_cast<unsigned>(textRenderColor24(color)),
+                static_cast<unsigned>(textRenderColor24(edgeColor)), edgeWidth,
+                textOpacity, textRenderIsPackedGradient(color));
+        }
+    }
+#endif
+
+    // 命名层文字：专用小透明层里 y=0 起画，某些字面 ink top 为负，会被裁剪框切掉顶部。
+    const tjs_int requestedY = y;
+    if(isNameLayerTextCall) {
+        try {
+            tTVPRect glyphBounds;
+            layer->GetFontGlyphDrawRect(ttstr(*param[textIndex]), glyphBounds);
+            y = krkr::font::ClampTextOriginToClipTop(
+                y, glyphBounds.top, edgeWidth, layer->GetClipTop());
+        } catch(...) {
+            y = requestedY;
+        }
+    }
+
+    try {
+        for(tjs_int dy = -edgeWidth; dy <= edgeWidth; ++dy) {
+            for(tjs_int dx = -edgeWidth; dx <= edgeWidth; ++dx) {
+                if(dx == 0 && dy == 0)
+                    continue;
+                if(dx * dx + dy * dy > edgeWidth * edgeWidth + 1)
+                    continue;
+                layer->DrawText(x + dx, y + dy, *param[textIndex],
+                                textRenderColor24(edgeColor), 255, true, 0, 0, 0,
+                                0, 0);
+            }
+        }
+        textRenderDrawTextWithColor(layer, x, y, *param[textIndex], color,
+                                    textOpacity, textHeight);
+    } catch(...) {
+        if(result)
+            *result = false;
+        return TJS_S_OK;
+    }
+
+    if(result)
+        *result = true;
+    return TJS_S_OK;
+}
+
+NCB_ATTACH_FUNCTION(EdgeShadowDrawText, Layer, EdgeShadowDrawTextCompat);
+NCB_ATTACH_FUNCTION(EdgeShadowDrawTextKinsokuRect, Layer,
+                    EdgeShadowDrawTextCompat);
 
 class TextRenderBase {
 public:
