@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    自适应图标（Android 8.0 / API 26 起）：三层交给启动器合成。
+      background  纯色底，形状由启动器的遮罩决定（圆形/方形/圆角方形…）；
+      foreground  "K" 折角，自己不带底（见 drawable/ic_launcher_foreground.xml）；
+      monochrome  单色层，Android 13 / API 33 起给"主题图标"用：系统会把它整体
+                  重新着色成桌面主题色（此时背景也由系统铺，不使用上面那层）。
+
+    API 26–32 的系统会忽略不认识的 <monochrome> 子标签（只记一条日志），
+    所以这一份可以同时服务"有主题图标"和"没有主题图标"的系统，不需要再拆一个 -v33。
+    老的 mipmap-anydpi/ic_launcher.xml 是给 API 24–25 用的"自带圆角方形"整图。
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
+</adaptive-icon>

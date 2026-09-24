@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    旧版整图（API 24–25 用）：这些系统不认识 <adaptive-icon>，图标就是这张图本身，
+    所以这里把"圆角方形 + K"画全，四周留 8 的边距当作自己的内边距。
+
+    画成矢量：minSdk 24 的平台原生支持 VectorDrawable，不用为各密度切 PNG。
+    改图形时注意别和 drawable/ic_launcher_foreground.xml 的 "K" 走样——
+    两者应该看起来是同一个标志。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="@color/ic_launcher_background"
+        android:pathData="M18,8 H90 A10,10 0 0 1 100,18 V90 A10,10 0 0 1 90,100 H18 A10,10 0 0 1 8,90 V18 A10,10 0 0 1 18,8 Z" />
+
+    <path
+        android:fillColor="@color/ic_launcher_foreground"
+        android:pathData="M34,28 H44 V50 L64,28 H76 L54,52 L77,80 H64 L44,56 V80 H34 Z" />
+</vector>
