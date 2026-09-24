@@ -2869,6 +2869,38 @@ namespace motion {
                             drewGroup = true;
                     }
                 }
+#if defined(KRKR_RENDER_PROBE)
+                // 条目级探针（每个 motion 前 8 个条目）：帧画到了哪个层、变换后的落点
+                // 与尺寸、以及游戏给的缩放是否作用上。回答两类问题：
+                //   1) 立绘“过大” —— 直接看 m/tx/ty 与 gameScale 的组合是否与画布相符；
+                //   2) SD “没有背景” —— 看 bg 条目到底有没有被画（不在列表里就是被跳过）。
+                if(logger) {
+                    static std::mutex s_itemProbeMutex;
+                    static std::map<std::string, int> s_itemProbeCount;
+                    const std::string key = _loadedStorage.AsStdString();
+                    int n = 0;
+                    {
+                        std::lock_guard<std::mutex> lock(s_itemProbeMutex);
+                        n = s_itemProbeCount[key]++;
+                    }
+                    if(n < 8) {
+                        logger->info(
+                            "probe: item motion='{}' label='{}' src='{}' dst={} "
+                            "srcSize={}x{} m=[{:.3f},{:.3f},{:.3f},{:.3f}] "
+                            "tx={:.1f} ty={:.1f} gameScale={:.3f}/{:.3f} "
+                            "boxScale={:.3f}/{:.3f} stencilGroup={} opa={}",
+                            key, node.label, af->src,
+                            (drawTarget == dest) ? "dest" : "scratch", iw, ih,
+                            static_cast<double>(mA), static_cast<double>(mB),
+                            static_cast<double>(mC), static_cast<double>(mD),
+                            static_cast<double>(outputTx),
+                            static_cast<double>(outputTy), gameScX, gameScY,
+                            static_cast<double>(boxScX),
+                            static_cast<double>(boxScY), stencilGroupOf[i],
+                            static_cast<int>(opaClamp));
+                    }
+                }
+#endif
                 if(drawTarget) {
                     try {
                         drawTarget->FuncCall(0, TJS_W("operateAffine"), nullptr,

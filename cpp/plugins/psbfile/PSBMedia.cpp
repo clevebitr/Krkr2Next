@@ -1653,10 +1653,13 @@ namespace PSB {
                 CollectMotionNodeFrames(layerDict, node);
                 if(logger)
                     logger->info(
-                        "  node[{}] '{}' parent={} type={} box={}x{} "
+                        "  node[{}] '{}' parent={} type={} stencil={}/{} "
+                        "box={}x{} "
                         "inh=0x{:x} to={},{},{},{} frames={} firstsrc='{}'",
                         static_cast<int>(nodes.size()), node.label, parentIndex,
-                        node.type, node.width, node.height, node.inheritMask,
+                        node.type, node.stencilType,
+                        node.hasStencil ? 1 : 0, node.width, node.height,
+                        node.inheritMask,
                         node.transformOrder[0], node.transformOrder[1],
                         node.transformOrder[2], node.transformOrder[3],
                         static_cast<int>(node.frames.size()),
