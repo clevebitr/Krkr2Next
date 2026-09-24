@@ -1246,13 +1246,6 @@ static void ProbeLogIgnoredTransform(const char *entry, tjs_int count,
     ProbeLogTransform(entry, count, values, n);
 }
 
-static tjs_error Player_setScaleLogged(tTJSVariant *, tjs_int count,
-                                       tTJSVariant **p,
-                                       iTJSDispatch2 *objthis) {
-    (void)objthis;
-    ProbeLogIgnoredTransform("setScale", count, p);
-    return TJS_S_OK;
-}
 
 static tjs_error Player_setRotateLogged(tTJSVariant *, tjs_int count,
                                         tTJSVariant **p,
@@ -1262,6 +1255,22 @@ static tjs_error Player_setRotateLogged(tTJSVariant *, tjs_int count,
     return TJS_S_OK;
 }
 #endif
+
+static tjs_error Player_setScale(tTJSVariant *, tjs_int count,
+                                 tTJSVariant **p,
+                                 iTJSDispatch2 *objthis) {
+    auto *player = GetPlayerInstance(objthis);
+    if(!player || count < 1 || !p || !p[0])
+        return TJS_S_OK;
+    const double sx = p[0]->AsReal();
+    const double sy = (count >= 2 && p[1]) ? p[1]->AsReal() : sx;
+    player->setDrawScale(sx, sy);
+#if defined(KRKR_RENDER_PROBE)
+    const double values[2] = { sx, sy };
+    ProbeLogTransform("setScale", count, values, 2);
+#endif
+    return TJS_S_OK;
+}
 
 static tjs_error Player_setDrawAffineTranslateMatrix(tTJSVariant *,
                                                      tjs_int count,
@@ -1735,11 +1744,10 @@ NCB_REGISTER_SUBCLASS_DELAY(EmotePlayer) {
     NCB_METHOD_RAW_CALLBACK(setRot, MotionPlayer_ignoreArgs, 0);
 #if defined(KRKR_RENDER_PROBE)
     NCB_METHOD_RAW_CALLBACK(setRotate, Player_setRotateLogged, 0);
-    NCB_METHOD_RAW_CALLBACK(setScale, Player_setScaleLogged, 0);
 #else
     NCB_METHOD_RAW_CALLBACK(setRotate, MotionPlayer_ignoreArgs, 0);
-    NCB_METHOD_RAW_CALLBACK(setScale, MotionPlayer_ignoreArgs, 0);
 #endif
+    NCB_METHOD_RAW_CALLBACK(setScale, Player_setScale, 0);
     NCB_METHOD_RAW_CALLBACK(setMirror, MotionPlayer_ignoreArgs, 0);
     NCB_METHOD_RAW_CALLBACK(setColor, MotionPlayer_ignoreArgs, 0);
     NCB_METHOD_RAW_CALLBACK(moveVariable, MotionPlayer_ignoreArgs, 0);

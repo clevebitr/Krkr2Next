@@ -558,6 +558,34 @@ SeparateLayerAdaptor 的私有渲染层，而它们从来没在日志里出现�
 `LayerAssign route=reparent-hidden-page` 日志、`probe: exch-route denied reason=page-busy/
 streak-not-reached`）。
 
+### 1.13.9 第十轮：探针给出真数值 —— 缺的是 `setScale`，而仿射是「替代居中」不是「叠加」
+
+真机探针（2026-09-24 20:32/20:34）第一次把游戏的实际调用打出来了：
+
+```
+probe: Player.setScale count=1 values=[0.750002]                                   ← NEKOPARA
+probe: Player.setRotate count=1 values=[0.000000]
+probe: Player.setDrawAffineTranslateMatrix count=6 values=[1,0,0,1,585,705]        ← NEKOPARA ショコラ站位
+probe: Player.setDrawAffineTranslateMatrix count=6 values=[1,0,0,1,1335,735]       ← NEKOPARA バニラ站位
+probe: Player.setDrawAffineTranslateMatrix count=6 values=[1,0,0,1,960,540]        ← 千恋万花 = 画布中心
+```
+
+两个结论：
+
+1. **立绘过大 = `setScale(0.75)` 被丢弃**：游戏用 0.75 把 PSB 原生尺寸缩进画面，
+   而本壳的 `setScale` 一直是空实现（`MotionPlayer_ignoreArgs`）。→ 这条必须实现。
+2. **上一轮把仿射叠在“已经居中过”的坐标上 ⇒ 双重居中**：千恋万花传的正是
+   `translate(960,540)`（= `halfCw/halfCh`），叠加上去等于把所有东西再推 960/540，
+   真机就是“主界面与 SD 渲染错位”。仿射是**运动空间 → 画布空间的完整映射**，
+   应当**替代**引擎自己的半画布居中。
+
+做法（`motionplayer`）：
+
+- `setScale` 真正实现（`Player::setDrawScale`，1 参=等比、2 参=分轴），在绘制时作用在
+  **源坐标**上（x 轴乘 a/c、y 轴乘 b/d）；
+- `setDrawAffineTranslateMatrix` 非单位阵时用 `dam ∘ (px,py)` **替代** `halfCw/halfCh`
+  居中（单位阵或未设置时行为与旧版逐位一致）；探针改记实际数值。
+
 ### 1.13.8 第九轮：合成组判据放宽成 `type==12` —— 普通图层被当蒙版吃掉
 
 对照参考实现发现了更根本的一条差异：合成组（stencil composite）的判据必须是

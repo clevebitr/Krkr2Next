@@ -2697,32 +2697,41 @@ namespace motion {
                 // ty. Display-box scale (layer box > texture) folds into the
                 // diagonal. 单一世界矩阵：x'=a*x+b*y+tx,
                 // y'=c*x+d*y+ty；显示盒缩放卷进对角。
-                const double mA0 = wm11[i] * boxScX;
-                const double mB0 = wm12[i] * boxScX;
-                const double mC0 = wm21[i] * boxScY;
-                const double mD0 = wm22[i] * boxScY;
-                // Origin-anchored translation: place the anchor at the world
-                // position. 原点锚定平移：把锚点放到世界位置 (px,py)。
-                const tjs_real baseTx = static_cast<tjs_real>(
-                    _coordX + halfCw + px - (mA0 * anchorX + mB0 * anchorY));
-                const tjs_real baseTy = static_cast<tjs_real>(
-                    _coordY + halfCh + py - (mC0 * anchorX + mD0 * anchorY));
-                // 再把游戏给的全局仿射叠在**外层**（画布坐标 → 最终画布坐标）：
-                // 游戏用这个矩阵把 PSB 原生尺寸的立绘缩/移到画面里。默认单位阵时
-                // 与旧行为逐位一致。
+                // 游戏给的全局缩放（Player.setScale）：作用在**源坐标**上 ——
+                // x 轴乘 a/c、y 轴乘 b/d（本类 x'=a·x+b·y 的约定）。
+                // 真机（NEKOPARA 4）：游戏调 setScale(0.75) 把 PSB 原生尺寸的立绘缩到
+                // 75%，以前这个入口是空实现 ⇒ 立绘比画面还大。
+                const double gameScX = _drawScaleX;
+                const double gameScY = _drawScaleY;
+                const double mA0 = wm11[i] * boxScX * gameScX;
+                const double mB0 = wm12[i] * boxScX * gameScY;
+                const double mC0 = wm21[i] * boxScY * gameScX;
+                const double mD0 = wm22[i] * boxScY * gameScY;
+                // 游戏给的全局仿射（setDrawAffineTranslateMatrix）是
+                // **运动空间 → 画布空间**的完整映射：真机上传的是
+                // 千恋万花 translate(960,540)（= 画布中心）、NEKOPARA 每个角色的站位
+                // translate(585,705) / (1335,735)。所以它**替代**引擎自己的半画布居中，
+                // 而不是叠在它上面 —— 叠上去就是双重居中（真机表现：主界面与 SD 渲染错位）。
                 const auto &dm = _drawAffineMatrix;
-                const tjs_real mA =
-                    static_cast<tjs_real>(dm[0] * mA0 + dm[2] * mC0);
-                const tjs_real mB =
-                    static_cast<tjs_real>(dm[0] * mB0 + dm[2] * mD0);
-                const tjs_real mC =
-                    static_cast<tjs_real>(dm[1] * mA0 + dm[3] * mC0);
-                const tjs_real mD =
-                    static_cast<tjs_real>(dm[1] * mB0 + dm[3] * mD0);
+                const bool hasDrawAffine =
+                    !(dm[0] == 1.0 && dm[1] == 0.0 && dm[2] == 0.0 &&
+                      dm[3] == 1.0 && dm[4] == 0.0 && dm[5] == 0.0);
+                // Origin-anchored translation: place the anchor at the world
+                // position. 原点锚定平移：把锚点放到世界（画布）位置。
+                const double canvasPx = hasDrawAffine
+                    ? (dm[0] * px + dm[2] * py + dm[4])
+                    : (halfCw + px);
+                const double canvasPy = hasDrawAffine
+                    ? (dm[1] * px + dm[3] * py + dm[5])
+                    : (halfCh + py);
                 const tjs_real outputTx = static_cast<tjs_real>(
-                    dm[0] * baseTx + dm[2] * baseTy + dm[4]);
+                    _coordX + canvasPx - (mA0 * anchorX + mB0 * anchorY));
                 const tjs_real outputTy = static_cast<tjs_real>(
-                    dm[1] * baseTx + dm[3] * baseTy + dm[5]);
+                    _coordY + canvasPy - (mC0 * anchorX + mD0 * anchorY));
+                const tjs_real mA = static_cast<tjs_real>(mA0);
+                const tjs_real mB = static_cast<tjs_real>(mB0);
+                const tjs_real mC = static_cast<tjs_real>(mC0);
+                const tjs_real mD = static_cast<tjs_real>(mD0);
 
 #if defined(KRKR_RENDER_PROBE)
                 if(logger && now >= 190.0 &&
@@ -4011,6 +4020,11 @@ namespace motion {
         void resetDrawAffineTranslateMatrix() {
             _drawAffineMatrix = { 1.0, 0.0, 0.0, 1.0, 0.0, 0.0 };
         }
+
+        void setDrawScale(double sx, double sy) {
+            _drawScaleX = sx;
+            _drawScaleY = sy;
+        }
         void setCoord(tjs_real x, tjs_real y) {
             _coordX = x;
             _coordY = y;
@@ -4496,6 +4510,10 @@ namespace motion {
         // setDrawAffineTranslateMatrix 成对出现）。以前这里是空实现，等于整套缩放/平移
         // 被丢掉。
         std::array<double, 6> _drawAffineMatrix{ 1.0, 0.0, 0.0, 1.0, 0.0, 0.0 };
+        // 游戏给的全局缩放（`Player.setScale`）。默认 1。NEKOPARA 4 用 0.75 把立绘
+        // 缩进画面；以前是空实现，立绘因此按 PSB 原生尺寸画、超出画面。
+        double _drawScaleX = 1.0;
+        double _drawScaleY = 1.0;
         // -1 = origin convention not resolved yet (auto). See
         // resolveCoordOrigin(). -1 = 尚未解析的原点约定（auto）。见
         // resolveCoordOrigin()。
