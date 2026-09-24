@@ -1614,9 +1614,22 @@ namespace PSB {
                 // (CollectMotionNodeTreesFromMotion). stencil
                 // 合成（type==12）：stencilType + 作者蒙版层名表。
                 // 蒙版名在全树构建（CollectMotionNodeTreesFromMotion）后解析为节点索引。
-                node.hasStencil = (node.type == 12);
-                node.stencilType = static_cast<int>(
+                const int stencilTypeValue = static_cast<int>(
                     GetPSBFloat((*layerDict)["stencilType"], 0));
+                node.stencilType = stencilTypeValue;
+                // 只有 `type==12 && (stencilType & 4)` 才是「带蒙版的合成组」。
+                //
+                // 参考实现（krkr2 NodeTree.cpp 的蒙版表遍历 + PlayerRenderItems.cpp:581
+                // 的 `node.nodeType == 12 && (node.stencilType & 4) != 0`）就是这么判的；
+                // 而且 e-mote 系 PSB 常把 stencilType 写成 0（有 content 的图层应正常绘制，
+                // 见 NodeTree.cpp:254 把 0 归一化为 1）。
+                //
+                // 本仓库以前用 `type == 12` 一刀切，于是 E-mote 树里大量**普通**图层被当成
+                // 合成组：后续节点全部被送进离屏组层，收尾又只折叠第一个组的蒙版 ⇒
+                // 真机表现是每帧 `multiple composites (2..6), only first folded`、
+                // 千恋万花 SD 的**背景被当蒙版吃掉**、NEKOPARA 立绘缺件。
+                node.hasStencil =
+                    (node.type == 12 && (stencilTypeValue & 4) != 0);
                 if(auto maskList = std::dynamic_pointer_cast<PSBList>(
                        (*layerDict)["stencilCompositeMaskLayerList"])) {
                     for(auto &item : *maskList) {

@@ -558,6 +558,24 @@ SeparateLayerAdaptor 的私有渲染层，而它们从来没在日志里出现�
 `LayerAssign route=reparent-hidden-page` 日志、`probe: exch-route denied reason=page-busy/
 streak-not-reached`）。
 
+### 1.13.8 第九轮：合成组判据放宽成 `type==12` —— 普通图层被当蒙版吃掉
+
+对照参考实现发现了更根本的一条差异：合成组（stencil composite）的判据必须是
+`node.nodeType == 12 && (node.stencilType & 4) != 0`（krkr2 `PlayerRenderItems.cpp:581`
+的蒙版表遍历条件），而且 e-mote 系 PSB 常把 `stencilType` 写成 **0**（`NodeTree.cpp:254`
+把 0 归一化为 1，因为有 content 的图层应当正常绘制）。
+
+本仓库 `PSBMedia.cpp` 以前用 `node.type == 12` 一刀切 ⇒ E-mote 树里大量**普通**图层被判定
+为合成组：其后所有节点被送进离屏**组层**，收尾又只折叠第一个组的蒙版 ⇒
+
+- 千恋万花 SD 的**背景**（节点名 `SD202/mask`、src=`src/SD202/背景`）被当蒙版吃进蒙版层，
+  永远不当作内容绘制 ⇒ “人物出来了、背景没有”；
+- NEKOPARA 每帧 `multiple composites (2..6), only first folded`、`stencil mask label
+  '■耳L/R' not found` ⇒ 立绘缺件。
+
+本轮把判据改成与参考实现一致（`type==12 && (stencilType&4)`，`stencilType==0` 的普通层不再
+参与合成），蒙版名解析同样只在真正的合成组上做（那一处本来就以 `hasStencil` 为门）。
+
 ### 1.13.7 第八轮：用户反馈（立绘出来了但过大 / SD 人物出来了背景没有）+ 变换入口被丢弃
 
 **用户真机反馈（a535966 之后）**：
