@@ -2801,23 +2801,37 @@ namespace motion {
                 // alpha=2,add=3,sub=4,mul=5,addalpha=12). 第二轮混合模式：把 M2
                 // content "bm" 映射为 operate 混合算子。
                 // 0=正常(alpha),1=加,2=减,3=乘,4=加alpha（int 见 drawable.h）。
+                // 混合模式映射必须与参考实现一致（krkr2
+                // `resolveBlendOperationModeLike_0x6C7440`）：
+                //   raw & 0x0F == 1 → omPsAdditive(14)
+                //                2 或 5 → omPsSubtractive(15)
+                //                3 → omPsMultiplicative(16)
+                //                4 → omPsScreen(17)
+                //                0/其他 → omAlpha(2)
+                //
+                // 以前把 2/3/4 映到 omSubtractive(4)/omMultiplicative(5)/
+                // omAddAlpha(12)，这些**非 Ps** 算子在 TVP 里不按 alpha 参与运算：
+                // 千恋万花 SD 的 `dirk`（暗い効果，bm=3）于是把整块 SD 区域乘成黑色
+                // —— 真机表现就是“人物出来了、背景没有（一片黑）”。
                 int blendOm = 2;
-                switch(af->blendMode) {
+                switch(af->blendMode & 0x0F) {
                     case 1:
-                        blendOm = 3;
-                        break; // additive / 加
+                        blendOm = 14; // omPsAdditive
+                        break;
                     case 2:
-                        blendOm = 4;
-                        break; // subtractive / 减
+                    case 5:
+                        blendOm = 15; // omPsSubtractive
+                        break;
                     case 3:
-                        blendOm = 5;
-                        break; // multiplicative / 乘
+                        blendOm = 16; // omPsMultiplicative
+                        break;
                     case 4:
-                        blendOm = 12;
-                        break; // addalpha / 加 alpha
+                        blendOm = 17; // omPsScreen
+                        break;
+                    case 0:
                     default:
-                        blendOm = 2;
-                        break; // alpha (normal) / 正常
+                        blendOm = 2; // omAlpha
+                        break;
                 }
                 // 参数依 Layer.operateAffine(src, x, y, w, h, affine, a,b,c,d,
                 // tx,ty, mode, opa, ...)。dst 对象绑定到 dest（调用对象），src
@@ -2888,7 +2902,9 @@ namespace motion {
                             "probe: item motion='{}' label='{}' src='{}' dst={} "
                             "srcSize={}x{} m=[{:.3f},{:.3f},{:.3f},{:.3f}] "
                             "tx={:.1f} ty={:.1f} gameScale={:.3f}/{:.3f} "
-                            "boxScale={:.3f}/{:.3f} stencilGroup={} opa={}",
+                            "boxScale={:.3f}/{:.3f} stencilGroup={} opa={} "
+                            "bm={} nodeType={} stencilType={} "
+                            "frameScale={:.3f}/{:.3f} worldScale={:.3f}/{:.3f}",
                             key, node.label, af->src,
                             (drawTarget == dest) ? "dest" : "scratch", iw, ih,
                             static_cast<double>(mA), static_cast<double>(mB),
@@ -2897,7 +2913,12 @@ namespace motion {
                             static_cast<double>(outputTy), gameScX, gameScY,
                             static_cast<double>(boxScX),
                             static_cast<double>(boxScY), stencilGroupOf[i],
-                            static_cast<int>(opaClamp));
+                            static_cast<int>(opaClamp),
+                            static_cast<int>(af->blendMode), node.type,
+                            node.stencilType, static_cast<double>(af->scaleX),
+                            static_cast<double>(af->scaleY),
+                            static_cast<double>(wslx[i]),
+                            static_cast<double>(wsly[i]));
                     }
                 }
 #endif
