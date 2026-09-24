@@ -558,6 +558,36 @@ SeparateLayerAdaptor 的私有渲染层，而它们从来没在日志里出现�
 `LayerAssign route=reparent-hidden-page` 日志、`probe: exch-route denied reason=page-busy/
 streak-not-reached`）。
 
+### 1.13.7 第八轮：用户反馈（立绘出来了但过大 / SD 人物出来了背景没有）+ 变换入口被丢弃
+
+**用户真机反馈（a535966 之后）**：
+
+- NEKOPARA 4：立绘**能出来了**（多合成组不再被第一组蒙版抹掉），但**比画面还大**，
+  只看到一小部分 → 缩放没生效；
+- 千恋万花 SD：**人物出来了，背景没有**。
+
+**变换入口被整批丢弃（本轮修）**：`motionplayer` 里 `setRotate` / `setScale` / `setMirror`
+都注册成 `MotionPlayer_ignoreArgs`（空实现），`setDrawAffineTranslateMatrix` 走到
+`Player::setDrawAffineTranslateMatrix(...) {}`（空实现），而且入口要求 `count >= 6` ——
+而游戏按参考实现的约定**传 1 个 AffineMatrix 对象**（`m11/m21/m12/m22/m14/m24`，
+见 `AffineSourceMotion.tjs` 的标识符表），于是调用直接吃 `TJS_E_INVALIDPARAM`（被游戏自己的
+try/catch 吞掉），整套缩放/平移全丢 ⇒ 立绘按 PSB 原生尺寸画，超出画面。
+
+做法：
+
+- `main.cpp` 的 `Player_setDrawAffineTranslateMatrix` 按参考实现接受**两种形式**
+  （6 个实数 m11,m21,m12,m22,m14,m24 / 1 个 AffineMatrix 对象），转成内部
+  `(a,b,c,d,tx,ty)` 存下；
+- `Player.h` 新增 `_drawAffineMatrix`（默认单位阵），并在 `operateAffine` 参数组装处把
+  它作为**外层仿射**叠到每个条目上（`x''=a·x'+b·y'+tx` 形式，单位阵时与旧行为逐位一致）；
+- 探针构建下，`setDrawAffineTranslateMatrix` / `setScale` / `setRotate` 的调用与数值会各记
+  一条（`probe: Player.setDrawAffineTranslateMatrix count=… values=[…]`），
+  下一份日志就能确认缩放系数与真实入口。
+
+**尚未定位**：千恋万花 SD **背景**缺失（人物已在）。SD301 的节点表里有
+`char301/mbg src=src/SD301/背景２`、`char301/bg src=src/SD301/背景`；背景属于哪个合成组/
+是否被 `str_clip` 裁掉，需要下一轮日志里的 `drawAnimatedTree` 节点明细来定位。
+
 ### 1.13.6 第七轮：非 D3D 路径上线后暴露的真因 —— 私有渲染层是 0×0
 
 `Motion.enableD3D` 恒返回 0 之后（§1.13.5），真机（20:50/20:51）确认选路成功：

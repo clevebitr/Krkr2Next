@@ -1191,16 +1191,126 @@ static tjs_error Player_skipToSync(tTJSVariant *, tjs_int, tTJSVariant **,
     return TJS_S_OK;
 }
 
+// 读对象属性为 double；只接受数值类，供 AffineMatrix 形式使用。
+static bool ReadMatrixProp(iTJSDispatch2 *obj, const tjs_char *name,
+                           double &out) {
+    if(!obj)
+        return false;
+    tTJSVariant v;
+    if(TJS_FAILED(obj->PropGet(0, name, nullptr, &v, obj)) ||
+       v.Type() == tvtVoid || v.Type() == tvtObject ||
+       v.Type() == tvtString)
+        return false;
+    out = v.AsReal();
+    return true;
+}
+
+#if defined(KRKR_RENDER_PROBE)
+// 一次性探针：游戏给的全局仿射，以及它实际调用的变换入口。
+//
+// 为什么需要：NEKOPARA 4 的立绘“比画面还大”，而游戏是用
+// `setDrawAffineTranslateMatrix`（或 setScale/setRotate）把 PSB 原生尺寸缩进画面的
+// —— 这些调用本壳以前全部丢弃（no-op）。这里把收到的值记下来，下一份真机日志就能
+// 确认缩放系数与入口。不记录文本内容。
+static void ProbeLogTransform(const char *entry, tjs_int count,
+                              const double *values, int valueCount) {
+    static std::mutex mutex;
+    static std::set<std::string> seen;
+    std::string key = std::string(entry);
+    for(int i = 0; i < valueCount; ++i)
+        key += ":" + std::to_string(static_cast<long long>(values[i] * 1000));
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        if(seen.size() >= 24 || !seen.insert(key).second)
+            return;
+    }
+    std::string text;
+    for(int i = 0; i < valueCount; ++i) {
+        if(i)
+            text += ",";
+        text += std::to_string(values[i]);
+    }
+    spdlog::info("probe: Player.{} count={} values=[{}]", entry,
+                 static_cast<int>(count), text);
+}
+
+static void ProbeLogIgnoredTransform(const char *entry, tjs_int count,
+                                     tTJSVariant **p) {
+    double values[6] = { 0, 0, 0, 0, 0, 0 };
+    int n = 0;
+    for(tjs_int i = 0; i < count && n < 6; ++i) {
+        if(p && p[i] && p[i]->Type() != tvtVoid &&
+           p[i]->Type() != tvtObject && p[i]->Type() != tvtString)
+            values[n++] = p[i]->AsReal();
+    }
+    ProbeLogTransform(entry, count, values, n);
+}
+
+static tjs_error Player_setScaleLogged(tTJSVariant *, tjs_int count,
+                                       tTJSVariant **p,
+                                       iTJSDispatch2 *objthis) {
+    (void)objthis;
+    ProbeLogIgnoredTransform("setScale", count, p);
+    return TJS_S_OK;
+}
+
+static tjs_error Player_setRotateLogged(tTJSVariant *, tjs_int count,
+                                        tTJSVariant **p,
+                                        iTJSDispatch2 *objthis) {
+    (void)objthis;
+    ProbeLogIgnoredTransform("setRotate", count, p);
+    return TJS_S_OK;
+}
+#endif
+
 static tjs_error Player_setDrawAffineTranslateMatrix(tTJSVariant *,
                                                      tjs_int count,
                                                      tTJSVariant **p,
                                                      iTJSDispatch2 *objthis) {
     auto *player = GetPlayerInstance(objthis);
-    if(!player || count < 6)
+    if(!player)
         return TJS_E_INVALIDPARAM;
-    player->setDrawAffineTranslateMatrix(p[0]->AsReal(), p[1]->AsReal(),
-                                         p[2]->AsReal(), p[3]->AsReal(),
-                                         p[4]->AsReal(), p[5]->AsReal());
+
+    // 参数与参考实现同一套：6 个实数（顺序 m11,m21,m12,m22,m14,m24），
+    // 或 1 个 AffineMatrix 对象（读 m11/m21/m12/m22/m14/m24）。
+    double m11 = 1, m21 = 0, m12 = 0, m22 = 1, m14 = 0, m24 = 0;
+    if(count >= 6) {
+        double *dst[6] = { &m11, &m21, &m12, &m22, &m14, &m24 };
+        for(int i = 0; i < 6; ++i) {
+            if(!p[i] || p[i]->Type() == tvtVoid)
+                return TJS_E_INVALIDPARAM;
+            *dst[i] = p[i]->AsReal();
+        }
+    } else if(count == 1 && p[0] && p[0]->Type() == tvtObject &&
+              p[0]->AsObjectNoAddRef()) {
+        iTJSDispatch2 *obj = p[0]->AsObjectNoAddRef();
+        ReadMatrixProp(obj, TJS_W("m11"), m11);
+        ReadMatrixProp(obj, TJS_W("m21"), m21);
+        ReadMatrixProp(obj, TJS_W("m12"), m12);
+        ReadMatrixProp(obj, TJS_W("m22"), m22);
+        ReadMatrixProp(obj, TJS_W("m14"), m14);
+        ReadMatrixProp(obj, TJS_W("m24"), m24);
+    } else {
+        return TJS_E_BADPARAMCOUNT;
+    }
+
+    // 本类内部统一用 (a,b,c,d,tx,ty)：x'=a*x+b*y+tx、y'=c*x+d*y+ty。
+    player->setDrawAffineTranslateMatrix(
+        static_cast<tjs_real>(m11), static_cast<tjs_real>(m12),
+        static_cast<tjs_real>(m21), static_cast<tjs_real>(m22),
+        static_cast<tjs_real>(m14), static_cast<tjs_real>(m24));
+#if defined(KRKR_RENDER_PROBE)
+    const double values[6] = { m11, m12, m21, m22, m14, m24 };
+    ProbeLogTransform("setDrawAffineTranslateMatrix", count, values, 6);
+    if(m11 != 1.0 || m12 != 0.0 || m21 != 0.0 || m22 != 1.0 || m14 != 0.0 ||
+       m24 != 0.0) {
+        static std::atomic<bool> s_appliedLogged{ false };
+        if(!s_appliedLogged.exchange(true))
+            spdlog::info("probe: Player.setDrawAffineTranslateMatrix 已应用到绘制"
+                         "（非单位阵 m11={} m22={} m14={} m24={}）",
+                         m11, m22, m14, m24);
+    }
+#endif
     return TJS_S_OK;
 }
 
@@ -1623,8 +1733,13 @@ NCB_REGISTER_SUBCLASS_DELAY(EmotePlayer) {
     NCB_METHOD_RAW_CALLBACK(loadSource, MotionPlayer_ignoreArgs, 0);
     NCB_METHOD_RAW_CALLBACK(findSource, MotionPlayer_getVoid, 0);
     NCB_METHOD_RAW_CALLBACK(setRot, MotionPlayer_ignoreArgs, 0);
+#if defined(KRKR_RENDER_PROBE)
+    NCB_METHOD_RAW_CALLBACK(setRotate, Player_setRotateLogged, 0);
+    NCB_METHOD_RAW_CALLBACK(setScale, Player_setScaleLogged, 0);
+#else
     NCB_METHOD_RAW_CALLBACK(setRotate, MotionPlayer_ignoreArgs, 0);
     NCB_METHOD_RAW_CALLBACK(setScale, MotionPlayer_ignoreArgs, 0);
+#endif
     NCB_METHOD_RAW_CALLBACK(setMirror, MotionPlayer_ignoreArgs, 0);
     NCB_METHOD_RAW_CALLBACK(setColor, MotionPlayer_ignoreArgs, 0);
     NCB_METHOD_RAW_CALLBACK(moveVariable, MotionPlayer_ignoreArgs, 0);

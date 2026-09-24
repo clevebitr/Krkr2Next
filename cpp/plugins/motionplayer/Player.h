@@ -10,6 +10,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -2702,14 +2703,26 @@ namespace motion {
                 const double mD0 = wm22[i] * boxScY;
                 // Origin-anchored translation: place the anchor at the world
                 // position. 原点锚定平移：把锚点放到世界位置 (px,py)。
-                const tjs_real outputTx = static_cast<tjs_real>(
+                const tjs_real baseTx = static_cast<tjs_real>(
                     _coordX + halfCw + px - (mA0 * anchorX + mB0 * anchorY));
-                const tjs_real outputTy = static_cast<tjs_real>(
+                const tjs_real baseTy = static_cast<tjs_real>(
                     _coordY + halfCh + py - (mC0 * anchorX + mD0 * anchorY));
-                const tjs_real mA = static_cast<tjs_real>(mA0);
-                const tjs_real mB = static_cast<tjs_real>(mB0);
-                const tjs_real mC = static_cast<tjs_real>(mC0);
-                const tjs_real mD = static_cast<tjs_real>(mD0);
+                // 再把游戏给的全局仿射叠在**外层**（画布坐标 → 最终画布坐标）：
+                // 游戏用这个矩阵把 PSB 原生尺寸的立绘缩/移到画面里。默认单位阵时
+                // 与旧行为逐位一致。
+                const auto &dm = _drawAffineMatrix;
+                const tjs_real mA =
+                    static_cast<tjs_real>(dm[0] * mA0 + dm[2] * mC0);
+                const tjs_real mB =
+                    static_cast<tjs_real>(dm[0] * mB0 + dm[2] * mD0);
+                const tjs_real mC =
+                    static_cast<tjs_real>(dm[1] * mA0 + dm[3] * mC0);
+                const tjs_real mD =
+                    static_cast<tjs_real>(dm[1] * mB0 + dm[3] * mD0);
+                const tjs_real outputTx = static_cast<tjs_real>(
+                    dm[0] * baseTx + dm[2] * baseTy + dm[4]);
+                const tjs_real outputTy = static_cast<tjs_real>(
+                    dm[1] * baseTx + dm[3] * baseTy + dm[5]);
 
 #if defined(KRKR_RENDER_PROBE)
                 if(logger && now >= 190.0 &&
@@ -3987,8 +4000,17 @@ namespace motion {
         // 帧合成到游戏传入的 目标层（drawOnto 保持私有，此处暴露安全入口）。
         void captureDrawTo(iTJSDispatch2 *target) { drawOnto(target); }
 
-        void setDrawAffineTranslateMatrix(tjs_real, tjs_real, tjs_real,
-                                          tjs_real, tjs_real, tjs_real) {}
+        void setDrawAffineTranslateMatrix(tjs_real a, tjs_real b, tjs_real c,
+                                          tjs_real d, tjs_real tx, tjs_real ty) {
+            _drawAffineMatrix = { static_cast<double>(a), static_cast<double>(b),
+                                  static_cast<double>(c), static_cast<double>(d),
+                                  static_cast<double>(tx),
+                                  static_cast<double>(ty) };
+        }
+
+        void resetDrawAffineTranslateMatrix() {
+            _drawAffineMatrix = { 1.0, 0.0, 0.0, 1.0, 0.0, 0.0 };
+        }
         void setCoord(tjs_real x, tjs_real y) {
             _coordX = x;
             _coordY = y;
@@ -4464,6 +4486,16 @@ namespace motion {
         mutable std::string _pendingButtonName;
         tjs_real _coordX = 0;
         tjs_real _coordY = 0;
+        // 游戏给的全局仿射（`Player.setDrawAffineTranslateMatrix`）。默认单位阵。
+        // `[a, b, c, d, tx, ty]`，与 opArgs 的 (a,b,c,d,tx,ty) 同一套约定，
+        // x' = a*x + b*y + tx、y' = c*x + d*y + ty。
+        //
+        // 为什么必须用上（真机 2026-09-24）：NEKOPARA 4 的立绘被画成“超出画面”的
+        // 大小，而游戏自己就是用这个矩阵把 PSB 原生尺寸缩到画面里的
+        // （AffineSourceMotion.tjs 里 m11/m21/m12/m22/m14/m24 与
+        // setDrawAffineTranslateMatrix 成对出现）。以前这里是空实现，等于整套缩放/平移
+        // 被丢掉。
+        std::array<double, 6> _drawAffineMatrix{ 1.0, 0.0, 0.0, 1.0, 0.0, 0.0 };
         // -1 = origin convention not resolved yet (auto). See
         // resolveCoordOrigin(). -1 = 尚未解析的原点约定（auto）。见
         // resolveCoordOrigin()。
