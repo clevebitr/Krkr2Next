@@ -76,23 +76,7 @@ private const val DRAWER_AUTO_HIDE_MS = 5_000L
 
 /**
  * 游戏画面。
- *
- * 只负责**渲染 surface 与触摸**；引擎生命周期、按键转发由 `MainActivity` 持有，
- * 因为 Activity 能可靠地拿到 `dispatchKeyEvent` 与 `onPause/onResume`。
- *
- * 用 `AndroidView` + [SurfaceView]（而不是 Compose 的 `AndroidExternalSurface`）：
- * 引擎用 `eglSwapBuffers` 直出到 surface buffer，这条零拷贝路径要求 SurfaceView
- * 系的独立 surface——TextureView 走合成路径，不适用。
- *
- * **不要**在这里用 Compose 的 `Modifier.pointerInput` 转发触摸：那样坐标是 Compose
- * 坐标系，需要额外换算。这里直接把 `OnTouchListener` 挂在 SurfaceView 上，
- * `MotionEvent.getX()/getY()` 就是视图坐标（物理像素），正是引擎期望的输入。
- *
- * 右下角有一个悬浮按钮：点开是两项菜单（显示运行时日志 / 退出游戏）。日志浮层是
- * 半透明的，内容取 [AppLog] 的内存环形缓冲——引擎日志经 `EngineSession.onLog`
- * 也汇进那里，所以浮层里看到的是壳与引擎混排的真实时序。
- * 菜单或浮层打开时，SurfaceView 的触摸监听会直接吞掉事件（见下面的 `setOnTouchListener`），
- * 否则点浮层会连带把一次 POINTER_DOWN 送进游戏。
+ * 只负责渲染 surface 与触摸；引擎生命周期、按键转发由 `MainActivity` 持有
  */
 @Composable
 fun GameScreen(
@@ -112,12 +96,22 @@ fun GameScreen(
      * 改了要退出重进才看得到。
      */
     overlayConfig: OverlayConfig,
+    /**
+     * 悬浮菜单里的「性能叠加层」快捷开关：**只改本局**，不落盘。
+     * 下次进游戏仍按配置（全局默认 / 该游戏的独立配置）来。
+     */
+    onOverlayEnabledChange: (Boolean) -> Unit,
     /** 本次会话生效的自定义按键浮层（全局默认与每游戏覆盖**已在启动时合并**）。 */
     keypadConfig: KeyPadProfile,
     /** 按键浮层编辑态：为真时浮层接管全部触摸（游戏收不到），并显示拖拽/缩放把手。 */
     keypadEditing: Boolean,
     onKeypadChange: (KeyPadProfile) -> Unit,
     onKeypadEditingChange: (Boolean) -> Unit,
+    /**
+     * 悬浮菜单里的「自定义按键浮层」快捷开关：**只改本局**，不落盘。
+     * 关掉时由宿主顺带退出编辑态——编辑态下浮层不受 `enabled` 约束，仍会显示。
+     */
+    onKeypadEnabledChange: (Boolean) -> Unit,
     /** 光标触控板模式：手指变触控板，相对移动驱动虚拟光标。 */
     touchpadMode: Boolean,
     touchpadSensitivity: Float,
@@ -340,8 +334,18 @@ fun GameScreen(
                 if (menuOpen) {
                     GameMenu(
                         keypadEditing = keypadEditing,
+                        overlayEnabled = overlayConfig.enabled,
+                        keypadEnabled = keypadConfig.enabled,
                         touchpadMode = touchpadMode,
                         engineMenuButton = engineMenuButton,
+                        onToggleOverlay = {
+                            menuOpen = false
+                            onOverlayEnabledChange(!overlayConfig.enabled)
+                        },
+                        onToggleKeypad = {
+                            menuOpen = false
+                            onKeypadEnabledChange(!keypadConfig.enabled)
+                        },
                         onToggleEngineMenuButton = {
                             menuOpen = false
                             onEngineMenuButtonChange(!engineMenuButton)
@@ -509,13 +513,17 @@ fun GameScreen(
 }
 
 /**
- * 悬浮菜单面板。三项都用纯文字，不引图标——少一个图标名就对不上依赖版本的风险。
+ * 悬浮菜单面板。菜单项都用纯文字，不引图标——少一个图标名就对不上依赖版本的风险。
  */
 @Composable
 private fun GameMenu(
     keypadEditing: Boolean,
+    overlayEnabled: Boolean,
+    keypadEnabled: Boolean,
     touchpadMode: Boolean,
     engineMenuButton: Boolean,
+    onToggleOverlay: () -> Unit,
+    onToggleKeypad: () -> Unit,
     onToggleEngineMenuButton: () -> Unit,
     onToggleTouchpad: () -> Unit,
     onToggleKeypadEdit: () -> Unit,
@@ -530,6 +538,26 @@ private fun GameMenu(
         colors = CardDefaults.cardColors(containerColor = Color(0xE61F1F1F)),
     ) {
         Column {
+            MenuEntry(
+                label = if (overlayEnabled) "性能叠加层：开" else "性能叠加层：关",
+                onClick = onToggleOverlay,
+            )
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color(0x33FFFFFF)),
+            )
+            MenuEntry(
+                label = if (keypadEnabled) "自定义按键浮层：开" else "自定义按键浮层：关",
+                onClick = onToggleKeypad,
+            )
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color(0x33FFFFFF)),
+            )
             MenuEntry(
                 label = if (touchpadMode) "触控板模式：开" else "触控板模式：关",
                 onClick = onToggleTouchpad,

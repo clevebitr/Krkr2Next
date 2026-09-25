@@ -30,28 +30,34 @@ import org.dpdns.clevebitr.core.OverlayField
 
 /**
  * 叠加层自定义编辑器。
+ *
+ * 说明文案走行内问号 → snackbar：全局设置页与游戏详情页各自把自己的 [snackbar] 传进来。
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun OverlayConfigEditor(
     config: OverlayConfig,
     onConfigChange: (OverlayConfig) -> Unit,
+    snackbar: SnackbarController,
     modifier: Modifier = Modifier,
     showPreview: Boolean = true,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         SwitchRow(
             title = "显示性能叠加层",
-            subtitle = "游戏画面内浮层，按 4Hz 采样；不勾选任何指标时等于关闭。",
             checked = config.enabled,
             onCheckedChange = { onConfigChange(config.copy(enabled = it)) },
+            onHelpClick = {
+                snackbar.showHelp("游戏画面内浮层，按 4Hz 采样；不勾选任何指标时等于关闭。")
+            },
         )
 
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            Text("显示哪些指标", style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = "顺序固定（环境 → 时间账 → 内存），勾选顺序不影响排版。",
-                style = MaterialTheme.typography.bodySmall,
+            RowTitleWithHelp(
+                title = "显示哪些指标",
+                onHelpClick = {
+                    snackbar.showHelp("顺序固定（环境 → 时间账 → 内存），勾选顺序不影响排版。")
+                },
             )
             FlowRow(
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -110,10 +116,11 @@ fun OverlayConfigEditor(
 
         if (showPreview) {
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text("预览", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    text = "用固定示例数据渲染，便于对照字号与透明度。",
-                    style = MaterialTheme.typography.bodySmall,
+                RowTitleWithHelp(
+                    title = "预览",
+                    onHelpClick = {
+                        snackbar.showHelp("用固定示例数据渲染，便于对照字号与透明度。")
+                    },
                 )
                 // 预览底色固定为黑：游戏画面是黑的，浅色主题下预览若铺在浅色上，
                 // 深色面板的观感会与真机完全不同

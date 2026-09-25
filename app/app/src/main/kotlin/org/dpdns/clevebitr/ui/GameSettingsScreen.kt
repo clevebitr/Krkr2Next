@@ -41,17 +41,7 @@ import org.dpdns.clevebitr.core.RunMode
 import org.dpdns.clevebitr.core.asEngineOverride
 
 /**
- * 游戏设置页：**这个游戏单独怎么跑**。
- *
- * 为什么从详情页拆出来单独一页：详情页要回答的是"这是什么游戏、要不要现在开"，
- * 而这里全是"改了下次启动才生效"的档位。两类信息混在一屏时，启动按钮会被十来个
- * 单选行挤到屏幕外，用户每次开游戏都得先划过一堆自己没打算改的选项。
- *
- * 每项都遵循同一条约定：**留空 = 继承全局，并且写清继承到的具体值**（"继承全局
- * （60 FPS）"而不是"继承全局"）。用户不填时必须能预知会得到什么。
- *
- * 保存是显式的（顶部「保存」），不是改一下就写盘：这些档位是逐游戏试出来的，
- * 边改边写会在用户来回比较时留下一串半成品配置。
+ * 游戏设置页
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,8 +104,11 @@ fun GameSettingsScreen(
         graphics = if (useOwnGraphics) graphics else null,
     )
 
+    val snackbar = rememberSnackbarController()
+
     Scaffold(
         modifier = modifier,
+        snackbarHost = { SnackbarPost(snackbar) },
         topBar = {
             TopAppBar(
                 title = {
@@ -164,12 +157,16 @@ fun GameSettingsScreen(
 
                 ChoiceRow(
                     title = "运行模式",
-                    subtitle = "兼容层与渲染器设置的固定组合。引擎按游戏目录里的插件标记判档，" +
-                        "自动判档不理想时在这里手动指定。",
                     choices = listOf(INHERIT to inheritLabel("模式", globalMode.label)) +
                         RunMode.entries.map { it.key to it.label },
                     selected = runMode,
                     onSelected = { runMode = it },
+                    onHelpClick = {
+                        snackbar.showHelp(
+                            "兼容层与渲染器设置的固定组合。引擎按游戏目录里的插件标记判档，" +
+                                "自动判档不理想时在这里手动指定。",
+                        )
+                    },
                 )
                 if (runMode != INHERIT) {
                     Text(
@@ -182,21 +179,27 @@ fun GameSettingsScreen(
 
                 ChoiceRow(
                     title = "帧率上限",
-                    subtitle = "0 = 不限速，跟随 vsync。设备吃不住时可以先限到 30。",
                     choices = listOf(INHERIT to inheritLabel("上限", fpsLabel(globalDefaults.fpsLimit))) +
                         listOf("0" to "不限速", "30" to "30 FPS", "60" to "60 FPS"),
                     selected = fpsLimit,
                     onSelected = { fpsLimit = it },
+                    onHelpClick = {
+                        snackbar.showHelp("0 = 不限速，跟随 vsync。设备吃不住时可以先限到 30。")
+                    },
                 )
 
                 ChoiceRow(
                     title = "字体回退",
-                    subtitle = "缺字（黑方块、方框大小不一）时在两种实现间切换对比，哪种正常用哪种。",
                     choices = listOf(
                         INHERIT to inheritLabel("策略", globalDefaults.fontFallbackMode),
                     ) + FONT_FALLBACK_CHOICES,
                     selected = fontFallback,
                     onSelected = { fontFallback = it },
+                    onHelpClick = {
+                        snackbar.showHelp(
+                            "缺字（黑方块、方框大小不一）时在两种实现间切换对比，哪种正常用哪种。",
+                        )
+                    },
                 )
 
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
@@ -205,13 +208,16 @@ fun GameSettingsScreen(
 
                 SwitchRow(
                     title = "使用独立配置",
-                    subtitle = "关掉则跟随全局默认（字号、字段、位置都用全局那一份）。",
                     checked = useOwnOverlay,
                     onCheckedChange = { useOwnOverlay = it },
+                    onHelpClick = {
+                        snackbar.showHelp("关掉则跟随全局默认（字号、字段、位置都用全局那一份）。")
+                    },
                 )
                 if (useOwnOverlay) {
                     OverlayConfigEditor(
                         config = overlay,
+                        snackbar = snackbar,
                         onConfigChange = { overlay = it },
                     )
                 } else {
@@ -229,13 +235,16 @@ fun GameSettingsScreen(
 
                 SwitchRow(
                     title = "使用独立配置",
-                    subtitle = "关掉则跟随全局默认（按钮布局与样式都用全局那一份）。",
                     checked = useOwnKeypad,
                     onCheckedChange = { useOwnKeypad = it },
+                    onHelpClick = {
+                        snackbar.showHelp("关掉则跟随全局默认（按钮布局与样式都用全局那一份）。")
+                    },
                 )
                 if (useOwnKeypad) {
                     KeyPadConfigEditor(
                         profile = keypad,
+                        snackbar = snackbar,
                         onProfileChange = { keypad = it },
                         templates = keyPadTemplates,
                         onSaveTemplate = onSaveKeyPadTemplate,
@@ -257,18 +266,24 @@ fun GameSettingsScreen(
 
                 SwitchRow(
                     title = "使用独立配置",
-                    subtitle = "关掉则跟随全局默认。",
                     checked = useOwnTouchpad,
                     onCheckedChange = { useOwnTouchpad = it },
+                    onHelpClick = {
+                        snackbar.showHelp("关掉则跟随全局默认。")
+                    },
                 )
                 SwitchRow(
                     title = "触控板模式",
-                    subtitle = "手指当触控板：相对拖动驱动光标，轻点=左键、双指轻点=右键、" +
-                        "双指上下拖=滚轮。适合需要鼠标的游戏。",
                     checked = if (useOwnTouchpad) touchpad else globalDefaults.touchpad,
                     onCheckedChange = { checked ->
                         if (!useOwnTouchpad) useOwnTouchpad = true
                         touchpad = checked
+                    },
+                    onHelpClick = {
+                        snackbar.showHelp(
+                            "手指当触控板：相对拖动驱动光标，轻点=左键、双指轻点=右键、" +
+                                "双指上下拖=滚轮。适合需要鼠标的游戏。",
+                        )
                     },
                 )
 
@@ -278,14 +293,19 @@ fun GameSettingsScreen(
 
                 SwitchRow(
                     title = "使用独立配置",
-                    subtitle = "关掉则跟随全局默认（纹理压缩、精确渲染、纹理尺寸、内存档" +
-                        "都用全局那一份）。",
                     checked = useOwnGraphics,
                     onCheckedChange = { useOwnGraphics = it },
+                    onHelpClick = {
+                        snackbar.showHelp(
+                            "关掉则跟随全局默认（纹理压缩、精确渲染、纹理尺寸、内存档" +
+                                "都用全局那一份）。",
+                        )
+                    },
                 )
                 if (useOwnGraphics) {
                     GraphicsConfigEditor(
                         config = graphics,
+                        snackbar = snackbar,
                         onConfigChange = { graphics = it },
                     )
                 } else {
@@ -305,19 +325,27 @@ fun GameSettingsScreen(
 
                 SwitchRow(
                     title = "使用独立配置",
-                    subtitle = "关掉则跟随全局默认（当前：" +
-                        "${if (globalDefaults.autoLogOnLaunch) "已开启" else "已关闭"}）。",
                     checked = useOwnAutoLog,
                     onCheckedChange = { useOwnAutoLog = it },
+                    onHelpClick = {
+                        snackbar.showHelp(
+                            "关掉则跟随全局默认（当前：" +
+                                "${if (globalDefaults.autoLogOnLaunch) "已开启" else "已关闭"}）。",
+                        )
+                    },
                 )
                 SwitchRow(
                     title = "加载游戏时自动显示日志",
-                    subtitle = "从启动到游戏出第一帧期间自动弹出运行时日志，进游戏后自动关闭；" +
-                        "手动关掉后本局不再弹。启动阶段就黑屏/卡住时用得上。",
                     checked = if (useOwnAutoLog) autoLog else globalDefaults.autoLogOnLaunch,
                     onCheckedChange = { checked ->
                         if (!useOwnAutoLog) useOwnAutoLog = true
                         autoLog = checked
+                    },
+                    onHelpClick = {
+                        snackbar.showHelp(
+                            "从启动到游戏出第一帧期间自动弹出运行时日志，进游戏后自动关闭；" +
+                                "手动关掉后本局不再弹。启动阶段就黑屏/卡住时用得上。",
+                        )
                     },
                 )
 

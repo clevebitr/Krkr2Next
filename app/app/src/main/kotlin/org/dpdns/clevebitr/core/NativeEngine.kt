@@ -1,6 +1,7 @@
 package org.dpdns.clevebitr.core
 
 import android.content.Context
+import android.os.Build
 import android.view.Surface
 
 /**
@@ -17,7 +18,29 @@ import android.view.Surface
  */
 object NativeEngine {
 
+    private const val TAG = "KrKr2Next/Engine"
+
     init {
+        // ── 翻译环境的 libomp 兜底（详见 bridge/engine_api/src/android/omp_env_compat.c
+        // 与 HANDOFF.md §1.14）────────────────────────────────────────────────
+        // x86_64 模拟器跑 arm64 库靠 Berberis(libndk_translation) 翻译。翻译层给 arm64
+        // guest 的 /proc/cpuinfo 只有 2 个 processor，而 sysconf/sched_getaffinity 说 4 个
+        // → libomp 18 的拓扑数量一致性断言失败，直接 abort()（OMP: Error #13 @
+        // kmp_affinity.cpp:4567）。libengine_api.so 的静态构造函数会触发 libomp 初始化，
+        // 所以进程在引擎 JNI_OnLoad 之前就死，表现为“启动即崩溃”且 tombstone 无 Abort message。
+        //
+        // 本工程只出 arm64-v8a，因此「主 ABI 不是 arm64-v8a」== 进程实际是 x86_64、正在翻
+        // 译执行 arm64 库。真机 arm64 不加载这个垫片，行为完全不变。
+        if (Build.SUPPORTED_ABIS.firstOrNull() != "arm64-v8a") {
+            try {
+                System.loadLibrary("omp_env_compat")
+                AppLog.i(TAG, "omp_env_compat loaded (translated env: ${Build.SUPPORTED_ABIS.joinToString()})")
+            } catch (e: UnsatisfiedLinkError) {
+                // 垫片缺失只影响翻译环境（那里不设 KMP_AFFINITY 必崩）；这里不抛，交给下面
+                // loadLibrary("engine_api") 按原样暴露问题，但留一行日志说明缺了什么。
+                AppLog.e(TAG, "libomp_env_compat.so 缺失 — 翻译环境下 libomp 可能断言 abort", e)
+            }
+        }
         System.loadLibrary("engine_api")
     }
 

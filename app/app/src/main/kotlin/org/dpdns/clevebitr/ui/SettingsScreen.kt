@@ -24,7 +24,6 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -123,6 +122,9 @@ fun SettingsScreen(
     var fontMode by remember { mutableStateOf(fontFallbackMode) }
     var runMode by remember { mutableStateOf(AppPrefs.runMode(context)) }
 
+    // snackbar
+    val snackbar = rememberSnackbarController()
+
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -135,9 +137,8 @@ fun SettingsScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarPost(snackbar,modifier) }
     ) { scaffoldPadding ->
-        // 宽屏（平板/横屏）下限制正文宽度并与内容居中：设置项都是"标签 + 一排单选"，
-        // 拉满 1000dp 时标签与选项会隔着半个屏幕，读起来要来回扫。
         val wide = LocalConfiguration.current.screenWidthDp >= 600
         Column(
             modifier = scaffoldPadding.let {
@@ -155,14 +156,8 @@ fun SettingsScreen(
             ) {
             SectionTitle("外观")
 
-            // 主题：写进壳的偏好并**立刻**回调给 Activity 换肤（不用退出重进）。
-            // 之所以必须有这一项：`themes.xml` 的 windowBackground 是黑的，若固定用
-            // 浅色方案的深色文字，在某些设备/系统深浅色下就会黑字黑底看不清。
             ChoiceRow(
                 title = "主题",
-                subtitle = "跟随系统之外还能手动锁定浅色或深色。" +
-                    "设置页/启动页的文字与图标颜色都取自当前配色，" +
-                    "若觉得文字看不清或图标不见了，先在这里切一档试试。",
                 choices = THEME_CHOICES,
                 selected = themeMode,
                 onSelected = { mode ->
@@ -170,16 +165,19 @@ fun SettingsScreen(
                     onThemeModeChanged(mode)
                     AppLog.i(TAG, "theme = $mode")
                 },
+                onHelpClick = {
+                    snackbar.showHelp(
+                        "跟随系统之外还能手动锁定浅色或深色。" +
+                            "设置页/启动页的文字与图标颜色都取自当前配色，" +
+                            "若觉得文字看不清或图标不见了，先在这里切一档试试。",
+                    )
+                }
             )
 
             SectionTitle("字体")
 
             ChoiceRow(
                 title = "字体回退策略",
-                subtitle = "引擎里保留了两套字体解析实现：原版派系（单一回退字面）与" +
-                    "AetherKiri 派系（把已注册字面逐个按字回退，并对齐基线）。" +
-                    "文字出现黑方块/大小不一的方框就是缺字，切到另一档对比即可。" +
-                    "下次开游戏生效。",
                 choices = FONT_FALLBACK_CHOICES,
                 selected = fontMode,
                 onSelected = { mode ->
@@ -188,6 +186,14 @@ fun SettingsScreen(
                     onFontFallbackModeChanged(mode)
                     AppLog.i(TAG, "font fallback = $mode（下次开游戏生效）")
                 },
+                onHelpClick = {
+                    snackbar.showHelp(
+                        "引擎里保留了两套字体解析实现：原版派系（单一回退字面）与" +
+                            "AetherKiri 派系（把已注册字面逐个按字回退，并对齐基线）。" +
+                            "文字出现黑方块/大小不一的方框就是缺字，切到另一档对比即可。" +
+                            "下次开游戏生效。",
+                    )
+                }
             )
 
             SectionTitle("渲染兼容（krkrz）")
@@ -200,9 +206,6 @@ fun SettingsScreen(
             // 这里只给固定组合，见 RunMode。
             ChoiceRow(
                 title = "运行模式",
-                subtitle = "兼容层与渲染器设置的固定组合。「逐游戏自动」按目录里的插件标记判档；" +
-                    "其余四条是试过的组合，按不下去就换一条试。" +
-                    "**改完要重启游戏才生效**（引擎在插件注册时读一次）。",
                 choices = RunMode.entries.map { it.key to it.label },
                 selected = runMode.key,
                 onSelected = { key ->
@@ -213,6 +216,13 @@ fun SettingsScreen(
                     onOglDrawDeviceCompatChanged(mode.oglDrawDeviceCompat)
                     AppLog.i(TAG, "run mode = ${mode.key}（${mode.compatProfile}/${mode.oglDrawDeviceCompat}，需重启游戏）")
                 },
+                onHelpClick = {
+                    snackbar.showHelp(
+                        "兼容层与渲染器设置的固定组合。「逐游戏自动」按目录里的插件标记判档；" +
+                            "其余四条是试过的组合，按不下去就换一条试。" +
+                            "改完要重启游戏才生效。",
+                    )
+                }
             )
             Text(
                 text = runMode.summary,
@@ -223,7 +233,7 @@ fun SettingsScreen(
 
             if (runningGame) {
                 Text(
-                    text = "正在游戏中：引擎兼容与字体回退都是**下次启动游戏**生效，改完退出重进即可。",
+                    text = "正在游戏中：引擎兼容与字体回退都是下次启动游戏生效，改完退出重进即可。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -240,6 +250,7 @@ fun SettingsScreen(
             )
             GraphicsConfigEditor(
                 config = graphicsConfig,
+                snackbar = snackbar,
                 onConfigChange = {
                     onGraphicsConfigChanged(it)
                     AppLog.i(
@@ -255,23 +266,31 @@ fun SettingsScreen(
 
             SwitchRow(
                 title = "加载游戏时自动显示日志",
-                subtitle = "从启动到游戏出第一帧期间自动弹出运行时日志浮层，进游戏后自动关闭；" +
-                    "手动关掉后本局不再弹。游戏在启动阶段就黑屏/卡住时，用它把那段日志" +
-                    "直接摊在屏幕上（否则那时还没机会去点开日志）。",
                 checked = autoLogOnLaunch,
                 onCheckedChange = onAutoLogOnLaunchChange,
+                onHelpClick = {
+                    snackbar.showHelp(
+                        "从启动到游戏出第一帧期间自动弹出运行时日志浮层，进游戏后自动关闭；" +
+                            "手动关掉后本局不再弹。游戏在启动阶段就黑屏/卡住时，用它把那段日志" +
+                            "直接摊在屏幕上（否则那时还没机会去点开日志）。",
+                    )
+                },
             )
 
             SwitchRow(
                 title = "采集 logcat",
-                subtitle = "把本进程的 logcat 也写到 logcat.log。" +
-                    "引擎里只走 __android_log_print 的那部分日志、以及系统替我们打的崩溃墓碑" +
-                    "（tombstone）只存在于 logcat，关掉就只剩引擎自己的 engine.log。",
                 checked = logcatCapture,
                 onCheckedChange = {
                     logcatCapture = it
                     AppPrefs.setLogcatCapture(context, it)
                     AppLog.i(TAG, "logcat capture = $it（下次启动生效）")
+                },
+                onHelpClick = {
+                    snackbar.showHelp(
+                        "把本进程的 logcat 也写到 logcat.log。" +
+                            "引擎里只走 __android_log_print 的那部分日志、以及系统替我们打的崩溃墓碑" +
+                            "（tombstone）只存在于 logcat，关掉就只剩引擎自己的 engine.log。",
+                    )
                 },
             )
 
@@ -288,6 +307,7 @@ fun SettingsScreen(
             )
             OverlayConfigEditor(
                 config = overlay,
+                snackbar = snackbar,
                 onConfigChange = {
                     overlay = it
                     AppPrefs.setOverlayConfig(context, it)
@@ -310,6 +330,7 @@ fun SettingsScreen(
             )
             KeyPadConfigEditor(
                 profile = keyPadProfile,
+                snackbar = snackbar,
                 onProfileChange = {
                     onKeyPadProfileChanged(it)
                     AppLog.i(TAG, "keypad: enabled=${it.enabled} buttons=${it.buttons.size}")
@@ -323,11 +344,15 @@ fun SettingsScreen(
 
             SwitchRow(
                 title = "光标触控板模式",
-                subtitle = "手指变成触控板：相对拖动驱动一个虚拟光标，单指轻点=左键、" +
-                    "双指轻点=右键、双指上下拖=滚轮。适合需要鼠标的游戏（悬停高亮、" +
-                    "右键菜单、精确点选）；普通触屏操作请保持关闭。游戏中也可从悬浮菜单切换。",
                 checked = touchpadMode,
                 onCheckedChange = onTouchpadModeChange,
+                onHelpClick = {
+                    snackbar.showHelp(
+                        "手指变成触控板：相对拖动驱动一个虚拟光标，单指轻点=左键、" +
+                            "双指轻点=右键、双指上下拖=滚轮。适合需要鼠标的游戏（悬停高亮、" +
+                            "右键菜单、精确点选）；普通触屏操作请保持关闭。游戏中也可从悬浮菜单切换。",
+                    )
+                },
             )
             if (touchpadMode) {
                 Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
@@ -345,17 +370,22 @@ fun SettingsScreen(
 
             SwitchRow(
                 title = "显示引擎菜单按钮",
-                subtitle = "游戏画面右下角的小按钮，点开是游戏注册的窗口菜单（Windows 版标题栏" +
-                    "下方那一栏：全屏、配置等）。游戏没注册菜单项时侧边栏会明确说明。",
                 checked = engineMenuButton,
                 onCheckedChange = onEngineMenuButtonChange,
+                onHelpClick = {
+                    snackbar.showHelp(
+                        "游戏画面右下角的小按钮，点开是游戏注册的窗口菜单（Windows 版标题栏" +
+                            "下方那一栏：全屏、配置等）。游戏没注册菜单项时侧边栏会明确说明。",
+                    )
+                },
             )
 
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text("引擎帧率上限", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    text = "下次启动游戏时生效。不限速时由 vsync 决定节拍。",
-                    style = MaterialTheme.typography.bodySmall,
+                RowTitleWithHelp(
+                    title = "引擎帧率上限",
+                    onHelpClick = {
+                        snackbar.showHelp("下次启动游戏时生效。不限速时由 vsync 决定节拍。")
+                    },
                 )
                 FPS_OPTIONS.forEach { (value, label) ->
                     Row(

@@ -1185,6 +1185,8 @@ namespace motion {
             std::vector<float> wx(n, 0.0f), wy(n, 0.0f);
             std::vector<float> wsx(n, 1.0f),
                 wsy(n, 1.0f); // accumulated scale / 累加缩放
+            std::vector<float> wosx(n, 1.0f),
+                wosy(n, 1.0f); // node's own scale (before the parent chain) / 自身缩放
             std::vector<float> wa(n,
                                   0.0f); // accumulated angle (deg) / 累加角度
             std::vector<float> wslx(n, 0.0f),
@@ -2280,6 +2282,8 @@ namespace motion {
                 wy[i] = py;
                 wsx[i] = scxChild;
                 wsy[i] = scyChild;
+                wosx[i] = ownSxM;
+                wosy[i] = ownSyM;
                 // Effective tint: the node's own non-white frame color, else
                 // the parent chain's nearest non-white container color
                 // (text/group tint). White = no tint. Stored so descendants
@@ -2919,6 +2923,28 @@ namespace motion {
                             static_cast<double>(af->scaleY),
                             static_cast<double>(wslx[i]),
                             static_cast<double>(wsly[i]));
+                        // 节点链探针：把该条目的祖先链（序号/标签/自身缩放/累加缩放/
+                        // inheritMask）打出来。用来定位“立绘过大”到底是链上哪一级的
+                        // 自身缩放不对或继承位不对（NEKOPARA 4 真机：条目矩阵
+                        // 10.5～114.9，而游戏只给了 setScale(0.75) + 仿射 1.5）。
+                        std::string chain;
+                        int guard = 0;
+                        for(int ci = i; ci >= 0 && guard++ < 32;
+                            ci = _motionNodes[ci].parentIndex) {
+                            const auto &cn = _motionNodes[ci];
+                            chain += " > ";
+                            chain += cn.label.empty() ? std::string("<unnamed>")
+                                                      : cn.label;
+                            chain += "#" + std::to_string(ci);
+                            chain += " os=" + std::to_string(wosx[ci]) + "/" +
+                                     std::to_string(wosy[ci]);
+                            chain += " acc=" + std::to_string(wsx[ci]) + "/" +
+                                     std::to_string(wsy[ci]);
+                            chain += " inh=" + std::to_string(cn.inheritMask);
+                        }
+                        logger->info(
+                            "probe: item chain motion='{}' label='{}' :{}", key,
+                            node.label, chain);
                     }
                 }
 #endif

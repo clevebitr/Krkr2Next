@@ -51,6 +51,10 @@ logo 动效 + NEKOPARA 4 立绘），已定位到**一个共同根因**（§1.13
 
 工作区除用户自己的 `.gitignore`/`README.md` 外干净（那两个文件**始终不要 add**）。
 
+**开发环境（2026-09-25）**：模拟器上「装完 APK 一启动就 SIGABRT、进不去程序」的根因已定位并修复
+（Berberis 翻译层给 arm64 guest 的伪 `/proc/cpuinfo` 触发 libomp 拓扑断言）——见 **§1.14**。
+真机 arm64 没有这个翻译 bug，行为不变。
+
 ---
 
 ## 1. 本会话已落地的关键修复（理解现状必读）
@@ -721,6 +725,85 @@ render texture），帧画出来也 assign 出去，却停在隐藏页 —— �
 - NEKOPARA：`stencil mask label '■耳L/R' not found for 'stencil'` 与大量
   `expandSubMotionNodes: no nodes for 'motion/general_obj_*'` —— E-mote 节点树有分支没被
   展开，属于“立绘只剩部分部件”方向的待查点。
+
+---
+
+## 1.14 x86_64 模拟器上「引擎加载即 SIGABRT」（2026-09-25，根因：Berberis 伪 cpuinfo 触发 libomp 断言）
+
+**用户报的现象**：在 Android Studio 里跑/预览 UI 时“无法进入程序”。
+
+**结论（已实测验证）**：与 Compose 预览、AS instrumentation、壳代码全部无关。
+真正的失败链是：`System.loadLibrary("engine_api")` → `libengine_api.so` 的**静态构造函数**触发
+libomp 18 运行时初始化 → libomp 按 `/proc/cpuinfo` 建 CPU 拓扑 → 数量一致性断言失败 → `abort()`。
+所以进程死在 `krkr2 JNI_OnLoad` 日志之前（普通 `am start` 一样崩；探针 APK 只 `loadLibrary` 也崩）。
+
+**为什么只有这台模拟器**：`emulator-5554` 是 x86_64 + 16KB 页，跑 arm64 库靠
+Berberis(`libndk_translation`，日志 `I berberis: Initialized Berberis ((null)), version 16.0.0`) 翻译。
+翻译层给 **arm64 guest** 的 CPU 视图自相矛盾：
+
+| 来源（guest 侧） | 看到的 CPU 数 |
+|---|---|
+| `sysconf(_SC_NPROCESSORS_ONLN)` / `sched_getaffinity` / `/sys/devices/system/cpu/online` | 4 |
+| `/proc/cpuinfo`（且**没有** `physical id`/`core id`/`apicid` 字段 → libomp `parsedEntries=0`） | **2** |
+| 宿主(x86_64) `/proc/cpuinfo`（对照组） | 4（`physical id 0–3`，AMD Ryzen 9 3900X） |
+
+libomp 的 verbose 日志把过程写得很清楚（`KMP_AFFINITY=verbose,none`）：
+`#155 Initial OS proc set respected: 0-3` → `#220 parsing /proc/cpuinfo.` → `#157 2 available OS procs`
+→ `#191 2 sockets x 1 core/socket x 1 thread/core (2 total cores)` →
+**`OMP: Error #13: Assertion failure at kmp_affinity.cpp(4567).`**。
+
+**取证要点（下次遇到同类问题照这个流程走）**：
+
+- tombstone 里**没有** `Abort message:`、host 侧只有 3 帧
+  （`libc.so (syscall+24)` → `libndk_translation.so (berberis::RunKernelSyscall+81)` → `/memfd:exec`），
+  guest 侧 2 帧（`arm64/libc.so (abort+152)` + `base.apk (offset 0x110000)` = libomp 的 LOAD1）。
+  原因：libomp 的致命信息**只写 stderr** 再直接 `abort()`，不走 `__android_log_assert`。
+- 所以必须在 app 里**把 fd 1/2 重定向到文件**才能拿到那句话（探针用
+  `android.system.Os.dup2(fd, 1/2)`）。tombstone 只给「谁 abort 了」，不给「为什么」。
+- `ro.debuggable=0` → 没有 root、`/data/tombstones` 读不到；改用
+  `adb shell dumpsys dropbox --print SYSTEM_TOMBSTONE`（shell 有 DUMP 权限；但**没有 memory map 段**）。
+- 本机没有 `python`/`readelf`/`zip`：APK 用 `jar --no-compress --update` 拼、用自写
+  `temp/ziplist.js` 解析 zip 中央目录拿精确 payload 偏移，ELF 用 NDK 的
+  `llvm-readelf/llvm-nm/llvm-addr2line`。
+- **无侵入复现**：`temp/probe/`（探针 APK 工程，未跟踪）能单独验证「某个 .so 能不能在这台机器上 dlopen」。
+  注意三点：① NDK 编的 .so 必须 `-Wl,-z,max-page-size=16384`（否则 16KB 页设备 dlopen 报
+  "program alignment (4096) cannot be smaller than system page size (16384)"）；
+  ② 改完 Java 必须 `cp dex/classes.dex .` 再拼 APK（否则打进旧 dex，看起来像“改动无效”）；
+  ③ 换 intent extra 重跑前必须 `am force-stop`（否则 intent 送到已运行实例，`onCreate` 不重跑）。
+- 另一条死路（别重走）：arm64 可执行文件（`aarch64-linux-android21-clang -pie`）在这台机器上跑不起来，
+  报 `missing DT_SYMTAB`；`app_process` 起的 shell 进程也没启用 native bridge，
+  load arm64 库直接 `is for EM_AARCH64 (183) instead of EM_X86_64 (62)`。测 arm64 库必须用真 app 进程。
+
+**修复（用户选的“app 侧最小改动”方案，已落地并端到端验证）**：
+
+| 文件 | 改动 |
+|---|---|
+| `bridge/engine_api/src/android/omp_env_compat.c`（新增，未跟 CMake，只给 NDK clang 直接编） | 构造 `__attribute__((constructor(101)))` + `JNI_OnLoad` 里 `setenv("KMP_AFFINITY","disabled",1)`；已有值则尊重不覆盖；日志 tag `KrKr2Next/omp` |
+| `scripts/build_engine_android.sh` | 新增一步「编译 libomp_env_compat.so」→ `app/app/src/main/jniLibs/arm64-v8a/libomp_env_compat.so`（`aarch64-linux-android24-clang -shared -fPIC -O2 -Wl,-z,max-page-size=16384 ... -llog`） |
+| `app/app/src/main/kotlin/org/dpdns/clevebitr/core/NativeEngine.kt` | `init` 里：`Build.SUPPORTED_ABIS.firstOrNull() != "arm64-v8a"` 时先 `loadLibrary("omp_env_compat")`，再 `loadLibrary("engine_api")` |
+
+为什么必须在 arm64 原生代码里 `setenv`：**Java 侧 `android.system.Os.setenv` 无效**（实测
+`Os.setenv(KMP_AFFINITY, disabled) ok` 之后 `guest getenv` 仍读到 `(null)`，engine 照崩）——
+Java/ART 是宿主 x86_64 libc 的 `setenv`，改的是宿主 `environ`，而 libomp 是 arm64 guest 库。
+为什么是 `disabled` 而不是 `none`：`verbose,none` 仍会建拓扑、仍会断言，必须**完全跳过** affinity 初始化。
+
+**验证记录（2026-09-25 08:45，emulator-5554 实测）**：
+
+```
+I KrKr2Next/omp:    omp_env_compat loaded: KMP_AFFINITY="disabled" (set by omp_env_compat)
+I KrKr2Next/Engine: omp_env_compat loaded (translated env: x86_64, arm64-v8a)
+I KrKr2Next/App:    libengine_api.so loaded, Application Context handed over   ← 修复前死在这里
+I KrKr2Next/App:    engine log -> /storage/emulated/0/Android/media/org.dpdns.clevebitr/logs/engine.log (rc=0)
+I KrKr2Next/Main:   onCreate (recovery=PreviousExit(kind=CLEAN, detail=null)) / onResume
+```
+
+进程存活、无 SIGABRT。**没验证过的**：真机 arm64（按主 ABI 判定会跳过垫片，逻辑上行为不变，但没实机跑过）；
+把 AVD 改成 `-cores 2`（伪 cpuinfo 恒为 2，理论上也能避开断言）也没试。
+
+**顺手记一条环境坑**：WSL 里 Gradle 用的是 `~/.android/debug.keystore`，与 Windows/AS 的那把**不是同一个 key**，
+所以 `adb install -r` 装 WSL 产物的 APK 会 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`。
+要覆盖 AS 装上去的包，就在 Windows 侧构建：
+`cd app && JAVA_HOME="/c/Program Files/Eclipse Adoptium/jdk-21.0.12.101-hotspot" ./gradlew.bat :app:assembleDebug`。
 
 ---
 

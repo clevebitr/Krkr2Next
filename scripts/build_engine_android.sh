@@ -149,8 +149,10 @@ log_step "构建 C++ 引擎 (libengine_api.so)"
 RENDER_PROBE_OPT=""
 if [[ -n "${ENABLE_RENDER_PROBE+x}" ]]; then
     RENDER_PROBE_OPT="-DENABLE_RENDER_PROBE=OFF"
-    case "$ENABLE_RENDER_PROBE" in
-        true|on|1) RENDER_PROBE_OPT="-DENABLE_RENDER_PROBE=ON" ;;
+    # 大小写不敏感（${VAR,,} 转小写）：以前只匹配小写的 on|true|1，传 `ON` 会静默退回
+    # OFF，而日志里还照原样打印 probe='ON'，很容易误判成"探针已开"。
+    case "${ENABLE_RENDER_PROBE,,}" in
+        true|on|yes|1) RENDER_PROBE_OPT="-DENABLE_RENDER_PROBE=ON" ;;
     esac
 fi
 LOG_LEVEL_OPT=""
@@ -190,7 +192,7 @@ elif [[ -n "${RENDER_PROBE_OPT}${LOG_LEVEL_OPT}" ]]; then
 fi
 
 if [[ "$NEED_CFG" == 1 ]]; then
-    log_info "CMake configure... (probe='${ENABLE_RENDER_PROBE:-<default>}', log_level='${KRKR_LOG_LEVEL:-<auto>}')"
+    log_info "CMake configure... (probe='${ENABLE_RENDER_PROBE:-<default>}' -> ${RENDER_PROBE_OPT:-<default>}, log_level='${KRKR_LOG_LEVEL:-<auto>}')"
     log_info "  ↑ 这一步会触发 vcpkg 安装全部 manifest 依赖，首次执行很慢（分钟级）"
     cmake --preset "$CMAKE_CONFIG_PRESET" ${RENDER_PROBE_OPT} ${LOG_LEVEL_OPT}
 else
@@ -292,6 +294,40 @@ copy_ndk_runtime_deps() {
 }
 
 copy_ndk_runtime_deps "$ENGINE_LIB" "$JNI_LIBS_DIR"
+
+# ============================================================
+# 编译 OpenMP 兼容垫片（只给 Berberis 翻译环境用）
+# ============================================================
+# x86_64 模拟器上翻译层给 arm64 guest 的 /proc/cpuinfo 只有 2 个 processor，与
+# 真实可用 CPU 数不一致，libomp 18 的拓扑断言会 abort → 引擎静态构造期间就
+# SIGABRT（Kotlin 侧表现为“启动即崩”）。垫片做的事就是在 libomp 初始化之前
+# setenv("KMP_AFFINITY", "disabled")——注意必须是 arm64 原生代码，Java 的
+# android.system.Os.setenv 改的是宿主 x86_64 的 environ，实测无效。
+# 真机 arm64 不加载它（NativeEngine 里按主 ABI 判定）。详见 HANDOFF.md §1.14。
+log_step "编译 libomp_env_compat.so（翻译环境 libomp 兜底）"
+
+OMP_COMPAT_SRC="$PROJECT_ROOT/bridge/engine_api/src/android/omp_env_compat.c"
+OMP_COMPAT_LIB="$JNI_LIBS_DIR/libomp_env_compat.so"
+if [[ ! -f "$OMP_COMPAT_SRC" ]]; then
+    log_error "缺少源文件：$OMP_COMPAT_SRC"
+    exit 1
+fi
+
+CLANG_WRAPPER="$(ls -1 "$NDK_ROOT"/toolchains/llvm/prebuilt/*/bin/aarch64-linux-android24-clang 2>/dev/null | head -n1 || true)"
+# API 24 = app 的 minSdk（与 CMakePresets.json 的 ANDROID_PLATFORM=android-24 一致）。
+# setenv/getenv 在 bionic 上早于 24 就有，这里只是跟工程保持一致。
+if [[ -z "$CLANG_WRAPPER" ]]; then
+    # 不硬失败：引擎本身仍可构建，只是翻译环境会继续崩（真机不受影响）。
+    log_warn "未找到 NDK clang 包装器（aarch64-linux-android24-clang），跳过 libomp_env_compat.so"
+else
+    # -Wl,-z,max-page-size=16384：16KB 页设备要求。不加的话 dlopen 直接失败：
+    #   program alignment (4096) cannot be smaller than system page size (16384)
+    "$CLANG_WRAPPER" -shared -fPIC -O2 \
+        -Wl,-z,max-page-size=16384 \
+        -Wl,-soname,libomp_env_compat.so \
+        -o "$OMP_COMPAT_LIB" "$OMP_COMPAT_SRC" -llog
+    log_info "已编译 -> $OMP_COMPAT_LIB"
+fi
 
 log_step "引擎构建完成"
 log_info "产物：$JNI_LIBS_DIR/libengine_api.so"

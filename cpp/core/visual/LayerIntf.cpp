@@ -2492,6 +2492,84 @@ static void TVPProbeExchangeRouteDenied(const tTJSNI_BaseLayer *target,
 }
 #endif
 
+// 页对判定：名字是 表-背景 / 裏-背景 的层就是 KAG 的背景页。
+static bool TVPIsKagBackgroundPage(const tTJSNI_BaseLayer *layer) {
+    if(!layer)
+        return false;
+    return layer->GetName() == TJS_W("表-背景") ||
+           layer->GetName() == TJS_W("裏-背景");
+}
+
+// 层名归一化：去掉 KAG 转场层前缀 `trans_`（与原实现一致）。
+static std::string TVPNormalizeKagLayerName(const ttstr &name) {
+    std::string value = name.AsStdString();
+    constexpr const char *prefix = "trans_";
+    if(value.rfind(prefix, 0) == 0)
+        value.erase(0, 6);
+    return value;
+}
+
+// 页内段名归一化：在层名归一化之外，把开头的 表/裏 视作同一个字。KAG 的页对两边结构
+// 对称，只差这一个前缀字（表メッセージレイヤ2 / 裏メッセージレイヤ2），镜像查找要忽略它。
+static std::string TVPNormalizeKagPageSegmentName(const ttstr &name) {
+    std::string value = TVPNormalizeKagLayerName(name);
+    // “表” 的 UTF-8 是 E8 A1 A8，“裏” 是 E8 A3 8F。用字节字面量，避开宽窄字符转换。
+    constexpr const char *kOmote = "\xE8\xA1\xA8";
+    constexpr const char *kUra = "\xE8\xA3\x8F";
+    if(value.rfind(kOmote, 0) == 0)
+        value.replace(0, 3, kUra);
+    return value;
+}
+
+// 在可见页子树里找“镜像容器”：把 target 到 hidden_page 之间的祖先链（由内向外）按页内
+// 段名在可见页子树里逐级匹配，返回匹配得最深的那层容器。
+//
+// 为什么需要：千恋万花 SD 的目标嵌在 `裏-背景 > 裏メッセージレイヤ2 > CG View Layer >
+// target`，而可见页里往往只有同名容器、没有同名同尺寸的叶子层；这时把整层挂到页根会让
+// 游戏对那个容器的显示/隐藏失效（游戏后续 hide 容器而层还在显示）。搬进镜像容器最贴近
+// 游戏自己的结构。
+static tTJSNI_BaseLayer *TVPFindMirroredKagContainer(
+    tTJSNI_BaseLayer *visible_page,
+    tTJSNI_BaseLayer *target,
+    tTJSNI_BaseLayer *hidden_page) {
+    if(!visible_page || !target || !hidden_page)
+        return nullptr;
+    std::vector<tTJSNI_BaseLayer *> chain;
+    for(auto *p = target->GetParent(); p && p != hidden_page; p = p->GetParent())
+        chain.push_back(p);
+    if(chain.empty())
+        return nullptr; // 页的直接子层：调用方的“搬到页”路径处理
+
+    tTJSNI_BaseLayer *found = nullptr;
+    for(auto *want : chain) {
+        const std::string want_name =
+            TVPNormalizeKagPageSegmentName(want->GetName());
+        if(want_name.empty())
+            continue;
+        tTJSNI_BaseLayer *hit = nullptr;
+        std::vector<tTJSNI_BaseLayer *> pending{visible_page};
+        while(!hit && !pending.empty()) {
+            auto *cur = pending.back();
+            pending.pop_back();
+            for(tjs_uint i = 0; i < cur->GetCount(); ++i) {
+                auto *cand = cur->GetChildren(static_cast<tjs_int>(i));
+                if(!cand || cand == target)
+                    continue;
+                if(TVPNormalizeKagPageSegmentName(cand->GetName()) == want_name) {
+                    hit = cand;
+                    break;
+                }
+                if(cand->GetCount() > 0)
+                    pending.push_back(cand);
+            }
+        }
+        if(!hit)
+            break;
+        found = hit;
+    }
+    return found;
+}
+
 static tTJSNI_BaseLayer *
 TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
                                        tTJSNI_BaseLayer *source) {
@@ -2506,9 +2584,23 @@ TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
         return nullptr;
     }
 
-    auto *hidden_page = target->GetParent();
-    auto *page_root = hidden_page ? hidden_page->GetParent() : nullptr;
-    if(!hidden_page || !page_root || source->GetParent() != page_root) {
+    // 找「隐藏页」：沿祖先链往上找第一个 表-背景/裏-背景 页。**不要**假设 target 的
+    // 直接父层就是页：真机案例（千恋万花 SD）是
+    // `裏-背景 > 裏メッセージレイヤ2 > CG View Layer > CG View LayerAffineLayer`，
+    // 直接父层是 `CG View Layer`，旧实现拿它当页 ⇒ root 取到 `裏メッセージレイヤ2`，
+    // 判据永远失败（真机日志 reason=no-page-root）。
+    // 同理也不再要求 source（隐藏无名工作层）挂在页的同一级父下：它可能挂在
+    // `トップレイヤ` 下（千恋万花就是），那个判据只是参考实现的形态巧合。
+    tTJSNI_BaseLayer *hidden_page = nullptr;
+    tTJSNI_BaseLayer *page_root = nullptr;
+    for(auto *p = target->GetParent(); p; p = p->GetParent()) {
+        if(TVPIsKagBackgroundPage(p)) {
+            hidden_page = p;
+            page_root = p->GetParent();
+            break;
+        }
+    }
+    if(!hidden_page || !page_root) {
 #if defined(KRKR_RENDER_PROBE)
         TVPProbeExchangeRouteDenied(target, "no-page-root");
 #endif
@@ -2562,44 +2654,63 @@ TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
     }
 
     const auto normalized = [](const ttstr &name) {
-        std::string value = name.AsStdString();
-        constexpr const char *prefix = "trans_";
-        if(value.rfind(prefix, 0) == 0)
-            value.erase(0, 6);
-        return value;
+        return TVPNormalizeKagLayerName(name);
     };
     const auto target_name = normalized(target->GetName());
-    for(tjs_uint i = 0; i < visible_page->GetCount(); ++i) {
-        auto *cand = visible_page->GetChildren(static_cast<tjs_int>(i));
-        if(!cand || cand == target || !cand->GetVisible() ||
-           !cand->GetParentVisible() ||
-           normalized(cand->GetName()) != target_name ||
-           cand->GetWidth() != target->GetWidth() ||
-           cand->GetHeight() != target->GetHeight())
-            continue;
+    // 在可见页的**整棵子树**里找同名同尺寸的层：目标可能嵌在页下多层子页里
+    // （千恋万花 SD 就是三层深），只查直接子层会漏。
+    tTJSNI_BaseLayer *matched = nullptr;
+    {
+        std::vector<tTJSNI_BaseLayer *> pending{visible_page};
+        while(!matched && !pending.empty()) {
+            auto *cur = pending.back();
+            pending.pop_back();
+            for(tjs_uint i = 0; i < cur->GetCount(); ++i) {
+                auto *cand = cur->GetChildren(static_cast<tjs_int>(i));
+                if(!cand || cand == target)
+                    continue;
+                if(cand->GetVisible() && cand->GetParentVisible() &&
+                   normalized(cand->GetName()) == target_name &&
+                   cand->GetWidth() == target->GetWidth() &&
+                   cand->GetHeight() == target->GetHeight()) {
+                    matched = cand;
+                    break;
+                }
+                if(cand->GetCount() > 0)
+                    pending.push_back(cand);
+            }
+        }
+    }
+    if(matched) {
         // 可见页里的 `trans_*` 子是即将进行的 crossfade 的目标层。转场开始前把隐藏页的
         // 运动帧改投进去，会让新帧多显示一帧（new → fade → new）；转场进行中则由下面的
         // DebugIsInTransition() 判据兜住。参考实现同样在这里让路。
-        const std::string candidate_name = cand->GetName().AsStdString();
+        const std::string candidate_name = matched->GetName().AsStdString();
         const bool candidate_is_transition_layer =
             candidate_name.rfind("trans_", 0) == 0;
         if(known_stale && candidate_is_transition_layer &&
            !hidden_page->DebugIsInTransition() &&
            !visible_page->DebugIsInTransition())
             return nullptr;
-        return cand;
+        return matched;
     }
 
     // 可见页里已经有内容层（尺寸压得住目标层）或者任一页正在转场：不能搬——搬了会
     // 破坏转场要拍的 old/new 页顺序。
+    //
+    // 这条检查只对**页的直接子层**有意义（判据就是“可见页的直接子层里已经有内容层”）；
+    // 嵌在子页里的目标（千恋万花 SD：页 > 裏メッセージレイヤ2 > CG View Layer > target）
+    // 不该被它拦下——可见页的直接子层是消息层，尺寸必然命中，于是永远 page-busy。
     bool visible_page_has_content_layer = false;
-    for(tjs_uint i = 0; i < visible_page->GetCount(); ++i) {
-        auto *cand = visible_page->GetChildren(static_cast<tjs_int>(i));
-        if(cand && cand->GetVisible() && cand->GetParentVisible() &&
-           cand->GetWidth() >= target->GetWidth() / 2 &&
-           cand->GetHeight() >= target->GetHeight() / 2) {
-            visible_page_has_content_layer = true;
-            break;
+    if(target->GetParent() == hidden_page) {
+        for(tjs_uint i = 0; i < visible_page->GetCount(); ++i) {
+            auto *cand = visible_page->GetChildren(static_cast<tjs_int>(i));
+            if(cand && cand->GetVisible() && cand->GetParentVisible() &&
+               cand->GetWidth() >= target->GetWidth() / 2 &&
+               cand->GetHeight() >= target->GetHeight() / 2) {
+                visible_page_has_content_layer = true;
+                break;
+            }
         }
     }
     if(visible_page_has_content_layer ||
@@ -2636,21 +2747,31 @@ TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
     }
 
     const auto target_order = target->GetOrderIndex();
+    // 嵌套目标优先搬进可见页里的**镜像容器**（页对两边结构对称），而不是整层挂到页根：
+    // 后者会让游戏对该容器的显示/隐藏失效。
+    tTJSNI_BaseLayer *reparent_to =
+        TVPFindMirroredKagContainer(visible_page, target, hidden_page);
+    const bool mirrored = reparent_to != nullptr;
+    if(!reparent_to)
+        reparent_to = visible_page;
     {
         std::lock_guard<std::mutex> lock(TVPExchangedKagPageMutex);
         TVPHiddenKagAssignmentStreaks.erase(target);
         TVPMotionSwapAssignmentTargets.insert(target);
     }
-    target->SetParent(visible_page);
-    if(visible_page->GetCount() > 0) {
+    target->SetParent(reparent_to);
+    if(reparent_to->GetCount() > 0) {
         target->SetOrderIndex(std::min<tjs_int>(
             static_cast<tjs_int>(target_order),
-            static_cast<tjs_int>(visible_page->GetCount() - 1)));
+            static_cast<tjs_int>(reparent_to->GetCount() - 1)));
     }
-    spdlog::info("LayerAssign route=reparent-hidden-page target='{}' "
-                 "page='{}' order={}",
+    spdlog::info("LayerAssign route={} target='{}' page='{}' parent='{}' "
+                 "order={}",
+                 mirrored ? "reparent-mirrored-page"
+                          : "reparent-hidden-page",
                  target->GetName().AsStdString(),
                  visible_page->GetName().AsStdString(),
+                 reparent_to->GetName().AsStdString(),
                  target->GetOrderIndex());
     return target;
 }
@@ -2727,6 +2848,18 @@ void tTJSNI_BaseLayer::AssignImages(tTJSNI_BaseLayer *src) {
                 sp ? sp->GetName().AsStdString() : std::string("<none>"),
                 (src != this && TVPIsAffineSourceMotionScratch(this, src)) ? 1
                                                                           : 0);
+            // 祖先链 dump（每层名字 + Visible）：定位 parentVisible=0 到底是哪一层隐藏。
+            {
+                std::string chain;
+                for(auto *p = GetParent(); p; p = p->GetParent()) {
+                    const std::string n = p->GetName().AsStdString();
+                    chain += " > ";
+                    chain += n.empty() ? std::string("<unnamed>") : n;
+                    chain += p->GetVisible() ? "(vis=1)" : "(vis=0)";
+                }
+                spdlog::info("probe: AssignImages chain target='{}' :{}",
+                             GetName().AsStdString(), chain);
+            }
         }
     }
 
@@ -2780,32 +2913,42 @@ void tTJSNI_BaseLayer::AssignImages(tTJSNI_BaseLayer *src) {
 
         // D3DEmote/SD 交付：源是隐藏无名的工作层（scratch），每帧会被清空重画。
         // Assign() 让目标层与它**共享同一张纹理**，下一帧重写 scratch 就把刚交付的
-        // 画面抹掉（真机：SD 显示一两秒后消失 / 只剩背景 UI / 残留矩形）。参考实现
-        // 对 KAG 的 syslay scratch 用 Independ() 断开别名；这里对「可见有名的目标 ←
-        // 隐藏无名的工作层」这一同类交付做同样处理。Independ() 做 GPU 侧拷贝，不会
-        // 丢像素（IndependNoCopy 会）。
+        // 画面抹掉（真机：SD 显示一两秒后消失 / 只剩背景 UI / 残留矩形）。
+        // 下面这条分支专门处理「可见有名的目标 ← 隐藏无名的工作层」且**已经产生别名**
+        // 的交付（千恋万花 SD 走的就是它）。
         if(src != this && src->MainImage && MainImage &&
            src->GetName().IsEmpty() && !src->GetVisible() && GetVisible() &&
            !GetName().IsEmpty() &&
            MainImage->GetTexture() == src->MainImage->GetTexture()) {
-            MainImage->Independ();
-            main_changed = true;
-            // 按目标名去重（封顶 8 个名字）：上一版按次数封顶 12，启动期就被 ev
-            // 用光，看不到 SD 目标。TEMP DIAGNOSTIC。
-            static std::mutex s_detachMutex;
-            static std::set<std::string> s_detachSeen;
-            bool logDetach = false;
+            // 交付已经产生别名（目标层与 scratch 共享同一张纹理）：改用**交换语义**——
+            // 目标层拿走已完成的帧，把自己的旧纹理还给 scratch 当下一次的渲染缓冲区。
+            //
+            // 这里原来是 `MainImage->Independ()`（GPU 侧拷贝）。拷贝本身不丢像素，但
+            // 千恋万花 SD 仍不显示：它的交付对是 target='CG View LayerAffineLayer'
+            // ← source（隐藏无名，挂在 `トップレイヤ` 下），**不满足**
+            // TVPIsAffineSourceMotionScratch 要求的「源父层 = AffineSource情報プール用」，
+            // 所以拿不到上面的交换交付，只能落到这条兜底上。交换语义与参考实现一致，
+            // 不产生额外拷贝，也不需要那个池父层判据。
             {
-                std::lock_guard<std::mutex> lock(s_detachMutex);
-                if(s_detachSeen.size() < 8 &&
-                   s_detachSeen.insert(GetName().AsStdString()).second)
-                    logDetach = true;
+                // 按目标名去重（封顶 8 个名字）：确认哪些目标走了交换交付。
+                static std::mutex s_swapMutex;
+                static std::set<std::string> s_swapSeen;
+                bool logSwap = false;
+                {
+                    std::lock_guard<std::mutex> lock(s_swapMutex);
+                    if(s_swapSeen.size() < 8 &&
+                       s_swapSeen.insert(GetName().AsStdString()).second)
+                        logSwap = true;
+                }
+                if(logSwap)
+                    spdlog::info(
+                        "probe: AssignImages swap(alias) target='{}' {}x{} "
+                        "parentVisible={}",
+                        GetName().AsStdString(), MainImage->GetWidth(),
+                        MainImage->GetHeight(), GetParentVisible() ? 1 : 0);
             }
-            if(logDetach)
-                spdlog::info("probe: AssignImages detach(Independ) target='{}' {}x{} "
-                             "parentVisible={}",
-                             GetName().AsStdString(), MainImage->GetWidth(),
-                             MainImage->GetHeight(), GetParentVisible() ? 1 : 0);
+            AssignMotionImages(src);
+            return;
         } else if(src != this && src->MainImage && MainImage &&
                   src->GetName().IsEmpty() && !src->GetVisible() &&
                   GetVisible() && !GetName().IsEmpty()) {

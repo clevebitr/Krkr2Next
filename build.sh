@@ -76,12 +76,31 @@ else
     GRADLE_TASK="assembleDebug"
 fi
 
+# ---- WSL 侧 SDK 兜底 --------------------------------------------------------
+LOCAL_PROPS="$APP_DIR/local.properties"
+if grep -qi microsoft /proc/version 2>/dev/null && grep -qE '^sdk\.dir=[A-Za-z]:' "$LOCAL_PROPS" 2>/dev/null; then
+    WSL_SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
+    cp -f "$LOCAL_PROPS" "$LOCAL_PROPS.wslbak"
+    printf 'sdk.dir=%s\n' "$WSL_SDK" > "$LOCAL_PROPS"
+    trap 'mv -f "$LOCAL_PROPS.wslbak" "$LOCAL_PROPS"' EXIT
+    echo "[wsl] local.properties 的 sdk.dir 临时指向 $WSL_SDK（退出时还原）"
+fi
+
+# ---- WSL 侧构建目录 --------------------------------------------------------
+GRADLE_ARGS=""
+if grep -qi microsoft /proc/version 2>/dev/null; then
+    WSL_GRADLE_BASE="$HOME/krkr2next-build/gradle"
+    mkdir -p "$WSL_GRADLE_BASE"
+    GRADLE_ARGS="--project-cache-dir=$WSL_GRADLE_BASE/dot-gradle -Pkotlin.project.persistent.dir=$WSL_GRADLE_BASE/dot-kotlin"
+fi
+
 echo ""
 echo "========================================"
 echo "  构建 APK：$GRADLE_TASK"
 echo "========================================"
-(cd "$APP_DIR" && sh ./gradlew ":app:$GRADLE_TASK")
+(cd "$APP_DIR" && sh ./gradlew $GRADLE_ARGS ":app:$GRADLE_TASK")
 
 echo ""
 echo "APK 产物："
-find "$APP_DIR/app/build/outputs/apk" -name '*.apk' 2>/dev/null || true
+find "$APP_DIR/app/build/outputs/apk" "$HOME/krkr2next-build/gradle/app-build/outputs/apk" \
+     -name '*.apk' 2>/dev/null || true

@@ -43,17 +43,20 @@ import org.dpdns.clevebitr.core.KeyPadProfile
 import org.dpdns.clevebitr.core.VkCodes
 
 /**
- * 自定义按键浮层的属性编辑器。全局默认、每游戏覆盖、模板应用共用同一个组件——
- * 三处的取值范围、颜色表、键位表必须完全一致。
+ * 自定义按键浮层的属性编辑器。
  *
- * 编辑器只改 [KeyPadProfile] 数据，**不自己落盘**：落盘由调用方决定（全局写
- * `AppPrefs`，每游戏写 `krkr2next.json`）。这样"编辑中"与"已保存"不会互相打架。
+ * 行说明走问号 → snackbar；拿不到 snackbar 宿主时（游戏内浮层的属性面板）退回行内 subtitle。
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun KeyPadConfigEditor(
     profile: KeyPadProfile,
     onProfileChange: (KeyPadProfile) -> Unit,
+    /**
+     * 行说明的落点。设置页传自己的 controller；[KeyPadOverlay] 的 ModalBottomSheet 里
+     * 没有 snackbar 宿主，传 null，那一行退回行内 subtitle。
+     */
+    snackbar: SnackbarController? = null,
     modifier: Modifier = Modifier,
     templates: Map<String, KeyPadProfile> = emptyMap(),
     onSaveTemplate: ((String, KeyPadProfile) -> Unit)? = null,
@@ -74,12 +77,14 @@ fun KeyPadConfigEditor(
     val effectiveId = selectedId?.takeIf { id -> profile.buttons.any { it.id == id } } ?: fallbackId
 
     Column(modifier = modifier.fillMaxWidth()) {
+        val overlayHelp = "在游戏画面上叠一组按钮，点它等于按键盘上的对应键。" +
+            "按钮以外的触摸照常传给游戏。"
         SwitchRow(
             title = "显示自定义按键浮层",
-            subtitle = "在游戏画面上叠一组按钮，点它等于按键盘上的对应键。" +
-                "按钮以外的触摸照常传给游戏。",
+            subtitle = if (snackbar == null) overlayHelp else null,
             checked = profile.enabled,
             onCheckedChange = { onProfileChange(profile.copy(enabled = it)) },
+            onHelpClick = snackbar?.let { controller -> { controller.showHelp(overlayHelp) } },
         )
 
         if (profile.buttons.isEmpty()) {
@@ -124,6 +129,7 @@ fun KeyPadConfigEditor(
             ButtonPropertiesEditor(
                 button = current,
                 onButtonChange = { onProfileChange(profile.withButton(it)) },
+                snackbar = snackbar,
             )
         }
 
@@ -143,6 +149,7 @@ fun KeyPadConfigEditor(
         if (templates.isNotEmpty()) {
             TemplateList(
                 templates = templates,
+                snackbar = snackbar,
                 onApply = { name, template ->
                     // 应用模板时重新分配 id：同一个模板套进不同游戏（或同一游戏两次）
                     // 时按钮 id 不能冲突。
@@ -210,13 +217,18 @@ private fun ButtonChips(
 private fun ButtonPropertiesEditor(
     button: KeyButton,
     onButtonChange: (KeyButton) -> Unit,
+    snackbar: SnackbarController? = null,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text("按键", style = MaterialTheme.typography.titleSmall)
-        Text(
-            text = "对应键盘上的哪个键（Windows VK 码，游戏脚本判断的就是它）。",
-            style = MaterialTheme.typography.bodySmall,
+        val keyHelp = "对应键盘上的哪个键（Windows VK 码，游戏脚本判断的就是它）。"
+        RowTitleWithHelp(
+            title = "按键",
+            onHelpClick = snackbar?.let { controller -> { controller.showHelp(keyHelp) } },
+            style = MaterialTheme.typography.titleSmall,
         )
+        if (snackbar == null) {
+            Text(text = keyHelp, style = MaterialTheme.typography.bodySmall)
+        }
         FlowRow(
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -309,11 +321,16 @@ private fun ButtonPropertiesEditor(
             onChange = { onButtonChange(button.copy(strokeWidthDp = it)) },
         )
 
-        Text(
-            text = "位置与大小（也可在游戏内编辑态直接拖拽/缩放）",
-            style = MaterialTheme.typography.titleSmall,
+        val sizeHelp = "也可在游戏内编辑态直接拖拽/缩放。"
+        RowTitleWithHelp(
+            title = "位置与大小",
+            onHelpClick = snackbar?.let { controller -> { controller.showHelp(sizeHelp) } },
             modifier = Modifier.padding(top = 8.dp),
+            style = MaterialTheme.typography.titleSmall,
         )
+        if (snackbar == null) {
+            Text(text = sizeHelp, style = MaterialTheme.typography.bodySmall)
+        }
         LabeledSlider(
             title = "横向位置",
             valueText = pct(button.x),
@@ -404,13 +421,17 @@ private fun TemplateList(
     templates: Map<String, KeyPadProfile>,
     onApply: (String, KeyPadProfile) -> Unit,
     onDelete: ((String) -> Unit)?,
+    snackbar: SnackbarController? = null,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-        Text("模板", style = MaterialTheme.typography.bodyLarge)
-        Text(
-            text = "把当前布局存成模板，别的游戏可以一键套用（按钮 id 会重新分配）。",
-            style = MaterialTheme.typography.bodySmall,
+        val templateHelp = "把当前布局存成模板，别的游戏可以一键套用（按钮 id 会重新分配）。"
+        RowTitleWithHelp(
+            title = "模板",
+            onHelpClick = snackbar?.let { controller -> { controller.showHelp(templateHelp) } },
         )
+        if (snackbar == null) {
+            Text(text = templateHelp, style = MaterialTheme.typography.bodySmall)
+        }
         templates.forEach { (name, template) ->
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),

@@ -285,6 +285,12 @@ class MainActivity : ComponentActivity() {
                                 startupState = startupState,
                                 statusText = statusText,
                                 overlayConfig = sessionOverlay,
+                                onOverlayEnabledChange = { enabled ->
+                                    // 悬浮菜单的快捷开关**只改本局**：配置文件是唯一事实来源，
+                                    // 不在这里落盘，否则会把这个游戏静默变成「独立配置」。
+                                    sessionOverlay = sessionOverlay.copy(enabled = enabled)
+                                    AppLog.i(TAG, "性能叠加层快捷开关：enabled=$enabled（仅本局）")
+                                },
                                 autoShowLogs = sessionAutoLogOnLaunch,
                                 keypadConfig = sessionKeypad,
                                 keypadEditing = keypadEditing,
@@ -294,6 +300,13 @@ class MainActivity : ComponentActivity() {
                                     // 退出编辑态才落盘：拖拽/缩放是每帧改数据的，
                                     // 不能每帧写一次 krkr2next.json。
                                     if (!editing) persistSessionKeypad()
+                                },
+                                onKeypadEnabledChange = { enabled ->
+                                    // 同样只改本局。关掉时顺带退出编辑态：编辑态下浮层
+                                    // 不受 enabled 约束（KeyPadOverlay 仍会渲染）。
+                                    sessionKeypad = sessionKeypad.copy(enabled = enabled)
+                                    if (!enabled) keypadEditing = false
+                                    AppLog.i(TAG, "按键浮层快捷开关：enabled=$enabled（仅本局）")
                                 },
                                 touchpadMode = sessionTouchpad,
                                 touchpadSensitivity = sessionTouchpadSensitivity,

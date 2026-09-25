@@ -63,31 +63,6 @@ import org.dpdns.clevebitr.core.VkCodes
 
 /**
  * 自定义按键浮层。
- *
- * ## 触摸穿透（本组件最容易踩的坑）
- *
- * 浮层铺满整个游戏画面，但**只有按钮自身的命中区消费事件**：容器本身不挂任何
- * `pointerInput`，所以按钮以外区域的触摸照常落到下面的引擎 SurfaceView。这与
- * `PerformanceOverlay` 的做法一致（它也不消费触摸）。
- *
- * 编辑态是例外：那时 [editing] 为真，`GameScreen` 的 SurfaceView 监听会直接吞掉
- * 全部触摸（否则拖按钮会连带把一次 `POINTER_DOWN` 送进游戏），因此编辑态下整个
- * 浮层才算"接管输入"。
- *
- * ## 编辑态：拖拽/缩放为什么用"绝对位置 + 手势起点"
- *
- * `pointerInput(key)` 的 block 只在 key 变化时重建，因此它捕获的 `button` 是**创建时**
- * 的那一份。若拖拽时按 `当前值 + 增量` 累加，block 不重建就永远拿旧值，每帧只会把
- * 按钮挪到"起点 + 最后一帧增量"——表现出来就是拖不动、缩放弹回。所以这里：
- *  - 手势开始时快照起点（经 [rememberUpdatedState] 取最新值）；
- *  - 拖拽中累加**相对手势起点**的总位移，再按绝对目标写回；
- *  - 回调本身也经 [rememberUpdatedState] 取最新，避免捕获过期闭包。
- *
- * ## 按键注入
- *
- * `onKeyDown` / `onKeyUp` 收到的是 **Windows VK 码**（[KeyButton.vk]），由调用方
- * 转成 `engine_input_event_t` 投递。按下/抬起必须成对：长按由本组件按系统 repeat
- * 的心跳补发 down（引擎侧不生成 repeat，见 `EngineLoop::HandleKeyDown`）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -231,8 +206,7 @@ fun KeyPadOverlay(
 }
 
 /**
- * 编辑态工具条：添加 / 属性 / 删除所选 / 完成。放在画面顶部中间——避开右上角的
- * 性能叠加层与右下角的悬浮菜单。
+ * 编辑态工具条
  */
 @Composable
 private fun KeyPadEditToolbar(
@@ -340,10 +314,7 @@ private data class SnapResult(
 )
 
 /**
- * 自动对齐：把按钮的左/中/右与上/中/下分别吸到最近的候选线上。
- *
- * 候选线 = 画面左/中/右（上/中/下）+ 其它按钮的同名边与中心。阈值按**像素**给，
- * 换算成归一化坐标后再比较，这样不同分辨率下手感一致。
+ * 自动对齐
  */
 private fun snapPosition(
     x: Float,
