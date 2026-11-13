@@ -14,6 +14,8 @@
 #include "PadIntf.h"
 // #include "PadImpl.h"
 
+namespace krkr::utils {
+
 //---------------------------------------------------------------------------
 tjs_error tTJSNI_BasePad::Construct(tjs_int numparams, tTJSVariant **param,
                                     iTJSDispatch2 *dsp) {
@@ -325,3 +327,5 @@ TJS_END_NATIVE_MEMBERS
 //---------------------------------------------------------------------------
 
 tTJSNativeClass *TVPCreateNativeClass_Pad() { return new tTJSNC_Pad(); }
+
+} // namespace krkr::utils

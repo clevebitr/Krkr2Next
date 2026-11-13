@@ -12,6 +12,8 @@
 
 #include "ClipboardIntf.h"
 
+namespace krkr::utils {
+
 //---------------------------------------------------------------------------
 tjs_error tTJSNI_BaseClipboard::Construct(tjs_int numparams,
                                           tTJSVariant **param,
@@ -103,3 +105,5 @@ tTJSNativeClass *TVPCreateNativeClass_Clipboard() {
     return cls;
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::utils

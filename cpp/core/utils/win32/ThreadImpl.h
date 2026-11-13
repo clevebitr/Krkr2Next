@@ -6,8 +6,6 @@
         See details of license at "license.txt"
 */
 //---------------------------------------------------------------------------
-// Thread base class
-//---------------------------------------------------------------------------
 #ifndef ThreadImplH
 #define ThreadImplH
 
@@ -17,66 +15,66 @@
 #include <condition_variable>
 #include <thread>
 
-//---------------------------------------------------------------------------
-// tTVPThread
-//---------------------------------------------------------------------------
-class tTVPThread {
-    bool Terminated;
-    std::thread Handle;
-    // DWORD ThreadId;
-    std::mutex _mutex; // for suspend
-    std::condition_variable _cond;
-    bool Suspended;
-    std::atomic<bool> Finished{ false }; // set when thread function returns
+namespace krkr::utils {
 
-    static void * /*__stdcall*/ StartProc(void *arg);
+    class tTVPThread {
+        bool Terminated;
+        std::thread Handle;
+        // DWORD ThreadId;
+        std::mutex _mutex; // for suspend
+        std::condition_variable _cond;
+        bool Suspended;
+        std::atomic<bool> Finished{ false }; // set when thread function returns
 
-public:
-    tTVPThread(bool suspended);
+        static void * /*__stdcall*/ StartProc(void *arg);
 
-    virtual ~tTVPThread();
+    public:
+        tTVPThread(bool suspended);
 
-    [[nodiscard]] bool GetTerminated() const { return Terminated; }
+        virtual ~tTVPThread();
 
-    void SetTerminated(bool s) { Terminated = s; }
+        [[nodiscard]] bool GetTerminated() const { return Terminated; }
 
-    void Terminate() { Terminated = true; }
+        void SetTerminated(bool s) { Terminated = s; }
 
-protected:
-    virtual void Execute() = 0;
+        void Terminate() { Terminated = true; }
 
-public:
-    void WaitFor();
+    protected:
+        virtual void Execute() = 0;
 
-    tTVPThreadPriority GetPriority();
+    public:
+        void WaitFor();
 
-    void SetPriority(tTVPThreadPriority pri);
+        tTVPThreadPriority GetPriority();
 
-    // void Suspend();
-    void Resume();
+        void SetPriority(tTVPThreadPriority pri);
 
-    // 	HANDLE GetHandle() const { return Handle; } 	/* win32 specific
-    // */ 	DWORD GetThreadId() const { return ThreadId; }  /* win32
-    // specific */
-};
-//---------------------------------------------------------------------------
+        // void Suspend();
+        void Resume();
 
-//---------------------------------------------------------------------------
-// tTVPThreadEvent
-//---------------------------------------------------------------------------
-class tTVPThreadEvent {
-    std::condition_variable Handle;
-    std::mutex Mutex;
+        // 	HANDLE GetHandle() const { return Handle; } 	/* win32 specific
+        // */ 	DWORD GetThreadId() const { return ThreadId; }  /* win32
+        // specific */
+    };
 
-public:
-    void Set();
+    class tTVPThreadEvent {
+        std::condition_variable Handle;
+        std::mutex Mutex;
 
-    void WaitFor(tjs_uint timeout);
-};
-//---------------------------------------------------------------------------
+    public:
+        void Set();
 
-void TVPAddOnThreadExitEvent(const std::function<void()> &ev);
+        void WaitFor(tjs_uint timeout);
+    };
 
-void TVPOnThreadExited();
-//---------------------------------------------------------------------------
+    void TVPAddOnThreadExitEvent(const std::function<void()> &ev);
+
+    void TVPOnThreadExited();
+} // namespace krkr::utils
+
+using krkr::utils::tTVPThread;
+using krkr::utils::tTVPThreadEvent;
+using krkr::utils::TVPAddOnThreadExitEvent;
+using krkr::utils::TVPOnThreadExited;
+
 #endif

@@ -14,6 +14,8 @@
 #include "tjsNative.h"
 #include "tjs.h"
 
+namespace krkr::utils {
+
 //---------------------------------------------------------------------------
 // global definitions
 //---------------------------------------------------------------------------
@@ -78,5 +80,28 @@ protected:
 //---------------------------------------------------------------------------
 extern tTJSNativeClass *TVPCreateNativeClass_Debug();
 //---------------------------------------------------------------------------
+
+} // namespace krkr::utils
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::utils::TVPAutoLogToFileOnError;
+using krkr::utils::TVPAutoClearLogOnError;
+using krkr::utils::TVPLoggingToFile;
+using krkr::utils::TVPSetOnLog;
+using krkr::utils::TVPClearLoggingHandlers;
+using krkr::utils::TVPAddLog;
+using krkr::utils::TVPAddImportantLog;
+using krkr::utils::TVPGetLastLog;
+using krkr::utils::TVPGetTJS2ConsoleOutputGateway;
+using krkr::utils::TVPGetTJS2DumpOutputGateway;
+using krkr::utils::TVPTJS2StartDump;
+using krkr::utils::TVPTJS2EndDump;
+using krkr::utils::TVPOnError;
+using krkr::utils::TVPGetImportantLog;
+using krkr::utils::TVPSetLogLocation;
+using krkr::utils::TVPNativeLogLocation;
+using krkr::utils::TVPStartLogToFile;
+using krkr::utils::tTJSNC_Debug;
+using krkr::utils::TVPCreateNativeClass_Debug;
 
 #endif

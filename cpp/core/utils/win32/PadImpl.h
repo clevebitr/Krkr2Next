@@ -15,6 +15,8 @@
 #include "tjsNative.h"
 #include "PadIntf.h"
 
+namespace krkr::utils {
+
 class TTVPPadForm;
 
 //---------------------------------------------------------------------------
@@ -135,6 +137,10 @@ protected:
 private:
 };
 //---------------------------------------------------------------------------
+
+} // namespace krkr::utils
+
+using krkr::utils::tTJSNI_Pad;
 
 //---------------------------------------------------------------------------
 #endif

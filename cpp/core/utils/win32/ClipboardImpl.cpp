@@ -13,6 +13,8 @@
 #include "Exception.h"
 #include "ClipboardIntf.h"
 
+namespace krkr::utils {
+
 //---------------------------------------------------------------------------
 // clipboard related functions
 //---------------------------------------------------------------------------
@@ -147,3 +149,5 @@ bool TVPClipboardGetText(ttstr &text) {
     return false;
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::utils

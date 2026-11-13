@@ -26,6 +26,7 @@
 #include "Platform.h"
 
 #include <fmt/format.h>
+#include "ThreadIntf.h"
 
 extern bool TVPStartupSuccess;
 

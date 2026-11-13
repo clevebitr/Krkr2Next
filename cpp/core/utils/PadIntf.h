@@ -14,6 +14,8 @@
 
 #include "tjsNative.h"
 
+namespace krkr::utils {
+
 //---------------------------------------------------------------------------
 // tTJSNI_BasePad
 //---------------------------------------------------------------------------
@@ -36,7 +38,11 @@ public:
 // #define TVP_TF_STRIKEOUT 0x08
 //---------------------------------------------------------------------------
 
+} // namespace krkr::utils
+
 #include "PadImpl.h"
+
+namespace krkr::utils {
 
 //---------------------------------------------------------------------------
 // tTJSNC_Pad : TJS Pad Class
@@ -56,4 +62,13 @@ protected:
 //---------------------------------------------------------------------------
 tTJSNativeClass *TVPCreateNativeClass_Pad();
 //---------------------------------------------------------------------------
+
+} // namespace krkr::utils
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::utils::tTJSNI_BasePad;
+// tTJSNI_Pad 由 PadImpl.h 导出（PadIntf.h 会 include 它）
+using krkr::utils::tTJSNC_Pad;
+using krkr::utils::TVPCreateNativeClass_Pad;
+
 #endif

@@ -94,6 +94,7 @@ namespace krkr::utils {
 
 } // namespace krkr::utils
 
+// TODO: 过渡兼容，迁移完成后删除
 using krkr::utils::Trim;
 using krkr::utils::icomp;
 using krkr::utils::equal_char_ignorecase;

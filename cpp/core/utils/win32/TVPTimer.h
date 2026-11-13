@@ -2,6 +2,8 @@
 #ifndef __TVP_TIMER_H__
 #define __TVP_TIMER_H__
 
+namespace krkr::utils {
+
 class TVPTimerEventIntarface {
 public:
     virtual ~TVPTimerEventIntarface() {}
@@ -74,5 +76,11 @@ public:
 
     static void ProgressAllTimer();
 };
+
+} // namespace krkr::utils
+
+using krkr::utils::TVPTimerEventIntarface;
+using krkr::utils::TVPTimerEvent;
+using krkr::utils::TVPTimer;
 
 #endif // __TVP_TIMER_H__

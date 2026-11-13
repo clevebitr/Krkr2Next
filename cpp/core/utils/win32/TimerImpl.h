@@ -13,6 +13,8 @@
 
 #include "TimerIntf.h"
 
+namespace krkr::utils {
+
 //---------------------------------------------------------------------------
 // tTJSNI_Timer : Timer Native Instance
 //---------------------------------------------------------------------------
@@ -65,4 +67,9 @@ private:
     void CancelTrigger();
 };
 //---------------------------------------------------------------------------
+
+} // namespace krkr::utils
+
+using krkr::utils::tTJSNI_Timer;
+
 #endif

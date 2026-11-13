@@ -36,8 +36,7 @@
 #pragma warning(pop)
 #endif
 #include "FontImpl.h"
-
-extern bool TVPEncodeUTF8ToUTF16(ttstr &output, const std::string &source);
+#include "MiscUtility.h"
 
 //---------------------------------------------------------------------------
 

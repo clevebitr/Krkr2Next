@@ -14,6 +14,8 @@
 #include "tjsNative.h"
 #include "EventIntf.h"
 
+namespace krkr::utils {
+
 // the timer has sub-milliseconds precision by fixed-point real.
 #define TVP_SUBMILLI_FRAC_BITS 16
 
@@ -70,7 +72,11 @@ public:
 };
 //---------------------------------------------------------------------------
 
+} // namespace krkr::utils
+
 #include "TimerImpl.h" // must define tTJSNI_Timer class
+
+namespace krkr::utils {
 
 //---------------------------------------------------------------------------
 // tTJSNC_Timer : TJS Timer class
@@ -100,5 +106,13 @@ extern tTJSNativeClass *TVPCreateNativeClass_Timer();
 */
 //---------------------------------------------------------------------------
 
-//---------------------------------------------------------------------------
+} // namespace krkr::utils
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::utils::TVPLimitTimerCapacity;
+using krkr::utils::tTJSNI_BaseTimer;
+// tTJSNI_Timer 由 TimerImpl.h 导出（TimerIntf.h 会 include 它）
+using krkr::utils::tTJSNC_Timer;
+using krkr::utils::TVPCreateNativeClass_Timer;
+
 #endif

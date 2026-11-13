@@ -30,6 +30,8 @@
 #define TVP_LEAST_TIMER_INTERVAL 3
 #define INFINITE 0xFFFFFFFF
 
+namespace krkr::utils {
+
 //---------------------------------------------------------------------------
 // tTVPTimerThread
 //---------------------------------------------------------------------------
@@ -427,3 +429,5 @@ tTJSNativeInstance *tTJSNC_Timer::CreateNativeInstance() {
 //---------------------------------------------------------------------------
 tTJSNativeClass *TVPCreateNativeClass_Timer() { return new tTJSNC_Timer(); }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::utils

@@ -1,6 +1,9 @@
 
 #include "tjsCommHead.h"
 #include "CharacterSet.h"
+#include "MiscUtility.h"
+
+namespace krkr::utils {
 
 //---------------------------------------------------------------------------
 bool TVPEncodeUTF8ToUTF16(ttstr &output, const std::string &source) {
@@ -16,3 +19,5 @@ bool TVPEncodeUTF8ToUTF16(ttstr &output, const std::string &source) {
     }
     return false;
 }
+
+} // namespace krkr::utils

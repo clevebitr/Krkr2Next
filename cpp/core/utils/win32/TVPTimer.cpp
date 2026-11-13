@@ -3,6 +3,8 @@
 #include "TVPTimer.h"
 #include "TickCount.h"
 
+namespace krkr::utils {
+
 struct tTVPTimerImpl {
     tTVPTimerImpl *Prev = nullptr, *Next = nullptr;
     TVPTimer *pTimer = nullptr;
@@ -192,3 +194,5 @@ void TVPTimer::UpdateTimer() {
         impl_->Set();
     }
 }
+
+} // namespace krkr::utils

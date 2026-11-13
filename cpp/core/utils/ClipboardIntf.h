@@ -13,6 +13,8 @@
 
 #include "tjsNative.h"
 
+namespace krkr::utils {
+
 /*[*/
 //---------------------------------------------------------------------------
 // tTVPClipboardFormat
@@ -59,4 +61,17 @@ protected:
 //---------------------------------------------------------------------------
 extern tTJSNativeClass *TVPCreateNativeClass_Clipboard();
 //---------------------------------------------------------------------------
+
+} // namespace krkr::utils
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::utils::tTVPClipboardFormat;
+using krkr::utils::cbfText;
+using krkr::utils::TVPClipboardHasFormat;
+using krkr::utils::TVPClipboardSetText;
+using krkr::utils::TVPClipboardGetText;
+using krkr::utils::tTJSNI_BaseClipboard;
+using krkr::utils::tTJSNC_Clipboard;
+using krkr::utils::TVPCreateNativeClass_Clipboard;
+
 #endif
