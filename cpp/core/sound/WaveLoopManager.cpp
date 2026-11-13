@@ -39,6 +39,8 @@
 #define strncasecmp _strnicmp
 #endif
 
+namespace krkr::sound {
+
 //---------------------------------------------------------------------------
 const int TVPWaveLoopLinkGiveUpCount = 10;
 // This is for preventing infinite loop caused by recursive links.
@@ -1542,3 +1544,5 @@ void tTVPWaveLoopManager::WriteInformation(AnsiString &s) {
 //---------------------------------------------------------------------------
 #endif
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound

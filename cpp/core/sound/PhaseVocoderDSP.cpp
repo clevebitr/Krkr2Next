@@ -46,6 +46,8 @@
 // #include "tvpgl_ia32_intf.h"
 #include "DetectCPU.h"
 
+namespace krkr::sound {
+
 //---------------------------------------------------------------------------
 tRisaPhaseVocoderDSP::tRisaPhaseVocoderDSP(unsigned int framesize,
                                            unsigned int frequency,
@@ -873,3 +875,5 @@ void tRisaPhaseVocoderDSP::ProcessCore_sse(int ch)
 }
 //---------------------------------------------------------------------------
 #endif
+
+} // namespace krkr::sound

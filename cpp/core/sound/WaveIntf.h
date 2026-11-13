@@ -136,7 +136,10 @@ extern tTVPWaveDecoder *TVPCreateWaveDecoder(const ttstr &storagename);
 //---------------------------------------------------------------------------
 // interface for basic filter management
 //---------------------------------------------------------------------------
+namespace krkr::sound {
 class tTVPSampleAndLabelSource;
+}
+using krkr::sound::tTVPSampleAndLabelSource;
 
 class iTVPBasicWaveFilter {
 public:
@@ -156,7 +159,10 @@ public:
 //---------------------------------------------------------------------------
 // tTJSNI_BaseWaveSoundBuffer
 //---------------------------------------------------------------------------
+namespace krkr::sound {
 class tTVPWaveLoopManager;
+}
+using krkr::sound::tTVPWaveLoopManager;
 
 class tTJSNI_BaseWaveSoundBuffer : public tTJSNI_SoundBuffer {
     typedef tTJSNI_SoundBuffer inherited;

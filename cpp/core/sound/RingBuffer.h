@@ -14,6 +14,9 @@
 #define RingBufferH
 
 #include <stddef.h>
+
+namespace krkr::sound {
+
 /*
         リングバッファ, ring buffer, circular buffer, 環状バッファ
 */
@@ -199,5 +202,9 @@ public:
     //!			このメソッドはバッファの書き込み位置を移動しない。
     T &GetLast() { return Buffer[WritePos]; }
 };
+
+} // namespace krkr::sound
+
+using krkr::sound::tRisaRingBuffer;
 
 #endif

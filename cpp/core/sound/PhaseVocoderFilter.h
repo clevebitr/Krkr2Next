@@ -15,7 +15,10 @@
 #include "WaveLoopManager.h"
 #include "WaveIntf.h"
 
+namespace krkr::sound {
 class tRisaPhaseVocoderDSP;
+}
+using krkr::sound::tRisaPhaseVocoderDSP;
 
 //---------------------------------------------------------------------------
 // tTJSNI_PhaseVocoder

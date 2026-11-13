@@ -17,6 +17,11 @@
 #include <vector>
 #include <string>
 #include "WaveSegmentQueue.h"
+#include "tjsUtils.h"
+
+#ifdef TVP_IN_LOOP_TUNER
+#include "WaveReader.h"
+#endif
 
 #define TVP_WL_MAX_FLAGS 16
 
@@ -27,9 +32,11 @@
 
 #define TVP_WL_MAX_ID_LEN 16
 
-#ifdef TVP_IN_LOOP_TUNER
-#include "WaveReader.h"
-#endif
+// 这两个类型仍由 WaveIntf.h 以全局名声明，暂不迁入 sound。
+class tTVPWaveDecoder;
+struct tTVPWaveFormat;
+
+namespace krkr::sound {
 
 //---------------------------------------------------------------------------
 #ifdef TVP_IN_LOOP_TUNER
@@ -71,7 +78,7 @@ public:
 };
 #else
 
-#include "tjsUtils.h"
+// tjsUtils.h 已在文件顶部 include（不能放进 namespace）
 
 #endif
 //---------------------------------------------------------------------------
@@ -158,10 +165,6 @@ bool inline operator<(const tTVPWaveLoopLink &lhs,
 // tTVPSampleAndLabelSource : source interface for sound sample and
 // its label info
 //---------------------------------------------------------------------------
-class tTVPWaveDecoder;
-
-struct tTVPWaveFormat;
-
 class tTVPSampleAndLabelSource {
 public:
     virtual void Decode(void *dest, tjs_uint samples, tjs_uint &written,
@@ -336,4 +339,14 @@ public:
 public:
 };
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound
+
+using krkr::sound::tTVPLabelStringType;
+using krkr::sound::tTVPLabelCharType;
+using krkr::sound::tTVPWaveLoopLinkCondition;
+using krkr::sound::tTVPWaveLoopLink;
+using krkr::sound::tTVPSampleAndLabelSource;
+using krkr::sound::tTVPWaveLoopManager;
+
 #endif

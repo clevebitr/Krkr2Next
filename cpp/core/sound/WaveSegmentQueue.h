@@ -15,6 +15,8 @@
 
 #include <deque>
 
+namespace krkr::sound {
+
 //---------------------------------------------------------------------------
 //! @brief 再生セグメント情報
 //---------------------------------------------------------------------------
@@ -186,5 +188,11 @@ public:
     FilteredPositionToDecodePosition(tjs_int64 pos) const;
 };
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound
+
+using krkr::sound::tTVPWaveSegment;
+using krkr::sound::tTVPWaveLabel;
+using krkr::sound::tTVPWaveSegmentQueue;
 
 #endif

@@ -68,8 +68,6 @@ extern tjs_int TVPDSAttenuateToPan(tjs_int att);
 //---------------------------------------------------------------------------
 // tTJSNI_WaveSoundBuffer : Wave Native Instance
 //---------------------------------------------------------------------------
-class tTVPWaveLoopManager;
-
 class tTVPWaveSoundBufferDecodeThread;
 
 class tTJSNI_WaveSoundBuffer : public tTJSNI_BaseWaveSoundBuffer {

@@ -14,6 +14,8 @@
 
 #include "WaveSegmentQueue.h"
 
+namespace krkr::sound {
+
 //---------------------------------------------------------------------------
 void tTVPWaveSegmentQueue::Clear() {
     Labels.clear();
@@ -229,3 +231,5 @@ tTVPWaveSegmentQueue::FilteredPositionToDecodePosition(tjs_int64 pos) const {
         Segments[Segments.size() - 1].Length;
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound
