@@ -32,11 +32,10 @@
 #define TVP_DEFAULT_AUTOPATH_CACHE_NUM 256
 static const tjs_char *TVP_AUTOPATH_CACHE_MISS_MARKER = TJS_W("\x01");
 
-// 这两个符号被 IoStorageLocal.cpp 以全局 extern 使用，暂留全局。
+namespace krkr::io {
+
 std::vector<ttstr> TVPAutoPathList;
 bool AutoPathTableInit = false;
-
-namespace krkr::io {
 
 //---------------------------------------------------------------------------
 // global variables
