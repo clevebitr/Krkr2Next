@@ -13,14 +13,20 @@
 
 #include "tjsTypes.h"
 
-//---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(tjs_uint64, TVPGetTickCount, ());
+namespace krkr::utils {
+    TJS_EXP_FUNC_DEF(tjs_uint64, TVPGetTickCount, ());
 
-extern tjs_uint32 TVPGetRoughTickCount32();
+    extern tjs_uint32 TVPGetRoughTickCount32();
 
-extern void TVPStartTickCount();
-// this must be called before TVPGetTickCount(), in main thread.
-// this function can be called more than one time.
-//---------------------------------------------------------------------------
+    extern void TVPStartTickCount();
+    // this must be called before TVPGetTickCount(), in main thread.
+    // this function can be called more than one time.
+
+} // namespace krkr::utils
+
+// TODO: 过渡兼容，迁移完成后删除
+using krkr::utils::TVPGetTickCount;
+using krkr::utils::TVPGetRoughTickCount32;
+using krkr::utils::TVPStartTickCount;
 
 #endif

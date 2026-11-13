@@ -1245,13 +1245,16 @@ bool TVPRenameFile(const std::string &from, const std::string &to) {
     return rename(from.c_str(), to.c_str()) == 0;
 }
 
-tjs_uint32 TVPGetRoughTickCount32() {
-    tjs_uint32 uptime = 0;
-    struct timespec on;
-    if(clock_gettime(CLOCK_MONOTONIC, &on) == 0)
-        uptime = on.tv_sec * 1000 + on.tv_nsec / 1000000;
-    return uptime;
-}
+namespace krkr::utils { 
+    tjs_uint32 TVPGetRoughTickCount32() {
+        tjs_uint32 uptime = 0;
+        struct timespec on;
+        if(clock_gettime(CLOCK_MONOTONIC, &on) == 0)
+            uptime = on.tv_sec * 1000 + on.tv_nsec / 1000000;
+        return uptime;
+    }
+} // namespace krkr::utils
+
 
 bool TVP_stat(const tjs_char *name, tTVP_stat &s) {
     tTJSNarrowStringHolder holder(name);

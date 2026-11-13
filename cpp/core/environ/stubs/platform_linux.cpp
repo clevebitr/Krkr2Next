@@ -43,6 +43,7 @@
 #include "SysInitImpl.h"
 #include "StorageImpl.h"
 #include "EventIntf.h"
+#include "TickCount.h"
 
 // ---------------------------------------------------------------------------
 // 文件操作
@@ -140,7 +141,9 @@ bool TVP_utime(const char *name, time_t modtime) {
 // 时钟
 // ---------------------------------------------------------------------------
 
-tjs_uint32 TVPGetRoughTickCount32() {
+namespace krkr::utils
+{
+    tjs_uint32 TVPGetRoughTickCount32() {
     tjs_uint32 uptime = 0;
     timespec on{};
     if(clock_gettime(CLOCK_MONOTONIC, &on) == 0)
@@ -148,6 +151,8 @@ tjs_uint32 TVPGetRoughTickCount32() {
             static_cast<tjs_uint32>(on.tv_sec * 1000 + on.tv_nsec / 1000000);
     return uptime;
 }
+} // namespace krkr::utils
+
 
 // ---------------------------------------------------------------------------
 // 内存信息（/proc）
