@@ -16,6 +16,8 @@
 #include "MIDIIntf.h"
 // #include "Messages.hpp"
 
+namespace krkr::sound {
+
 //---------------------------------------------------------------------------
 TJS_EXP_FUNC_DEF(void, TVPMIDIOutData, (const tjs_uint8 *data, int len));
 /* output MIDI data (can be multiple data at once) */
@@ -111,6 +113,12 @@ protected:
 #endif
 };
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::sound::TVPMIDIOutData;
+using krkr::sound::tTJSNI_MIDISoundBuffer;
 
 //---------------------------------------------------------------------------
 #endif

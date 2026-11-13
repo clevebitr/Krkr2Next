@@ -15,6 +15,8 @@
 #include "WaveIntf.h"
 #include "MsgIntf.h"
 
+namespace krkr::sound {
+
 //---------------------------------------------------------------------------
 // tTJSNC_PhaseVocoder : PhaseVocoder TJS native class
 //---------------------------------------------------------------------------
@@ -375,3 +377,5 @@ void tTJSNI_PhaseVocoder::Decode(void *dest, tjs_uint samples,
     }
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound

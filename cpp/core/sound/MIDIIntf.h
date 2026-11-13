@@ -15,6 +15,8 @@
 #include "tjsNative.h"
 #include "SoundBufferBaseIntf.h"
 
+namespace krkr::sound {
+
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -36,7 +38,11 @@ public:
 };
 //---------------------------------------------------------------------------
 
+} // namespace krkr::sound
+
 #include "MIDIImpl.h" // must define tTJSNI_MIDISoundBuffer class
+
+namespace krkr::sound {
 
 //---------------------------------------------------------------------------
 
@@ -56,6 +62,14 @@ protected:
 //---------------------------------------------------------------------------
 extern tTJSNativeClass *TVPCreateNativeClass_MIDISoundBuffer();
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::sound::tTJSNI_BaseMIDISoundBuffer;
+using krkr::sound::tTJSNI_MIDISoundBuffer;
+using krkr::sound::tTJSNC_MIDISoundBuffer;
+using krkr::sound::TVPCreateNativeClass_MIDISoundBuffer;
 
 //---------------------------------------------------------------------------
 #endif

@@ -16,6 +16,8 @@
 
 #include "TVPTimer.h"
 
+namespace krkr::sound {
+
 //---------------------------------------------------------------------------
 // Sound Buffer Timer Dispatcher ( for fading or commiting defered
 // settings )
@@ -93,3 +95,5 @@ void tTJSNI_SoundBuffer::Invalidate() {
     inherited::Invalidate();
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound

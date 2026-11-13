@@ -16,6 +16,8 @@
 
 #include "SoundBufferBaseIntf.h"
 
+namespace krkr::sound {
+
 //---------------------------------------------------------------------------
 class tTJSNI_SoundBuffer : public tTJSNI_BaseSoundBuffer {
     typedef tTJSNI_BaseSoundBuffer inherited;
@@ -32,4 +34,9 @@ public:
 protected:
 };
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound
+
+using krkr::sound::tTJSNI_SoundBuffer;
+
 #endif

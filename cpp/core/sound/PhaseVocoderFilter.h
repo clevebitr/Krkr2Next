@@ -16,9 +16,8 @@
 #include "WaveIntf.h"
 
 namespace krkr::sound {
+
 class tRisaPhaseVocoderDSP;
-}
-using krkr::sound::tRisaPhaseVocoderDSP;
 
 //---------------------------------------------------------------------------
 // tTJSNI_PhaseVocoder
@@ -111,5 +110,11 @@ private:
     iTJSNativeInstance *CreateNativeInstance() override;
 };
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::sound::tTJSNI_PhaseVocoder;
+using krkr::sound::tTJSNC_PhaseVocoder;
 
 #endif

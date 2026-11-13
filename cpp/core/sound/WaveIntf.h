@@ -18,6 +18,8 @@
 
 typedef tTVReal D3DVALUE;
 
+namespace krkr::sound {
+
 /*[*/
 //---------------------------------------------------------------------------
 // Sound Global Focus Mode
@@ -136,10 +138,7 @@ extern tTVPWaveDecoder *TVPCreateWaveDecoder(const ttstr &storagename);
 //---------------------------------------------------------------------------
 // interface for basic filter management
 //---------------------------------------------------------------------------
-namespace krkr::sound {
 class tTVPSampleAndLabelSource;
-}
-using krkr::sound::tTVPSampleAndLabelSource;
 
 class iTVPBasicWaveFilter {
 public:
@@ -159,10 +158,7 @@ public:
 //---------------------------------------------------------------------------
 // tTJSNI_BaseWaveSoundBuffer
 //---------------------------------------------------------------------------
-namespace krkr::sound {
 class tTVPWaveLoopManager;
-}
-using krkr::sound::tTVPWaveLoopManager;
 
 class tTJSNI_BaseWaveSoundBuffer : public tTJSNI_SoundBuffer {
     typedef tTJSNI_SoundBuffer inherited;
@@ -221,7 +217,11 @@ public:
 };
 //---------------------------------------------------------------------------
 
+} // namespace krkr::sound
+
 #include "WaveImpl.h" // must define tTJSNI_WaveSoundBuffer class
+
+namespace krkr::sound {
 
 //---------------------------------------------------------------------------
 
@@ -284,5 +284,28 @@ protected:
 //---------------------------------------------------------------------------
 iTJSDispatch2 *TVPCreateWaveFlagsObject(iTJSDispatch2 *buffer);
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::sound::tTVPSoundGlobalFocusMode;
+using krkr::sound::TVP_GUID_KSDATAFORMAT_SUBTYPE_PCM;
+using krkr::sound::TVP_GUID_KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+using krkr::sound::tTVPWaveFormat;
+using krkr::sound::TVPConvertPCMTo16bits;
+using krkr::sound::TVPConvertPCMToFloat;
+using krkr::sound::tTVPWaveDecoder;
+using krkr::sound::tTVPWaveDecoderCreator;
+using krkr::sound::TVPRegisterWaveDecoderCreator;
+using krkr::sound::TVPUnregisterWaveDecoderCreator;
+using krkr::sound::TVPCreateWaveDecoder;
+using krkr::sound::iTVPBasicWaveFilter;
+using krkr::sound::tTJSNI_BaseWaveSoundBuffer;
+using krkr::sound::tTJSNI_WaveSoundBuffer;
+using krkr::sound::tTJSNC_WaveSoundBuffer;
+using krkr::sound::TVPCreateNativeClass_WaveSoundBuffer;
+using krkr::sound::tTJSNI_WaveFlags;
+using krkr::sound::tTJSNC_WaveFlags;
+using krkr::sound::TVPCreateWaveFlagsObject;
 
 #endif

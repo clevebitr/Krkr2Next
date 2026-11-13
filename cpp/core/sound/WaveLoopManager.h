@@ -32,11 +32,10 @@
 
 #define TVP_WL_MAX_ID_LEN 16
 
-// 这两个类型仍由 WaveIntf.h 以全局名声明，暂不迁入 sound。
+namespace krkr::sound {
+
 class tTVPWaveDecoder;
 struct tTVPWaveFormat;
-
-namespace krkr::sound {
 
 //---------------------------------------------------------------------------
 #ifdef TVP_IN_LOOP_TUNER

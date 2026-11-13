@@ -11,6 +11,8 @@
 #include "tjsCommHead.h"
 
 #include "SoundBufferBaseIntf.h"
+
+namespace krkr::sound {
 #include "MsgIntf.h"
 #include "EventIntf.h"
 
@@ -192,3 +194,5 @@ void tTJSNI_BaseSoundBuffer::StopFade(bool async, bool settargetvol) {
     }
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound

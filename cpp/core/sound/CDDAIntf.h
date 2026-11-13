@@ -15,6 +15,8 @@
 #include "tjsNative.h"
 #include "SoundBufferBaseIntf.h"
 
+namespace krkr::sound {
+
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -36,7 +38,11 @@ public:
 };
 //---------------------------------------------------------------------------
 
+} // namespace krkr::sound
+
 #include "CDDAImpl.h" // must define tTJSNI_CDDASoundBuffer class
+
+namespace krkr::sound {
 
 //---------------------------------------------------------------------------
 
@@ -56,5 +62,13 @@ protected:
 //---------------------------------------------------------------------------
 extern tTJSNativeClass *TVPCreateNativeClass_CDDASoundBuffer();
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::sound::tTJSNI_BaseCDDASoundBuffer;
+using krkr::sound::tTJSNI_CDDASoundBuffer;
+using krkr::sound::tTJSNC_CDDASoundBuffer;
+using krkr::sound::TVPCreateNativeClass_CDDASoundBuffer;
 
 #endif

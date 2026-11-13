@@ -22,6 +22,8 @@ extern "C" {
 #include "libavformat/avformat.h"
 };
 
+namespace krkr::sound {
+
 class FFWaveDecoder : public tTVPWaveDecoder // decoder interface
 {
     bool IsPlanar;
@@ -450,3 +452,5 @@ bool FFWaveDecoder::ReadPacket() {
     }
     return false;
 }
+
+} // namespace krkr::sound

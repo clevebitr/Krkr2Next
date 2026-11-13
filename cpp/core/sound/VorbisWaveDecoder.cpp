@@ -10,6 +10,8 @@
 #include "DebugIntf.h"
 #include <algorithm>
 
+namespace krkr::sound {
+
 static const bool FloatExtraction =
     false; // true if output format is IEEE 32-bit float
 
@@ -511,3 +513,5 @@ tTVPWaveDecoder *OpusWaveDecoderCreator::Create(const ttstr &storagename,
     }
     return decoder;
 }
+
+} // namespace krkr::sound

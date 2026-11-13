@@ -50,6 +50,8 @@
 #include "Platform.h"
 #include <fmt/printf.h>
 
+namespace krkr::sound {
+
 //---------------------------------------------------------------------------
 // Options management
 //---------------------------------------------------------------------------
@@ -3588,3 +3590,5 @@ TJS_END_NATIVE_PROP_DECL_OUTER(cls, useVisBuffer)
 return cls;
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound

@@ -34,6 +34,8 @@ class iTVPSoundBuffer;
 
 /*]*/
 
+namespace krkr::sound {
+
 //---------------------------------------------------------------------------
 // Constants
 //---------------------------------------------------------------------------
@@ -338,5 +340,16 @@ public:
                          tjs_int aheadsamples);
 };
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::sound::TVPReleaseDirectSound;
+using krkr::sound::TVPGetDirectSound;
+using krkr::sound::TVPResetVolumeToAllSoundBuffer;
+using krkr::sound::TVPSetWaveSoundBufferUse3DMode;
+using krkr::sound::TVPGetWaveSoundBufferUse3DMode;
+using krkr::sound::TVPWaveSoundBufferCommitSettings;
+using krkr::sound::tTJSNI_WaveSoundBuffer;
 
 #endif

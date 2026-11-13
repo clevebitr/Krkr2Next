@@ -14,6 +14,8 @@
 
 #include "CDDAIntf.h"
 
+namespace krkr::sound {
+
 //---------------------------------------------------------------------------
 // tTVPCDDAVolumeControlType
 //---------------------------------------------------------------------------
@@ -104,5 +106,13 @@ protected:
 #endif
 };
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::sound::tTVPCDDAVolumeControlType;
+using krkr::sound::TVPCDDAVolumeControlType;
+using krkr::sound::CD_AUDIO_VOLUME_DATA;
+using krkr::sound::tTJSNI_CDDASoundBuffer;
 
 #endif

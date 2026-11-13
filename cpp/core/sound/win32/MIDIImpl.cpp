@@ -18,6 +18,8 @@
 #include "StorageIntf.h"
 #include "MsgIntf.h"
 #include "SysInitIntf.h"
+
+namespace krkr::sound {
 #include "ThreadIntf.h"
 #include "UtilStreams.h"
 
@@ -994,3 +996,5 @@ tTJSNativeClass *TVPCreateNativeClass_MIDISoundBuffer() {
     return cls;
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound

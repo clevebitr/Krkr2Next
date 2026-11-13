@@ -13,6 +13,8 @@
 
 #include "tjsNative.h"
 
+namespace krkr::sound {
+
 //---------------------------------------------------------------------------
 // tTVPSoundStatus
 //---------------------------------------------------------------------------
@@ -92,9 +94,16 @@ public:
     void StopFade(bool async, bool settargetvol);
 };
 
+} // namespace krkr::sound
+
 //---------------------------------------------------------------------------
 
 #include "SoundBufferBaseImpl.h"
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::sound::tTVPSoundStatus;
+using krkr::sound::tTJSNI_BaseSoundBuffer;
+using krkr::sound::tTJSNI_SoundBuffer;
 
 //---------------------------------------------------------------------------
 

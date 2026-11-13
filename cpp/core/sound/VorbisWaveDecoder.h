@@ -2,6 +2,8 @@
 
 #include "WaveIntf.h"
 
+namespace krkr::sound {
+
 class VorbisWaveDecoderCreator : public tTVPWaveDecoderCreator {
 public:
     // VorbisWaveDecoderCreator() {
@@ -17,3 +19,8 @@ public:
     tTVPWaveDecoder *Create(const ttstr &storagename,
                             const ttstr &extension) override;
 };
+
+} // namespace krkr::sound
+
+using krkr::sound::VorbisWaveDecoderCreator;
+using krkr::sound::OpusWaveDecoderCreator;

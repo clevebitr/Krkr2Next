@@ -13,6 +13,8 @@
 
 #include "tjsCommHead.h"
 
+namespace krkr::sound {
+
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -64,3 +66,5 @@ void (*PCMConvertLoopFloat32ToInt16)(void *dest, const void *src,
     PCMConvertLoopFloat32ToInt16_c;
 
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound

@@ -17,6 +17,8 @@
 #include "CDDAImpl.h"
 #include "SysInitIntf.h"
 
+namespace krkr::sound {
+
 #ifdef ENABLE_CDDA
 
 //---------------------------------------------------------------------------
@@ -753,3 +755,5 @@ tTJSNativeClass *TVPCreateNativeClass_CDDASoundBuffer() {
     return new tTJSNC_CDDASoundBuffer();
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::sound
