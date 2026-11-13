@@ -13,6 +13,8 @@
 
 #include "tjs.h"
 
+namespace krkr::utils {
+
 using namespace TJS;
 
 //---------------------------------------------------------------------------
@@ -381,5 +383,13 @@ public:
     ~tObjectListSafeLockHolder() { List.SafeUnlock(); }
 };
 //---------------------------------------------------------------------------
+
+} // namespace krkr::utils
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::utils::tVoidObjectList;
+using krkr::utils::tObjectList;
+using krkr::utils::tVoidObjectListSafeLockHolder;
+using krkr::utils::tObjectListSafeLockHolder;
 
 #endif

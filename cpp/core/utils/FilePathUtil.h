@@ -10,6 +10,8 @@
 #include <winnetwk.h>
 #endif
 
+namespace krkr::utils {
+
 static std::string IncludeTrailingBackslash(const std::string &path) {
     int n = path.length();
 
@@ -71,6 +73,13 @@ inline ttstr ExtractFileDir(const ttstr &path) {
     }
 #endif
 }
+
+} // namespace krkr::utils
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::utils::IncludeTrailingBackslash;
+using krkr::utils::ExcludeTrailingBackslash;
+using krkr::utils::ExtractFileDir;
 
 #if 0
 inline std::wstring ExtractFilePath(const std::wstring& path) {

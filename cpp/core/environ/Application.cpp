@@ -19,6 +19,7 @@
 #include "SystemIntf.h"
 
 #include "Exception.h"
+#include "FilePathUtil.h"
 // #include "Resource.h"
 #include "SystemControl.h"
 // #include "MouseCursor.h"
@@ -973,9 +974,13 @@ void TVPDeleteAcceleratorKeyTable( HWND hWnd ) {
 
 void TVPInitWindowOptions() {}
 
+namespace krkr::utils {
+
 std::string ExtractFileDir(const std::string &FileName) {
     return av_dirname((char *)FileName.c_str());
 }
+
+} // namespace krkr::utils
 
 unsigned long ColorToRGB(unsigned int col) {
     // 0xBBGGRR
