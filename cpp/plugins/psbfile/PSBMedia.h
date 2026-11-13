@@ -198,6 +198,30 @@ namespace PSB {
             // type==0， 完整静止 logo 不该在片头动画开始前出现）。此前只按"有无
             // content" 判断可见性，导致该静态 logo 过早出现。
             int type = 2; // PSB frame type / 帧类型
+            // PSB frame content["mask"] — the AUTHORITATIVE bitfield marking
+            // which content keys this frame really carries. The reference reads
+            // every key only when its bit is set (AetherKiri
+            // PlayerInternal.h:1921-2035, default 0 = read nothing). Without
+            // this our parser applies template-only values as if they were
+            // animation — most visibly `zx=30` on `*_le` layout nodes, which
+            // blew the subtree up 30x (NEKOPARA 4 "立绘过大 / 错位").
+            // PSB 帧 content["mask"]：作者标记“本帧真正携带哪些内容键”的位域。
+            // 参考实现只在位时读对应键（AetherKiri PlayerInternal.h:1921-2035，
+            // 缺键默认 0 = 什么都不读）。不读它就会把模板里才有的值当动画值——
+            // 最典型的是 `*_le` 布局节点上的 `zx=30`，于是整棵子树被放大 30×
+            // （真机 NEKOPARA 4 的“立绘过大 / 错位”）。
+            int mask = 0; // content["mask"] / 帧内容掩码
+            // 节点深度（绘制次序）。**注意：它来自 `coord[2]`，不是缩放。**
+            // 参考实现里 `z / scaleX / scaleY` 是三个独立字段，`mask & 0x2`
+            // 的 `coord[x,y,z]` 写进的是 `state.z`（AetherKiri
+            // PlayerInternal.h:1929-1931）；绘制前参考会按累积 Z 排序
+            // （PlayerUpdateLayers.cpp:4690 `entry.sortKey = node.accumulated.posZ`
+            // + :5774 `std::sort`），而我们一直是纯节点先序、丢弃了 Z。
+            // 历史上我们把 `coord[2]` 当“缩放兑底”，上一轮那个自创的 `_le`
+            // “布局单位”（30/47/22/14…）其实就是这些 Z 值——把深度当缩放，
+            // 于是不得不再造一个“单位”去抵消它。
+            // Node depth (draw order). NOTE: comes from `coord[2]`, NOT a scale.
+            float z = 0.0f; // coord[2] / 深度
             std::string src; // content.src ("src/..." image path)
             float ox = 0, oy = 0; // content origin offset / 原点偏移
             float cx = 0, cy = 0; // content coord / 坐标
@@ -210,6 +234,14 @@ namespace PSB {
             // 'z'）。logo 背景用 zx/zy 把小图放大（yuzulogo 的 64×64 white_box
             // → 全屏）；不读这个字段，白底永远铺不满画布。默认 1=不缩放。
             float scaleX = 1, scaleY = 1; // content scale "zx"/"zy" / 缩放
+            // Diagnostic: true when scaleX/scaleY came from the coord[2] 'z'
+            // fallback instead of an explicit "zx"/"zy" key. e-mote layout
+            // nodes (`*_le`) carry a z that must NOT be read as a scale, so
+            // this tells us which source fed the value.
+            // 诊断用：scaleX/scaleY 来自 coord[2] 'z' 兜底而非显式 "zx"/"zy"。
+            // e-mote 布局节点（`*_le`）带的是 z，不该被当缩放，本标志用于
+            // 区分值来自哪个键。
+            bool scaleFromCoordZ = false;
             // M2 per-frame rotation (content "angle", degrees). The yuzusoft
             // logo's leaf "jitter"/wobble is an angle animation; without it the
             // leaf neither swings nor faces the correct way. Units: degrees
@@ -437,6 +469,20 @@ namespace PSB {
             // UI 选择器取参数化 clip 时间 而非全局时钟（参考 PlayerUpdateLayers
             // phase-2，node+776）。-1=未参数化。
             int parameterizeIndex = -1;
+            // 子运动**参数轴**（E-mote 的差分/表情时间轴是参数轴，不是时间轴）。
+            // 展开自 `motion/<obj>/<sub>` 的内容节点会带上子运动自己的
+            // parameter[0]。
+            //
+            // 为什么必须有它：子时钟（subLaunchTime/subLoopTime）无 loop 时会一路
+            // 跑过子运动时间线末尾，落进作者写的"末尾 type-0 / blank"帧 ⇒
+            // **整块部件永久消失**。真机 NEKOPARA 4（`emote-eval` 探针）：
+            //   node[411] 'mabuta' effNow=32805 afTime=1016 afType=0 afVis=0
+            //   ↓ 该运动 16 帧的末尾就是 t=1016 的 type-0 帧
+            //   ⇒ 加载后 ~1s，眼/口/眉/鼻/颊（全部 face_parts 子运动）整批消失
+            //     （HANDOFF 里"刚加载正常、立马错位"）。
+            // 改成按参数值取帧后：参数未设置 → 轴起点 → 加载瞬间那一帧（真机验证正确）。
+            bool hasSubParam = false;
+            PSBMotionParameter subParam;
             // E-mote mesh subdivision count (PSB "meshDivision", reference
             // node+2008). Kept so the probe can observe what the data authors.
             // E-mote 面片细分计数（PSB "meshDivision"，参考

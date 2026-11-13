@@ -1,0 +1,391 @@
+--- line 352 ---
+   346|     } else {
+   347|         Face = new tFreeTypeFace(stdname, opt);
+   348|         recreate = true;
+   349|     }
+   350|     Face->SetHeight(font.Height < 0 ? -font.Height : font.Height);
+   351| 
+   352| #if defined(KRKR_RENDER_PROBE)
+   353|     // [Font probe] 打印请求的字面名/字号与 FreeType 实际使用的值。
+   354|     // 文字偏小或垂直错位时看这里：heightReq 与 heightPix 不符 =
+   355|     // 字形缩放被改过； ascent 与 rawAsc/rawDesc/unitsEM 推不出来 = 基线被放歪。
+   356|     if(auto logger = spdlog::get("core")) {
+   357|         logger->info(
+   358|             "[FontProbe] apply face='{}' being='{}' heightReq={} heightPix={} "
+   359|             "ascent={} rawAsc={} rawDesc={} unitsEM={} angle={} fallback={}",
+   360|             font.Face.AsNarrowStdString(), stdname.AsNarrowStdString(),
+   361|             font.Height, Face->GetPixelHeight(), Face->GetAscent(),
+   362|             Face->GetAscender(), Face->GetDescender(), Face->GetUnitsPerEM(),
+   363|             font.Angle,
+   364|             TVPGetFontFallbackMode() == FontFallbackMode::Chain ? "chain"
+   365|                                                                 : "legacy");
+   366|     }
+
+--- line 485 ---
+   479|             if(FaceFallback) {
+   480|                 data = FaceFallback->GetGlyphFromCharcode(font.Character);
+   481|             }
+   482|         }
+   483|     }
+   484|     if(data == nullptr) {
+   485| #if defined(KRKR_RENDER_PROBE)
+   486|         // 缺字诊断（探针构建才编）：走到这里说明主字面、回退字面（legacy）或整条
+   487|         // 回退链（chain）都没有这个字形，最终会用 GetDefaultChar() 画出来——真机上
+   488|         // 看到的"豆腐块"就是它。
+   489|         //
+   490|         // 为什么值得记：千恋万花显示方块时，日志里只有一条
+   491|         // `GetBeingFont: mono/fullwidth fallback -> Noto Sans CJK HK`，看不出**哪些
+   492|         // 字符**没找到、也看不出是回退面选错还是链里根本没有。这里把码点、当前模式与
+   493|         // 回退面一起打出来，最多 16 个不同码点，避免刷屏。
+   494|         if(!isUnicodeSpace(font.Character)) {
+   495|             static std::mutex s_missing_mtx;
+   496|             static std::vector<char16_t> s_missing_seen;
+   497|             std::lock_guard<std::mutex> lk(s_missing_mtx);
+   498|             if(s_missing_seen.size() < 16 &&
+   499|                std::find(s_missing_seen.begin(), s_missing_seen.end(),
+
+--- line 661 ---
+   655|                   tTVPGraphicLoadMode mode);
+   656| void TVPLoadHeaderPVRv3(void *formatdata, tTJSBinaryStream *src,
+   657|                         iTJSDispatch2 **dic);
+   658| 
+   659| #include "LoadAMV.h"
+   660| 
+   661| #if defined(KRKR_RENDER_PROBE)
+   662| // 格式分派落到“不支持”分支的次数（探针用）。TVPLoadGraphic 用前后差值把
+   663| // 资源名打出来——那条 warning 本身没有名字，限频日志又常常刚好跳过它。
+   664| static std::atomic<uint64_t> g_unsupportedFormatFallbacks{ 0 };
+   665| #endif
+   666| 
+   667| static void TVPLoadGraphicRouter(void *formatdata, void *callbackdata,
+   668|                                  tTVPGraphicSizeCallback sizecallback,
+   669|                                  tTVPGraphicScanLineCallback scanlinecallback,
+   670|                                  tTVPMetaInfoPushCallback metainfopushcallback,
+   671|                                  tTJSBinaryStream *src, tjs_int keyidx,
+   672|                                  tTVPGraphicLoadMode mode) {
+   673|     uint8_t header[16] = {};
+   674|     tjs_uint64 origSrcPos = src->GetPosition();
+   675|     if(src->Read(header, sizeof(header)) == sizeof(header)) {
+
+--- line 710 ---
+   704|         }
+   705|         if(!memcmp(header, "AJPM", 4)) {
+   706|             return CALL_LOAD_FUNC(TVPLoadAMV);
+   707|         }
+   708| #undef CALL_LOAD_FUNC
+   709|     }
+   710| #if defined(KRKR_RENDER_PROBE)
+   711|     g_unsupportedFormatFallbacks.fetch_add(1, std::memory_order_relaxed);
+   712| #endif
+   713|     spdlog::warn("Unsupported image format (header {:02x}{:02x}{:02x}{:02x}), "
+   714|                  "generating 1x1 transparent fallback",
+   715|                  header[0], header[1], header[2], header[3]);
+   716|     sizecallback(callbackdata, 1, 1, gpfRGBA);
+   717|     void *buf = scanlinecallback(callbackdata, 0);
+   718|     if(buf)
+   719|         memset(buf, 0, 4);
+   720|     scanlinecallback(callbackdata, -1);
+   721| }
+   722| 
+   723| static void TVPLoadHeaderRouter(void *formatdata, tTJSBinaryStream *src,
+   724|                                 iTJSDispatch2 **dic) {
+
+--- line 2585 ---
+  2579|         if(unsupportedVideo) {
+  2580|             bmp = new tTVPBitmap(1, 1, 32);
+  2581|             void *bits = bmp->GetScanLine(0);
+  2582|             if(bits)
+  2583|                 memset(bits, 0, 4);
+  2584|         } else {
+  2585| #if defined(KRKR_RENDER_PROBE)
+  2586|             // 探针：记录本次加载是否落到“格式不支持”的 1x1 占位分支，
+  2587|             // 以便把资源名与那条无名字的 warning 对应起来。
+  2588|             const uint64_t probeFmtFallbacksBefore =
+  2589|                 g_unsupportedFormatFallbacks.load(std::memory_order_relaxed);
+  2590| #endif
+  2591| #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
+  2592|             TVPDecodeArena::Instance().Begin();
+  2593| #endif
+  2594|             if(mode == glmNormal && keyidx == TVP_clNone && !desw && !desh) {
+  2595|                 texture = TVPInternalLoadTexture(nname, &mi, &pn);
+  2596|             }
+  2597|             if(!texture) {
+  2598|                 bmp = TVPInternalLoadBitmap(nname, keyidx, desw, desh, &mi,
+  2599|                                             mode, &pn);
+
+--- line 2604 ---
+  2598|                 bmp = TVPInternalLoadBitmap(nname, keyidx, desw, desh, &mi,
+  2599|                                             mode, &pn);
+  2600|             }
+  2601| #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
+  2602|             TVPDecodeArena::Instance().End();
+  2603| #endif
+  2604| #if defined(KRKR_RENDER_PROBE)
+  2605|             if(g_unsupportedFormatFallbacks.load(std::memory_order_relaxed) !=
+  2606|                probeFmtFallbacksBefore) {
+  2607|                 spdlog::info("probe: 图片格式不支持 -> 1x1 占位 name={} ext={}",
+  2608|                              nname.AsStdString(), ext.AsStdString());
+  2609|             }
+  2610| #endif
+  2611|         }
+  2612| 
+  2613|         if(provincename)
+  2614|             *provincename = pn;
+  2615|         if(metainfo)
+  2616|             *metainfo = TVPMetaInfoPairsToDictionary(mi);
+  2617| 
+  2618|         if(TVPGraphicCacheEnabled) {
+
+--- line 3143 ---
+  3137| #include "ThreadIntf.h"
+  3138| #include "ComplexRect.h"
+  3139| #include "EventImpl.h"
+  3140| #include "WindowImpl.h"
+  3141| #include "RenderManager.h"
+  3142| #include "DrawDeviceGLESModule.h"
+  3143| #if defined(KRKR_RENDER_PROBE)
+  3144| #include <spdlog/spdlog.h>
+  3145| #endif
+  3146| using namespace DrawDeviceGLES;
+  3147| 
+  3148| #define ZeroMemory(p, n) memset(p, 0, n);
+  3149| // #include <d3d9.h>
+  3150| // #include <mmsystem.h>
+  3151| #include <algorithm>
+  3152| 
+  3153| //---------------------------------------------------------------------------
+  3154| // オプション
+  3155| //---------------------------------------------------------------------------
+  3156| static tjs_int TVPBasicDrawDeviceOptionsGeneration = 0;
+  3157| bool TVPZoomInterpolation = true;
+
+--- line 3678 ---
+  3672|         iWindowLayer *form = Window->GetForm();
+  3673|         if(form && !Managers.empty()) {
+  3674|             iTVPBaseBitmap *buf = Managers.back()->GetDrawBuffer();
+  3675|             if(buf) {
+  3676|                 form->UpdateDrawBuffer(buf->GetTexture());
+  3677|             }
+  3678| #if defined(KRKR_RENDER_PROBE)
+  3679|             else {
+  3680|                 // DrawBuffer 空：Show 被调但无缓冲可 blit。
+  3681|                 spdlog::info("BasicShow: skip (buf=null)");
+  3682|                 spdlog::default_logger()->flush();
+  3683|             }
+  3684| #endif
+  3685|         }
+  3686| #if defined(KRKR_RENDER_PROBE)
+  3687|         else {
+  3688|             // form 或主层 LayerManager 缺失：Show 被调但守卫生效，无法 blit。
+  3689|             spdlog::info("BasicShow: skip (form={} managers={})", (void *)form,
+  3690|                          Managers.size());
+  3691|             spdlog::default_logger()->flush();
+  3692|         }
+
+--- line 3686 ---
+  3680|                 // DrawBuffer 空：Show 被调但无缓冲可 blit。
+  3681|                 spdlog::info("BasicShow: skip (buf=null)");
+  3682|                 spdlog::default_logger()->flush();
+  3683|             }
+  3684| #endif
+  3685|         }
+  3686| #if defined(KRKR_RENDER_PROBE)
+  3687|         else {
+  3688|             // form 或主层 LayerManager 缺失：Show 被调但守卫生效，无法 blit。
+  3689|             spdlog::info("BasicShow: skip (form={} managers={})", (void *)form,
+  3690|                          Managers.size());
+  3691|             spdlog::default_logger()->flush();
+  3692|         }
+  3693| #endif
+  3694|     }
+  3695| #if defined(KRKR_RENDER_PROBE)
+  3696|     else {
+  3697|         spdlog::info("BasicShow: skip (Window=null)");
+  3698|         spdlog::default_logger()->flush();
+  3699|     }
+  3700| #endif
+
+--- line 3695 ---
+  3689|             spdlog::info("BasicShow: skip (form={} managers={})", (void *)form,
+  3690|                          Managers.size());
+  3691|             spdlog::default_logger()->flush();
+  3692|         }
+  3693| #endif
+  3694|     }
+  3695| #if defined(KRKR_RENDER_PROBE)
+  3696|     else {
+  3697|         spdlog::info("BasicShow: skip (Window=null)");
+  3698|         spdlog::default_logger()->flush();
+  3699|     }
+  3700| #endif
+  3701| #if 0
+  3702| 	if(!TargetWindow) return;
+  3703| 	if(!Texture) return;
+  3704| 	if(!Direct3DDevice) return;
+  3705| 	if(!ShouldShow) return;
+  3706| 
+  3707| 	ShouldShow = false;
+  3708| 
+  3709| 	HRESULT hr = D3D_OK;
+
+--- line 4273 ---
+  4267| static std::vector<tTVPPrerenderedFontMap> TVPPrerenderedFontMapVector;
+  4268| //---------------------------------------------------------------------------
+  4269| void TVPMapPrerenderedFont(const tTVPFont &font, const ttstr &storage) {
+  4270|     // map specified font to specified prerendered font
+  4271|     ttstr fn = TVPSearchPlacedPath(storage);
+  4272| 
+  4273| #if defined(KRKR_RENDER_PROBE)
+  4274|     // [tpf mapping probe] Which .tpf file does the game map for which face?
+  4275|     // Yuzusoft option boxes map e.g. "font/スキップ.tpf"; a case/path mismatch
+  4276|     // on Android could map a WRONG-size .tpf (→ option text smaller/offset).
+  4277|     // 记录游戏把哪个 .tpf 映射到哪个 face（选项框常映射如 "font/スキップ.tpf"；
+  4278|     // Android 上大小写/路径差异可能映射到错误字号的 .tpf →
+  4279|     // 选项文字偏小/偏移）。
+  4280|     if(auto tl = spdlog::get("core")) {
+  4281|         tl->info("[TpfMap] face='{}' h={} storage='{}' -> '{}'",
+  4282|                  font.Face.AsNarrowStdString(), font.Height,
+  4283|                  storage.AsNarrowStdString(), fn.AsNarrowStdString());
+  4284|     }
+  4285| #endif
+  4286| 
+  4287|     // search or retrieve specified storage
+
+--- line 4440 ---
+  4434| 
+  4435|     // look prerendered font
+  4436|     const tTVPPrerenderedCharacterItem *pitem = nullptr;
+  4437|     if(pfont)
+  4438|         pitem = pfont->Find(font.Character);
+  4439| 
+  4440| #if defined(KRKR_RENDER_PROBE)
+  4441|     // [PrerenderedFont probe] Was the .tpf glyph actually hit, and what are its
+  4442|     // baked metrics vs the requested size / the fallback rasterizer ascent?
+  4443|     // The .tpf glyphs were pre-baked for the ORIGIN font (e.g. MS Gothic,
+  4444|     // ascent ~0.86x height); placement uses aofsy = FALLBACK font ascent
+  4445|     // (Noto CJK ~1.16x height). A big mismatch pushes the baseline down and
+  4446|     // clips the box bottom (option box "top-left + top half only"). Logging
+  4447|     // hit/miss + metrics per face/char confirms whether a face is using .tpf
+  4448|     // glyphs and how far off the vertical offset is.
+  4449|     // [预渲染字体探针] .tpf 字形是否真的命中，其内置度量与请求字号/回退栅格化器
+  4450|     // ascent 的差异。.tpf 字形是按**原始字体**（如 MS
+  4451|     // ゴシック，ascent≈0.86×字号） 预烘焙的；定位用的 aofsy 却是**回退字体**的
+  4452|     // ascent（Noto CJK≈1.16×字号）。
+  4453|     // 差异过大时基线被压下去、框底被裁（选项框"偏左上+只见上半"）。按 face/字符
+  4454|     // 打印命中与否与度量，确认哪些 face 在走 .tpf 及垂直偏移差多少。
+
+--- line 5148 ---
+  5142|     if(drect.right > dtdata->rect.right) {
+  5143|         srect.right -= (drect.right - dtdata->rect.right);
+  5144|         drect.right = dtdata->rect.right;
+  5145|     }
+  5146| 
+  5147|     if(srect.left >= srect.right) {
+  5148| #if defined(KRKR_RENDER_PROBE)
+  5149|         static std::set<std::string> sProbedEmptyLayouts;
+  5150|         const std::string layoutKey = Font.Face.AsNarrowStdString() + "|" +
+  5151|             std::to_string(Font.Height) + "|" +
+  5152|             std::to_string(dtdata->rect.left) + ":" +
+  5153|             std::to_string(dtdata->rect.top) + "|" +
+  5154|             std::to_string(dtdata->rect.right) + ":" +
+  5155|             std::to_string(dtdata->rect.bottom) + "|" +
+  5156|             std::to_string(glyphRect.left) + ":" +
+  5157|             std::to_string(glyphRect.top) + ":" +
+  5158|             std::to_string(glyphRect.right) + ":" +
+  5159|             std::to_string(glyphRect.bottom);
+  5160|         if(sProbedEmptyLayouts.insert(layoutKey).second) {
+  5161|             if(auto logger = spdlog::get("core")) {
+  5162|                 logger->info(
+
+--- line 5187 ---
+  5181|     if(drect.bottom > dtdata->rect.bottom) {
+  5182|         srect.bottom -= (drect.bottom - dtdata->rect.bottom);
+  5183|         drect.bottom = dtdata->rect.bottom;
+  5184|     }
+  5185| 
+  5186|     if(srect.top >= srect.bottom) {
+  5187| #if defined(KRKR_RENDER_PROBE)
+  5188|         static std::set<std::string> sProbedVerticalEmptyLayouts;
+  5189|         const std::string layoutKey = Font.Face.AsNarrowStdString() + "|" +
+  5190|             std::to_string(Font.Height) + "|" +
+  5191|             std::to_string(dtdata->rect.left) + ":" +
+  5192|             std::to_string(dtdata->rect.top) + "|" +
+  5193|             std::to_string(dtdata->rect.right) + ":" +
+  5194|             std::to_string(dtdata->rect.bottom) + "|" +
+  5195|             std::to_string(glyphRect.left) + ":" +
+  5196|             std::to_string(glyphRect.top) + ":" +
+  5197|             std::to_string(glyphRect.right) + ":" +
+  5198|             std::to_string(glyphRect.bottom);
+  5199|         if(sProbedVerticalEmptyLayouts.insert(layoutKey).second) {
+  5200|             if(auto logger = spdlog::get("core")) {
+  5201|                 logger->info(
+
+--- line 5215 ---
+  5209|             }
+  5210|         }
+  5211| #endif
+  5212|         return false; // not drawable
+  5213|     }
+  5214| 
+  5215| #if defined(KRKR_RENDER_PROBE)
+  5216|     {
+  5217|         static std::set<std::string> sProbedLayouts;
+  5218|         const std::string layoutKey = Font.Face.AsNarrowStdString() + "|" +
+  5219|             std::to_string(Font.Height) + "|" +
+  5220|             std::to_string(dtdata->rect.left) + ":" +
+  5221|             std::to_string(dtdata->rect.top) + "|" +
+  5222|             std::to_string(dtdata->rect.right) + ":" +
+  5223|             std::to_string(dtdata->rect.bottom);
+  5224|         if(sProbedLayouts.insert(layoutKey).second) {
+  5225|             if(auto logger = spdlog::get("core")) {
+  5226|                 logger->info(
+  5227|                     "[TextLayoutProbe] face='{}' height={} prerender={} "
+  5228|                     "request=({},{}) glyph=({},{},{},{}) clipped=({},{},{},{}) "
+  5229|                     "source=({},{},{},{}) ascent=({},{})",
+
+--- line 5598 ---
+  5592|         return; // nothing to do
+  5593| 
+  5594|     Independ();
+  5595| 
+  5596|     ApplyFont();
+  5597| 
+  5598| #if defined(KRKR_RENDER_PROBE)
+  5599|     // [text probe] single-char draw, mirror of the multi-char probe above
+  5600|     // (deduped). [文字探针] 单字符绘制，与上文多字符探针对应（去重）。
+  5601|     {
+  5602|         static std::set<std::string> sProbedSingleFaces;
+  5603|         std::string fkey =
+  5604|             Font.Face.AsNarrowStdString() + "|" + std::to_string(Font.Height);
+  5605|         if(sProbedSingleFaces.insert(fkey).second) {
+  5606|             if(auto tl = spdlog::get("core")) {
+  5607|                 std::string ttext = text.AsNarrowStdString();
+  5608|                 if(ttext.size() > 16)
+  5609|                     ttext = ttext.substr(0, 16);
+  5610|                 tl->info("[TextProbe] single destRect=({},{},{},{}) xy=({},{}) "
+  5611|                          "face='{}' "
+  5612|                          "height={} ascentOfs=({},{}) prerender={} text='{}'",
+
+--- line 5795 ---
+  5789|         return; // nothing to do
+  5790| 
+  5791|     Independ();
+  5792| 
+  5793|     ApplyFont();
+  5794| 
+  5795| #if defined(KRKR_RENDER_PROBE)
+  5796|     // [text probe] Option/menu text sizing & placement diagnostics (deduped per
+  5797|     // face so it does not spam for every character). See FreeTypeFontRasterizer
+  5798|     // FontProbe for glyph metrics.
+  5799|     // [文字探针] 选项/菜单文字的尺寸与定位诊断（按 face
+  5800|     // 去重，避免逐字符刷屏）。 字形度量见 FreeTypeFontRasterizer 的 FontProbe。
+  5801|     {
+  5802|         static std::set<std::string> sProbedFaces;
+  5803|         std::string fkey =
+  5804|             Font.Face.AsNarrowStdString() + "|" + std::to_string(Font.Height);
+  5805|         if(sProbedFaces.insert(fkey).second) {
+  5806|             if(auto tl = spdlog::get("core")) {
+  5807|                 std::string ttext = text.AsNarrowStdString();
+  5808|                 if(ttext.size() > 24)
+  5809|                     ttext = ttext.substr(0, 24);
+

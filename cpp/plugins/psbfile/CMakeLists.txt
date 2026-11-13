@@ -8,6 +8,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     PSBValue.cpp
     PSBFile.cpp
     PSBMedia.cpp
+    EmoteMaskBits.h
     types/PimgType.cpp
     types/MotionType.cpp
     types/PimgType.cpp

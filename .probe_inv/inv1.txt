@@ -1,0 +1,506 @@
+--- line 849 ---
+   843|         } catch(...) {
+   844|             spdlog::warn("Failed to apply compatibility hook for message edge "
+   845|                          "argument routing (msghack.tjs)");
+   846|         }
+   847|     }
+   848| 
+   849| #if defined(KRKR_RENDER_PROBE)
+   850|     // D3D/分离渲染路径的判定快照。
+   851|     //
+   852|     // 为什么需要：两作（千恋万花 / NEKOPARA 4）的 motion 贴图都已经加载，但帧交付到
+   853|     // 了不可见页；先要弄清游戏到底选了哪条路径（D3DAdaptor 的 captureCanvas vs
+   854|     // SeparateLayerAdaptor 的私有渲染层）——这个选择由游戏脚本根据
+   855|     // `Motion.enableD3D` / `Motion.Player.useD3D` / `window.d3dMotion` 决定，
+   856|     // 而它在日志里从来没有痕迹。
+   857|     if(lower == TJS_W("motion.tjs") ||
+   858|        lower == TJS_W("affinesourcemotion.tjs") ||
+   859|        lower == TJS_W("d3daffinesourcemotion.tjs")) {
+   860|         try {
+   861|             tTJSVariant snapshot;
+   862|             // 每一项单独 try：`enableD3D` 可能是 stub 对象，`+` 转换会抛 E_CONVERT，
+   863|             // 整段写在一个表达式里就会得到一个什么都没说的 “snapshot failed”。
+
+--- line 890 ---
+   884| }
+   885| 
+   886| void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
+   887|                        tTJSVariant *result, bool isexpression,
+   888|                        const tjs_char *modestr) {
+   889|     // execute storage which contains script
+   890| #if defined(KRKR_RENDER_PROBE)
+   891|     { // StorageExec 探针：全量记录 startup 链实际执行的 storage（含 exec#
+   892|       // 累计序号），
+   893|         // 首开 vs restart 逐脚本 diff，钉死"跳过 KAG boot"是从哪个脚本断的。
+   894|         static unsigned s_exec = 0;
+   895|         spdlog::info("StorageExec: exec#{} name={}", ++s_exec,
+   896|                      name.AsStdString());
+   897|     }
+   898| #endif
+   899|     if(!TVPScriptEngine)
+   900|         TVPThrowInternalError;
+   901| 
+   902|     { // for bytecode
+   903|         ttstr place(TVPSearchPlacedPath(name));
+   904|         ttstr shortname(TVPExtractStorageName(place));
+
+--- line 1291 ---
+  1285| #if defined(__ANDROID__)
+  1286|         __android_log_print(ANDROID_LOG_INFO, "krkr2",
+  1287|                             "Loading startup script: %s",
+  1288|                             place.AsStdString().c_str());
+  1289| #endif
+  1290|         TVPStartupSuccess = false;
+  1291| #if defined(KRKR_RENDER_PROBE)
+  1292|         { // EngineState[entry]: startup.tjs 执行前 dump 引擎状态，首开 vs
+  1293|           // restart 对照残留
+  1294|             extern bool TVPSystemControlAlive;
+  1295|             spdlog::info(
+  1296|                 "EngineState[entry]: wndCount={} mainWnd={} sysUninit={} "
+  1297|                 "ctlAlive={} "
+  1298|                 "projDirSet={} dataPathSet={} startupSuccess={} cmdArgGen={}",
+  1299|                 TVPGetWindowCount(), (void *)TVPMainWindow,
+  1300|                 (int)TVPSystemUninitCalled, (int)TVPSystemControlAlive,
+  1301|                 (int)(!TVPProjectDir.IsEmpty()), (int)(!TVPDataPath.IsEmpty()),
+  1302|                 (int)TVPStartupSuccess,
+  1303|                 (tjs_int)TVPGetCommandLineArgumentGeneration());
+  1304|             spdlog::default_logger()->flush();
+  1305|         }
+
+--- line 1312 ---
+  1306| #endif
+  1307|         // —— startup.tjs 执行探针：抓 restart 时 startup 提前抛错的时机/消息。
+  1308|         // 黑屏特征：startup.tjs 抛异常(而 system/Initialize.tjs
+  1309|         // 存在)时被静默吞掉改走 fallback， KAG boot
+  1310|         // 被绕过。此探针记录是"完成"还是"抛错"及错误内容，钉死跳 KvK boot
+  1311|         // 的具体 gate。
+  1312| #if defined(KRKR_RENDER_PROBE)
+  1313|         auto StartupProbeLog = [](const char *kind, const ttstr &msg) {
+  1314|             spdlog::info(
+  1315|                 "StartupProbe: startup.tjs threw({}) sysInitExists={} msg={}",
+  1316|                 kind, (int)TVPIsExistentStorage(TJS_W("system/Initialize.tjs")),
+  1317|                 msg.AsStdString());
+  1318|             spdlog::default_logger()->flush();
+  1319|         };
+  1320| #endif
+  1321|         try {
+  1322|             iTJSTextReadStream *stream = TVPCreateTextStreamForRead(place, "");
+  1323|             stream->Destruct();
+  1324|             TVPExecuteStorage(TVPStartupScriptName);
+  1325|             TVPStartupSuccess = true;
+  1326| #if defined(KRKR_RENDER_PROBE)
+
+--- line 1326 ---
+  1320| #endif
+  1321|         try {
+  1322|             iTJSTextReadStream *stream = TVPCreateTextStreamForRead(place, "");
+  1323|             stream->Destruct();
+  1324|             TVPExecuteStorage(TVPStartupScriptName);
+  1325|             TVPStartupSuccess = true;
+  1326| #if defined(KRKR_RENDER_PROBE)
+  1327|             spdlog::info(
+  1328|                 "StartupProbe: startup.tjs completed without throwing");
+  1329|             spdlog::default_logger()->flush();
+  1330| #endif
+  1331|         }
+  1332| #if defined(KRKR_RENDER_PROBE)
+  1333|         catch(const TJS::eTJSScriptError &e) {
+  1334|             StartupProbeLog("eTJSScriptError", e.GetMessage());
+  1335|             if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
+  1336|                 throw;
+  1337|         } catch(const TJS::eTJS &e) {
+  1338|             StartupProbeLog("eTJS", e.GetMessage());
+  1339|             if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
+  1340|                 throw;
+
+--- line 1332 ---
+  1326| #if defined(KRKR_RENDER_PROBE)
+  1327|             spdlog::info(
+  1328|                 "StartupProbe: startup.tjs completed without throwing");
+  1329|             spdlog::default_logger()->flush();
+  1330| #endif
+  1331|         }
+  1332| #if defined(KRKR_RENDER_PROBE)
+  1333|         catch(const TJS::eTJSScriptError &e) {
+  1334|             StartupProbeLog("eTJSScriptError", e.GetMessage());
+  1335|             if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
+  1336|                 throw;
+  1337|         } catch(const TJS::eTJS &e) {
+  1338|             StartupProbeLog("eTJS", e.GetMessage());
+  1339|             if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
+  1340|                 throw;
+  1341|         } catch(const std::exception &e) {
+  1342|             StartupProbeLog("std::exception", ttstr(e.what()));
+  1343|             if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
+  1344|                 throw;
+  1345|         } catch(const char *e) {
+  1346|             StartupProbeLog("const char*", ttstr(e));
+
+--- line 1368 ---
+  1362|             }
+  1363|         }
+  1364| #endif
+  1365|         if(!TVPStartupSuccess) {
+  1366|             // try direct execute initialize.tjs to compatible for
+  1367|             // some patch
+  1368| #if defined(KRKR_RENDER_PROBE)
+  1369|             spdlog::info("StartupProbe: running FALLBACK system/Initialize.tjs "
+  1370|                          "(startup.tjs failed)");
+  1371|             spdlog::default_logger()->flush();
+  1372| #endif
+  1373| #if defined(__ANDROID__)
+  1374|             __android_log_print(
+  1375|                 ANDROID_LOG_INFO, "krkr2",
+  1376|                 "Fallback startup script: system/Initialize.tjs");
+  1377| #endif
+  1378|             TVPExecuteStorage(TJS_W("system/Initialize.tjs"));
+  1379|             TVPStartupSuccess = true;
+  1380|         }
+  1381|         spdlog::info("Startup script ended.");
+  1382|         // KAG 已经起来了，补上补丁脚本会读的运行时开关
+
+--- line 1388 ---
+  1382|         // KAG 已经起来了，补上补丁脚本会读的运行时开关
+  1383|         TVPInstallKagRuntimeDefaults();
+  1384|         // 窗口镜像只能等到框架建好：KiriNext 的 patch.tjs 跑在 startup.tjs
+  1385|         // 之前，那时 KAGWindow 还不存在（见
+  1386|         // TVPGetPatchWindowPrerequisitesScript）
+  1387|         TVPInstallPatchWindowPrerequisites();
+  1388| #if defined(KRKR_RENDER_PROBE)
+  1389|         { // EngineState[exit]: startup.tjs 结束后 dump，对照 entry 看状态变化
+  1390|             extern bool TVPSystemControlAlive;
+  1391|             spdlog::info(
+  1392|                 "EngineState[exit]: wndCount={} mainWnd={} sysUninit={} "
+  1393|                 "ctlAlive={} "
+  1394|                 "projDirSet={} dataPathSet={} startupSuccess={} cmdArgGen={}",
+  1395|                 TVPGetWindowCount(), (void *)TVPMainWindow,
+  1396|                 (int)TVPSystemUninitCalled, (int)TVPSystemControlAlive,
+  1397|                 (int)(!TVPProjectDir.IsEmpty()), (int)(!TVPDataPath.IsEmpty()),
+  1398|                 (int)TVPStartupSuccess,
+  1399|                 (tjs_int)TVPGetCommandLineArgumentGeneration());
+  1400|             spdlog::default_logger()->flush();
+  1401|         }
+  1402| #endif
+
+--- line 2699 ---
+  2693|             // ── 决定性探针：对比 blit 源纹理(nativeGLTex) 与引擎当前合成所写的
+  2694|             // render-target 附件纹理 id。
+  2695|             //   nativeGLTex == rtTex -> 引擎写进了我们采样的同一纹理：
+  2696|             //      源黑 = 引擎画了黑/没画（问题在合成内容/脚本，非纹理脱节）。
+  2697|             //   nativeGLTex != rtTex -> 引擎画进了别的纹理：二次打开主
+  2698|             //   DrawBuffer 与
+  2699|             //      blit 源脱节（重启状态残留）。仅 KRKR_RENDER_PROBE 时编译。
+  2700| #if defined(KRKR_RENDER_PROBE)
+  2701|             {
+  2702|                 GLint curFbo = 0;
+  2703|                 glGetIntegerv(GL_FRAMEBUFFER_BINDING, &curFbo);
+  2704|                 GLint rtTex = 0, rtType = 0;
+  2705|                 if(curFbo != 0) {
+  2706|                     glGetFramebufferAttachmentParameteriv(
+  2707|                         GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+  2708|                         GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &rtType);
+  2709|                     if(rtType == GL_TEXTURE) {
+  2710|                         glGetFramebufferAttachmentParameteriv(
+  2711|                             GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+  2712|                             GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &rtTex);
+  2713|                     }
+
+--- line 2700 ---
+  2694|             // render-target 附件纹理 id。
+  2695|             //   nativeGLTex == rtTex -> 引擎写进了我们采样的同一纹理：
+  2696|             //      源黑 = 引擎画了黑/没画（问题在合成内容/脚本，非纹理脱节）。
+  2697|             //   nativeGLTex != rtTex -> 引擎画进了别的纹理：二次打开主
+  2698|             //   DrawBuffer 与
+  2699|             //      blit 源脱节（重启状态残留）。仅 KRKR_RENDER_PROBE 时编译。
+  2700| #if defined(KRKR_RENDER_PROBE)
+  2701|             {
+  2702|                 GLint curFbo = 0;
+  2703|                 glGetIntegerv(GL_FRAMEBUFFER_BINDING, &curFbo);
+  2704|                 GLint rtTex = 0, rtType = 0;
+  2705|                 if(curFbo != 0) {
+  2706|                     glGetFramebufferAttachmentParameteriv(
+  2707|                         GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+  2708|                         GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &rtType);
+  2709|                     if(rtType == GL_TEXTURE) {
+  2710|                         glGetFramebufferAttachmentParameteriv(
+  2711|                             GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+  2712|                             GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &rtTex);
+  2713|                     }
+  2714|                 }
+
+--- line 2724 ---
+  2718|                     static_cast<unsigned>(nativeGLTex),
+  2719|                     static_cast<int>(curFbo), static_cast<int>(rtTex),
+  2720|                     static_cast<unsigned>(rtType),
+  2721|                     (nativeGLTex == static_cast<uint32_t>(rtTex)) ? " [SAME]"
+  2722|                                                                   : " [DIFF]");
+  2723|             }
+  2724| #endif // KRKR_RENDER_PROBE
+  2725| 
+  2726|             TVPSetRenderTarget(0);
+  2727|             blitSrcTexture = static_cast<GLuint>(nativeGLTex);
+  2728|         } else {
+  2729|             // CPU fallback: read pixel data and upload to our blit texture.
+  2730|             blitSrcTexture = blit_texture_;
+  2731|             const tjs_int pitch = tex->GetPitch();
+  2732|             const void *pixelData = tex->GetPixelData();
+  2733|             if(!pixelData) {
+  2734|                 // Fallback: read line by line via GetScanLineForRead.
+  2735|                 // NOTE: This may call TVPSetRenderTarget() internally,
+  2736|                 // which changes the current FBO binding — that's fine
+  2737|                 // because we haven't bound the IOSurface FBO yet.
+  2738|                 if(blit_pixel_buf_.size() < static_cast<size_t>(tw * th * 4)) {
+
+--- line 2784 ---
+  2778|         //   SourceSample !黑 -> 引擎合成纹理有画面，黑屏在「blit 到
+  2779|         //   IOSurface」这步 SourceSample 全黑 -> 引擎 GL
+  2780|         //   合成本身没把画面画进源纹理。
+  2781|         // 频率提到每 5 帧，并在同一采样点对源纹理连续读两次（相隔若干 draw 后）
+  2782|         // 以排除「单帧瞬时闪」；同时打印全局图层对象数 layers，区分
+  2783|         // 「引擎没建/没东西画」与「画了但没进源纹理」两条线。
+  2784|         // 诊断插桩：仅当编译期定义 KRKR_RENDER_PROBE 时运行（每 5
+  2785|         // 帧读像素+打日志， 属黑屏/渲染诊断探针）。默认 release 关闭，避免每帧
+  2786|         // glReadPixels 与日志刷屏； 遇到黑屏/渲染问题再打开。
+  2787| #if defined(KRKR_RENDER_PROBE)
+  2788|         static int s_blitDbg = 0;
+  2789|         const bool kBlitDump = ((s_blitDbg++) % 5) == 1;
+  2790| #else
+  2791|         const bool kBlitDump = false;
+  2792| #endif
+  2793|         if(kBlitDump) {
+  2794|             // 引擎本段(自上次 GetRenderStat 清零以来)实际执行的 GL 绘制次数：
+  2795|             //   draw 持续增长 -> 引擎在合成图层，黑的是「画了但没进 tex4」
+  2796|             //   draw 归零      -> 引擎没发起合成，问题在调度/无可见图层
+  2797|             unsigned int engDraw = 0;
+  2798|             uint64_t engVmem = 0;
+
+--- line 2787 ---
+  2781|         // 频率提到每 5 帧，并在同一采样点对源纹理连续读两次（相隔若干 draw 后）
+  2782|         // 以排除「单帧瞬时闪」；同时打印全局图层对象数 layers，区分
+  2783|         // 「引擎没建/没东西画」与「画了但没进源纹理」两条线。
+  2784|         // 诊断插桩：仅当编译期定义 KRKR_RENDER_PROBE 时运行（每 5
+  2785|         // 帧读像素+打日志， 属黑屏/渲染诊断探针）。默认 release 关闭，避免每帧
+  2786|         // glReadPixels 与日志刷屏； 遇到黑屏/渲染问题再打开。
+  2787| #if defined(KRKR_RENDER_PROBE)
+  2788|         static int s_blitDbg = 0;
+  2789|         const bool kBlitDump = ((s_blitDbg++) % 5) == 1;
+  2790| #else
+  2791|         const bool kBlitDump = false;
+  2792| #endif
+  2793|         if(kBlitDump) {
+  2794|             // 引擎本段(自上次 GetRenderStat 清零以来)实际执行的 GL 绘制次数：
+  2795|             //   draw 持续增长 -> 引擎在合成图层，黑的是「画了但没进 tex4」
+  2796|             //   draw 归零      -> 引擎没发起合成，问题在调度/无可见图层
+  2797|             unsigned int engDraw = 0;
+  2798|             uint64_t engVmem = 0;
+  2799|             if(::TVPGetRenderManager()) {
+  2800|                 ::TVPGetRenderManager()->GetRenderStat(engDraw, engVmem);
+  2801|             }
+
+--- line 5013 ---
+  5007| TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ isExistentStorage) {
+  5008|     if(numparams < 1)
+  5009|         return TJS_E_BADPARAMCOUNT;
+  5010| 
+  5011|     ttstr path = *param[0];
+  5012| 
+  5013| #if defined(KRKR_RENDER_PROBE)
+  5014|     // 诊断 diffimage2.tjs 的递归：脚本把本方法包了一层；若包装被无限递归，
+  5015|     // 每层都会用同一个 ".dref" 名字回调到这里——重复实参就是证据。
+  5016|     {
+  5017|         static thread_local int s_probeCalls = 0;
+  5018|         if(s_probeCalls < 64) {
+  5019|             ++s_probeCalls;
+  5020|             spdlog::info("probe: Storages.isExistentStorage({}) #{}",
+  5021|                          path.AsStdString(), s_probeCalls);
+  5022|         }
+  5023|     }
+  5024| #endif
+  5025| 
+  5026|     if(result)
+  5027|         *result = (tjs_int)TVPIsExistentStorage(path);
+
+--- line 5829 ---
+  5823|                                                  tjs_int numargs,
+  5824|                                                  tTJSVariant *result,
+  5825|                                                  tjs_int start_ip) {
+  5826|         // 栈快没了就先抛脚本异常：异常展开时 AddTrace
+  5827|         // 会把脚本名、行号与整条调用 链（" <-- "
+  5828|         // 那串）带进日志，既不闪退，也直接指出递归点。
+  5829| #if defined(KRKR_RENDER_PROBE)
+  5830|         if(TVPIsTJSStackNearlyExhausted()) {
+  5831|             const tjs_char *bn = Block ? Block->GetName() : TJS_W("?");
+  5832|             const tjs_char *fn = Name ? Name : TJS_W("?");
+  5833|             spdlog::info(
+  5834|                 "probe: TJS stack nearly exhausted block={} func={} start_ip={}",
+  5835|                 ttstr(bn).AsStdString(), ttstr(fn).AsStdString(), start_ip);
+  5836|             TJS_eTJSScriptError(
+  5837|                 TJS_W("Script call stack exhausted (recursive call?)"), this,
+  5838|                 start_ip);
+  5839|         }
+  5840| #else
+  5841|         if(TVPIsTJSStackNearlyExhausted())
+  5842|             TJS_eTJSScriptError(
+  5843|                 TJS_W("Script call stack exhausted (recursive call?)"), this,
+
+--- line 8399 ---
+  8393| #include "tjsArray.h"
+  8394| #include "tjsNative.h"
+  8395| #include "tjsHashSearch.h"
+  8396| #include "tjsGlobalStringMap.h"
+  8397| #include "tjsDebug.h"
+  8398| 
+  8399| #if defined(KRKR_RENDER_PROBE)
+  8400| #include <spdlog/spdlog.h>
+  8401| #endif
+  8402| 
+  8403| #include <atomic>
+  8404| 
+  8405| static std::atomic<int64_t> sTJSCustomObjectCount{ 0 };
+  8406| static std::atomic<int64_t> sObjByHash[8] = {};
+  8407| 
+  8408| extern "C" int64_t TJS_GetCustomObjectCount() {
+  8409|     return sTJSCustomObjectCount.load(std::memory_order_relaxed);
+  8410| }
+  8411| 
+  8412| extern "C" void TJS_GetObjByHashBits(int64_t out[8]) {
+  8413|     for(int i = 0; i < 8; i++)
+
+--- line 10037 ---
+ 10031|                 return TJS_S_OK;
+ 10032|             }
+ 10033|             if(TJSCompatResolveTextRenderRenderCount(membername, result, this,
+ 10034|                                                      objthis)) {
+ 10035|                 return TJS_S_OK;
+ 10036|             }
+ 10037| #if defined(KRKR_RENDER_PROBE)
+ 10038|             // 诊断：A 块回退也没兜住的成员。用于定位"明明在回退名单里却报
+ 10039|             // does not exist"（例如 commitSavedata）到底是回退开关没开，还是
+ 10040|             // 这条访问路径根本没走到 tTJSCustomObject::PropGet。
+ 10041|             {
+ 10042|                 static thread_local int s_probeMisses = 0;
+ 10043|                 if(s_probeMisses < 32) {
+ 10044|                     ++s_probeMisses;
+ 10045|                     if(auto logger = spdlog::get("tjs2"))
+ 10046|                         logger->debug(
+ 10047|                             "probe: PropGet miss '{}' (compatFallbacks={})",
+ 10048|                             ttstr(membername).AsStdString(),
+ 10049|                             TJSCompatFallbacksEnabledFlag ? 1 : 0);
+ 10050|                 }
+ 10051|             }
+
+--- line 10134 ---
+ 10128|             data = Add(membername,
+ 10129|                        hint); // create a member when TJS_MEMBERENSURE
+ 10130|                               // is specified
+ 10131|         else
+ 10132|             data = Find(membername, hint);
+ 10133| 
+ 10134| #if defined(KRKR_RENDER_PROBE)
+ 10135|         if(!data) {
+ 10136|             if(membername &&
+ 10137|                TJS_strcmp(membername, TJS_W("diffEnterCount")) == 0) {
+ 10138|                 spdlog::info("probe: PropSet miss 'diffEnterCount', flag={:04X}",
+ 10139|                              flag);
+ 10140|             }
+ 10141|             return TJS_E_MEMBERNOTFOUND; // not found
+ 10142|         }
+ 10143| #else
+ 10144|         if(!data)
+ 10145|             return TJS_E_MEMBERNOTFOUND; // not found
+ 10146| #endif
+ 10147| 
+ 10148|         if(flag & TJS_HIDDENMEMBER)
+
+--- line 10791 ---
+ 10785| 
+ 10786| } // namespace TJS
+ 10787| 
+ 10788| #include "tjsCommHead.h"
+ 10789| #include "TVPTimer.h"
+ 10790| #include "TickCount.h"
+ 10791| #if defined(KRKR_RENDER_PROBE)
+ 10792| #include <spdlog/spdlog.h>
+ 10793| static unsigned long long g_probeTimerFireCount =
+ 10794|     0; // KRKR_RENDER_PROBE 下累计 TJS 定时器触发数
+ 10795| #endif
+ 10796| 
+ 10797| struct tTVPTimerImpl {
+ 10798|     tTVPTimerImpl *Prev = nullptr, *Next = nullptr;
+ 10799|     TVPTimer *pTimer = nullptr;
+ 10800|     uint32_t Index;
+ 10801| 
+ 10802|     ~tTVPTimerImpl() {
+ 10803|         if(Prev)
+ 10804|             Prev->Next = Next;
+ 10805|         if(Next)
+
+--- line 10794 ---
+ 10788| #include "tjsCommHead.h"
+ 10789| #include "TVPTimer.h"
+ 10790| #include "TickCount.h"
+ 10791| #if defined(KRKR_RENDER_PROBE)
+ 10792| #include <spdlog/spdlog.h>
+ 10793| static unsigned long long g_probeTimerFireCount =
+ 10794|     0; // KRKR_RENDER_PROBE 下累计 TJS 定时器触发数
+ 10795| #endif
+ 10796| 
+ 10797| struct tTVPTimerImpl {
+ 10798|     tTVPTimerImpl *Prev = nullptr, *Next = nullptr;
+ 10799|     TVPTimer *pTimer = nullptr;
+ 10800|     uint32_t Index;
+ 10801| 
+ 10802|     ~tTVPTimerImpl() {
+ 10803|         if(Prev)
+ 10804|             Prev->Next = Next;
+ 10805|         if(Next)
+ 10806|             Next->Prev = Prev;
+ 10807|     }
+ 10808| 
+
+--- line 10894 ---
+ 10888|     tTVPTimerImpl *p = Next;
+ 10889|     if(!p)
+ 10890|         return;
+ 10891|     Next = nullptr;
+ 10892| 
+ 10893|     p->pTimer->FireEvent();
+ 10894| #if defined(KRKR_RENDER_PROBE)
+ 10895|     ++g_probeTimerFireCount;
+ 10896| #endif
+ 10897|     p->FireNext();
+ 10898|     _processedTimer.Add(p);
+ 10899|     // 	int interval = p->pTimer->GetInterval();
+ 10900|     // 	p->Set(interval);
+ 10901| }
+ 10902| 
+ 10903| void TVPTimer::ProgressAllTimer() {
+ 10904| #if defined(KRKR_RENDER_PROBE)
+ 10905|     {
+ 10906|         // ── 定时器驱动探针：TJS 定时器是否在推进（二次打开 delta
+ 10907|         // 停滞=定时器没转）。
+ 10908|         static unsigned n = 0;
+
+--- line 10904 ---
+ 10898|     _processedTimer.Add(p);
+ 10899|     // 	int interval = p->pTimer->GetInterval();
+ 10900|     // 	p->Set(interval);
+ 10901| }
+ 10902| 
+ 10903| void TVPTimer::ProgressAllTimer() {
+ 10904| #if defined(KRKR_RENDER_PROBE)
+ 10905|     {
+ 10906|         // ── 定时器驱动探针：TJS 定时器是否在推进（二次打开 delta
+ 10907|         // 停滞=定时器没转）。
+ 10908|         static unsigned n = 0;
+ 10909|         static unsigned long long lastFire = 0;
+ 10910|         if((++n % 30) == 1) {
+ 10911|             spdlog::info("TimerProbe: cumulativeFired={} delta={}",
+ 10912|                          g_probeTimerFireCount,
+ 10913|                          g_probeTimerFireCount - lastFire);
+ 10914|             lastFire = g_probeTimerFireCount;
+ 10915|         }
+ 10916|     }
+ 10917| #endif
+ 10918|     uint32_t curTick = TVPGetRoughTickCount32();
+

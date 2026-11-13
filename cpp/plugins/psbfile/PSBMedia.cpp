@@ -13,6 +13,7 @@
 #include "PSBMedia.h"
 
 #include "PSBFile.h"
+#include "EmoteMaskBits.h"
 #include "resources/ImageMetadata.h"
 #include "MsgIntf.h"
 #include "Platform.h"
@@ -25,6 +26,11 @@ namespace PSB {
 #define LOGGER spdlog::get("plugin")
 
     namespace {
+        // 解析期位域统计（thread_local：PSB 解析发生在加载线程，避免并发解析
+        // 互相污染）。由 CollectAllMotionNodeTrees() 在每个 archive 复位一次并在
+        // 结束时打印一行汇总。只统计、不影响渲染。
+        thread_local Emote::MaskStats g_emoteMaskStats;
+
         size_t CalcEntryFootprint(const PSBMedia::CacheEntry &entry) {
             size_t total = entry.resource ? entry.resource->data.size() : 0;
             if(entry.convertedImage) {
@@ -52,15 +58,6 @@ namespace PSB {
             return false;
         }
 
-        /**
-         * 资源键 `\<档案\>/\<内部路径\>` 里档案名与内部路径的分界位置。
-         *
-         * 为什么不能就按第一个 '/' 切：档案可能带存储前缀（`lzfs:/x.psb/...`，
-         * motionplayer 发 `psb://lzfs://...` 经存储层规范化后 `//` 收成单斜杠）
-         * 或位于子目录（`motion/mono_loop.mtn/...`）；按第一个 '/' 会切出
-         * `lzfs:` / `motion` 这种假档案名 → `loadPSBFile` 必然失败。
-         * 移植自 AetherKiri `cpp/plugins/psbfile/PSBMedia.cpp:111-134`。
-         */
         std::string ArchiveBoundaryKey(const std::string &key) {
             std::string lower = key;
             std::transform(lower.begin(), lower.end(), lower.begin(),
@@ -230,18 +227,6 @@ namespace PSB {
                     break;
                 }
                 if(src == &rawSrc) {
-                    // The "RL" tag on this resource produced no decodable
-                    // run-length stream — e.g. an UNCOMPRESSED palette image
-                    // (m2logo icon32/icon18: 3x16 raw CI8 index bytes) whose
-                    // compress metadata resolved to RL. Do NOT bail to a 1x1
-                    // default (invisible vertical cross bar); fall back to the
-                    // raw bytes and let format inference decode them below
-                    // (CI8/CI4/L8/...).
-                    // 该资源标 RL 但解不出合法 RLE 流——比如**未压缩**调色图
-                    // （m2logo icon32/icon18：3x16 原始 CI8 索引字节）其
-                    // compress
-                    // 元数据却解析成了 RL。不能直接放弃成 1x1（竖线不可见），
-                    // 回退拿原始字节，交给下方格式推断去解码（CI8/CI4/L8/…）。
                     decodedAlign = 0;
                     if(LOGGER)
                         LOGGER->warn("convertImage: key='{}' RL decode failed "
@@ -581,6 +566,144 @@ namespace PSB {
             return fallback;
         }
 
+        // 按 PSB 帧的 content["mask"] 把“作者标记本帧不存在”的字段复位回默认值。
+        //
+        // 为什么是“事后复位”而不是“按位读”：两个帧解析点（平坦轨道 / 节点帧）已经
+        // 把键全读进来了，逐处改成按位读容易出现两套不同口径的解析；事后统一复位
+        // 只有一处口径，且只动本地 frame 结构（不去改共享的 PSB 字典）。语义与参考
+        // 实现完全等价：mask 位为 0 时该键等同于不存在。
+        // 位表来自 AetherKiri `PlayerInternal.h:1921-2035`（对应 libkrkr2 sub_692AB0）：
+        //   0x1 ox/oy、0x2 coord[x,y,z]、0x4 fx、0x8 fy、0x10 angle、
+        //   0x20 'z'、0x60 zx/zy、0x80 sx、0x100 sy、0x400 opa/op、0x20000 bm。
+        //
+        // 位号已集中到 EmoteMaskBits.h（ContentMask），并与 FreeMote 的位表逐位
+        // 对账过（见该文件头部的许可证说明：**只参考、未复制代码**）。
+        // countStats=true 时把"真实数据里出现了哪些位 / 位与键是否自洽"累加到
+        // g_emoteMaskStats；只有节点树口径（CollectMotionNodeFrames）会打开它，
+        // 避免平坦轨道口径把同一批帧数两遍。
+        void ApplyFrameContentMask(
+            const std::shared_ptr<PSBDictionary> &content,
+            PSBMedia::PSBMotionFrame &f, bool countStats = false) {
+            if(!content)
+                return;
+            const int mask =
+                static_cast<int>(GetPSBFloat((*content)["mask"], 0));
+            f.mask = mask;
+            if((mask & Emote::ContentMask::Origin) == 0) {
+                f.ox = Emote::Defaults::Origin;
+                f.oy = Emote::Defaults::Origin;
+            }
+            if((mask & Emote::ContentMask::Coord) == 0) {
+                f.cx = Emote::Defaults::Coord;
+                f.cy = Emote::Defaults::Coord;
+                f.z = Emote::Defaults::Coord;
+                f.scaleFromCoordZ = false;
+            }
+            if((mask & (Emote::ContentMask::ZoomX |
+                        Emote::ContentMask::ZoomY)) == 0) {
+                f.scaleX = Emote::Defaults::Zoom;
+                f.scaleY = Emote::Defaults::Zoom;
+                f.scaleFromCoordZ = false;
+            }
+            if((mask & Emote::ContentMask::Angle) == 0)
+                f.angle = Emote::Defaults::Angle;
+            if((mask & Emote::ContentMask::SlantX) == 0)
+                f.slantX = Emote::Defaults::Slant;
+            if((mask & Emote::ContentMask::SlantY) == 0)
+                f.slantY = Emote::Defaults::Slant;
+            if((mask & Emote::ContentMask::FlipX) == 0)
+                f.flipX = false;
+            if((mask & Emote::ContentMask::FlipY) == 0)
+                f.flipY = false;
+            if((mask & Emote::ContentMask::Opacity) == 0)
+                f.opacity = Emote::Defaults::Opacity;
+            if((mask & Emote::ContentMask::BlendMode) == 0) {
+                // 参考实现按 value_or(0) 取 0；FreeMote 的帧内容默认表写的是 16。
+                // 两者不一致，故做成开关：默认保持本轮之前的行为（0）。
+                if constexpr(Emote::Switches::kBlendModeDefault16)
+                    f.blendMode = Emote::Defaults::BlendMode;
+                else
+                    f.blendMode = 0;
+            }
+
+            // ---- 本轮新增：只统计 / 只告警，默认不改变任何渲染行为 ----
+            if(countStats) {
+                ++g_emoteMaskStats.frames;
+                if((*content).find("mask") != (*content).end())
+                    ++g_emoteMaskStats.framesWithMask;
+                struct MaskProbe {
+                    int index;
+                    const char *key;
+                    const char *altKey;
+                };
+                // 位 → 该位管辖的 content 键。用于两个方向的**自洽性检查**：
+                //   位=1 但键不存在 ⇒ 位表或解析口径有误；
+                //   位=0 但键存在   ⇒ 复位口径在真实数据里确实会被触发（本轮最重要
+                //                     的一条数据：它决定 color/曲线这些位值不值得实现）。
+                static const MaskProbe kProbes[] = {
+                    {0, "ox", "oy"},     {1, "coord", nullptr},
+                    {2, "fx", nullptr},   {3, "fy", nullptr},
+                    {4, "angle", nullptr},
+                    {5, "zx", nullptr},   {6, "zy", nullptr},
+                    {7, "sx", nullptr},   {8, "sy", nullptr},
+                    {9, "color", nullptr},
+                    {10, "opa", "op"},
+                    {11, "ccc", nullptr}, {12, "acc", nullptr},
+                    {13, "zcc", nullptr}, {14, "scc", nullptr},
+                    {15, "occ", nullptr},
+                    {17, "bm", nullptr},
+                    {19, "motion", nullptr},
+                    {20, "prt", nullptr},
+                    {25, "mesh", nullptr},
+                };
+                for(int bit = 0; bit < 32; ++bit) {
+                    if((mask & (1 << bit)) == 0)
+                        continue;
+                    ++g_emoteMaskStats.maskBitSeen[bit];
+                    if(((1 << bit) & Emote::ContentMask::kImplemented) == 0)
+                        ++g_emoteMaskStats.unhandledBitSeen[bit];
+                }
+                for(const auto &probe : kProbes) {
+                    const bool hasKey =
+                        (*content).find(probe.key) != (*content).end() ||
+                        (probe.altKey != nullptr &&
+                         (*content).find(probe.altKey) != (*content).end());
+                    if((mask & (1 << probe.index)) != 0) {
+                        if(!hasKey)
+                            ++g_emoteMaskStats.bitSetKeyMissing[probe.index];
+                    } else if(hasKey) {
+                        ++g_emoteMaskStats.bitClearKeyPresent[probe.index];
+                    }
+                }
+                if((mask & Emote::ContentMask::Color) != 0)
+                    ++g_emoteMaskStats.colorBitSet;
+                else
+                    ++g_emoteMaskStats.colorBitClear;
+            }
+
+            // ---- A/B 开关（默认全关 = 行为与本轮之前逐字节一致）----
+            // 一次只翻一个，翻完看真机日志/截图。
+            if constexpr(Emote::Switches::kGateColorByMask) {
+                if((mask & Emote::ContentMask::Color) == 0)
+                    f.packedColors = {Emote::Defaults::PackedVertexColor,
+                                      Emote::Defaults::PackedVertexColor,
+                                      Emote::Defaults::PackedVertexColor,
+                                      Emote::Defaults::PackedVertexColor};
+            }
+            if constexpr(Emote::Switches::kGateCurvesByMask) {
+                if((mask & Emote::ContentMask::CoordCurve) == 0)
+                    f.hasEasing = false;
+                if((mask & Emote::ContentMask::AngleCurve) == 0)
+                    f.hasAngleEasing = false;
+                if((mask & Emote::ContentMask::ZoomCurve) == 0)
+                    f.hasScaleEasing = false;
+                if((mask & Emote::ContentMask::SlantCurve) == 0)
+                    f.hasSlantEasing = false;
+                if((mask & Emote::ContentMask::OpacityCurve) == 0)
+                    f.hasOpacityEasing = false;
+            }
+        }
+
         int GetPSBInt(const std::shared_ptr<IPSBValue> &value,
                       int fallback = 0) {
             if(!value)
@@ -684,8 +807,6 @@ namespace PSB {
             auto content =
                 std::dynamic_pointer_cast<PSBDictionary>((*frame0)["content"]);
             if(!content) {
-                // 同一份资源解析会重复走到这里（真机实测同一行连刷 6 次）：
-                // 按 label 去重，只记第一次，避免把 4MiB 的轮转窗口刷满。
                 KRKR_LOG_ONCE("psb_extract_no_content_" + debugLabel,
                               if(logger) {
                                   std::string keys;
@@ -864,15 +985,6 @@ namespace PSB {
             }
         }
 
-        // Extract the full frame time-line for one motion: each layer's
-        // frameList becomes a PSBMotionLayerTrack whose frames (sorted by time)
-        // drive the animation. Mirrors CollectLayersFromMotion but keeps EVERY
-        // frame, not just frame0, so the player can pick the frame active at
-        // the current clock — this is what makes logo/title actually animate.
-        // Extract the complete timeline: frame 0 is enough for static
-        // discovery, but playback needs every keyframe to select state at the
-        // current clock. 提取完整时间线：静态资源发现只需 frame
-        // 0，播放则必须保留全部关键帧， 以便按当前时钟选择图层状态。
         void CollectMotionTracksFromMotion(
             const std::shared_ptr<PSBDictionary> &motionDict,
             const std::string &motionName, const std::string &sceneName,
@@ -916,28 +1028,8 @@ namespace PSB {
                     if(!frame)
                         continue;
                     PSBMedia::PSBMotionFrame f;
-                    // M2 frameList "time" is a 60fps FRAME count (PSB motion
-                    // format); the Player clock (progress delta fed by the game
-                    // script) is in MILLISECONDS. Convert once at parse time so
-                    // every consumer compares the same unit — without this a
-                    // 4-second logo timeline (t=241) finishes in ~241 ms and
-                    // all characters pop in at once. M2 frameList 的 "time" 是
-                    // 60fps 帧数（PSB motion 格式）； Player 时钟（脚本传给
-                    // progress 的增量）是毫秒。在解析处统一 换算成毫秒，否则 4
-                    // 秒的 logo 时间线（t=241）约 241ms 就播完，
-                    // 所有角色瞬间同时出现。
                     f.time = static_cast<int>(GetPSBFloat((*frame)["time"], 0) *
                                               1000.0 / 60.0);
-                    // PSB frame "type" (0=invisible, 2=static, 3=interpolate)
-                    // gates visibility — reference sub_6926B4 parseFrame. A
-                    // type==0 frame is the layer's HIDDEN initial state even if
-                    // it carries a content/src (yuzulogo white/logo at t=0);
-                    // drawing it made the complete static logo appear before
-                    // the intro started. PSB 帧 "type"（0=不可见, 2=静态,
-                    // 3=插值）决定可见性——参考 sub_6926B4 parseFrame。type==0
-                    // 帧是图层的**隐藏初始态**，即使 带 content/src（yuzulogo
-                    // 的 white/logo t=0 帧）；画出它就会在
-                    // 片头开始前显示完整静态 logo。
                     f.type = static_cast<int>(GetPSBFloat((*frame)["type"], 0));
                     auto content = std::dynamic_pointer_cast<PSBDictionary>(
                         (*frame)["content"]);
@@ -953,16 +1045,10 @@ namespace PSB {
                         if(coord && coord->size() >= 2) {
                             f.cx = GetPSBFloat((*coord)[0], 0);
                             f.cy = GetPSBFloat((*coord)[1], 0);
+                            // coord[2] 是 **Z（深度）**，不是缩放兑底 —— 见 z 字段声明处。
+                            if(coord->size() >= 3)
+                                f.z = GetPSBFloat((*coord)[2], 0.0f);
                         }
-                        // M2 per-frame scale: content "zx"/"zy" (libkrkr2
-                        // sub_692AB0 mask 0x60) drive logo backdrops that
-                        // magnify a tiny source (yuzulogo's 64x64 white_box →
-                        // fullscreen). coord[2] 'z' is a fallback scale
-                        // (reference also stores coord[2] into slot z). M2
-                        // 帧内缩放：content 的 "zx"/"zy"（libkrkr2 sub_692AB0
-                        // mask 0x60） 驱动 logo 背景把 64×64 white_box
-                        // 放大到全屏；coord[2] 'z' 作为 兜底缩放（参考也会把
-                        // coord[2] 存入 slot z）。
                         {
                             const float zx =
                                 GetPSBFloat((*content)["zx"], 0.0f);
@@ -972,43 +1058,10 @@ namespace PSB {
                                 f.scaleX = zx;
                             if(zy != 0.0f)
                                 f.scaleY = zy;
-                            if(zx == 0.0f || zy == 0.0f) {
-                                if(coord && coord->size() >= 3) {
-                                    const float z =
-                                        GetPSBFloat((*coord)[2], 0.0f);
-                                    if(z != 0.0f) {
-                                        if(zx == 0.0f)
-                                            f.scaleX = z;
-                                        if(zy == 0.0f)
-                                            f.scaleY = z;
-                                    }
-                                }
-                            }
                         }
-                        // Round 2: blend mode (content "bm") and clipping rect
-                        // (content "clip" → [l,t,r,b]). bm maps to the operate
-                        // blend op; clip is probed this round (applied once
-                        // confirmed present on device).
-                        // 第二轮：混合模式(content "bm")与裁切矩形(content
-                        // "clip"→ [l,t,r,b])。bm 映射到 operate 混合算子；clip
-                        // 本轮先探针， 真机确认存在后再应用。
                         f.blendMode =
                             static_cast<int>(GetPSBFloat((*content)["bm"], 0));
-                        // M2 per-frame rotation (content "angle", degrees).
-                        // Drives the yuzusoft logo leaf's wobble/orientation.
-                        // Reference reads the same key (sub_692AB0 mask 0x10)
-                        // into the frame angle. M2 帧内旋转（content
-                        // "angle"，单位度）。驱动 yuzusoft logo 叶子
-                        // 的摆动/朝向。参考读取同一键（sub_692AB0 mask
-                        // 0x10）到帧 angle。
                         f.angle = GetPSBFloat((*content)["angle"], 0.0f);
-                        // M2 skew (content "sx"/"sy"), transformOrder case-3
-                        // operator [1,sx;sy,1] (libkrkr2 sub_699940). Aligns
-                        // with AetherKiri applyLocalTransform — we previously
-                        // skipped case 3 entirely. M2 斜切(content
-                        // "sx"/"sy")，transformOrder case-3 算子
-                        // [1,sx;sy,1]（libkrkr2 sub_699940），对齐 AetherKiri
-                        // applyLocalTransform——此前我们整段跳过 case 3。
                         f.slantX = GetPSBFloat((*content)["sx"], 0.0f);
                         f.slantY = GetPSBFloat((*content)["sy"], 0.0f);
                         if(auto clipList = std::dynamic_pointer_cast<PSBList>(
@@ -1025,34 +1078,15 @@ namespace PSB {
                                     GetPSBFloat((*clipList)[3], 0));
                             }
                         }
-                        // M2 flip: content "fx"/"fy" nonzero means mirror the
-                        // sprite (e.g. yuzulogo's leaf jitter piece). Same as
-                        // the flat path. M2 翻转：content "fx"/"fy"
-                        // 非零表示镜像该精灵（如 yuzulogo 叶片摆动件）。
                         f.flipX = GetPSBFloat((*content)["fx"], 0.0f) != 0.0f;
                         f.flipY = GetPSBFloat((*content)["fy"], 0.0f) != 0.0f;
-                        // M2 frame opacity is stored under "opa" (0..255), not
-                        // "op". Reading the wrong key always yielded the
-                        // fallback 255, so any layer whose entrance is driven
-                        // by opacity (e.g. yuzulogo's `white`/`logo` t=0 frame
-                        // has `opa:0` → the complete cyan logo must stay
-                        // transparent at first) was rendered fully opaque. Read
-                        // "opa" first, fall back to "op". M2 帧透明度字段是
-                        // "opa"（0..255），不是 "op"。读错 key 会恒返回兜底
-                        // 255，
-                        // 导致以透明度驱动入场/出场的层被画成完全不透明（如
-                        // yuzulogo 的 white/logo 层 t=0 帧 `opa:0`，完整青色
-                        // logo 开首应保持透明）。优先读 "opa"，无则回退 "op"。
                         f.opacity = GetPSBFloat((*content)["opa"], -1.0f);
                         if(f.opacity < 0.0f)
                             f.opacity = GetPSBFloat((*content)["op"], 255.0f);
                     } else {
-                        // type==0 (invisible) or a frame without content only
-                        // marks a time change: the layer is invisible during
-                        // this range. type==0（不可见）或无 content
-                        // 的帧只是时间标记：该时段内 图层不可见。
                         f.visible = false;
                     }
+                    ApplyFrameContentMask(content, f);
                     track.frames.push_back(std::move(f));
                 }
                 if(track.frames.empty())
@@ -1066,8 +1100,6 @@ namespace PSB {
             }
         }
 
-        // Extract the time-line for every scene/motion in the object tree.
-        // 对对象树里每个场景/每个 motion 都提取时间线。
         void
         CollectAllMotionTracks(PSBMedia &media, const std::string &archiveKey,
                                const std::shared_ptr<PSBDictionary> &objectTree,
@@ -1088,14 +1120,6 @@ namespace PSB {
                         std::dynamic_pointer_cast<PSBDictionary>(motionVal);
                     if(!motionDictObj)
                         continue;
-                    // M2 motion-level metadata: "loopTime" (>0 means the
-                    // timeline loops, e.g. logo intros play until the script
-                    // advances). Same frames→ms conversion as frameList "time"
-                    // — both are 60fps frame counts in the PSB, the Player
-                    // clock is in ms. M2 motion 级元数据："loopTime"（>0
-                    // 表示时间线循环，如 logo 片头 会一直播到脚本推进）。与
-                    // frameList "time" 同样的 帧→毫秒 换算—— PSB 里两者都是
-                    // 60fps 帧数，Player 时钟是毫秒。
                     const tjs_int loopTime = static_cast<tjs_int>(
                         GetPSBFloat((*motionDictObj)["loopTime"], 0) * 1000.0 /
                         60.0);
@@ -1121,10 +1145,6 @@ namespace PSB {
             }
         }
 
-        // Recursively build a node's frame timeline from its "frameList" (same
-        // content fields as the flat track: time +
-        // content{src,ox,oy,coord,op}). 递归解析节点自身的 "frameList"
-        // 帧时间线（字段与扁平轨道一致）。
         void
         CollectMotionNodeFrames(const std::shared_ptr<PSBDictionary> &layerDict,
                                 PSBMedia::PSBMotionNode &node) {
@@ -1139,21 +1159,8 @@ namespace PSB {
                 if(!frame)
                     continue;
                 PSBMedia::PSBMotionFrame f;
-                // Same frames→ms conversion as the flat tracks (see
-                // CollectMotionTracksFromMotion): keep the Player clock (ms)
-                // and the node timeline in one unit. 与扁平轨道同样的 帧→毫秒
-                // 换算（见 CollectMotionTracksFromMotion）： 让 Player
-                // 时钟（毫秒）与节点时间线保持同一单位。
                 f.time = static_cast<int>(GetPSBFloat((*frame)["time"], 0) *
                                           1000.0 / 60.0);
-                // PSB frame "type" (0=invisible) — see
-                // CollectMotionTracksFromMotion. A type==0 frame hides the node
-                // even when it carries a content/src (yuzulogo white/logo t=0:
-                // the static logo must not show before the intro animation
-                // starts). PSB 帧 "type"（0=不可见）——见
-                // CollectMotionTracksFromMotion。 type==0 帧即使带 content/src
-                // 也隐藏节点（yuzulogo white/logo 的 t=0 帧：完整静态 logo
-                // 不该在片头动画开始前出现）。
                 f.type = static_cast<int>(GetPSBFloat((*frame)["type"], 0));
                 auto content = std::dynamic_pointer_cast<PSBDictionary>(
                     (*frame)["content"]);
@@ -1169,13 +1176,15 @@ namespace PSB {
                     if(coord && coord->size() >= 2) {
                         f.cx = GetPSBFloat((*coord)[0], 0);
                         f.cy = GetPSBFloat((*coord)[1], 0);
+                        // coord[2] 是 **Z（深度）**，不是缩放兑底 —— 与 flat
+                        // 路径（CollectMotionTracksFromMotion）及参考
+                        // PlayerInternal.h:1929-1931 一致。
+                        // 【节点树路径（立绘走这条）此前从不读 z】⇒ 累积 posZ
+                        // 恒为 0，`kEmoteZSort` 的稳定排序成了空操作，画面与旧行为
+                        // 逐像素相同。
+                        if(coord->size() >= 3)
+                            f.z = GetPSBFloat((*coord)[2], 0.0f);
                     }
-                    // M2 per-frame scale from content "zx"/"zy" (and coord[2]
-                    // 'z' fallback) — same as the flat track path. Logo
-                    // backdrops magnify a tiny source image to fullscreen via
-                    // zx/zy. M2 帧内缩放来自 content "zx"/"zy"（及 coord[2] 'z'
-                    // 兜底）—— 与扁平轨道一致。logo 背景以小图 + zx/zy
-                    // 放大到全屏。
                     {
                         const float zx = GetPSBFloat((*content)["zx"], 0.0f);
                         const float zy = GetPSBFloat((*content)["zy"], 0.0f);
@@ -1183,28 +1192,10 @@ namespace PSB {
                             f.scaleX = zx;
                         if(zy != 0.0f)
                             f.scaleY = zy;
-                        if(zx == 0.0f || zy == 0.0f) {
-                            if(coord && coord->size() >= 3) {
-                                const float z = GetPSBFloat((*coord)[2], 0.0f);
-                                if(z != 0.0f) {
-                                    if(zx == 0.0f)
-                                        f.scaleX = z;
-                                    if(zy == 0.0f)
-                                        f.scaleY = z;
-                                }
-                            }
-                        }
                     }
-                    // Round 2 same as flat path: blend (bm) + clip probe.
-                    // 第二轮同扁平路径：混合(bm)+裁切探针。
                     f.blendMode =
                         static_cast<int>(GetPSBFloat((*content)["bm"], 0));
-                    // M2 per-frame rotation (content "angle", degrees), same as
-                    // flat. M2 帧内旋转（content
-                    // "angle"，单位度），同扁平路径。
                     f.angle = GetPSBFloat((*content)["angle"], 0.0f);
-                    // M2 skew (content "sx"/"sy"), same as flat path.
-                    // M2 斜切(content "sx"/"sy")，同扁平路径。
                     f.slantX = GetPSBFloat((*content)["sx"], 0.0f);
                     f.slantY = GetPSBFloat((*content)["sy"], 0.0f);
                     if(auto clipList = std::dynamic_pointer_cast<PSBList>(
@@ -1221,40 +1212,11 @@ namespace PSB {
                                 GetPSBFloat((*clipList)[3], 0));
                         }
                     }
-                    // M2 flip (content "fx"/"fy") same as flat path.
-                    // M2 翻转（content "fx"/"fy"）同扁平路径。
                     f.flipX = GetPSBFloat((*content)["fx"], 0.0f) != 0.0f;
                     f.flipY = GetPSBFloat((*content)["fy"], 0.0f) != 0.0f;
-                    // M2 frame opacity is stored under "opa" (0..255), not
-                    // "op". Reading the wrong key always yielded the fallback
-                    // 255, so any layer whose entrance is driven by opacity
-                    // (e.g. yuzulogo's `white`/`logo` t=0 frame has `opa:0` →
-                    // the complete cyan logo must stay transparent at first)
-                    // was rendered fully opaque. Read "opa" first, fall back to
-                    // "op". M2 帧透明度字段是 "opa"（0..255），不是 "op"。读错
-                    // key 会恒返回兜底 255，
-                    // 导致以透明度驱动入场/出场的层被画成完全不透明（如
-                    // yuzulogo 的 white/logo 层 t=0 帧 `opa:0`，完整青色 logo
-                    // 开首应保持透明）。优先读 "opa"，无则回退 "op"。
                     f.opacity = GetPSBFloat((*content)["opa"], -1.0f);
                     if(f.opacity < 0.0f)
                         f.opacity = GetPSBFloat((*content)["op"], 255.0f);
-                    // M2 cubic-bezier easing (content "ccc") for this frame's
-                    // interpolation toward the NEXT keyframe, if present.
-                    // M2 三次贝塞尔缓动（content
-                    // "ccc"）：本帧向下一帧插值用，若存在。 Per-property bezier
-                    // easing: the reference (libkrkr2/AetherKiri) reads a
-                    // SEPARATE curve for EACH attribute ("ccc"=color,
-                    // "acc"=angle, "zcc"=scale, "occ"=opacity, "scc"=slant). We
-                    // read all of them so the interpolator can ease each
-                    // attribute with its own curve instead of reusing "ccc" for
-                    // everything (which mis-times the m2logo M-fold rotation
-                    // and the position/scale tweens).
-                    // 逐属性贝塞尔缓动：参考（libkrkr2/AetherKiri）为**每个属性**读取各自
-                    // 曲线（"ccc"=颜色、"acc"=角度、"zcc"=缩放、"occ"=透明度、scc=斜切）。
-                    // 全部读取后，插值器才能让每个属性用各自曲线，而不是把
-                    // "ccc" 复用于 所有属性（否则 m2logo 的 M
-                    // 折叠角与位置/缩放补间会相对参考错位）。
                     if(auto cccObj = std::dynamic_pointer_cast<PSBDictionary>(
                            (*content)["ccc"]))
                         if(auto xl = std::dynamic_pointer_cast<PSBList>(
@@ -1324,14 +1286,6 @@ namespace PSB {
                             f.sccX2 = GetPSBFloat((*xl)[2], 1.0f);
                             f.sccY2 = GetPSBFloat((*yl)[2], 1.0f);
                         }
-                    // M2 per-sprite vertex color (content "color"): either a
-                    // dictionary of "0".."3" (four packed ARGB DWORDs, one per
-                    // corner) or a scalar number broadcast to all four corners.
-                    // Default stays opaque white (identity —
-                    // Player::applyFlatTint skips it). M2 精灵顶点色（content
-                    // "color"）：要么是 "0".."3" 的字典（四角各一 个打包 ARGB
-                    // DWORD），要么是广播到四角的标量数字。默认保持不透明白
-                    // （恒等——Player::applyFlatTint 会跳过）。
                     if(auto colorDict =
                            std::dynamic_pointer_cast<PSBDictionary>(
                                (*content)["color"])) {
@@ -1354,15 +1308,6 @@ namespace PSB {
                     } else if(auto colorList =
                                   std::dynamic_pointer_cast<PSBList>(
                                       (*content)["color"])) {
-                        // M2 text glyphs sometimes store the color as a flat
-                        // list of four packed ARGB DWORDs (per corner) instead
-                        // of a { "0".."3" } dict or a scalar. Fall back to the
-                        // list so C/W and the cross vertical line actually get
-                        // their red/black tint. M2
-                        // 文本字形有时把颜色存成**扁平四值 list**（每个打包
-                        // ARGB DWORD， 四角各一），而不是 { "0".."3" }
-                        // 字典或标量。回退到 list，让 C/W
-                        // 和十字竖线真正拿到红/黑着色。
                         for(int ci = 0;
                             ci < 4 && ci < static_cast<int>(colorList->size());
                             ci++) {
@@ -1376,20 +1321,6 @@ namespace PSB {
                         }
                     }
 #if defined(KRKR_RENDER_PROBE)
-                    // Trace probe (P1): print the AUTHORED per-corner packed
-                    // color of every m2logo frame that either carries a
-                    // non-white color (so we see the red→black line and red C/W
-                    // values the parser actually read) or is one of the thin
-                    // line icons (icon17/18/32) even when white — this decides
-                    // whether the vertical cross bar's missing color is (a)
-                    // absent in the data, (b) a format we don't parse, or (c)
-                    // meant to come from an icon base color / parent.
-                    // 追踪探针(P1)：把 m2logo
-                    // 中**带非白颜色**的每帧作者打包色（红转黑线、 红色 C/W
-                    // 的实际解析值）以及**线框
-                    // icon(17/18/32)**（即使为白）的作者
-                    // 打包色全部打印——用来判定十字竖线缺色是 ① 数据里真没有 ②
-                    // 解析漏了新 格式 ③ 应来自 icon 基准色/父容器。
                     {
                         auto plogger = LOGGER;
                         if(plogger && !f.src.empty() &&
@@ -1419,11 +1350,7 @@ namespace PSB {
                         }
                     }
 #endif
-                    // E-mote mesh: content["mesh"]["bp"] (or "b") → 16 control
-                    // points (32 floats) for a bicubic Bernstein patch that
-                    // deforms children. E-mote 面片：content["mesh"]["bp"]（或
-                    // "b"）→ 16 个控制点（32 float） 的双三次 Bernstein
-                    // 面片，用于变形子节点。
+
                     if(auto meshObj = std::dynamic_pointer_cast<PSBDictionary>(
                            (*content)["mesh"])) {
                         std::shared_ptr<PSBList> bp =
@@ -1440,10 +1367,7 @@ namespace PSB {
                             }
                         }
                     }
-                    // M2 control-point rotation spline (content "cp"): x/y
-                    // 主贝塞尔 控制点、t 时间节、s[].x/y/p 每节样条（参考
-                    // AetherKiri sub_698454）。 M2 控制点旋转样条（content
-                    // "cp"）——见 PSBMotionCpCurve。
+
                     if(auto cpDict = std::dynamic_pointer_cast<PSBDictionary>(
                            (*content)["cp"])) {
                         auto cpxList =
@@ -1505,12 +1429,7 @@ namespace PSB {
                             }
                         }
                     }
-                    // M2 motion sub-object (content["motion"]["mask"][x]):
-                    // 选择子运动 节点角度计算模式
-                    // motionDt（0x2→dt、0x8→dofst、0x10→dtgt）。 M2
-                    // 运动子对象（content["motion"]）：mask 位
-                    // 0x2→dt（角度模式）、
-                    // 0x8→dofst（角度偏移）、0x10→dtgt（模式 4 目标节点名）。
+
                     if(auto md = std::dynamic_pointer_cast<PSBDictionary>(
                            (*content)["motion"])) {
                         const int mm =
@@ -1526,12 +1445,9 @@ namespace PSB {
                                 f.motionDtgt = dtgt->value;
                     }
                 } else {
-                    // type==0 (invisible) or a frame without content only marks
-                    // a time change: the node is invisible during this range.
-                    // type==0（不可见）或无 content 的帧只是时间标记：该时段内
-                    // 节点不可见。
                     f.visible = false;
                 }
+                ApplyFrameContentMask(content, f, true);
                 node.frames.push_back(std::move(f));
             }
             std::stable_sort(node.frames.begin(), node.frames.end(),
@@ -1541,13 +1457,6 @@ namespace PSB {
                              });
         }
 
-        // Recursively build the M2 layer NODE TREE from the motion's "layer"
-        // array, descending into the PSB "children" key. Pre-order insertion
-        // guarantees parents come before their children in `nodes`, which is
-        // what top-down position/opacity accumulation requires. 递归从 motion
-        // 的 "layer" 数组构建 M2 图层**节点树**，沿 PSB "children" 下钻。
-        // 先序插入保证 `nodes`
-        // 中父节点总在子节点之前——这正是自顶向下累加坐标/透明度所需。
         void CollectMotionNodesFromLayerList(
             const std::shared_ptr<PSBList> &layerList, int parentIndex,
             std::vector<PSBMedia::PSBMotionNode> &nodes,
@@ -1567,18 +1476,13 @@ namespace PSB {
                 node.parentIndex = parentIndex;
                 node.type =
                     static_cast<int>(GetPSBFloat((*layerDict)["type"], 0));
-                // Per-node transform inheritance mask / local-matrix operator
-                // order. libkrkr2 sub_6B3C78 reads "inheritMask" (default 0x1FC
-                // = inherit all) and "transformOrder" (default [0,1,2,3]).
-                // Without these we can't gate scale/angle/flip inheritance per
-                // node (e.g. m2logo letters must NOT inherit str_clip's
-                // clip-region scale). 节点的变换继承掩码 /
-                // 局部矩阵算子顺序。libkrkr2 sub_6B3C78 读取
-                // "inheritMask"（默认 0x1FC=全部继承）与 "transformOrder"（默认
-                // [0,1,2,3]）。缺它们就无法按节点门控 scale/angle/flip 继承（如
-                // m2logo 字母不能继承 str_clip 的裁剪窗口缩放）。
-                node.inheritMask = static_cast<int>(
-                    GetPSBFloat((*layerDict)["inheritMask"], 0x1FC));
+                node.inheritMask = static_cast<int>(GetPSBFloat(
+                    (*layerDict)["inheritMask"], Emote::InheritMask::kDefault));
+                // 继承位直方图：位表已补全到 11 项（EmoteMaskBits.h::InheritMask），
+                // 默认值 kDefault = 0x1FC = bits 2..8 正好是全部仿射项，可作交叉验证。
+                for(int ibit = 0; ibit < 32; ++ibit)
+                    if((node.inheritMask & (1 << ibit)) != 0)
+                        ++g_emoteMaskStats.inheritMaskSeen[ibit];
                 if(auto toList = std::dynamic_pointer_cast<PSBList>(
                        (*layerDict)["transformOrder"])) {
                     for(int k = 0;
@@ -1587,49 +1491,30 @@ namespace PSB {
                             static_cast<int>(GetPSBFloat((*toList)[k], k));
                     }
                 }
-                // Layer display size: the texture may be smaller than the layer
-                // (e.g. yuzulogo's 64x64 white_box stretched to fill the
-                // canvas). 图层显示尺寸：纹理可能小于图层（如 yuzulogo 的 64x64
-                // white_box 需拉伸铺满画布）。
                 node.width =
                     static_cast<int>(GetPSBFloat((*layerDict)["width"], 0));
                 node.height =
                     static_cast<int>(GetPSBFloat((*layerDict)["height"], 0));
-                // E-mote mesh gates. NOTE: the PSB key for the mesh TYPE is
-                // "meshTransform" (reference NodeTree sub_6B3C78) — "meshType"
-                // is a DIFFERENT per-meshCombinator key, so reading the wrong
-                // key here would silently keep all mesh deformation off. E-mote
-                // 网格门控。注意：PSB 的网格**类型**键是 "meshTransform"（参考
-                // NodeTree sub_6B3C78），"meshType" 是另一个 meshCombinator
-                // 内的键—— 读错键会让所有网格变形静默失效。
                 node.meshType = static_cast<int>(
                     GetPSBFloat((*layerDict)["meshTransform"], 0));
                 node.meshSyncChildMask = static_cast<int>(
                     GetPSBFloat((*layerDict)["meshSyncChildMask"], 0));
                 node.meshDivision = static_cast<int>(
                     GetPSBFloat((*layerDict)["meshDivision"], 0));
-                // stencil composite (type==12): stencilType + authored mask
-                // layer labels (stencilCompositeMaskLayerList). Mask labels
-                // resolve to node indices AFTER the full tree is built
-                // (CollectMotionNodeTreesFromMotion). stencil
-                // 合成（type==12）：stencilType + 作者蒙版层名表。
-                // 蒙版名在全树构建（CollectMotionNodeTreesFromMotion）后解析为节点索引。
                 const int stencilTypeValue = static_cast<int>(
                     GetPSBFloat((*layerDict)["stencilType"], 0));
                 node.stencilType = stencilTypeValue;
-                // 只有 `type==12 && (stencilType & 4)` 才是「带蒙版的合成组」。
-                //
-                // 参考实现（krkr2 NodeTree.cpp 的蒙版表遍历 + PlayerRenderItems.cpp:581
-                // 的 `node.nodeType == 12 && (node.stencilType & 4) != 0`）就是这么判的；
-                // 而且 e-mote 系 PSB 常把 stencilType 写成 0（有 content 的图层应正常绘制，
-                // 见 NodeTree.cpp:254 把 0 归一化为 1）。
-                //
-                // 本仓库以前用 `type == 12` 一刀切，于是 E-mote 树里大量**普通**图层被当成
-                // 合成组：后续节点全部被送进离屏组层，收尾又只折叠第一个组的蒙版 ⇒
-                // 真机表现是每帧 `multiple composites (2..6), only first folded`、
-                // 千恋万花 SD 的**背景被当蒙版吃掉**、NEKOPARA 立绘缺件。
+                // 注意：stencilType 在 FreeMote 眼里是**枚举**（PSB 侧比 MMO 侧多一个
+                // 常量偏移 4：PSB 5 ↔ MMO 1），而不是位标志。若真实数据里所有
+                // type-12 层都带 bit2，那么 `(stencilType & 4)` 这个判据等于恒真、
+                // 不具区分度；直方图会直接把这件事暴露出来（见 emote layer stats）。
+                // 本轮不改判据，只统计。
+                if(node.type == Emote::Stencil::kLayerType &&
+                   stencilTypeValue >= 0 && stencilTypeValue < 64)
+                    ++g_emoteMaskStats.stencilTypeValue[stencilTypeValue];
                 node.hasStencil =
-                    (node.type == 12 && (stencilTypeValue & 4) != 0);
+                    (node.type == Emote::Stencil::kLayerType &&
+                     (stencilTypeValue & Emote::Stencil::kPsbValueOffset) != 0);
                 if(auto maskList = std::dynamic_pointer_cast<PSBList>(
                        (*layerDict)["stencilCompositeMaskLayerList"])) {
                     for(auto &item : *maskList) {
@@ -1640,14 +1525,17 @@ namespace PSB {
                         }
                     }
                 }
-                // groundCorrection → TJS onGroundCorrection callback
-                // (sub_6BAA10). groundCorrection → TJS onGroundCorrection
-                // 回调（sub_6BAA10）。
+                // "是否带作者声明的蒙版层列表"比 stencilType 的位判据更有区分度：
+                // 数量对比进 emote layer stats，用来决定合成组判据要不要改。
+                if(node.type == Emote::Stencil::kLayerType) {
+                    if(node.stencilMaskLabels.empty())
+                        ++g_emoteMaskStats.stencilWithoutLabels;
+                    else
+                        ++g_emoteMaskStats.stencilWithLabels;
+                }
+
                 node.groundCorrection =
                     GetPSBFloat((*layerDict)["groundCorrection"], 0.0f) != 0.0f;
-                // parameterize → motion-level parameter table index (phase-2
-                // clip time). parameterize → motion 级参数表索引（phase-2 clip
-                // 时间）。
                 node.parameterizeIndex = static_cast<int>(
                     GetPSBFloat((*layerDict)["parameterize"], -1));
                 CollectMotionNodeFrames(layerDict, node);
@@ -1655,7 +1543,8 @@ namespace PSB {
                     logger->info(
                         "  node[{}] '{}' parent={} type={} stencil={}/{} "
                         "box={}x{} "
-                        "inh=0x{:x} to={},{},{},{} frames={} firstsrc='{}'",
+                        "inh=0x{:x} to={},{},{},{} frames={} firstsrc='{}' "
+                        "f0scale={}/{} f0zscale={} f0mask=0x{:x}",
                         static_cast<int>(nodes.size()), node.label, parentIndex,
                         node.type, node.stencilType,
                         node.hasStencil ? 1 : 0, node.width, node.height,
@@ -1664,11 +1553,17 @@ namespace PSB {
                         node.transformOrder[2], node.transformOrder[3],
                         static_cast<int>(node.frames.size()),
                         node.frames.empty() ? std::string("")
-                                            : node.frames.front().src);
+                                            : node.frames.front().src,
+                        node.frames.empty() ? 0.0f
+                                            : node.frames.front().scaleX,
+                        node.frames.empty() ? 0.0f
+                                            : node.frames.front().scaleY,
+                        node.frames.empty()
+                            ? 0
+                            : (node.frames.front().scaleFromCoordZ ? 1 : 0),
+                        node.frames.empty() ? 0 : node.frames.front().mask);
                 const int myIndex = static_cast<int>(nodes.size());
                 nodes.push_back(std::move(node));
-                // Descend into children (the actual layer hierarchy).
-                // 下钻到 children（真正的图层层级）。
                 auto children = std::dynamic_pointer_cast<PSBList>(
                     (*layerDict)["children"]);
                 if(children && children->size() > 0) {
@@ -1678,14 +1573,21 @@ namespace PSB {
             }
         }
 
-        // Extract the layered node tree for every scene/motion in the object
-        // tree. 对对象树里每个场景/每个 motion 提取分层节点树。
         void CollectAllMotionNodeTrees(
             PSBMedia &media, const std::string &archiveKey,
             const std::shared_ptr<PSBDictionary> &objectTree,
             const std::shared_ptr<spdlog::logger> &logger) {
             if(!objectTree)
                 return;
+            g_emoteMaskStats.reset();
+            // sub-motion 清点（HANDOFF-EMOTE §5）：`motion/general_obj_a` 这类
+            // sub-motion 的 `layer: []` 是**数据本身为空**还是**解析漏了 key**？
+            // 这里直接从原始 PSB 计数，并区分"带 parameter（=参数轴时间轴，空 layer
+            // 属正常）"与"真的什么都没有"。
+            size_t subMotionTotal = 0;
+            size_t subMotionEmpty = 0;
+            size_t subMotionEmptyWithParam = 0;
+            std::string subMotionEmptyNames;
             for(const auto &[sceneName, sceneVal] : *objectTree) {
                 auto sceneDict =
                     std::dynamic_pointer_cast<PSBDictionary>(sceneVal);
@@ -1700,11 +1602,6 @@ namespace PSB {
                         std::dynamic_pointer_cast<PSBDictionary>(motionVal);
                     if(!targetMotion)
                         continue;
-                    // Motion-level parameter table ("parameter" list /
-                    // "parameterize" dict-or-index) — drives parameterized clip
-                    // TIME for UI selectors. motion 级参数表（"parameter" 列表
-                    // / "parameterize" 字典或索引）， 驱动 UI 选择器的参数化
-                    // clip 时间。
                     std::vector<PSBMotionParameter> parameters;
                     if(auto paramList = std::dynamic_pointer_cast<PSBList>(
                            (*targetMotion)["parameter"])) {
@@ -1760,6 +1657,17 @@ namespace PSB {
                     }
                     auto layerList = std::dynamic_pointer_cast<PSBList>(
                         (*targetMotion)["layer"]);
+                    ++subMotionTotal;
+                    if(!layerList || layerList->size() == 0) {
+                        ++subMotionEmpty;
+                        if(!parameters.empty())
+                            ++subMotionEmptyWithParam;
+                        if(subMotionEmptyNames.size() < 240) {
+                            if(!subMotionEmptyNames.empty())
+                                subMotionEmptyNames += ",";
+                            subMotionEmptyNames += sceneName + "/" + motionName;
+                        }
+                    }
                     if(!layerList) {
                         if(!parameters.empty())
                             media.setMotionParameters(archiveKey, sceneName,
@@ -1770,12 +1678,6 @@ namespace PSB {
                     std::vector<PSBMedia::PSBMotionNode> nodes;
                     CollectMotionNodesFromLayerList(layerList, -1, nodes,
                                                     logger);
-                    // Resolve authored stencil MASK LAYER LABELS into node
-                    // indices now that the whole tree exists (mask labels match
-                    // any node, not just direct children, per reference
-                    // NodeTree buildMotionNodes + probe). 全树构建完成后把作者
-                    // stencil 蒙版**层名**解析为节点索引（蒙版名可
-                    // 匹配任意节点，不限于直接子层，参考 NodeTree）。
                     if(!nodes.empty()) {
                         std::unordered_map<std::string, int> nodeIndexByLabel;
                         for(size_t ki = 0; ki < nodes.size(); ++ki)
@@ -1796,6 +1698,31 @@ namespace PSB {
                                                  mLabel, nd.label);
                             }
                         }
+                        // 合成组清单探针：把每个 type-12 可折叠组的“标签 → 蒙版层
+                        // 标签/解析到的节点序号”打出来。立绘错位/穿帮时必须先分清是
+                        // ① 蒙版没解析到（组不可折叠，整块按未裁切直画）还是 ② 折了但
+                        // 蒙版乘错。只有这行能把这两种情况区分开。
+                        if(logger) {
+                            int gi = 0;
+                            for(const auto &nd : nodes) {
+                                if(!nd.hasStencil)
+                                    continue;
+                                std::string masks;
+                                for(size_t mi = 0;
+                                    mi < nd.stencilMaskLabels.size() && mi < 8;
+                                    ++mi) {
+                                    if(!masks.empty())
+                                        masks += ",";
+                                    masks += nd.stencilMaskLabels[mi];
+                                }
+                                logger->info(
+                                    "stencil group[{}] '{}' type={} "
+                                    "labels=[{}] resolved={}",
+                                    gi++, nd.label, nd.stencilType, masks,
+                                    static_cast<int>(
+                                        nd.stencilMaskNodeIndices.size()));
+                            }
+                        }
                         const size_t storedNodeCount = nodes.size();
                         media.addMotionNodes(archiveKey, sceneName, motionName,
                                              std::move(nodes));
@@ -1810,6 +1737,34 @@ namespace PSB {
                                                   motionName,
                                                   std::move(parameters));
                 }
+            }
+
+            // ===== 位域对照汇总（FreeMote 对照轮，每个 archive 一行）=====
+            // frames/bits        ：真实数据里出现过哪些 content mask 位
+            // resetTriggered     ：位=0 但键存在 ⇒ 我们的"复位口径"确实在生效
+            // tableMismatch      ：位=1 但键不存在 ⇒ 位表/解析口径要复核
+            // unhandled          ：出现了但我们尚未实现的位（决定下一步做什么）
+            if(logger) {
+                logger->info(
+                    "emote mask stats [{}]: frames={} withMask={} bits={} "
+                    "resetTriggered={} tableMismatch={} unhandled={}",
+                    archiveKey, g_emoteMaskStats.frames,
+                    g_emoteMaskStats.framesWithMask, g_emoteMaskStats.SeenBits(),
+                    g_emoteMaskStats.ResetTriggeredBits(),
+                    g_emoteMaskStats.TableMismatchBits(),
+                    g_emoteMaskStats.UnhandledBits());
+                logger->info(
+                    "emote layer stats [{}]: inheritMask={} stencilType={} "
+                    "colorKeyBit=[set {} / clear {}]",
+                    archiveKey, g_emoteMaskStats.InheritBits(),
+                    g_emoteMaskStats.StencilTypes(),
+                    g_emoteMaskStats.colorBitSet,
+                    g_emoteMaskStats.colorBitClear);
+                logger->info(
+                    "emote sub-motions [{}]: total={} emptyLayer={} "
+                    "emptyWithParam={} names=[{}]",
+                    archiveKey, subMotionTotal, subMotionEmpty,
+                    subMotionEmptyWithParam, subMotionEmptyNames);
             }
         }
 
@@ -1846,13 +1801,6 @@ namespace PSB {
                                         objectTree, positions, &buttons,
                                         logger);
 
-                // Some Yuzusoft scenes (e.g. yuzulogo.mtn "LOGO") name their
-                // animation arbitrarily instead of normal/show/bt, so the fixed
-                // list above yields nothing. Enumerate the whole motion dict so
-                // their source layers still get correct coordinates.
-                // 部分 Yuzusoft 场景（如 yuzulogo.mtn 的 "LOGO"）的动画命名并非
-                // normal/show/bt 固定名，上面的枚举取不到任何东西。遍历整个
-                // motion 字典，让它们的源图层仍能获得正确坐标。
                 if(!std::dynamic_pointer_cast<PSBDictionary>(
                        (*motionDict)[motionName])) {
                     for(const auto &[altName, altVal] : *motionDict) {
@@ -1962,19 +1910,14 @@ namespace PSB {
                             logger->info("Stored {} button bounds for {}",
                                          count, archiveKey);
                     }
-                    // Frame time-lines for every scene/motion (M2 animation).
-                    // 提取全部场景/motion 的帧时间线（M2 动画）。
                     CollectAllMotionTracks(media, archiveKey, objectTree,
                                            logger);
-                    // Layered node trees (parent→child) for generic M2
-                    // accumulation. 分层节点树（父子关系），供通用 M2
-                    // 坐标/透明度累加。
                     CollectAllMotionNodeTrees(media, archiveKey, objectTree,
                                               logger);
                 }
             }
         }
-    } // namespace
+    }
 
     PSBMedia::PSBMedia() {
         _ref = 1;
@@ -2315,13 +2258,6 @@ namespace PSB {
     }
 
     bool PSBMedia::tryLazyLoadArchive(const std::string &key) {
-        // 档案边界不能按"第一个 '/'"切：资源键形如 `<档案>/<内部路径>`，而档案本身
-        // 可能带存储前缀或位于子目录 —— `lzfs:/e-mote...psb/motion/all_parts/x`
-        // （motionplayer 发的是 `psb://lzfs://...`，经存储层规范化后 `//` 收成单斜杠）
-        // 按第一个 '/' 会切出档案名 `lzfs:`，随后 loadPSBFile 必然抛
-        // `Not supported media type ""`，于是立绘整块画不出来（NEKOPARA 4）。
-        // 移植自 AetherKiri `cpp/plugins/psbfile/PSBMedia.cpp:111-134` 的
-        // `ArchiveBoundaryKey()`。
         const auto archiveKey = ArchiveBoundaryKey(key);
         if(archiveKey.empty() || archiveKey == key)
             return false;
@@ -2367,12 +2303,6 @@ namespace PSB {
         }
     }
 
-    // Force-parse the archive so its layer positions and motion tracks are
-    // ready. tryLazyLoadArchive keys on a path containing '/', so append a
-    // sentinel path. Idempotent thanks to the _loadedArchives set inside
-    // tryLazyLoadArchive. 立即解析归档，使其图层坐标与 motion
-    // 时间线就绪。tryLazyLoadArchive 按含 '/'
-    // 的路径取归档名，故追加一个哨兵路径；内部 _loadedArchives 集合保证幂等。
     bool PSBMedia::ensureArchiveLoaded(const std::string &archiveKey) {
         return tryLazyLoadArchive(archiveKey + "/_probe");
     }

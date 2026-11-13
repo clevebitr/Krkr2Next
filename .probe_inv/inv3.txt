@@ -1,0 +1,322 @@
+--- line 2462 ---
+  2456| };
+  2457| static std::map<const tTJSNI_BaseLayer *, TVPKagAssignmentStreak>
+  2458|     TVPHiddenKagAssignmentStreaks;
+  2459| // 被本函数**搬回可见页**的层：它们后续的交付要走交换语义（AssignMotionImages）。
+  2460| static std::set<const tTJSNI_BaseLayer *> TVPMotionSwapAssignmentTargets;
+  2461| 
+  2462| #if defined(KRKR_RENDER_PROBE)
+  2463| // 改投判定的拒绝原因探针：每个 (目标名, 原因) 只记一条。
+  2464| //
+  2465| // 为什么需要：真机上运动帧明明已画好却看不到，而“为什么不改投到可见页”只看得到
+  2466| // 结果（没有 `LayerAssign route=` 行）。这里把每道门播出来，下一次真机日志就能定死是
+  2467| // “可见页没找到”还是“判据认为不该改”。
+  2468| static void TVPProbeExchangeRouteDenied(const tTJSNI_BaseLayer *target,
+  2469|                                         const char *reason) {
+  2470|     static std::mutex mutex;
+  2471|     static std::set<std::string> seen;
+  2472|     if(!target)
+  2473|         return;
+  2474|     const std::string key = target->GetName().AsStdString() + "|" + reason;
+  2475|     {
+  2476|         std::lock_guard<std::mutex> lock(mutex);
+
+--- line 2585 ---
+  2579| static tTJSNI_BaseLayer *
+  2580| TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
+  2581|                                        tTJSNI_BaseLayer *source) {
+  2582|     if(!target || !source || target->GetName().IsEmpty() ||
+  2583|        !target->GetVisible() || !source->GetName().IsEmpty() ||
+  2584|        source->GetVisible()) {
+  2585| #if defined(KRKR_RENDER_PROBE)
+  2586|         if(target && source && !source->GetVisible() &&
+  2587|            source->GetName().IsEmpty())
+  2588|             TVPProbeExchangeRouteDenied(target, "bad-signature");
+  2589| #endif
+  2590|         return nullptr;
+  2591|     }
+  2592| 
+  2593|     // 找「隐藏页」：沿祖先链往上找第一个 表-背景/裏-背景 页。**不要**假设 target 的
+  2594|     // 直接父层就是页：真机案例（千恋万花 SD）是
+  2595|     // `裏-背景 > 裏メッセージレイヤ2 > CG View Layer > CG View LayerAffineLayer`，
+  2596|     // 直接父层是 `CG View Layer`，旧实现拿它当页 ⇒ root 取到 `裏メッセージレイヤ2`，
+  2597|     // 判据永远失败（真机日志 reason=no-page-root）。
+  2598|     // 同理也不再要求 source（隐藏无名工作层）挂在页的同一级父下：它可能挂在
+  2599|     // `トップレイヤ` 下（千恋万花就是），那个判据只是参考实现的形态巧合。
+
+--- line 2610 ---
+  2604|             hidden_page = p;
+  2605|             page_root = p->GetParent();
+  2606|             break;
+  2607|         }
+  2608|     }
+  2609|     if(!hidden_page || !page_root) {
+  2610| #if defined(KRKR_RENDER_PROBE)
+  2611|         TVPProbeExchangeRouteDenied(target, "no-page-root");
+  2612| #endif
+  2613|         return nullptr;
+  2614|     }
+  2615| 
+  2616|     const bool page_visible =
+  2617|         hidden_page->GetVisible() && hidden_page->GetParentVisible();
+  2618|     bool known_stale = false;
+  2619|     {
+  2620|         std::lock_guard<std::mutex> lock(TVPExchangedKagPageMutex);
+  2621|         auto &last_visible = TVPKagPageLastObservedVisibility[hidden_page];
+  2622|         if(page_visible) {
+  2623|             last_visible = true;
+  2624|             TVPExchangedHiddenKagPages.erase(hidden_page);
+
+--- line 2625 ---
+  2619|     {
+  2620|         std::lock_guard<std::mutex> lock(TVPExchangedKagPageMutex);
+  2621|         auto &last_visible = TVPKagPageLastObservedVisibility[hidden_page];
+  2622|         if(page_visible) {
+  2623|             last_visible = true;
+  2624|             TVPExchangedHiddenKagPages.erase(hidden_page);
+  2625| #if defined(KRKR_RENDER_PROBE)
+  2626|             TVPProbeExchangeRouteDenied(target, "page-visible");
+  2627| #endif
+  2628|             return nullptr;
+  2629|         }
+  2630|         if(last_visible)
+  2631|             TVPExchangedHiddenKagPages.insert(hidden_page);
+  2632|         last_visible = false;
+  2633|         known_stale = TVPExchangedHiddenKagPages.find(hidden_page) !=
+  2634|                       TVPExchangedHiddenKagPages.end();
+  2635|     }
+  2636|     // 注意：`!known_stale` **不能**在这里提前返回。
+  2637|     //
+  2638|     // 参考实现只用 known_stale 决定“同名兄弟层改投”要不要真的改（下面那句
+  2639|     // `return known_stale ? candidate : nullptr`），而“可见页没有同名兄弟”这条兑底
+
+--- line 2656 ---
+  2650|            !TVPIsKagBackgroundPair(hidden_page, cand))
+  2651|             continue;
+  2652|         visible_page = cand;
+  2653|         break;
+  2654|     }
+  2655|     if(!visible_page) {
+  2656| #if defined(KRKR_RENDER_PROBE)
+  2657|         TVPProbeExchangeRouteDenied(target, "no-visible-page");
+  2658| #endif
+  2659|         return nullptr;
+  2660|     }
+  2661| 
+  2662|     const auto normalized = [](const ttstr &name) {
+  2663|         return TVPNormalizeKagLayerName(name);
+  2664|     };
+  2665|     const auto target_name = normalized(target->GetName());
+  2666|     // 在可见页的**整棵子树**里找同名同尺寸的层：目标可能嵌在页下多层子页里
+  2667|     // （千恋万花 SD 就是三层深），只查直接子层会漏。
+  2668|     tTJSNI_BaseLayer *matched = nullptr;
+  2669|     {
+  2670|         std::vector<tTJSNI_BaseLayer *> pending{visible_page};
+
+--- line 2725 ---
+  2719|             }
+  2720|         }
+  2721|     }
+  2722|     if(visible_page_has_content_layer ||
+  2723|        hidden_page->DebugIsInTransition() ||
+  2724|        visible_page->DebugIsInTransition()) {
+  2725| #if defined(KRKR_RENDER_PROBE)
+  2726|         TVPProbeExchangeRouteDenied(target, "page-busy");
+  2727| #endif
+  2728|         std::lock_guard<std::mutex> lock(TVPExchangedKagPageMutex);
+  2729|         TVPHiddenKagAssignmentStreaks.erase(target);
+  2730|         return nullptr;
+  2731|     }
+  2732| 
+  2733|     // 页面交换可能在可见页里留下同名同尺寸的兄弟层都找不到的情形（脚本在交换前新建了
+  2734|     // 层）。此时只有当“这个隐藏层被持续交付”时才认定它是遗留孤儿，把**层本身**搬回可见
+  2735|     // 页；后续的 KAG 页面交换会正常带着它走。参考实现：同一个目标连续 12 次交付，且相邻
+  2736|     // 两次间隔不超过 250ms。
+  2737|     const auto now = std::chrono::steady_clock::now();
+  2738|     bool persistent_hidden_target = false;
+  2739|     {
+
+--- line 2749 ---
+  2743|            now - streak.last > std::chrono::milliseconds(250))
+  2744|             streak.count = 0;
+  2745|         streak.last = now;
+  2746|         persistent_hidden_target = ++streak.count >= 12;
+  2747|     }
+  2748|     if(!persistent_hidden_target) {
+  2749| #if defined(KRKR_RENDER_PROBE)
+  2750|         TVPProbeExchangeRouteDenied(target, "streak-not-reached");
+  2751| #endif
+  2752|         return nullptr;
+  2753|     }
+  2754| 
+  2755|     const auto target_order = target->GetOrderIndex();
+  2756|     // 嵌套目标优先搬进可见页里的**镜像容器**（页对两边结构对称），而不是整层挂到页根：
+  2757|     // 后者会让游戏对该容器的显示/隐藏失效。
+  2758|     tTJSNI_BaseLayer *reparent_to =
+  2759|         TVPFindMirroredKagContainer(visible_page, target, hidden_page);
+  2760|     const bool mirrored = reparent_to != nullptr;
+  2761|     if(!reparent_to)
+  2762|         reparent_to = visible_page;
+  2763|     {
+
+--- line 8933 ---
+  8927|     TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ loadImages) {
+  8928|         TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
+  8929|                                 /*var. type*/ tTJSNI_Layer);
+  8930|         if(numparams < 1)
+  8931|             return TJS_E_BADPARAMCOUNT;
+  8932|         ttstr name(*param[0]);
+  8933| #if defined(KRKR_RENDER_PROBE)
+  8934|         // 诊断 diffimage2.tjs 的递归：脚本把本方法包了一层并自递归；若递归点
+  8935|         // 在这里，日志里会看到重复的实参。
+  8936|         {
+  8937|             static thread_local int s_probeCalls = 0;
+  8938|             if(s_probeCalls < 64) {
+  8939|                 ++s_probeCalls;
+  8940|                 spdlog::info("probe: Layer.loadImages({}) #{}",
+  8941|                              name.AsStdString(), s_probeCalls);
+  8942|             }
+  8943|         }
+  8944| #endif
+  8945|         tjs_uint32 key = clNone; // TODO Intfなのに固有値が
+  8946|         if(numparams >= 2 && param[1]->Type() != tvtVoid)
+  8947|             key = (tjs_uint32)param[1]->AsInteger();
+
+--- line 13044 ---
+ 13038|     tjhandle dec = tjInitDecompress();
+ 13039|     if(!dec)
+ 13040|         return false;
+ 13041|     int w = 0, h = 0, subsamp = 0;
+ 13042|     if(tjDecompressHeader2(dec, const_cast<unsigned char *>(data),
+ 13043|                            (unsigned long)size, &w, &h, &subsamp) != 0) {
+ 13044| #if defined(KRKR_RENDER_PROBE)
+ 13045|         spdlog::info(
+ 13046|             "probe: AMV header 失败：{}（size={}，first={:02X}{:02X}）",
+ 13047|             tjGetErrorStr2(dec), size, size > 0 ? data[0] : 0,
+ 13048|             size > 1 ? data[1] : 0);
+ 13049| #endif
+ 13050|         tjDestroy(dec);
+ 13051|         return false;
+ 13052|     }
+ 13053|     outW = w;
+ 13054|     outH = h;
+ 13055|     outBuf.resize((size_t)w * h * numComponents);
+ 13056|     int ret = tjDecompress2(dec, const_cast<unsigned char *>(data),
+ 13057|                             (unsigned long)size, outBuf.data(), w,
+ 13058|                             w * numComponents, h, pixelFormat, TJFLAG_FASTDCT);
+
+--- line 13061 ---
+ 13055|     outBuf.resize((size_t)w * h * numComponents);
+ 13056|     int ret = tjDecompress2(dec, const_cast<unsigned char *>(data),
+ 13057|                             (unsigned long)size, outBuf.data(), w,
+ 13058|                             w * numComponents, h, pixelFormat, TJFLAG_FASTDCT);
+ 13059|     if(ret != 0) {
+ 13060|         int errCode = tjGetErrorCode(dec);
+ 13061| #if defined(KRKR_RENDER_PROBE)
+ 13062|         spdlog::info("probe: AMV tjDecompress2 失败：code={} msg={} {}x{} "
+ 13063|                      "subsamp={} pf={} ncomp={}",
+ 13064|                      static_cast<int>(errCode), tjGetErrorStr2(dec), w, h,
+ 13065|                      subsamp, pixelFormat, numComponents);
+ 13066| #endif
+ 13067|         if(errCode == TJERR_WARNING) {
+ 13068|             tjDestroy(dec);
+ 13069|             return true;
+ 13070|         }
+ 13071|         tjDestroy(dec);
+ 13072|         return false;
+ 13073|     }
+ 13074|     tjDestroy(dec);
+ 13075|     return true;
+
+--- line 13090 ---
+ 13084|         return true;
+ 13085|     if(!dqtSeg.empty()) {
+ 13086|         auto patched = InjectDQT(jpegData, jpegSize, dqtSeg);
+ 13087|         const bool ok = TryDecodeJpeg(patched.data(), patched.size(),
+ 13088|                                       pixelFormat, numComponents, outW, outH,
+ 13089|                                       pixelOut);
+ 13090| #if defined(KRKR_RENDER_PROBE)
+ 13091|         spdlog::info("probe: AMV DQT 注入重试 ok={} dqtSeg={}B jpeg={}B",
+ 13092|                      ok ? 1 : 0, dqtSeg.size(), jpegSize);
+ 13093| #endif
+ 13094|         return ok;
+ 13095|     }
+ 13096|     return false;
+ 13097| }
+ 13098| 
+ 13099| // ---------------------------------------------------------------------------
+ 13100| // Read helpers — read only what we need from the stream
+ 13101| // ---------------------------------------------------------------------------
+ 13102| static void ReadExact(tTJSBinaryStream *src, void *buf, tjs_uint len) {
+ 13103|     if(src->Read(buf, len) != len)
+ 13104|         TVPThrowExceptionMessage(TJS_W("AMV: read error"));
+
+--- line 13201 ---
+ 13195| 
+ 13196|     // --- Read frame payload (only the first frame) ---
+ 13197|     std::vector<unsigned char> payload(payloadLen);
+ 13198|     ReadExact(src, payload.data(), (tjs_uint)payloadLen);
+ 13199|     const unsigned char *payloadStart = payload.data();
+ 13200| 
+ 13201| #if defined(KRKR_RENDER_PROBE)
+ 13202|     {
+ 13203|         // 结构探针：这份 AMV 的帧载荷不以 JPEG SOI 开头（首字节非 FFD8），
+ 13204|         // 需要看清 [前缀][JPEG] 的边界、是否含 alpha 段、以及是否以 EOI 收尾。
+ 13205|         //   SOI_count>1  ⇒ 载荷内有 color/alpha 两段 JPEG
+ 13206|         //   tail16 以 FFD9 结尾 ⇒ 最后一段是完整 JPEG，前缀只需跳过
+ 13207|         const int dump = static_cast<int>(std::min(payloadLen, (size_t)32));
+ 13208|         std::string hex;
+ 13209|         hex.reserve(dump * 2);
+ 13210|         for(int i = 0; i < dump; i++) {
+ 13211|             char buf[4];
+ 13212|             std::snprintf(buf, sizeof(buf), "%02X", payload[i]);
+ 13213|             hex += buf;
+ 13214|         }
+ 13215| 
+
+--- line 13335 ---
+ 13329|         alphaDataOffset = colorSize;
+ 13330| 
+ 13331|         int decW = 0, decH = 0;
+ 13332|         std::vector<unsigned char> rgbPixels;
+ 13333|         if(!DecodeJpegWithQT(payloadStart, colorSize, dqtSeg, TJPF_RGBA, 4,
+ 13334|                              decW, decH, rgbPixels)) {
+ 13335| #if defined(KRKR_RENDER_PROBE)
+ 13336|             // 探针：载荷不以 SOI 开头时，试着从首个 FFD8 起解码，判定
+ 13337|             // “前缀只需跳过”还是“数据本身不是 JPEG（被加密或其它变体）”。
+ 13338|             {
+ 13339|                 size_t off = 0;
+ 13340|                 bool found = false;
+ 13341|                 for(size_t i = 0; i + 1 < payloadLen; i++) {
+ 13342|                     if(payloadStart[i] == 0xFF &&
+ 13343|                        payloadStart[i + 1] == 0xD8) {
+ 13344|                         off = i;
+ 13345|                         found = true;
+ 13346|                         break;
+ 13347|                     }
+ 13348|                 }
+ 13349|                 if(found) {
+
+--- line 14197 ---
+ 14191|     if(DrawDevice)
+ 14192|         DrawDevice->SetShowUpdateRect(b);
+ 14193| }
+ 14194| //---------------------------------------------------------------------------
+ 14195| void tTJSNI_BaseWindow::RequestUpdate() {
+ 14196|     // is called from primary layer
+ 14197| #if defined(KRKR_RENDER_PROBE)
+ 14198|     {
+ 14199|         // 重绘请求计数探针（低频率，每 60
+ 14200|         // 次打一条）：判断二次打开"游戏是否仍在请求重绘"。
+ 14201|         static unsigned s_reqUpd = 0;
+ 14202|         if((++s_reqUpd % 60) == 1)
+ 14203|             spdlog::info("RequestUpdate: repaint requested (cum={})", s_reqUpd);
+ 14204|     }
+ 14205| #endif
+ 14206|     // post update event to self
+ 14207|     TVPPostWindowUpdate((tTJSNI_Window *)this);
+ 14208| }
+ 14209| //---------------------------------------------------------------------------
+ 14210| void tTJSNI_BaseWindow::NotifySrcResize() {
+ 14211|     // is called from primary layer
+

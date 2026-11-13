@@ -8,6 +8,10 @@
 #include <iterator>
 #include <set>
 #include <mutex>
+#include <fstream>
+#include <sstream>
+#include <cstdlib>
+#include <sys/stat.h>
 #include <unordered_map>
 #include <algorithm>
 #include <array>
@@ -826,6 +830,30 @@ namespace motion {
                                 // 参考帧发起子运动的时刻
                     const int subLoop =
                         media->getMotionLoopTime(storageStr, obj, sub);
+                    // 子运动**参数轴**：拿到子运动自己的参数表（差分/表情轴）。
+                    // 没参数说明该子运动真是时间线（如口パク循环），保留子时钟。
+                    bool hasSubParam = false;
+                    PSB::PSBMotionParameter subParam;
+                    {
+                        auto params =
+                            media->getMotionParameters(storageStr, obj, sub);
+                        if(params.empty() && sub != "normal")
+                            params = media->getMotionParameters(storageStr, obj,
+                                                                "normal");
+                        if(!params.empty()) {
+                            subParam = params.front();
+                            hasSubParam = !subParam.id.empty();
+                            if(logger)
+                                logger->info(
+                                    "expandSubMotionNodes: '{}' axis "
+                                    "param='{}' range=[{},{}] division={} "
+                                    "disc={} (params={})",
+                                    f.src, subParam.id, subParam.rangeBegin,
+                                    subParam.rangeEnd, subParam.division,
+                                    subParam.discretization ? 1 : 0,
+                                    static_cast<int>(params.size()));
+                        }
+                    }
                     const std::string subRef = f.src;
                     f.src.clear();
                     // Append the sub-subtree rooted under this referencing
@@ -839,12 +867,23 @@ namespace motion {
                             c.parentIndex = selfIdx;
                         else
                             c.parentIndex += offset;
+                        // stencilMaskNodeIndices 是**子运动自己**的节点表下标
+                        // （PSBMedia 解析时按 motion 局部表算的），追加进父表后必须
+                        // 同样加上插入偏移——否则蒙版指向错误的节点（真机后果：
+                        // `pass mlNodesDrawn=0`，整轮蒙版层一个节点都没画进去，
+                        // 合成组在空蒙版下折叠 ⇒ 后发不被脸部轮廓裁掉、盖住脸）。
+                        // 以前只重映射了 parentIndex，这一项漏了。
+                        for(auto &mi : c.stencilMaskNodeIndices)
+                            if(mi >= 0)
+                                mi += offset;
                         // Reference child-player: the expanded sub-motion's
                         // content is driven by the PARENT motion node's
                         // activity, not the child's own trailing type-0 frame.
                         // 参考子播放器：展开的子运动内容由**父 motion
                         // 节点**的活动驱动， 而非子节点自己的末尾 type-0 帧。
                         c.submotionContent = true;
+                        c.hasSubParam = hasSubParam;
+                        c.subParam = subParam;
                         // Sub-motion child-clock: content nodes carry their own
                         // real clock (launch time + loop) instead of the
                         // parent's global tick, mirroring AetherKiri's child
@@ -1083,6 +1122,35 @@ namespace motion {
             }
         }
 
+        // 参数值 → [0,1] 归一化轴位置（与 parameterizedClipTime 同一套量化规则，
+        // 只把结果留在归一化域）。用于**子运动参数轴**：归一化位置 × 子运动时间线长度
+        // = 该取的帧时刻。参数未设置时 value=0 → 轴起点。
+        static double normalizedParamValue(
+            const PSB::PSBMotionParameter &parameter, double value) {
+            const double range = parameter.rangeEnd - parameter.rangeBegin;
+            if(std::abs(range) <= 0.0000001)
+                return 0.0;
+            const double minimum =
+                std::min(parameter.rangeBegin, parameter.rangeEnd);
+            const double maximum =
+                std::max(parameter.rangeBegin, parameter.rangeEnd);
+            double normalized =
+                (std::clamp(value, minimum, maximum) - parameter.rangeBegin) /
+                range;
+            if(parameter.discretization) {
+                const double rangeMagnitude = std::abs(range);
+                const double integerSteps = std::round(rangeMagnitude);
+                const double selectorSteps =
+                    (integerSteps >= 1.0 &&
+                     std::abs(rangeMagnitude - integerSteps) <= 0.0000001)
+                    ? integerSteps
+                    : parameter.division;
+                if(selectorSteps > 0.0)
+                    normalized =
+                        std::round(normalized * selectorSteps) / selectorSteps;
+            }
+            return std::clamp(normalized, 0.0, 1.0);
+        }
         // Parameterized clip time (reference detail::parameterizedClipTime):
         // maps a UI selector variable `value` in [rangeBegin, rangeEnd] onto
         // the motion timeline axis ([0, timelineEnd]) instead of the global
@@ -1135,6 +1203,52 @@ namespace motion {
         // 图像）把自身变换传给子层但自身不画
         // ——容器的滑入/淡入由此传给子层（通用 M2，对应 libkrkr2.so 的
         // Player_updateLayers）。
+        //
+        // 绘制次序开关（一键回退，见 HANDOFF-EMOTE.md §3.1）：
+        //   true  = 先算全部节点的累积变换（含累积 posZ），按 posZ **稳定排序**后
+        //           再统一绘制（对齐 AetherKiri PlayerUpdateLayers.cpp:4690
+        //           `entry.sortKey = node.accumulated.posZ` + :5774
+        //           `std::stable_sort`）。NEKOPARA 4 的“脸被发色平涂盖住”就是纯
+        //           先序绘制造成的。
+        //   false = 回退到旧行为：纯节点先序，算到哪画到哪。
+        // Draw-order switch (one-line rollback, see HANDOFF-EMOTE.md §3.1).
+        static constexpr bool kEmoteZSort = true;
+        // 时间线末尾的 type-0 帧是作者的**结束标记**（type=0 且不含 src），不是
+        // "隐藏"。非循环 motion 播完后 `progress()` 会把 `_playing` 置 false 而
+        // **主时钟继续往前走**（真机 tick=97873 >> end），于是每个节点的活跃帧都落到
+        // 它自己的末尾 type-0 帧上 → 整块立绘/部件永久消失
+        // （真机：`drawAnimated: drew 0 images ... playing=0`）。
+        // true  = 活跃帧恰为本节点**最后一帧**、且 type==0、且无图像 src 时，
+        //         回退到该节点最后一个可绘制帧（`src/...`）。
+        // false = 旧行为（末尾帧当隐藏）。
+        static constexpr bool kEmoteTerminalFrameIsEndMarker = true;
+        // 子运动**参数轴**：把差分/表情类子运动的求值从"子时钟"换成"参数值→帧"。
+        // 真机证据（emote-eval 探针）：node[411] 'mabuta' effNow=32805 选中 t=1016 的
+        // type-0 帧（该运动末尾就是隐藏帧）⇒ 加载 ~1s 后眼/口/眉/鼻/颊整批消失。
+        // true = 按参数值取帧（参数未设置 = 轴起点 = 加载瞬间那一帧）；
+        // false = 回退到旧的子时钟行为。
+        static constexpr bool kEmoteSubMotionParamAxis = true;
+        // ── stencil 蒙版语义（一键回退；证据见 HANDOFF-EMOTE.md 与本文件日志）──
+        //
+        // ① 蒙版层是否**同时作为普通内容**绘制。
+        //    `layer["stencilCompositeMaskLayerList"]` 里列的是模型里**普通图层**的名字
+        //    （FreeMote 的字段默认值把该列表默认为空数组，名称本身也说明是"蒙版层
+        //    列表"，而不是隐藏层）。真机证据（NEKOPARA 4 ショコラ冬制服a，
+        //    `stencil group[0] 'stencil' labels=[■輪郭,■耳L,■耳R] resolved=1`）：
+        //    唯一解析到的蒙版 `■輪郭`（`src/head_parts/輪郭00` = 脸底皮肤/轮廓）
+        //    被拉入蒙版层后**再没被合成到 dest**，于是整张脸透出背景
+        //    （temp/shot-160348.png）。
+        //    true  = 蒙版节点画两遍：一遍进蒙版层（stencilMaskOf 路径），
+        //            一遍按原 z 序画进 dest。
+        //    false = 旧行为：只进蒙版层（蒙版内容永远不可见）。
+        static constexpr bool kEmoteDrawStencilMaskAsContent = true;
+        //
+        // ② 蒙版层"全空"时是否跳过乘法。
+        //    真机：`stencil: pass folded=4 emptyMask=3`——三组 `ステンシル(shirome)`
+        //    在折叠时蒙版为空，乘法把**整组内容**乘成透明，眼/口/眉随之消失。
+        //    true  = 蒙版全空则不做乘法（组内容按未蒙版直画），避免"擦除"式损失。
+        //    false = 旧行为：无条件乘。
+        static constexpr bool kEmoteSkipEmptyMaskMultiply = true;
         int drawAnimatedTree(iTJSDispatch2 *dest, iTJSDispatch2 *tempParent,
                              const std::shared_ptr<spdlog::logger> &logger) {
             const tjs_int now = _tickCount; // ms clock, advanced by progress()
@@ -1183,8 +1297,24 @@ namespace motion {
                 }
             }
             std::vector<float> wx(n, 0.0f), wy(n, 0.0f);
+            // 累积 Z（深度）——绘制次序的排序键。规则与 px/py 完全同一条父链
+            // （`posZ[i] = 父累积 + 自身帧 z`，参考 PlayerUpdateLayers.cpp:1035）。
+            // Accumulated Z (depth), the draw-order sort key. Accumulated down the
+            // exact same parent chain as px/py (reference :1035).
+            std::vector<float> wz(n, 0.0f);
             std::vector<float> wsx(n, 1.0f),
                 wsy(n, 1.0f); // accumulated scale / 累加缩放
+            // e-mote layout "unit" factor contributed by the nearest `*_le`
+            // ancestor (`*_le` / `*_le<digits>`). A unit is a coordinate-space
+            // conversion, NOT an animation scale: it REPLACES the inherited
+            // unit instead of multiplying it, so a nested part does not get
+            // pushed away by its parent's unit × its own unit. Kept apart from
+            // the animation factor so the item IMAGE geometry can drop the
+            // unit while positions keep it. / e-mote 布局“单位”因子（最近的
+            // `*_le` 祖先贡献）：单位是坐标空间换算而非动画缩放，**替换**
+            // 继承单位而不是累乘（否则嵌套部件被父单位×自身单位推远）。与
+            // 动画因子分开保存，使条目图像几何能剔除单位、位置保留单位。
+            std::vector<float> wunitx(n, 1.0f), wunity(n, 1.0f);
             std::vector<float> wosx(n, 1.0f),
                 wosy(n, 1.0f); // node's own scale (before the parent chain) / 自身缩放
             std::vector<float> wa(n,
@@ -1279,16 +1409,226 @@ namespace motion {
                     }
                 }
             }
+            // OUTERMOST foldable composite ancestor per node. Composite subtrees
+            // are contiguous in pre-order, so a change of this value marks the
+            // end of one group's content — that is what lets EVERY group be
+            // folded with the same single scratch pair instead of only the
+            // first (previously: >=2 groups -> no masking at all).
+            // 每个节点**最外层**可折叠合成祖先。合成子树在先序里连续，因此该值变化
+            // 即代表"上一组内容结束"——这正是同一对单缓冲 scratch 也能**逐组**折叠的
+            // 依据（旧实现：组数 >=2 就完全不折蒙版）。
+            std::vector<int> stencilRootOf(n, -1);
+            for(int i = 0; i < n; i++) {
+                const auto &nd = _motionNodes[i];
+                const int inherited =
+                    (nd.parentIndex >= 0) ? stencilRootOf[nd.parentIndex] : -1;
+                if(nd.hasStencil && !nd.stencilMaskNodeIndices.empty())
+                    stencilRootOf[i] = (inherited >= 0) ? inherited : i;
+                else
+                    stencilRootOf[i] = inherited;
+            }
+            // 蒙版引用计数：每个可折叠组引用到的蒙版节点各计一次。折叠完一组就
+            // 递减，全部归零时才允许清空蒙版层 —— 因为蒙版名是按标签**全局**解析
+            // 的，同一张蒙版常被多个组共用，而且它往往排在**组之前**（真机
+            // `head_parts/頭部変形基礎`：`■輪郭` 是 node[5]、组是 node[6]）。
+            // 旧写法“折完一组就清 ml”会把后面几组还没用到的蒙版一起洗掉，于是
+            // 日志里出现 `folded=4 emptyMask=4`（名字解析到了，折的时候却是空的）。
+            std::vector<int> maskRemaining(n, 0);
+            for(int gi = 0; gi < n; gi++) {
+                if(!_motionNodes[gi].hasStencil ||
+                   _motionNodes[gi].stencilMaskNodeIndices.empty())
+                    continue;
+                for(const int mi : _motionNodes[gi].stencilMaskNodeIndices)
+                    if(mi >= 0 && mi < n)
+                        ++maskRemaining[mi];
+            }
+            // 逐组诊断（只写日志、不改行为）：回答“本可以折叠的组里，哪些没折、
+            // 内容到底进了组层 gl 还是根本没进”——上一轮 `folded=4 groups=6` 就是
+            // 靠这个才能定案到底是“没活跃节点”还是“收尾路径漏了”。
+            std::vector<int> glNodes(n, 0);    // 画进组层的节点数（按最外层组）
+            std::vector<char> foldedFlag(n, 0); // 本组是否折过
+            std::vector<char> drewMaskFlag(n, 0);
+            int mlNodesDrawn = 0; // 本轮画进蒙版层的节点数（全局）
+            int mlNodesAsContent = 0; // 其中"同时作为普通内容"又画到 dest 的次数
             // Save previous clip state for str_clip containers.
             // 保存 str_clip 容器之前的裁剪状态，绘制后恢复。
             ClipState prevClip;
             const bool clipSupported = readClip(dest, prevClip);
+            // kEmoteZSort 的延迟绘制队列（HANDOFF-EMOTE.md §3.1）。第一趟只算
+            // 累积变换并把“要画的条目 + 几何参数”排进队列，循环结束后按累积 posZ
+            // **稳定排序**再统一绘制。
+            // 关键点：像素数据在**共享**的 temp 层里，所以不能只在第一趟把参数
+            // 排队——那样所有条目都会画到最后一张图上。第二趟必须逐条**重新载入**
+            // 图像（+ 重新上四角平涂）再调用共用的 paintItem。
+            // Deferred draw queue for kEmoteZSort. The pixels live in the SHARED
+            // temp layer, so pass 2 has to re-load each item's image before
+            // painting; queueing only the args would draw the last image n times.
+            struct PendingDraw {
+                float posZ = 0.0f;
+                int index = -1;
+                ttstr path;
+                std::string src; // only used by the probe's `trace` dump
+                std::array<std::uint32_t, 4> tint{ 0xFFFFFFFFu, 0xFFFFFFFFu,
+                                                   0xFFFFFFFFu, 0xFFFFFFFFu };
+                ClipState clip;
+                std::array<tTJSVariant, 14> args;
+            };
+            std::vector<PendingDraw> pendingDraws;
+            if(kEmoteZSort)
+                pendingDraws.reserve(static_cast<size_t>(n));
+#if defined(KRKR_RENDER_PROBE)
+            // ── 运行期调试指令（仅探针构建）──────────────────────────────
+            // Runtime debug directives (probe builds only). The file is polled
+            // every 30 passes; editing it on the device re-configures the next
+            // frames, so ONE build covers many isolation experiments (which
+            // item covers the face, what a layer really looks like, ...).
+            //   skip <substr>      不画 label/src 含 substr 的条目
+            //   only <substr>      只画匹配的条目（蒙版节点仍照画）
+            //   opa  <substr> <v>  强制不透明度 v（0..255）
+            //   zadd <substr> <d>  posZ += d（测绘制次序）
+            //   trace              打印本轮排序后的完整绘制列表
+            struct EmoteDbgRule {
+                int kind = 0; // 0 skip, 1 only, 2 opa, 3 zadd, 4 zset, 5 notint
+                std::string needle;
+                float value = 0.0f;
+            };
+            static std::vector<EmoteDbgRule> s_dbgRules;
+            static bool s_dbgHasOnly = false;
+            static bool s_dbgTrace = false;
+            static bool s_dbgTraceOnce = false;
+            static std::vector<std::string> s_dbgFrameNeedles;
+            static std::map<std::string, tjs_int> s_dbgEvalLastLog;
+            static long long s_dbgMtime = -1;
+            static unsigned s_dbgPoll = 0;
+            if((s_dbgPoll++ % 5u) == 1u) {
+                static const char *kDbgPaths[] = {
+                    "/sdcard/Android/media/org.dpdns.clevebitr/"
+                    "emote-debug.txt",
+                    "/storage/emulated/0/Android/media/org.dpdns.clevebitr/"
+                    "emote-debug.txt",
+                };
+                for(const char *dbgPath : kDbgPaths) {
+                    struct stat st {};
+                    if(::stat(dbgPath, &st) != 0)
+                        continue;
+                    const long long mt = static_cast<long long>(st.st_mtime);
+                    if(mt == s_dbgMtime)
+                        break;
+                    std::ifstream in(dbgPath);
+                    if(!in)
+                        break;
+                    std::vector<EmoteDbgRule> rules;
+                    bool hasOnly = false, trace = false;
+                    std::vector<std::string> frameNeedles;
+                    std::string line;
+                    while(std::getline(in, line)) {
+                        if(line.empty() || line[0] == '#')
+                            continue;
+                        std::istringstream ls(line);
+                        std::string cmd, needle, val;
+                        ls >> cmd;
+                        if(cmd == "trace") {
+                            trace = true;
+                            continue;
+                        }
+                        if(cmd == "frames") {
+                            // `frames <needle>`：帧求值探针（只写日志）。
+                            if(ls >> needle)
+                                frameNeedles.push_back(needle);
+                            continue;
+                        }
+                        if(!(ls >> needle))
+                            continue;
+                        EmoteDbgRule r;
+                        r.needle = needle;
+                        if(cmd == "skip")
+                            r.kind = 0;
+                        else if(cmd == "only") {
+                            r.kind = 1;
+                            hasOnly = true;
+                        } else if(cmd == "opa")
+                            r.kind = 2;
+                        else if(cmd == "zadd")
+                            r.kind = 3;
+                        else if(cmd == "zset")
+                            r.kind = 4;
+                        else if(cmd == "notint")
+                            r.kind = 5;
+                        else
+                            continue;
+                        if(r.kind == 2 || r.kind == 3 || r.kind == 4) {
+                            if(!(ls >> val))
+                                continue;
+                            r.value = std::strtof(val.c_str(), nullptr);
+                        }
+                        rules.push_back(std::move(r));
+                    }
+                    s_dbgRules.swap(rules);
+                    s_dbgHasOnly = hasOnly;
+                    s_dbgTrace = trace;
+                    s_dbgTraceOnce = true; // dump the next pass once
+                    s_dbgFrameNeedles.swap(frameNeedles);
+                    s_dbgEvalLastLog.clear();
+                    s_dbgMtime = mt; // 防止每次轮询重复读取同一份文件
+                    if(logger)
+                        logger->info("emote-debug: reloaded {} rules "
+                                     "(only={} trace={} frames={}) from '{}'",
+                                     s_dbgRules.size(), s_dbgHasOnly,
+                                     s_dbgTrace,
+                                     static_cast<int>(s_dbgFrameNeedles.size()),
+                                     dbgPath);
+                    // `frames <needle>`：把匹配节点的帧表 dump 出来（time/type/visible）。
+                    // 回答“某个部件为什么整轮都不画”：看它选中的帧是不是 type-0（隐藏）。
+                    if(logger && !s_dbgFrameNeedles.empty()) {
+                        for(const auto &needle : s_dbgFrameNeedles) {
+                            int shown = 0;
+                            for(size_t i = 0;
+                                i < _motionNodes.size() && shown < 6; ++i) {
+                                const auto &nd = _motionNodes[i];
+                                bool hit = nd.label.find(needle) !=
+                                    std::string::npos;
+                                if(!hit && !nd.frames.empty())
+                                    hit = nd.frames.front().src.find(needle) !=
+                                        std::string::npos;
+                                if(!hit)
+                                    continue;
+                                ++shown;
+                                logger->info(
+                                    "emote-frames: node[{}] '{}' nodeType={} "
+                                    "frames={} sub={} ref='{}' launch={} "
+                                    "loop={} paramIdx={}",
+                                    static_cast<int>(i), nd.label, nd.type,
+                                    static_cast<int>(nd.frames.size()),
+                                    nd.submotionContent ? 1 : 0,
+                                    nd.subRefSrc, nd.subLaunchTime,
+                                    nd.subLoopTime, nd.parameterizeIndex);
+                                for(size_t k = 0;
+                                    k < nd.frames.size() && k < 24; ++k) {
+                                    const auto &f = nd.frames[k];
+                                    logger->info(
+                                        "emote-frames:   f[{}] time={} type={} "
+                                        "vis={} mask=0x{:x} src='{}'",
+                                        static_cast<int>(k), f.time, f.type,
+                                        f.visible ? 1 : 0, f.mask, f.src);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+#endif
+            // 条目在**先序**里生效的裁剪。第二趟按 Z 重排后逐条重新套用，否则
+            // 延迟绘制会全部落进先序里最后那个 str_clip / viewport 区域。
+            // Clip in effect for an item in pre-order; re-applied per item in pass 2.
+            ClipState activeClip = prevClip;
             // ③ stencil composite provisioning: when any type-12 composite with
             // authored masks exists, prepare + clear the two canvas-sized
             // scratch layers once per pass (content → group, masks → mask). ③
             // stencil 合成供给：确有带蒙版的 type-12 合成组时，每轮预备并清空
             // 两块画布大小的离屏层（内容→组层、蒙版→蒙版层）。
             bool stencilActive = false;
+            int compositeGroupCount = 0;
             if(anyStencil) {
                 int compositeGroups = 0;
                 for(int gi = 0; gi < n; gi++) {
@@ -1304,15 +1644,14 @@ namespace motion {
                 // `drawAnimatedTree stencil: multiple composites (2..6), only first
                 // folded`，而立绘完全看不到 —— 多组时宁可不做蒙版折叠（直接画到目标
                 // 层，蒙版效果不精确，但画面可见）。
-                if(compositeGroups > 1) {
-                    if(logger)
-                        logger->info("drawAnimatedTree stencil: {} composite "
-                                     "groups; skipping stencil fold "
-                                     "(single-buffered scratch)",
-                                     compositeGroups);
-                } else if(compositeGroups == 1) {
+                // 旧实现只在“唯一一个合成组”时折叠，多组时**整个跳过**蒙版
+                // （真机 NEKOPARA 4 每帧 6 个合成组 ⇒ 立绘从头到尾没有任何蒙版，
+                // 该被蒙版裁掉/合成的部分原样画出来）。现在改为**逐组折叠**：
+                // 单缓冲 scratch（gl/ml）每组画完立即折进 dest 再清空复用，
+                // 于是组数不再设限。见 stencilRootOf 与 flushStencilGroup。
+                if(compositeGroups >= 1)
                     stencilActive = true;
-                }
+                compositeGroupCount = compositeGroups;
                 if(stencilActive) {
                     iTJSDispatch2 *gl =
                         getOrCreateStencilLayer(dest, false, cw, ch);
@@ -1324,9 +1663,187 @@ namespace motion {
                     }
                     if(logger)
                         logger->info("drawAnimatedTree stencil: composite "
-                                     "active, scratch layers ready");
+                                     "active({} groups), scratch layers ready",
+                                     compositeGroups);
                 }
             }
+            // 逐组收尾：把当前累积在 gl/ml 里的那一组（curFoldGroup 指定的 type-12
+            // 节点）折叠进 dest，然后清空 scratch 给下一组复用。组内节点看完即折，
+            // z 序与“单组折叠”时完全一致。
+            int curFoldGroup = -1;
+            // 本轮已画进蒙版层、且仍被未折叠的组引用的蒙版数：只有它归零才能清 ml。
+            int maskPendingRefs = 0;
+            for(const int m : maskRemaining)
+                maskPendingRefs += m;
+            // 本轮的折叠统计（用于一次性打印“到底哪几组折了、哪几组蒙版是空的”，
+            // 而不是像以前那样每 600 帧只采样一个组）。
+            int passFoldCount = 0;
+            int passEmptyMaskFolds = 0;
+            std::string passEmptyMaskLabels;
+            auto flushStencilGroup = [&]() {
+                const int gi = curFoldGroup;
+                curFoldGroup = -1;
+                if(gi >= 0 && gi < n) {
+                    // 本组不再引用它的蒙版了：递减后如果全轮再无引用，才可以清 ml。
+                    for(const int mi : _motionNodes[gi].stencilMaskNodeIndices)
+                        if(mi >= 0 && mi < n && maskRemaining[mi] > 0) {
+                            --maskRemaining[mi];
+                            --maskPendingRefs;
+                        }
+                }
+                if(!stencilActive || gi < 0 || gi >= n) {
+                    drewGroup = drewMask = false;
+                    return;
+                }
+                iTJSDispatch2 *gl =
+                    getOrCreateStencilLayer(dest, false, cw, ch);
+                iTJSDispatch2 *ml = getOrCreateStencilLayer(dest, true, cw, ch);
+                const bool hadContent = drewGroup;
+                const bool hadMask = drewMask;
+                if(gi >= 0 && gi < n) {
+                    foldedFlag[gi] = 1;
+                    drewMaskFlag[gi] = hadMask ? 1 : 0;
+                }
+                drewGroup = drewMask = false;
+                if(gl && ml && hadContent) {
+                    const auto &gnd = _motionNodes[gi];
+                    const bool applied =
+                        applyStencilComposite(gl, ml, gnd.stencilType);
+                    if(applied) {
+                        // Blit the masked group at canvas origin (identity
+                        // rect). 把蒙版后的组层按画布原点合成（恒等矩形）。
+                        tTJSVariant srArgs[9] = {
+                            tTJSVariant(static_cast<tjs_int>(0)),
+                            tTJSVariant(static_cast<tjs_int>(0)),
+                            tTJSVariant(gl, gl),
+                            tTJSVariant(static_cast<tjs_int>(0)),
+                            tTJSVariant(static_cast<tjs_int>(0)),
+                            tTJSVariant(static_cast<tjs_int>(cw)),
+                            tTJSVariant(static_cast<tjs_int>(ch)),
+                            tTJSVariant(static_cast<tjs_int>(
+                                2)), // omAlpha / 正常 alpha
+                            tTJSVariant(static_cast<tjs_int>(255)),
+                        };
+                        tTJSVariant *srArgv[] = { &srArgs[0], &srArgs[1],
+                                                  &srArgs[2], &srArgs[3],
+                                                  &srArgs[4], &srArgs[5],
+                                                  &srArgs[6], &srArgs[7],
+                                                  &srArgs[8] };
+                        try {
+                            dest->FuncCall(0, TJS_W("operateRect"), nullptr,
+                                           nullptr, 9, srArgv, dest);
+                            drawn++;
+                        } catch(...) {
+                            if(auto l = _logger())
+                                l->warn("drawAnimatedTree stencil: composite "
+                                        "blit exception");
+                        }
+                    }
+                    // 统计每一组的折叠结果，由调用方在每个渲染轮的末尾一次性打出。
+                    ++passFoldCount;
+                    if(!hadMask) {
+                        ++passEmptyMaskFolds;
+                        if(passEmptyMaskLabels.size() < 160)
+                            passEmptyMaskLabels +=
+                                gnd.label + "(" +
+                                std::to_string(
+                                    static_cast<int>(
+                                        gnd.stencilMaskNodeIndices.size())) +
+                                "),";
+                    }
+                }
+                if(gl)
+                    clear(gl, 0);
+                // 蒙版层**不能**每折一组就清：同一张蒙版被多个组共用，而且蒙版
+                // 通常排在组之前（见 maskRemaining 处注释）。只在本轮再无任何
+                // 待用蒙版时才清。
+                if(ml && maskPendingRefs <= 0) {
+                    clear(ml, 0);
+                }
+            };
+            // 单条目的真正的“画”（stencil 分流 + 逐组收尾 + operateAffine）。
+            // 两条路径共用：kEmoteZSort=false 时在第一趟就地调用；=true 时由第二趟
+            // 按累积 posZ 顺序调用。
+            // The actual per-item paint (stencil divert + per-group fold +
+            // operateAffine); shared by both paths.
+            auto paintItem = [&](int i, std::array<tTJSVariant, 14> &opArgs) {
+                // 本节点已不属于当前累积的合成组时，先把上一组折进 dest 再画
+                // 本节点 —— 这样逐组折叠不会打乱 z 序。
+                // 当前节点若是**当前累积组的蒙版**，先不要收尾：蒙版名是按标签全局
+                // 解析的，蒙版节点可能落在组子树之外、甚至排在组后面（真机
+                // `head_parts/頭部変形基礎` 里 `■輪郭` 是 node[5]、`stencil` 组是
+                // node[6]；也有作品把蒙版放在组后的）。若按“离开子树就折”处理，
+                // 这一组会拿到**空蒙版**（日志里的 `fold ... mask=0`）。
+                bool isMaskOfCurGroup = false;
+                if(curFoldGroup >= 0 && stencilMaskOf[i]) {
+                    const auto &cgn = _motionNodes[curFoldGroup];
+                    isMaskOfCurGroup =
+                        std::find(cgn.stencilMaskNodeIndices.begin(),
+                                  cgn.stencilMaskNodeIndices.end(),
+                                  i) != cgn.stencilMaskNodeIndices.end();
+                }
+                if(stencilActive && curFoldGroup >= 0 &&
+                   stencilRootOf[i] != curFoldGroup && !isMaskOfCurGroup)
+                    flushStencilGroup();
+                iTJSDispatch2 *drawTarget = dest;
+                // 只把**可折叠**合成组的成员（stencilRootOf >= 0）分流进 scratch。
+                // 旧条件用的是 stencilGroupOf >= 0（任意 type-12 后代），在"某组
+                // 蒙版名全解析不到 ⇒ 不可折叠"时会把它画进 gl 却永远没人折（内容丢失）。
+                // 不可折叠的 type-12 子树按普通节点直接画到 dest。
+                if(stencilActive &&
+                   (stencilMaskOf[i] || stencilRootOf[i] >= 0)) {
+                    if(stencilMaskOf[i]) {
+                        drawTarget =
+                            getOrCreateStencilLayer(dest, true, cw, ch);
+                        if(drawTarget) {
+                            drewMask = true;
+                            ++mlNodesDrawn;
+                        }
+                    } else {
+                        drawTarget =
+                            getOrCreateStencilLayer(dest, false, cw, ch);
+                        if(drawTarget) {
+                            drewGroup = true;
+                            if(stencilRootOf[i] >= 0)
+                                ++glNodes[stencilRootOf[i]];
+                        }
+                    }
+                    if(stencilRootOf[i] >= 0)
+                        curFoldGroup = stencilRootOf[i];
+                }
+                auto paintTo = [&](iTJSDispatch2 *target) -> bool {
+                    if(!target)
+                        return false;
+                    tTJSVariant *opArgv[14];
+                    for(int k = 0; k < 14; k++)
+                        opArgv[k] = &opArgs[static_cast<size_t>(k)];
+                    try {
+                        target->FuncCall(0, TJS_W("operateAffine"), nullptr,
+                                         nullptr, 14, opArgv, target);
+                        ++drawn;
+                        return true;
+                    } catch(const std::exception &e) {
+                        if(auto l = _logger())
+                            l->warn(
+                                "drawAnimatedTree: operateAffine exception: {}",
+                                e.what());
+                    } catch(...) {
+                        if(auto l = _logger())
+                            l->warn("drawAnimatedTree: operateAffine unknown "
+                                    "exception");
+                    }
+                    return false;
+                };
+                const bool isMaskNode = stencilMaskOf[i];
+                if(paintTo(drawTarget) && isMaskNode &&
+                   kEmoteDrawStencilMaskAsContent && drawTarget != dest) {
+                    // 蒙版节点同时是**可见内容**：再按原 z 序画一遍到 dest。
+                    // A mask node is ALSO normal visible content, so paint it
+                    // into dest as well (see kEmoteDrawStencilMaskAsContent).
+                    if(paintTo(dest))
+                        ++mlNodesAsContent;
+                }
+            };
             for(int i = 0; i < n; i++) {
                 const auto &node = _motionNodes[i];
                 // Visibility semantics aligned to libkrkr2 / AetherKiri:
@@ -1407,6 +1924,29 @@ namespace motion {
                             nodeTimeOverride[i] = effNow;
                         }
                     }
+                } else if(kEmoteSubMotionParamAxis && node.hasSubParam) {
+                    // (a') **子运动参数轴**：差分/表情类子运动（目/口/眉/頬/鼻…）的
+                    // 时间轴是**参数轴**，帧由参数值选，不是由时钟跑。子时钟会把
+                    // 参数跑到末尾（= 作者的"隐藏"帧）⇒ 整块部件永久消失。
+                    // 参数未设置 → 0 → 轴起点 = 加载瞬间那一帧（真机验证正确）。
+                    double rawValue = 0.0;
+                    const auto vit = _variables.find(node.subParam.id);
+                    if(vit != _variables.end()) {
+                        const tTJSVariant &mv = vit->second;
+                        if(mv.Type() == tvtInteger)
+                            rawValue = static_cast<double>(mv.AsInteger());
+                        else if(mv.Type() == tvtReal)
+                            rawValue = mv.AsReal();
+                    }
+                    const double normalized =
+                        normalizedParamValue(node.subParam, rawValue);
+                    // 轴位置 → 时间线时刻（轴末 = 时间线末帧，与"子时钟一直跑到末"
+                    // 一致，只是改成由参数决定）。
+                    const tjs_int axisEndMs =
+                        frames.empty() ? 0 : frames.back().time;
+                    effNow = static_cast<tjs_int>(
+                        normalized * static_cast<double>(axisEndMs));
+                    nodeTimeOverride[i] = effNow;
                 } else if(node.submotionContent && !node.subRefSrc.empty()) {
                     // (b) child clock: submotion starts at its launch keyframe
                     // and loops with its own loopTime (a “real” sub-player
@@ -1435,6 +1975,57 @@ namespace motion {
                 if(!afBase) {
                     vis[i] = false;
                     continue;
+                }
+                // 结束标记 → 保持最后一个可绘制帧（见 kEmoteTerminalFrameIsEndMarker）。
+                // 只认"末尾 + type-0 + 无图像 src"这一种形态，中间的 type-0（差分/表情
+                // 轴的"未选中"态）不受影响；有 parameter 轴的子运动走参数求值。
+                if(kEmoteTerminalFrameIsEndMarker && !frames.empty() &&
+                   afBase == &frames.back() && !afBase->visible &&
+                   afBase->src.empty()) {
+                    const PSB::PSBMedia::PSBMotionFrame *hold = nullptr;
+                    for(const auto &f : frames) {
+                        if(f.visible && f.src.compare(0, 4, "src/") == 0)
+                            hold = &f;
+                    }
+                    if(hold)
+                        afBase = hold;
+                }
+                // `frames <needle>` 探针：选中帧的 time/type/visible 对不上时
+                // 一眼能看出“选中的是 type-0（隐藏）帧”。
+                {
+                    bool hit = false;
+                    for(const auto &needle : s_dbgFrameNeedles) {
+                        if(needle.empty())
+                            continue;
+                        if(node.label.find(needle) != std::string::npos ||
+                           (!node.frames.empty() &&
+                            node.frames.front().src.find(needle) !=
+                                std::string::npos)) {
+                            hit = true;
+                            break;
+                        }
+                    }
+                    if(hit && logger) {
+                        const std::string key =
+                            std::to_string(i) + "|" + node.label;
+                        auto lit = s_dbgEvalLastLog.find(key);
+                        const bool due = lit == s_dbgEvalLastLog.end() ||
+                            effNow < lit->second ||
+                            (effNow - lit->second) >= 60;
+                        if(due) {
+                            s_dbgEvalLastLog[key] = effNow;
+                            logger->info(
+                                "emote-eval: node[{}] '{}' effNow={} "
+                                "afTime={} afType={} afVis={} frames={} "
+                                "sub={} loop={} launch={} src='{}'",
+                                i, node.label, effNow, afBase->time,
+                                afBase->type, afBase->visible ? 1 : 0,
+                                static_cast<int>(node.frames.size()),
+                                node.submotionContent ? 1 : 0,
+                                node.subLoopTime, node.subLaunchTime,
+                                afBase->src);
+                        }
+                    }
                 }
                 nodeActiveFrame[i] =
                     afBase; // for mesh parents / 供 mesh 父节点使用
@@ -2026,14 +2617,58 @@ namespace motion {
                         }
                     }
                 }
+                // ---- `*_le` “layout unit” hack — DISABLED (2026-09-27) ----
+                // 参考实现里**没有**这个概念：AetherKiri 的缩放只做**乘法累加**
+                // （PlayerUpdateLayers.cpp:1027-1028 与 :1258-1262
+                //   `accumulated.scaleX = state.scaleX * parent.accumulated.scaleX`，
+                // 只由 inheritMask 0x020/0x040 门控），全仓库 grep 不到
+                // `_le`/`layoutUnit`/`wunit` 任何一处。上一轮自创了“布局单位”：
+                // 把 `_le` 节点的自身缩放当成子树坐标单位（替换而非累乘），又只在
+                // **图像四边形**上把该单位除掉（imgUnit）——于是“位置缩放”与
+                // “图像缩放”脱耦：部件各自尺寸看着对、彼此却散开，正是真机
+                // “立绘错位”的症状。这里按参考语义整体关掉；要回到旧行为改成 true。
+                constexpr bool kEmoteLayoutUnitHack = false;
+                const bool isLayoutUnitNode = kEmoteLayoutUnitHack;
+                (void)isLayoutUnitNode;
+                // A layout node's OWN coord lives in the MODEL PX space (unit
+                // 1), not in the parent's unit space — only its DESCENDANTS are
+                // expressed in its unit. Dividing the parent's matrix by the
+                // parent's unit keeps the parent's animation (rotation/scale)
+                // while removing the unit factor from this node's own offset.
+                // Without this, a NESTED layout node (e.g. 追加パーツ_le3 unit
+                // 4 hanging under the 22-unit torso subtree) gets its own
+                // offset multiplied by 22 → parts fly thousands of px away
+                // (真机：-7150 px). 布局节点自身的 coord 处于**模型 px 空间**
+                // （单位 1），只有其子孙才用它的单位 ⇒ 该节点自身偏移要用
+                // “父级矩阵 ÷ 父级单位”（保留动画、剔除单位）。否则嵌套布局
+                // 节点（如 22 单位躯干子树下的 追加パーツ_le3=4）自身偏移被
+                // 乘 22，部件被推飞数千 px。
+                const float posUnitDivX =
+                    (isLayoutUnitNode && node.parentIndex >= 0 &&
+                     wunitx[node.parentIndex] > 0.0f)
+                    ? 1.0f / wunitx[node.parentIndex]
+                    : 1.0f;
+                const float posUnitDivY =
+                    (isLayoutUnitNode && node.parentIndex >= 0 &&
+                     wunity[node.parentIndex] > 0.0f)
+                    ? 1.0f / wunity[node.parentIndex]
+                    : 1.0f;
                 float px = pOn
-                    ? static_cast<float>(wm11[node.parentIndex] * defCx +
-                                         wm12[node.parentIndex] * defCy) +
+                    ? static_cast<float>((wm11[node.parentIndex] *
+                                          posUnitDivX) *
+                                             defCx +
+                                         (wm12[node.parentIndex] *
+                                          posUnitDivY) *
+                                             defCy) +
                         baseX
                     : loX;
                 float py = pOn
-                    ? static_cast<float>(wm21[node.parentIndex] * defCx +
-                                         wm22[node.parentIndex] * defCy) +
+                    ? static_cast<float>((wm21[node.parentIndex] *
+                                          posUnitDivX) *
+                                             defCx +
+                                         (wm22[node.parentIndex] *
+                                          posUnitDivY) *
+                                             defCy) +
                         baseY
                     : loY;
                 // ⑤ groundCorrection TJS callback (reference sub_6BAA10): when
@@ -2164,8 +2799,54 @@ namespace motion {
                 const float ownSyM = (meshScaleFactor != 1.0f && (inh & 0x040))
                     ? ownSy * meshScaleFactor
                     : ownSy;
-                const float scx = (inh & 0x020) ? baseSx * ownSxM : ownSxM;
-                const float scy = (inh & 0x040) ? baseSy * ownSyM : ownSyM;
+                // ---- e-mote LAYOUT (unit) nodes: `*_le` / `*_le<digits>`
+                // 它们是部件的“布局单位”节点（NEKOPARA 4 真机：下半身 14 /
+                // 胴体 22 / 胸 2 / スカート 15 …，逐部件不同）。单位是
+                // **坐标空间换算**（把该部件的布局坐标换算到模型 px 空间），
+                // 不是动画缩放 ⇒ 必须**替换**继承来的单位，而不是累乘。
+                // 累乘会把各部件相对父级按自己的 z 乘积推远 —— 真机表现即
+                // “立绘部件散开”（胸相对胴体 ×44 而非 ×2，#custom/14 ×154
+                // 而非 ×7）。非 `_le` 节点的缩放（动画/缩放动画）仍照旧累乘。
+                // 单位与动画分开记：总缩放 = 单位 × 动画；条目图像几何只吃
+                // 动画（见条目绘制处的 imgUnit）。M2 标签里没有 `_le` ⇒
+                // 该规则对千恋万花等 M2 游戏零影响（真机 M2 证据：m2logo
+                // `line` 条目 16x3 靠祖先累加缩放 26.429 才能画出正确的
+                // 423 px 宽，说明 M2 必须保留累加缩放）。
+                const float baseUnitX =
+                    (node.parentIndex >= 0) ? wunitx[node.parentIndex] : 1.0f;
+                const float baseUnitY =
+                    (node.parentIndex >= 0) ? wunity[node.parentIndex] : 1.0f;
+                // Animation-only factors (accumulated scale minus its unit).
+                const float baseAnimX =
+                    baseSx / (baseUnitX > 0.0f ? baseUnitX : 1.0f);
+                const float baseAnimY =
+                    baseSy / (baseUnitY > 0.0f ? baseUnitY : 1.0f);
+                float unitX = baseUnitX, unitY = baseUnitY, animX, animY;
+                if(isLayoutUnitNode) {
+                    // Unit node: its own scale IS the unit of this subtree.
+                    if(ownSxM > 0.0f)
+                        unitX = ownSxM;
+                    if(ownSyM > 0.0f)
+                        unitY = ownSyM;
+                    animX = baseAnimX;
+                    animY = baseAnimY;
+                } else if(inh & 0x020) {
+                    animX = baseAnimX * ownSxM;
+                } else {
+                    // Bit clear ⇒ own scale only (unit is dropped), as before.
+                    animX = ownSxM;
+                    unitX = 1.0f;
+                }
+                if(!isLayoutUnitNode) {
+                    if(inh & 0x040) {
+                        animY = baseAnimY * ownSyM;
+                    } else {
+                        animY = ownSyM;
+                        unitY = 1.0f;
+                    }
+                }
+                const float scx = unitX * animX;
+                const float scy = unitY * animY;
                 // Additionally, the M2 `str_clip` text container carries a
                 // CLIP-REGION scale (zx/zy, e.g. m2logo str_clip s=9,1) that
                 // must scale ONLY the reveal window, NOT the letter glyphs
@@ -2280,8 +2961,15 @@ namespace motion {
                 const int wop = baseOp * lop / 255;
                 wx[i] = px;
                 wy[i] = py;
+                // 累积 Z：父累积 + 自身帧 z（与 px/py 同一条父链，:1035）。
+                wz[i] = ((node.parentIndex >= 0) ? wz[node.parentIndex] : 0.0f) +
+                    af->z;
                 wsx[i] = scxChild;
                 wsy[i] = scyChild;
+                // What the CHILDREN see as the layout unit (a str_clip drops
+                // its own scale ⇒ its children keep the parent's unit).
+                wunitx[i] = isStrClipNode ? baseUnitX : unitX;
+                wunity[i] = isStrClipNode ? baseUnitY : unitY;
                 wosx[i] = ownSxM;
                 wosy[i] = ownSyM;
                 // Effective tint: the node's own non-white frame color, else
@@ -2544,15 +3232,17 @@ namespace motion {
                     }
                     if(!under) {
                         writeClip(dest, prevClip);
+                        activeClip = prevClip;
                         _strClipActiveParent = -1;
                     }
                 }
                 if(isStrClipContainer || isViewportClip) {
-                    writeClip(dest,
-                              ClipState{ static_cast<int>(wcL),
-                                         static_cast<int>(wcT),
-                                         static_cast<int>(wcR - wcL),
-                                         static_cast<int>(wcB - wcT) });
+                    const ClipState newClip{ static_cast<int>(wcL),
+                                             static_cast<int>(wcT),
+                                             static_cast<int>(wcR - wcL),
+                                             static_cast<int>(wcB - wcT) };
+                    writeClip(dest, newClip);
+                    activeClip = newClip;
                     _strClipActiveParent = i;
                 }
                 if(af->src.size() <= 4 || af->src.compare(0, 4, "src/") != 0) {
@@ -2663,6 +3353,8 @@ namespace motion {
                 float anchorX = interpOx, anchorY = interpOy;
                 float iconOrX = 0.0f, iconOrY = 0.0f;
                 bool hasIconOrigin = false;
+                bool hasImgMeta = false;
+                int metaW = 0, metaH = 0;
                 if(auto *med = PSB::GetGlobalPSBMedia()) {
                     PSB::PSBMedia::CachedImageInfo gi;
                     if(med->getImageInfo(storageStr + "/" + res + "/pixel.png",
@@ -2673,6 +3365,9 @@ namespace motion {
                             (gi.originX != 0.0f || gi.originY != 0.0f);
                         anchorX += iconOrX;
                         anchorY += iconOrY;
+                        hasImgMeta = true;
+                        metaW = static_cast<int>(gi.width);
+                        metaH = static_cast<int>(gi.height);
                     }
                 }
                 if(!hasIconOrigin && coordOrigin != 1) {
@@ -2707,10 +3402,28 @@ namespace motion {
                 // 75%，以前这个入口是空实现 ⇒ 立绘比画面还大。
                 const double gameScX = _drawScaleX;
                 const double gameScY = _drawScaleY;
-                const double mA0 = wm11[i] * boxScX * gameScX;
-                const double mB0 = wm12[i] * boxScX * gameScY;
-                const double mC0 = wm21[i] * boxScY * gameScX;
-                const double mD0 = wm22[i] * boxScY * gameScY;
+                // E-mote 的布局单位缩放（`*_le` = layout element）：e-mote 模型里每个部件
+                // 在 `*_le` 节点上带一个“布局单位”缩放（NEKOPARA 4 真机：下半身 20 /
+                // 胴体 22 / 胸 2 / スカート 15 …，逐部件不同、与纹理像素尺寸无固定比例）。
+                // 它把**布局坐标**（部件内部偏移）换算到模型 px 空间，而部件**图像本身
+                // 就是 px**（纹理 432x925 / 479x904 …）。原样乘进图像四边形会把立绘放大
+                // 约 20 倍 —— 真机表现正是“立绘过大”（画面被单个部件铺满）。
+                // 因此：位置/旋转仍走累加矩阵（布局换算要生效），只把图像四边形
+                // （mA0..mD0，含锚点偏移）按 `1/∏(_le 自身缩放)` 收缩回去。
+                // M2 的节点标签里没有 `_le` ⇒ ratio 恒 1，千恋万花等 M2 游戏零回归
+                // （真机 M2 证据：`m2logo.mtn line` 条目 16x3 靠祖先累加缩放 26.429
+                // 才能画出正确的 423 px 宽，说明 M2 必须保留累加缩放）。
+                // 单位由最近的 `*_le` 祖先**替换**而非累乘（见上），所以几何
+                // 只需剔除本节点当前生效的那个单位（`wunitx[i]`），不再沿链
+                // 累乘所有 `_le` 缩放。
+                const double imgUnit =
+                    (wunitx[i] > 0.0f)
+                        ? 1.0 / static_cast<double>(wunitx[i])
+                        : 1.0;
+                const double lA = wm11[i] * boxScX * gameScX * imgUnit;
+                const double lB = wm12[i] * boxScX * gameScY * imgUnit;
+                const double lC = wm21[i] * boxScY * gameScX * imgUnit;
+                const double lD = wm22[i] * boxScY * gameScY * imgUnit;
                 // 游戏给的全局仿射（setDrawAffineTranslateMatrix）是
                 // **运动空间 → 画布空间**的完整映射：真机上传的是
                 // 千恋万花 translate(960,540)（= 画布中心）、NEKOPARA 每个角色的站位
@@ -2720,13 +3433,28 @@ namespace motion {
                 const bool hasDrawAffine =
                     !(dm[0] == 1.0 && dm[1] == 0.0 && dm[2] == 0.0 &&
                       dm[3] == 1.0 && dm[4] == 0.0 && dm[5] == 0.0);
+                // 画布仿射必须同时作用于**四边形**与**位置**。真机（NEKOPARA 4）：
+                // setDrawAffineTranslateMatrix = [1.5,0,0,1.5,960,832.5]，即运动空间
+                // 整体放大 1.5 倍再平移；而 setScale(0.75) 作用在源坐标上。
+                // 以前只把仿射乘进位置、不乘进四边形 ⇒ 位置被放 1.5 倍、部件尺寸仍
+                // 0.75 倍，两者比例差 2 倍，真机表现就是「部件尺寸对但彼此散开」。
+                // 现在：四边形 = 仿射 ∘ 节点矩阵，位置 = 仿射 ∘ (源坐标 × setScale)。
+                // 无仿射（千恋万花等上传单位阵/零阵）时退化为恒等 ⇒ 该分支零变化。
+                const double amA = hasDrawAffine ? dm[0] : 1.0;
+                const double amB = hasDrawAffine ? dm[2] : 0.0;
+                const double amC = hasDrawAffine ? dm[1] : 0.0;
+                const double amD = hasDrawAffine ? dm[3] : 1.0;
+                const double mA0 = amA * lA + amB * lC;
+                const double mB0 = amA * lB + amB * lD;
+                const double mC0 = amC * lA + amD * lC;
+                const double mD0 = amC * lB + amD * lD;
                 // Origin-anchored translation: place the anchor at the world
                 // position. 原点锚定平移：把锚点放到世界（画布）位置。
                 const double canvasPx = hasDrawAffine
-                    ? (dm[0] * px + dm[2] * py + dm[4])
+                    ? (amA * (px * gameScX) + amB * (py * gameScY) + dm[4])
                     : (halfCw + px);
                 const double canvasPy = hasDrawAffine
-                    ? (dm[1] * px + dm[3] * py + dm[5])
+                    ? (amC * (px * gameScX) + amD * (py * gameScY) + dm[5])
                     : (halfCh + py);
                 const tjs_real outputTx = static_cast<tjs_real>(
                     _coordX + canvasPx - (mA0 * anchorX + mB0 * anchorY));
@@ -2794,8 +3522,12 @@ namespace motion {
                 // **四角**顶点色平涂到字形纹理（四角全白为恒等跳过）。给 m2logo
                 // 的 C/W 上红、细线红转黑、黑色十字，以及作者创作的四角渐变上
                 // 色——operateAffine 没有颜色通道，因此在此乘源像素。
-                if(effPacked[0] != 0xFFFFFFFFu || effPacked[1] != 0xFFFFFFFFu ||
-                   effPacked[2] != 0xFFFFFFFFu || effPacked[3] != 0xFFFFFFFFu) {
+                if(!kEmoteZSort &&
+                   (effPacked[0] != 0xFFFFFFFFu ||
+                    effPacked[1] != 0xFFFFFFFFu ||
+                    effPacked[2] != 0xFFFFFFFFu ||
+                    effPacked[3] != 0xFFFFFFFFu)) {
+                    // kEmoteZSort 时四角平涂推迟到第二趟（重载图像之后）再做。
                     applyCornerTint(temp, effPacked);
                 }
                 // Round 2 blend mode: map M2 content "bm" to an operate blend
@@ -2843,7 +3575,7 @@ namespace motion {
                 // Layer.operateAffine(src, x, y, w, h, affine, a,b,c,d, tx,ty,
                 // mode, opa, ...); the destination is the object `dest` this
                 // method is called on, src is the temp texture.
-                tTJSVariant opArgs[14] = {
+                std::array<tTJSVariant, 14> opArgs = {
                     tTJSVariant(temp, temp), // 0 src
                     tTJSVariant(static_cast<tjs_int>(0)), // 1 x
                     tTJSVariant(static_cast<tjs_int>(0)), // 2 y
@@ -2859,34 +3591,64 @@ namespace motion {
                     tTJSVariant(blendOm), // 12 blend mode / 混合模式
                     tTJSVariant(opaClamp), // 13 opacity
                 };
-                tTJSVariant *opArgv[] = { &opArgs[0],  &opArgs[1],  &opArgs[2],
-                                          &opArgs[3],  &opArgs[4],  &opArgs[5],
-                                          &opArgs[6],  &opArgs[7],  &opArgs[8],
-                                          &opArgs[9],  &opArgs[10], &opArgs[11],
-                                          &opArgs[12], &opArgs[13] };
-                // ③ stencil divert: nodes inside a type-12 composite draw into
-                // the offscreen GROUP layer; referenced mask nodes draw into
-                // the MASK layer (even when authored outside the group subtree
-                // — masks are dedicated sprites); both fold together at the end
-                // of the pass. ③ stencil 分流：type-12
-                // 合成组内的节点画进离屏**组层**；被引用的
-                // 蒙版节点画进**蒙版层**（即使作者把蒙版放在组子树外——蒙版是专用
-                // 精灵）；两者在本轮末尾合成。
-                iTJSDispatch2 *drawTarget = dest;
-                if(stencilActive &&
-                   (stencilMaskOf[i] || stencilGroupOf[i] >= 0)) {
-                    if(stencilMaskOf[i]) {
-                        drawTarget =
-                            getOrCreateStencilLayer(dest, true, cw, ch);
-                        if(drawTarget)
-                            drewMask = true;
-                    } else {
-                        drawTarget =
-                            getOrCreateStencilLayer(dest, false, cw, ch);
-                        if(drawTarget)
-                            drewGroup = true;
+                // 真正的 stencil 分流/逐组收尾/绘制在共用的 paintItem 里（见上）；
+                // 此处只预算“本条目是否会进 scratch”，供探针打印 dst=。
+                // The actual stencil divert / fold / draw lives in paintItem; here we
+                // only pre-compute whether this item goes to a scratch layer (for the
+                // probe's dst= column).
+                float dbgZAdd = 0.0f;
+                bool dbgZSet = false, dbgNoTint = false;
+                float dbgZValue = 0.0f;
+#if defined(KRKR_RENDER_PROBE)
+                if(!s_dbgRules.empty()) {
+                    bool dbgSkip = false, dbgOnlyHit = false;
+                    int dbgOpa = -1;
+                    for(const auto &r : s_dbgRules) {
+                        // 尾部 `$` = 必须以该子串**结尾**（避免 `#custom/1` 误中
+                        // `#custom/12`）。A trailing `$` anchors the match at the
+                        // end of the string (so `#custom/1$` cannot hit
+                        // `#custom/12`).
+                        const bool anchored =
+                            !r.needle.empty() && r.needle.back() == '$';
+                        const std::string nd =
+                            anchored ? r.needle.substr(0, r.needle.size() - 1)
+                                     : r.needle;
+                        auto hits = [&](const std::string &s) {
+                            if(nd.empty())
+                                return false;
+                            if(!anchored)
+                                return s.find(nd) != std::string::npos;
+                            return s.size() >= nd.size() &&
+                                s.compare(s.size() - nd.size(), nd.size(),
+                                          nd) == 0;
+                        };
+                        if(!hits(node.label) && !hits(af->src))
+                            continue;
+                        if(r.kind == 0)
+                            dbgSkip = true;
+                        else if(r.kind == 1)
+                            dbgOnlyHit = true;
+                        else if(r.kind == 2)
+                            dbgOpa = static_cast<int>(r.value);
+                        else if(r.kind == 3)
+                            dbgZAdd += r.value;
+                        else if(r.kind == 4) {
+                            dbgZSet = true;
+                            dbgZValue = r.value;
+                        } else if(r.kind == 5)
+                            dbgNoTint = true;
                     }
+                    if(dbgSkip ||
+                       (s_dbgHasOnly && !dbgOnlyHit && !stencilMaskOf[i]))
+                        continue;
+                    if(dbgOpa >= 0)
+                        opArgs[13] = tTJSVariant(
+                            static_cast<tjs_int>(std::clamp(dbgOpa, 0, 255)));
                 }
+#endif
+                [[maybe_unused]] const bool willUseScratch =
+                    stencilActive &&
+                    (stencilMaskOf[i] || stencilRootOf[i] >= 0);
 #if defined(KRKR_RENDER_PROBE)
                 // 条目级探针（每个 motion 前 8 个条目）：帧画到了哪个层、变换后的落点
                 // 与尺寸、以及游戏给的缩放是否作用上。回答两类问题：
@@ -2901,16 +3663,28 @@ namespace motion {
                         std::lock_guard<std::mutex> lock(s_itemProbeMutex);
                         n = s_itemProbeCount[key]++;
                     }
-                    if(n < 8) {
+                    // 上限 64：NEKOPARA 4 的 e-mote 模型每帧画 31~38 张，头/脸/
+                    // 手臂等条目排在列表末尾，旧的 8 条上限把它们全挡掉了。
+                    if(n < 64) {
                         logger->info(
                             "probe: item motion='{}' label='{}' src='{}' dst={} "
+                            "idx={} parent='{}' world=({:.1f},{:.1f}) "
+                            "coord=({:.1f},{:.1f}) posZ={:.2f} "
                             "srcSize={}x{} m=[{:.3f},{:.3f},{:.3f},{:.3f}] "
                             "tx={:.1f} ty={:.1f} gameScale={:.3f}/{:.3f} "
                             "boxScale={:.3f}/{:.3f} stencilGroup={} opa={} "
                             "bm={} nodeType={} stencilType={} "
                             "frameScale={:.3f}/{:.3f} worldScale={:.3f}/{:.3f}",
                             key, node.label, af->src,
-                            (drawTarget == dest) ? "dest" : "scratch", iw, ih,
+                            willUseScratch ? "scratch" : "dest", i,
+                            (node.parentIndex >= 0)
+                                ? _motionNodes[node.parentIndex].label
+                                : std::string("<root>"),
+                            static_cast<double>(wx[i]),
+                            static_cast<double>(wy[i]),
+                            static_cast<double>(af->cx),
+                            static_cast<double>(af->cy),
+                            static_cast<double>(wz[i]), iw, ih,
                             static_cast<double>(mA), static_cast<double>(mB),
                             static_cast<double>(mC), static_cast<double>(mD),
                             static_cast<double>(outputTx),
@@ -2923,6 +3697,19 @@ namespace motion {
                             static_cast<double>(af->scaleY),
                             static_cast<double>(wslx[i]),
                             static_cast<double>(wsly[i]));
+                        // 图像/元数据/单位缩放探针：确认 e-mote 的 `_le` 布局单位缩放
+                        // 是否已被剔除（unit）、以及图片元数据尺寸与纹理像素尺寸的关系
+                        // （NEKOPARA 4 的部件纹理 479x904 而模型空间只有几十像素）。
+                        logger->info(
+                            "probe: item meta motion='{}' label='{}' src='{}' "
+                            "tex={}x{} meta={}x{} ic={} anchor=({:.1f},{:.1f}) "
+                            "unit={:.5f} mA={:.3f}",
+                            key, node.label, af->src, iw, ih,
+                            hasImgMeta ? metaW : 0, hasImgMeta ? metaH : 0,
+                            hasIconOrigin ? 1 : 0,
+                            static_cast<double>(anchorX),
+                            static_cast<double>(anchorY), imgUnit,
+                            static_cast<double>(mA));
                         // 节点链探针：把该条目的祖先链（序号/标签/自身缩放/累加缩放/
                         // inheritMask）打出来。用来定位“立绘过大”到底是链上哪一级的
                         // 自身缩放不对或继承位不对（NEKOPARA 4 真机：条目矩阵
@@ -2940,6 +3727,8 @@ namespace motion {
                                      std::to_string(wosy[ci]);
                             chain += " acc=" + std::to_string(wsx[ci]) + "/" +
                                      std::to_string(wsy[ci]);
+                            chain += " un=" + std::to_string(wunitx[ci]) + "/" +
+                                     std::to_string(wunity[ci]);
                             chain += " inh=" + std::to_string(cn.inheritMask);
                         }
                         logger->info(
@@ -2948,20 +3737,111 @@ namespace motion {
                     }
                 }
 #endif
-                if(drawTarget) {
-                    try {
-                        drawTarget->FuncCall(0, TJS_W("operateAffine"), nullptr,
-                                             nullptr, 14, opArgv, drawTarget);
-                        drawn++;
-                    } catch(const std::exception &e) {
-                        if(auto l = _logger())
-                            l->warn(
-                                "drawAnimatedTree: operateAffine exception: {}",
-                                e.what());
-                    } catch(...) {
-                        if(auto l = _logger())
-                            l->warn("drawAnimatedTree: operateAffine unknown "
-                                    "exception");
+                if(kEmoteZSort) {
+                    // 延迟绘制：本条目收集到第二趟，按累积 posZ 统一排序后再画。
+                    // Defer to pass 2 (sorted by accumulated posZ).
+                    PendingDraw pd;
+                    pd.posZ = dbgZSet ? dbgZValue : (wz[i] + dbgZAdd);
+                    pd.index = i;
+                    pd.path = path;
+                    pd.src = af->src;
+                    pd.tint = effPacked;
+#if defined(KRKR_RENDER_PROBE)
+                    if(dbgNoTint)
+                        pd.tint = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu,
+                                    0xFFFFFFFFu };
+#endif
+                    pd.clip = activeClip;
+                    pd.args = opArgs;
+                    pendingDraws.push_back(std::move(pd));
+                } else {
+                    // 回退路径：旧行为，就地画。
+                    paintItem(i, opArgs);
+                }
+            }
+            // ---- 第二趟（kEmoteZSort）-------------------------------
+            // 把第一趟收集的绘制条目按**累积 posZ 稳定排序**后统一绘制
+            // （对齐 AetherKiri PlayerUpdateLayers.cpp:4690
+            // `entry.sortKey = node.accumulated.posZ` + :5774
+            // `std::stable_sort`）。同等 Z 保持先序（stable），即旧次序。
+            // 像素源是**共享**的 temp 层，所以这里必须逐条重新载入图像 + 重新
+            // 上四角平涂，再调共用的 paintItem。
+            // Pass 2: stable_sort the collected items by accumulated posZ, then
+            // re-load each image into the shared temp layer and paint.
+            if(kEmoteZSort && !pendingDraws.empty()) {
+                std::stable_sort(
+                    pendingDraws.begin(), pendingDraws.end(),
+                    [](const PendingDraw &lhs, const PendingDraw &rhs) {
+                        return lhs.posZ < rhs.posZ;
+                    });
+                // 按 Z 重排后逐条重新套用先序里生效的裁剪。
+                ClipState appliedClip;
+                bool appliedClipValid = false;
+                int reloadFailed = 0;
+                for(auto &pd : pendingDraws) {
+                    if(!appliedClipValid || appliedClip.l != pd.clip.l ||
+                       appliedClip.t != pd.clip.t ||
+                       appliedClip.w != pd.clip.w ||
+                       appliedClip.h != pd.clip.h) {
+                        writeClip(dest, pd.clip);
+                        appliedClip = pd.clip;
+                        appliedClipValid = true;
+                    }
+                    iTJSDispatch2 *temp = getOrCreateTempLayer(tempParent);
+                    if(!temp || !tryLoadImage(temp, pd.path)) {
+                        ++reloadFailed;
+                        continue;
+                    }
+                    if(pd.tint[0] != 0xFFFFFFFFu ||
+                       pd.tint[1] != 0xFFFFFFFFu ||
+                       pd.tint[2] != 0xFFFFFFFFu ||
+                       pd.tint[3] != 0xFFFFFFFFu) {
+                        applyCornerTint(temp, pd.tint);
+                    }
+                    // opArgs[0] 就是共享 temp 层（同一对象），无需改写。
+                    paintItem(pd.index, pd.args);
+                }
+                if(appliedClipValid)
+                    writeClip(dest, prevClip);
+#if defined(KRKR_RENDER_PROBE)
+                // `trace` 指令：把本轮排序后的完整绘制列表打出来（条目级，一次
+                // 一行）。用来对着参考画面点清“谁最后画、谁盖住谁”。
+                // `trace` directive: dump the full sorted draw list for this pass.
+                static unsigned s_dbgTracePass = 0;
+                if((s_dbgTrace && (s_dbgTraceOnce || ((++s_dbgTracePass) % 120) == 1)) &&
+                   logger) {
+                    s_dbgTraceOnce = false;
+                    {
+                        for(size_t ti = 0; ti < pendingDraws.size(); ++ti) {
+                            const auto &td = pendingDraws[ti];
+                            const auto &tn = _motionNodes[td.index];
+                            logger->info(
+                                "zdraw #{} z={:.2f} label='{}' src='{}' "
+                                "scratch={} opa={}",
+                                ti, static_cast<double>(td.posZ), tn.label,
+                                td.src,
+                                (stencilMaskOf[td.index] ||
+                                 stencilRootOf[td.index] >= 0)
+                                    ? 1
+                                    : 0,
+                                static_cast<int>(td.args[13].AsInteger()));
+                        }
+                    }
+                }
+#endif
+                // 每轮一条节流日志：确认排序确实发生并给出 Z 范围（真机验证用）。
+                if(logger) {
+                    static unsigned s_zSortPass = 0;
+                    if((++s_zSortPass % 600) == 1) {
+                        logger->info(
+                            "drawAnimatedTree zsort: items={} z=[{:.2f},{:.2f}] "
+                            "reloadFailed={} first='{}' last='{}'",
+                            pendingDraws.size(),
+                            static_cast<double>(pendingDraws.front().posZ),
+                            static_cast<double>(pendingDraws.back().posZ),
+                            reloadFailed,
+                            _motionNodes[pendingDraws.front().index].label,
+                            _motionNodes[pendingDraws.back().index].label);
                     }
                 }
             }
@@ -2982,67 +3862,64 @@ namespace motion {
             // 一道合成到目标。本轮只折叠第一个活跃的 type-12
             // 合成组（离屏层为单缓冲）；
             // 离屏层为单缓冲，超出一个合成组时只处理第一个。
-            if(stencilActive && drewGroup) {
-                iTJSDispatch2 *gl =
-                    getOrCreateStencilLayer(dest, false, cw, ch);
-                iTJSDispatch2 *ml = getOrCreateStencilLayer(dest, true, cw, ch);
-                int compositeCount = 0;
-                for(int gi = 0; gi < n; gi++) {
-                    const auto &gnd = _motionNodes[gi];
-                    if(!gnd.hasStencil || gnd.stencilMaskNodeIndices.empty())
-                        continue;
-                    compositeCount++;
-                    if(compositeCount > 1) {
-                        if(logger)
-                            logger->warn("drawAnimatedTree stencil: multiple "
-                                         "composites ({}), only first folded",
-                                         compositeCount);
-                        continue;
-                    }
-                    const bool applied =
-                        applyStencilComposite(gl, ml, gnd.stencilType);
-                    if(applied) {
-                        // Blit the masked group at canvas origin (identity
-                        // rect). 把蒙版后的组层按画布原点合成（恒等矩形）。
-                        tTJSVariant srArgs[9] = {
-                            tTJSVariant(static_cast<tjs_int>(0)),
-                            tTJSVariant(static_cast<tjs_int>(0)),
-                            tTJSVariant(gl, gl),
-                            tTJSVariant(static_cast<tjs_int>(0)),
-                            tTJSVariant(static_cast<tjs_int>(0)),
-                            tTJSVariant(static_cast<tjs_int>(cw)),
-                            tTJSVariant(static_cast<tjs_int>(ch)),
-                            tTJSVariant(static_cast<tjs_int>(
-                                2)), // omAlpha / 正常 alpha
-                            tTJSVariant(static_cast<tjs_int>(255)),
-                        };
-                        tTJSVariant *srArgv[] = { &srArgs[0], &srArgs[1],
-                                                  &srArgs[2], &srArgs[3],
-                                                  &srArgs[4], &srArgs[5],
-                                                  &srArgs[6], &srArgs[7],
-                                                  &srArgs[8] };
-                        try {
-                            dest->FuncCall(0, TJS_W("operateRect"), nullptr,
-                                           nullptr, 9, srArgv, dest);
-                            drawn++;
-                        } catch(...) {
-                            if(auto l = _logger())
-                                l->warn("drawAnimatedTree stencil: composite "
-                                        "blit exception");
+            // 末尾把最后一个还在累积的合成组折掉（多组时前面每一组都在循环里折过）。
+            if(stencilActive)
+                flushStencilGroup();
+            // 每轮一条完整的折叠统计（节流到 1/600 轮）：直接回答“组有没有被折”
+            // 与“哪几组的蒙版是空的”两个问题，不再需要逐组采样。
+            if(stencilActive && logger) {
+                static unsigned s_stencilPassProbe = 0;
+                if((++s_stencilPassProbe % 600) == 1) {
+                    logger->info("drawAnimatedTree stencil: pass folded={} "
+                                 "emptyMask={} labels=[{}] groups={}",
+                                 passFoldCount, passEmptyMaskFolds,
+                                 passEmptyMaskLabels, compositeGroupCount);
+                    // 逐组明细：哪一组、是否折过、组层里画了几个节点、本轮蒙版层
+                    // 总共画了几个节点。上限 12 组/轮，避免刷日志。
+                    int shown = 0;
+                    for(int gi = 0; gi < n && shown < 12; gi++) {
+                        const auto &gnd = _motionNodes[gi];
+                        if(!gnd.hasStencil ||
+                           gnd.stencilMaskNodeIndices.empty())
+                            continue;
+                        // 子树规模 + 每个蒙版索引**实际落在哪个组**：把“组不折叠”
+                        // 拆成两种互斥原因 —— ① subtree=0 说明 stencilRootOf 算错
+                        // （父链重映射还有漏，是我的 bug）；② subtree>0 但
+                        // glNodes=0 说明子树节点全部被跳过（可见性/无活跃帧判定）。
+                        int subtree = 0;
+                        for(int si = 0; si < n; si++)
+                            if(stencilRootOf[si] == gi)
+                                ++subtree;
+                        std::string maskInfo;
+                        for(size_t mj = 0;
+                            mj < gnd.stencilMaskNodeIndices.size() && mj < 4;
+                            ++mj) {
+                            const int mi = gnd.stencilMaskNodeIndices[mj];
+                            if(!maskInfo.empty())
+                                maskInfo += ",";
+                            maskInfo += std::to_string(mi);
+                            if(mi >= 0 && mi < n) {
+                                maskInfo += "->root";
+                                maskInfo +=
+                                    std::to_string(stencilRootOf[mi]);
+                            } else {
+                                maskInfo += "(OOR)";
+                            }
                         }
-#if defined(KRKR_RENDER_PROBE)
-                        if(logger)
-                            logger->info(
-                                "drawAnimatedTree stencil: '{}' stencilType={} "
-                                "group={} mask={} applied={}",
-                                gnd.label, gnd.stencilType, drewGroup ? 1 : 0,
-                                drewMask ? 1 : 0, applied ? 1 : 0);
-#endif
+                        logger->info(
+                            "drawAnimatedTree stencil: group[{}] '{}' "
+                            "type={} root={} folded={} maskDrawn={} glNodes={} "
+                            "subtree={} maskIdx=[{}]",
+                            gi, gnd.label, gnd.stencilType, stencilRootOf[gi],
+                            static_cast<int>(foldedFlag[gi]),
+                            static_cast<int>(drewMaskFlag[gi]), glNodes[gi],
+                            subtree, maskInfo);
+                        ++shown;
                     }
-                    if(gl)
-                        clear(gl, 0);
-                    if(ml)
-                        clear(ml, 0);
+                    logger->info("drawAnimatedTree stencil: pass mlNodesDrawn={} "
+                                 "mlAsContent={} maskPendingRefsEnd={}",
+                                 mlNodesDrawn, mlNodesAsContent,
+                                 maskPendingRefs);
                 }
             }
             return drawn;
@@ -3875,6 +4752,32 @@ namespace motion {
                 const tjs_int mpitch = maskNI->GetMainImagePixelBufferPitch();
                 if(!gbuf || !mbuf || gpitch < w * 4 || mpitch < w * 4)
                     return false;
+                // 蒙版层"全空"时，下面的乘法会把**整组内容**乘成透明（真机日志
+                // `stencil: pass folded=4 emptyMask=3`：三组 `ステンシル(shirome)`
+                // 就是这种情况，结果是眼/口/眉随组内容一起消失）。先做一次带提前
+                // 退出的扫描：全空则不乘，让调用方照常合成组内容。
+                // An all-empty mask would alpha-multiply the whole group away.
+                if constexpr(kEmoteSkipEmptyMaskMultiply) {
+                    bool anyMaskPixel = false;
+                    for(tjs_int y = 0; y < h && !anyMaskPixel; ++y) {
+                        const unsigned char *mrow =
+                            mbuf + static_cast<tjs_int>(y) * mpitch;
+                        for(tjs_int x = 0; x < w; ++x) {
+                            const size_t off = static_cast<size_t>(x) * 4u;
+                            if(mrow[off + 3] != 0 || mrow[off] != 0 ||
+                               mrow[off + 1] != 0 || mrow[off + 2] != 0) {
+                                anyMaskPixel = true;
+                                break;
+                            }
+                        }
+                    }
+                    if(!anyMaskPixel) {
+                        if(auto logger = _logger())
+                            logger->debug("applyStencilComposite: mask is "
+                                          "empty -> skip multiply");
+                        return true;
+                    }
+                }
                 for(tjs_int y = 0; y < h; ++y) {
                     unsigned char *mrow = mbuf + (tjs_int)y * mpitch;
                     unsigned char *grow = gbuf + (tjs_int)y * gpitch;
@@ -4094,6 +4997,18 @@ namespace motion {
                                   static_cast<double>(c), static_cast<double>(d),
                                   static_cast<double>(tx),
                                   static_cast<double>(ty) };
+            // 永久诊断（不跟探针）：游戏是在**动画**这个全局仿射的
+            // （HANDOFF-EMOTE §4-#6: setDrawAffineTranslateMatrix count=6）。
+            // 真机现象：立绘并非没画（`drew 38~50 images` 持续在涨），而是被
+            // 仿射**推出屏幕**（画面只剩背景）。这里把每次变化打成一行，
+            // 直接给出"推到哪去了"的数字。
+            if(auto l = _logger()) {
+                const auto &m = _drawAffineMatrix;
+                l->info("setDrawAffineTranslateMatrix: [{:.4g},{:.4g},{:.4g},{:.4g},"
+                        "{:.4g},{:.4g}] drawScale={:.4g}/{:.4g} coord={:.4g}/{:.4g}",
+                        m[0], m[1], m[2], m[3], m[4], m[5], _drawScaleX,
+                        _drawScaleY, _coordX, _coordY);
+            }
         }
 
         void resetDrawAffineTranslateMatrix() {

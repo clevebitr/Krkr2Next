@@ -1,0 +1,299 @@
+--- line 2992 ---
+  2986|                         frameData.get() +
+  2987|                         (static_cast<size_t>(srcOffsetY) * ready.width +
+  2988|                          srcOffsetX) * 4;
+  2989|                     m_BmpBits->Update(framePixels, ready.width * 4, dstX, dstY,
+  2990|                                       copyWidth, copyHeight);
+  2991|                 }
+  2992| #if defined(KRKR_RENDER_PROBE)
+  2993|                 // 几何探针：帧尺寸正常但整体偏移时，需要知道游戏给的位置
+  2994|                 // （_left/_top，由 setPosition 设）、帧头裁剪偏移、帧自身
+  2995|                 // 尺寸、屏幕尺寸与图层实际尺寸——五者才能定位偏移来源。
+  2996|                 {
+  2997|                     static int s_showGeomProbe = 0;
+  2998|                     if(s_showGeomProbe < 40) {
+  2999|                         ++s_showGeomProbe;
+  3000|                         spdlog::info(
+  3001|                             "probe: AlphaMovie.showNextImage [{}] "
+  3002|                             "frame={}/{} crop=({},{}) {}x{} pos=({},{}) "
+  3003|                             "screen={}x{} layer={}x{}",
+  3004|                             amvFileName_.AsStdString(), frameIndex, _numOfFrame,
+  3005|                             ready.left, ready.top, ready.width, ready.height,
+  3006|                             _left, _top, _screenWidth, _screenHeight,
+
+--- line 3092 ---
+  3086|                         tTVPRect(0, atlasTop, ready.width,
+  3087|                                  atlasTop + ready.height));
+  3088|     }
+  3089| 
+  3090|     destinationRect->Set(ready.left, ready.top, ready.left + ready.width,
+  3091|                          ready.top + ready.height);
+  3092| #if defined(KRKR_RENDER_PROBE)
+  3093|     // 几何探针：GLAlphaMovie 路径把帧上传到纹理底部条带（atlasTop），目标矩形
+  3094|     // 用帧头的 left/top。这两者任一错都会表现为“尺寸正常但整体偏移”。
+  3095|     {
+  3096|         static int s_copyGeomProbe = 0;
+  3097|         if(s_copyGeomProbe < 40) {
+  3098|             ++s_copyGeomProbe;
+  3099|             spdlog::info(
+  3100|                 "probe: AlphaMovie.copyNextImageToTexture [{}] frame={} "
+  3101|                 "rect=({},{})-({},{}) frame={}x{} target={}x{} atlasTop={}",
+  3102|                 amvFileName_.AsStdString(), frameIndex, ready.left, ready.top,
+  3103|                 ready.left + ready.width, ready.top + ready.height, ready.width,
+  3104|                 ready.height, targetWidth, targetHeight,
+  3105|                 static_cast<tjs_int>(targetHeight - ready.height));
+  3106|         }
+
+--- line 3613 ---
+  3607| #include "LayerIntf.h"
+  3608| #include "RectItf.h"
+  3609| #include "tvpfontstruc.h"
+  3610| #include "WindowIntf.h"
+  3611| #include "krkr_egl_context.h"
+  3612| 
+  3613| #if defined(KRKR_RENDER_PROBE)
+  3614| #include <spdlog/spdlog.h>
+  3615| #endif
+  3616| 
+  3617| #include <algorithm>
+  3618| #include <cmath>
+  3619| #include <limits>
+  3620| #include <optional>
+  3621| #include <string>
+  3622| #include <vector>
+  3623| 
+  3624| #define NCB_MODULE_NAME TJS_W("textrender.dll")
+  3625| 
+  3626| #ifndef TJS_INTF_METHOD
+  3627| #define TJS_INTF_METHOD
+
+--- line 4114 ---
+  4108|         textRenderTryIntObjectProp(object, TJS_W("fontSize"), textHeight);
+  4109|         textRenderTryIntObjectProp(object, TJS_W("size"), textHeight);
+  4110|     }
+  4111|     edgeWidth = std::clamp<tjs_int>(edgeWidth, 0, 12);
+  4112|     textHeight = std::clamp<tjs_int>(textHeight, 8, 128);
+  4113| 
+  4114| #if defined(KRKR_RENDER_PROBE)
+  4115|     { // 一次性探针：确认这一次绘制确实走了原生路径（不记录文本内容）。
+  4116|         static int logged = 0;
+  4117|         if(logged < 8) {
+  4118|             ++logged;
+  4119|             spdlog::info(
+  4120|                 "probe: textrender EdgeShadowDrawText len={} x={} y={} "
+  4121|                 "color=0x{:06x} edgeColor=0x{:06x} edgeWidth={} opacity={} "
+  4122|                 "packed={}",
+  4123|                 ttstr(*param[textIndex]).GetLen(), x, y,
+  4124|                 static_cast<unsigned>(textRenderColor24(color)),
+  4125|                 static_cast<unsigned>(textRenderColor24(edgeColor)), edgeWidth,
+  4126|                 textOpacity, textRenderIsPackedGradient(color));
+  4127|         }
+  4128|     }
+
+--- line 6063 ---
+  6057|                             if(val) {
+  6058|                                 f.packedColors[ci] = static_cast<std::uint32_t>(
+  6059|                                     GetPSBInt(val, 0xFFFFFFFF));
+  6060|                             }
+  6061|                         }
+  6062|                     }
+  6063| #if defined(KRKR_RENDER_PROBE)
+  6064|                     {
+  6065|                         auto plogger = LOGGER;
+  6066|                         if(plogger && !f.src.empty() &&
+  6067|                            f.src.compare(0, 9, "src/logo/") == 0) {
+  6068|                             const bool nonWhite =
+  6069|                                 f.packedColors[0] != 0xFFFFFFFFu ||
+  6070|                                 f.packedColors[1] != 0xFFFFFFFFu ||
+  6071|                                 f.packedColors[2] != 0xFFFFFFFFu ||
+  6072|                                 f.packedColors[3] != 0xFFFFFFFFu;
+  6073|                             const bool isLineIcon =
+  6074|                                 f.src == "src/logo/icon17" ||
+  6075|                                 f.src == "src/logo/icon18" ||
+  6076|                                 f.src == "src/logo/icon32" ||
+  6077|                                 f.src == "src/logo/icon26";
+
+--- line 8468 ---
+  8462|        v.Type() == tvtString)
+  8463|         return false;
+  8464|     out = v.AsReal();
+  8465|     return true;
+  8466| }
+  8467| 
+  8468| #if defined(KRKR_RENDER_PROBE)
+  8469| // 一次性探针：游戏给的全局仿射，以及它实际调用的变换入口。
+  8470| //
+  8471| // 为什么需要：NEKOPARA 4 的立绘“比画面还大”，而游戏是用
+  8472| // `setDrawAffineTranslateMatrix`（或 setScale/setRotate）把 PSB 原生尺寸缩进画面的
+  8473| // —— 这些调用本壳以前全部丢弃（no-op）。这里把收到的值记下来，下一份真机日志就能
+  8474| // 确认缩放系数与入口。不记录文本内容。
+  8475| static void ProbeLogTransform(const char *entry, tjs_int count,
+  8476|                               const double *values, int valueCount) {
+  8477|     static std::mutex mutex;
+  8478|     static std::set<std::string> seen;
+  8479|     std::string key = std::string(entry);
+  8480|     for(int i = 0; i < valueCount; ++i)
+  8481|         key += ":" + std::to_string(static_cast<long long>(values[i] * 1000));
+  8482|     {
+
+--- line 8528 ---
+  8522|     auto *player = GetPlayerInstance(objthis);
+  8523|     if(!player || count < 1 || !p || !p[0])
+  8524|         return TJS_S_OK;
+  8525|     const double sx = p[0]->AsReal();
+  8526|     const double sy = (count >= 2 && p[1]) ? p[1]->AsReal() : sx;
+  8527|     player->setDrawScale(sx, sy);
+  8528| #if defined(KRKR_RENDER_PROBE)
+  8529|     const double values[2] = { sx, sy };
+  8530|     ProbeLogTransform("setScale", count, values, 2);
+  8531| #endif
+  8532|     return TJS_S_OK;
+  8533| }
+  8534| 
+  8535| static tjs_error Player_setDrawAffineTranslateMatrix(tTJSVariant *,
+  8536|                                                      tjs_int count,
+  8537|                                                      tTJSVariant **p,
+  8538|                                                      iTJSDispatch2 *objthis) {
+  8539|     auto *player = GetPlayerInstance(objthis);
+  8540|     if(!player)
+  8541|         return TJS_E_INVALIDPARAM;
+  8542| 
+
+--- line 8571 ---
+  8565| 
+  8566|     // 本类内部统一用 (a,b,c,d,tx,ty)：x'=a*x+b*y+tx、y'=c*x+d*y+ty。
+  8567|     player->setDrawAffineTranslateMatrix(
+  8568|         static_cast<tjs_real>(m11), static_cast<tjs_real>(m12),
+  8569|         static_cast<tjs_real>(m21), static_cast<tjs_real>(m22),
+  8570|         static_cast<tjs_real>(m14), static_cast<tjs_real>(m24));
+  8571| #if defined(KRKR_RENDER_PROBE)
+  8572|     const double values[6] = { m11, m12, m21, m22, m14, m24 };
+  8573|     ProbeLogTransform("setDrawAffineTranslateMatrix", count, values, 6);
+  8574|     if(m11 != 1.0 || m12 != 0.0 || m21 != 0.0 || m22 != 1.0 || m14 != 0.0 ||
+  8575|        m24 != 0.0) {
+  8576|         static std::atomic<bool> s_appliedLogged{ false };
+  8577|         if(!s_appliedLogged.exchange(true))
+  8578|             spdlog::info("probe: Player.setDrawAffineTranslateMatrix 已应用到绘制"
+  8579|                          "（非单位阵 m11={} m22={} m14={} m24={}）",
+  8580|                          m11, m22, m14, m24);
+  8581|     }
+  8582| #endif
+  8583|     return TJS_S_OK;
+  8584| }
+  8585| 
+
+--- line 9005 ---
+  8999|     NCB_METHOD_RAW_CALLBACK(unloadResource, MotionPlayer_ignoreArgs, 0);
+  9000|     NCB_METHOD_RAW_CALLBACK(unloadUnusedTextures, MotionPlayer_ignoreArgs, 0);
+  9001|     NCB_METHOD_RAW_CALLBACK(loadImages, MotionPlayer_ignoreArgs, 0);
+  9002|     NCB_METHOD_RAW_CALLBACK(loadSource, MotionPlayer_ignoreArgs, 0);
+  9003|     NCB_METHOD_RAW_CALLBACK(findSource, MotionPlayer_getVoid, 0);
+  9004|     NCB_METHOD_RAW_CALLBACK(setRot, MotionPlayer_ignoreArgs, 0);
+  9005| #if defined(KRKR_RENDER_PROBE)
+  9006|     NCB_METHOD_RAW_CALLBACK(setRotate, Player_setRotateLogged, 0);
+  9007| #else
+  9008|     NCB_METHOD_RAW_CALLBACK(setRotate, MotionPlayer_ignoreArgs, 0);
+  9009| #endif
+  9010|     NCB_METHOD_RAW_CALLBACK(setScale, Player_setScale, 0);
+  9011|     NCB_METHOD_RAW_CALLBACK(setMirror, MotionPlayer_ignoreArgs, 0);
+  9012|     NCB_METHOD_RAW_CALLBACK(setColor, MotionPlayer_ignoreArgs, 0);
+  9013|     NCB_METHOD_RAW_CALLBACK(moveVariable, MotionPlayer_ignoreArgs, 0);
+  9014|     NCB_METHOD_RAW_CALLBACK(startWind, MotionPlayer_ignoreArgs, 0);
+  9015|     NCB_METHOD_RAW_CALLBACK(stopWind, MotionPlayer_ignoreArgs, 0);
+  9016|     NCB_METHOD_RAW_CALLBACK(setOuterForce, MotionPlayer_ignoreArgs, 0);
+  9017|     NCB_METHOD_RAW_CALLBACK(getOuterForce, MotionPlayer_getVoid, 0);
+  9018|     NCB_METHOD_RAW_CALLBACK(serialize, MotionPlayer_getVoid, 0);
+  9019|     NCB_METHOD_RAW_CALLBACK(unserialize, MotionPlayer_ignoreArgs, 0);
+
+--- line 12412 ---
+ 12406|                 // the width/height meta is wrong or the Open/convert path fails
+ 12407|                 // for these sprites. 加载探针(P-load)：m2logo 线框 icon
+ 12408|                 // 的原创纹理是 3x16 调色条
+ 12409|                 // （icon32 深色/icon18 浅灰），但引擎常得到 1x1（竖线不可见）。
+ 12410|                 // 打印解析路径、实际加载尺寸与缓存的图像元数据，一次看清是元数据
+ 12411|                 // 宽高错了还是 Open/convert 对这些精灵失败。
+ 12412| #if defined(KRKR_RENDER_PROBE)
+ 12413|                 if(logger &&
+ 12414|                    (af->src == "src/logo/icon17" ||
+ 12415|                     af->src == "src/logo/icon18" ||
+ 12416|                     af->src == "src/logo/icon32" ||
+ 12417|                     af->src == "src/logo/icon26" || node.label == "line" ||
+ 12418|                     node.label == "line2")) {
+ 12419|                     PSB::PSBMedia::CachedImageInfo gi;
+ 12420|                     const bool hasGi = PSB::GetGlobalPSBMedia() &&
+ 12421|                         PSB::GetGlobalPSBMedia()->getImageInfo(
+ 12422|                             storageStr + "/" + res + "/pixel.png", gi);
+ 12423|                     logger->info(
+ 12424|                         "loadProbe: node='{}' src='{}' res='{}' loaded={}x{} "
+ 12425|                         "hasMeta={} meta={}x{} compress={} type='{}' "
+ 12426|                         "palBytes={}",
+
+--- line 12586 ---
+ 12580|                     _coordY + canvasPy - (mC0 * anchorX + mD0 * anchorY));
+ 12581|                 const tjs_real mA = static_cast<tjs_real>(mA0);
+ 12582|                 const tjs_real mB = static_cast<tjs_real>(mB0);
+ 12583|                 const tjs_real mC = static_cast<tjs_real>(mC0);
+ 12584|                 const tjs_real mD = static_cast<tjs_real>(mD0);
+ 12585| 
+ 12586| #if defined(KRKR_RENDER_PROBE)
+ 12587|                 if(logger && now >= 190.0 &&
+ 12588|                    (af->src == "src/logo/icon25" ||
+ 12589|                     af->src == "src/logo/icon26" ||
+ 12590|                     af->src == "src/logo/icon27" ||
+ 12591|                     af->src == "src/logo/icon28" ||
+ 12592|                     af->src == "src/logo/icon29" ||
+ 12593|                     af->src == "src/logo/icon48")) {
+ 12594|                     auto screenX = [&](float pixX, float pixY) -> float {
+ 12595|                         return static_cast<float>(outputTx) +
+ 12596|                             mA * (pixX - anchorX) + mB * (pixY - anchorY);
+ 12597|                     };
+ 12598|                     auto screenY = [&](float pixX, float pixY) -> float {
+ 12599|                         return static_cast<float>(outputTy) +
+ 12600|                             mC * (pixX - anchorX) + mD * (pixY - anchorY);
+
+--- line 12747 ---
+ 12741|                         if(drawTarget)
+ 12742|                             drewGroup = true;
+ 12743|                     }
+ 12744|                     if(stencilRootOf[i] >= 0)
+ 12745|                         curFoldGroup = stencilRootOf[i];
+ 12746|                 }
+ 12747| #if defined(KRKR_RENDER_PROBE)
+ 12748|                 // 条目级探针（每个 motion 前 8 个条目）：帧画到了哪个层、变换后的落点
+ 12749|                 // 与尺寸、以及游戏给的缩放是否作用上。回答两类问题：
+ 12750|                 //   1) 立绘“过大” —— 直接看 m/tx/ty 与 gameScale 的组合是否与画布相符；
+ 12751|                 //   2) SD “没有背景” —— 看 bg 条目到底有没有被画（不在列表里就是被跳过）。
+ 12752|                 if(logger) {
+ 12753|                     static std::mutex s_itemProbeMutex;
+ 12754|                     static std::map<std::string, int> s_itemProbeCount;
+ 12755|                     const std::string key = _loadedStorage.AsStdString();
+ 12756|                     int n = 0;
+ 12757|                     {
+ 12758|                         std::lock_guard<std::mutex> lock(s_itemProbeMutex);
+ 12759|                         n = s_itemProbeCount[key]++;
+ 12760|                     }
+ 12761|                     // 上限 64：NEKOPARA 4 的 e-mote 模型每帧画 31~38 张，头/脸/
+
+--- line 13739 ---
+ 13733|                             : static_cast<unsigned char>(
+ 13734|                                   (static_cast<int>(prevA) * maskA) / 255);
+ 13735|                         grow[off + 3] = newA;
+ 13736|                     }
+ 13737|                 }
+ 13738|                 groupNI->Update(tTVPRect(0, 0, w, h));
+ 13739| #if defined(KRKR_RENDER_PROBE)
+ 13740|                 auto logger = _logger();
+ 13741|                 if(logger && recoveredRgbAlpha)
+ 13742|                     logger->info("applyStencilComposite: RGB-rotation alpha "
+ 13743|                                  "recovered in mask");
+ 13744| #endif
+ 13745|                 return true;
+ 13746|             } catch(...) {
+ 13747|                 return false;
+ 13748|             }
+ 13749|         }
+ 13750| 
+ 13751|         // Apply an M2 PER-CORNER packedColors tint (bilinear across the 4
+ 13752|         // corners, ported from AetherKiri applyPackedCornerTintLike_0x6A7518)
+ 13753|         // to the just-loaded glyph texture before Layer.operateAffine (which
+

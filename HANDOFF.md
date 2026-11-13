@@ -4,6 +4,8 @@
 > 读这份之前先读根目录 `AGENTS.md`（项目级规则）。兼容层的细节事实与逐条差异见
 > `compat/README.md`，本文件是"接手第一份"。
 > 渲染层的 open issue 明细（证据 + 下一步探针）在 **`compat/recon/render-issues.md`**。
+> E-mote（PSB）立绘专项（NEKOPARA 4 立绘盖脸 + FPS，含已排除假设清单与下一轮唯一行动）在
+> 根目录 **`HANDOFF-EMOTE.md`** —— 接手立绘/PSB/motionplayer 议题时**先读它**。
 
 ---
 

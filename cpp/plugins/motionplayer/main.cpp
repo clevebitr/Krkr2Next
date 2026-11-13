@@ -50,6 +50,8 @@ namespace {
     std::atomic<uint64_t> g_autoDriveRegisters{ 0 };
     /// 每次"（重）挂钩子" +1：钩子回调里据此打印一次"确认存活"。
     std::atomic<uint64_t> g_autoDriveHookGen{ 0 };
+    /// 上次挂钩的墙钟毫秒（重挂限频用，见 AutoDriveRegister）。
+    std::atomic<int64_t> g_autoDriveHookAtMs{ 0 };
 
     void AutoDriveRegister(motion::Player *player) {
         if(!player)
@@ -69,10 +71,25 @@ namespace {
             // 结果永远恰好一条活条目。这样即使 g_autoDriveHooked 与实际钩子表
             // 不一致（真机 2026-09-18 13:20:27 之后：登记照常发生，钩子却再没被
             // 回调过，SD 动画 tick 永远是 0），也能重新活过来。
-            if(!g_autoDriveHooked || added) {
+            // **自愈重挂，但要限频**。真机曾出现"钩子登记照常、却再没被回调"，
+            // 所以保留重挂能力；但旧条件 `!g_autoDriveHooked || added` 在
+            // "游戏每帧先 play/draw（注册）、随后摘除"的节奏下退化成**每帧一次**
+            // TVPRemoveContinuousEventHook + TVPAddContinuousEventHook
+            // （真机 NEKOPARA 4 实测：3 分钟重挂 5665 次、摘除 3828 次），而钩子表
+            // 的压缩恰好发生在 TVPDeliverAllEvents 里 —— 那正是每次 `.stall` 记的
+            // 卡顿阶段。现在最多每秒重挂一次：模块加载/事件表重建后仍能在 1s 内
+            // 自愈，但不再每帧改动引擎的连续事件表。
+            const int64_t nowMs =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch())
+                    .count();
+            if(!g_autoDriveHooked ||
+               (nowMs - g_autoDriveHookAtMs.load(std::memory_order_relaxed)) >=
+                   1000) {
                 TVPRemoveContinuousEventHook(&g_autoDriveHook);
                 TVPAddContinuousEventHook(&g_autoDriveHook);
                 g_autoDriveHooked = true;
+                g_autoDriveHookAtMs.store(nowMs, std::memory_order_relaxed);
                 g_autoDriveLastMs = 0; // 下一帧重新取基准，避免停顿时跳一大步
                 g_autoDriveHookGen.fetch_add(1, std::memory_order_relaxed);
             }
@@ -95,10 +112,12 @@ namespace {
             std::remove(g_autoDrivePlayers.begin(), g_autoDrivePlayers.end(),
                         player),
             g_autoDrivePlayers.end());
-        if(g_autoDriveHooked && g_autoDrivePlayers.empty()) {
-            TVPRemoveContinuousEventHook(&g_autoDriveHook);
-            g_autoDriveHooked = false;
-        }
+        // **表空时不再摘钩子**：游戏每帧"注册→摘除"，旧代码于是每帧
+        // Remove+Add 一次连续事件钩子（真机 NEKOPARA 4：3 分钟 3828 次），而
+        // 事件派发/压缩就在 TVPDeliverAllEvents 里做——那正是 `.stall` 记的卡顿
+        // 阶段。回调本身在表空时立即 return（见 OnContinuousCallback），常驻一条
+        // 空条目远比每帧重建事件表便宜；重挂的"自愈"改由 AutoDriveRegister
+        // 的每秒限频路径负责。
     }
 
     void AutoDriveClearAll() {
@@ -479,9 +498,14 @@ GetSeparateAdaptorRenderTarget(motion::SeparateLayerAdaptor *adaptor) {
     layerObj->PropSet(TJS_MEMBERENSURE, TJS_W("hitThreshold"), nullptr, &htVal,
                       layerObj);
 
-    // Ensure the owner AnimKAGLayer passes hit test even without its own
-    // bitmap; hitThreshold=0 means bounds-only checking (no alpha test needed)
-    tTJSVariant ownerHtVal(static_cast<tjs_int>(0));
+    // Ensure the owner AnimKAGLayer does NOT intercept mouse events either.
+    // 真机（NEKOPARA 4）点击真因：owner 是角色用的 AffineLayer 容器，本身没有位图；
+    // hitThreshold=0 会让「无位图层」走 bounds-only 命中（LayerIntf.cpp 的
+    // _HitTestNoVisibleCheck：无 MainImage 且 HitThreshold<=0 时直接返回 true），
+    // 于是整块 1920x1080 的角色层吞掉所有点击，消息层收不到 ⇒ 对话不推进。
+    // 改成 256（最大 alpha 255）后角色容器不再拦截，点击穿透到消息层，
+    // 由 KAG 的 window.onClick 推进对话。
+    tTJSVariant ownerHtVal(static_cast<tjs_int>(256));
     owner->PropSet(TJS_MEMBERENSURE, TJS_W("hitThreshold"), nullptr,
                    &ownerHtVal, owner);
 

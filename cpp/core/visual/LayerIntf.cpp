@@ -2513,6 +2513,12 @@ static std::string TVPNormalizeKagLayerName(const ttstr &name) {
 // 对称，只差这一个前缀字（表メッセージレイヤ2 / 裏メッセージレイヤ2），镜像查找要忽略它。
 static std::string TVPNormalizeKagPageSegmentName(const ttstr &name) {
     std::string value = TVPNormalizeKagLayerName(name);
+    // KAG 给“建在某个页上的层”会带 ` : <页名>` 后缀（真机千恋万花：`CG View Layer :
+    // SD104AA`）。镜像查找要把它与同名的纯层名视作同一段（`CG View Layer` ≡
+    // `CG View Layer : SD104AA`），否则可见页里的容器匹配不上、SD 永远搬不进去。
+    const auto suffix = value.find(" : ");
+    if(suffix != std::string::npos)
+        value.erase(suffix);
     // “表” 的 UTF-8 是 E8 A1 A8，“裏” 是 E8 A3 8F。用字节字面量，避开宽窄字符转换。
     constexpr const char *kOmote = "\xE8\xA1\xA8";
     constexpr const char *kUra = "\xE8\xA3\x8F";
@@ -2916,9 +2922,16 @@ void tTJSNI_BaseLayer::AssignImages(tTJSNI_BaseLayer *src) {
         // 画面抹掉（真机：SD 显示一两秒后消失 / 只剩背景 UI / 残留矩形）。
         // 下面这条分支专门处理「可见有名的目标 ← 隐藏无名的工作层」且**已经产生别名**
         // 的交付（千恋万花 SD 走的就是它）。
+        // 交换语义只在**目标祖先链真的可见**（GetParentVisible）时使用：
+        // 千恋万花真机（2026-09-26 14:33 日志）里同一帧被交付两次——先给隐藏页
+        // `裏-背景 > 裏メッセージレイヤ2 > CG View Layer` 里的 `CG View LayerAffineLayer`
+        // （parentVisible=0），约 1s 后才给可见页 `表メッセージレイヤ2 > CG View Layer :
+        // SD104AA` 下的同名层（parentVisible=1）。若隐藏页目标也交换，帧就被它从 scratch
+        // 里换走，可见孪生层拿到的只剩被换出去的旧缓冲 ⇒ SD 空白。隐藏页目标保持普通共享
+        // 赋值，帧留在 scratch 里等孪生层来取（那条交换会正常发生）。
         if(src != this && src->MainImage && MainImage &&
            src->GetName().IsEmpty() && !src->GetVisible() && GetVisible() &&
-           !GetName().IsEmpty() &&
+           !GetName().IsEmpty() && GetParentVisible() &&
            MainImage->GetTexture() == src->MainImage->GetTexture()) {
             // 交付已经产生别名（目标层与 scratch 共享同一张纹理）：改用**交换语义**——
             // 目标层拿走已完成的帧，把自己的旧纹理还给 scratch 当下一次的渲染缓冲区。
@@ -2952,14 +2965,27 @@ void tTJSNI_BaseLayer::AssignImages(tTJSNI_BaseLayer *src) {
         } else if(src != this && src->MainImage && MainImage &&
                   src->GetName().IsEmpty() && !src->GetVisible() &&
                   GetVisible() && !GetName().IsEmpty()) {
-            // 条件形状命中但纹理并未共享：把两个纹理指针记下来，判定“别名”到底存在与否。
-            static std::atomic<int> s_noShareProbe{0};
-            if(s_noShareProbe.fetch_add(1) < 8)
-                spdlog::info("probe: AssignImages no-shared-texture target='{}' "
-                             "targetTex={} srcTex={}",
-                             GetName().AsStdString(),
-                             static_cast<const void *>(MainImage->GetTexture()),
-                             static_cast<const void *>(src->MainImage->GetTexture()));
+            if(MainImage->GetTexture() == src->MainImage->GetTexture()) {
+                // 形状命中、纹理共享，但目标祖先链不可见：**故意不交换**（见上），
+                // 落到普通共享赋值，让帧留在 scratch 里等可见孪生层来取。
+                static std::atomic<int> s_hiddenSkipProbe{0};
+                if(s_hiddenSkipProbe.fetch_add(1) < 8)
+                    spdlog::info(
+                        "probe: AssignImages skip-swap(hidden-page) target='{}' "
+                        "{}x{}",
+                        GetName().AsStdString(), MainImage->GetWidth(),
+                        MainImage->GetHeight());
+            } else {
+                // 条件形状命中但纹理并未共享：把两个纹理指针记下来，判定“别名”到底存在与否。
+                static std::atomic<int> s_noShareProbe{0};
+                if(s_noShareProbe.fetch_add(1) < 8)
+                    spdlog::info(
+                        "probe: AssignImages no-shared-texture target='{}' "
+                        "targetTex={} srcTex={}",
+                        GetName().AsStdString(),
+                        static_cast<const void *>(MainImage->GetTexture()),
+                        static_cast<const void *>(src->MainImage->GetTexture()));
+            }
         }
     } else {
         DeallocateImage();

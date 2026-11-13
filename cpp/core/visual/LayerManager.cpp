@@ -21,6 +21,7 @@
 #include "TickCount.h"
 #include "DebugIntf.h"
 #include "LayerTreeOwner.h"
+#include <spdlog/spdlog.h>
 
 //---------------------------------------------------------------------------
 // tTVPLayerManager
@@ -357,6 +358,33 @@ tTJSNI_BaseLayer *tTVPLayerManager::GetMostFrontChildAt(
 //---------------------------------------------------------------------------
 void tTVPLayerManager::PrimaryClick(tjs_int x, tjs_int y) {
     tTJSNI_BaseLayer *l = GetMostFrontChildAt(x, y);
+    // 点击命中探针：NEKOPARA 4（e-mote）里“点任意地方不推进对话、但引擎 UI
+    // 按钮正常”时，先看这一击究竟命中了哪一层——如果命中的是全屏角色层
+    // （layer name='バニラ'/'ショコラ'），说明角色层压在消息层前面吞掉了点击；
+    // 如果命中 <none> 或消息层，则问题在脚本/命中测试而不是层序。
+    // 同时（限前 30 次）打一次 Primary 子层顺序，看角色层与消息层的相对 z 序。
+    {
+        static int s_clickProbe = 0;
+        const int n = s_clickProbe++;
+        spdlog::info("probe: click ({},{}) hit={} hitOrder={}",
+                     static_cast<int>(x), static_cast<int>(y),
+                     l ? l->GetName().AsStdString() : std::string("<none>"),
+                     l ? static_cast<int>(l->GetOrderIndex()) : -1);
+        if(n < 30 && Primary) {
+            std::string order;
+            const tjs_uint cnt = Primary->GetCount();
+            for(tjs_uint ci = 0; ci < cnt; ci++) {
+                tTJSNI_BaseLayer *c =
+                    Primary->GetChildren(static_cast<tjs_int>(ci));
+                if(!c)
+                    continue;
+                order += "[" + std::to_string(ci) + "]" +
+                         c->GetName().AsStdString() + " ";
+            }
+            spdlog::info("probe: layer-order Primary[{}] = {}",
+                         static_cast<int>(cnt), order);
+        }
+    }
     if(l /*&& CaptureOwner == l*/) {
         l->FromPrimaryCoordinates(x, y);
         l->FireClick(x, y);
@@ -376,6 +404,14 @@ void tTVPLayerManager::PrimaryMouseDown(tjs_int x, tjs_int y,
     PrimaryMouseMove(x, y, flags);
     tTJSNI_BaseLayer *l =
         CaptureOwner ? CaptureOwner : GetMostFrontChildAt(x, y);
+    // 鼠标按下命中探针（与 PrimaryClick 配对）：CaptureOwner 非空意味着上一次
+    // 按下把鼠标捕获给了某个层，之后所有事件都被它吃掉——这是“只有第一次点击
+    // 有效”类问题的常见原因。
+    spdlog::info("probe: mousedown ({},{}) hit={} capture={}",
+                 static_cast<int>(x), static_cast<int>(y),
+                 l ? l->GetName().AsStdString() : std::string("<none>"),
+                 CaptureOwner ? CaptureOwner->GetName().AsStdString()
+                              : std::string("<none>"));
     if(l) {
         l->FromPrimaryCoordinates(x, y);
         ReleaseCaptureCalled = false;
