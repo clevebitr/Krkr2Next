@@ -23,237 +23,247 @@
 #ifndef _LIBINPUT_VELOCITY_TRACKER_H
 #define _LIBINPUT_VELOCITY_TRACKER_H
 
-/*
- * Implements a particular velocity tracker algorithm.
- */
-class VelocityTrackerStrategy {
-public:
-    struct Position {
-        float x, y;
-    };
+namespace krkr::utils {
 
-    struct Estimator {
-        static const size_t MAX_DEGREE = 4;
+    /*
+     * Implements a particular velocity tracker algorithm.
+     */
+    class VelocityTrackerStrategy {
+    public:
+        struct Position {
+            float x, y;
+        };
 
-        // Estimator time base.
-        tjs_uint64 time;
+        struct Estimator {
+            static const size_t MAX_DEGREE = 4;
 
-        // Polynomial coefficients describing motion in X and Y.
-        float xCoeff[MAX_DEGREE + 1], yCoeff[MAX_DEGREE + 1];
+            // Estimator time base.
+            tjs_uint64 time;
 
-        // Polynomial degree (number of coefficients), or zero if no
-        // information is available.
-        tjs_uint32 degree;
+            // Polynomial coefficients describing motion in X and Y.
+            float xCoeff[MAX_DEGREE + 1], yCoeff[MAX_DEGREE + 1];
 
-        // Confidence (coefficient of determination), between 0 (no
-        // fit) and 1 (perfect fit).
-        float confidence;
+            // Polynomial degree (number of coefficients), or zero if no
+            // information is available.
+            tjs_uint32 degree;
 
-        inline void clear() {
-            time = 0;
-            degree = 0;
-            confidence = 0;
-            for(size_t i = 0; i <= MAX_DEGREE; i++) {
-                xCoeff[i] = 0;
-                yCoeff[i] = 0;
+            // Confidence (coefficient of determination), between 0 (no
+            // fit) and 1 (perfect fit).
+            float confidence;
+
+            inline void clear() {
+                time = 0;
+                degree = 0;
+                confidence = 0;
+                for(size_t i = 0; i <= MAX_DEGREE; i++) {
+                    xCoeff[i] = 0;
+                    yCoeff[i] = 0;
+                }
             }
-        }
+        };
+
+    protected:
+        VelocityTrackerStrategy() {}
+
+    public:
+        virtual ~VelocityTrackerStrategy() = default;
+
+        virtual void clear() = 0;
+
+        virtual void addMovement(tjs_uint64 eventTime, float x, float y) = 0;
+
+        virtual bool getEstimator(Estimator *outEstimator) const = 0;
     };
 
-protected:
-    VelocityTrackerStrategy() {}
+    /*
+     * Velocity tracker algorithm based on least-squares linear
+     * regression.
+     */
+    class LeastSquaresVelocityTrackerStrategy : public VelocityTrackerStrategy {
+    public:
+        enum Weighting {
+            WEIGHTING_NONE, // No weights applied.  All data points are
+                            // equally reliable.
+            WEIGHTING_DELTA, // Weight by time delta.  Data points
+                             // clustered together are weighted less.
+            WEIGHTING_CENTRAL, // Weight such that points within a certain
+                               // horizon are weighed more than those
+                               // outside of that horizon.
+            WEIGHTING_RECENT, // Weight such that points older than a
+                              // certain amount are weighed less.
+        };
 
-public:
-    virtual ~VelocityTrackerStrategy() = default;
+        // Degree must be no greater than Estimator::MAX_DEGREE.
+        LeastSquaresVelocityTrackerStrategy(
+            tjs_uint32 degree, Weighting weighting = WEIGHTING_NONE);
 
-    virtual void clear() = 0;
+        ~LeastSquaresVelocityTrackerStrategy() override;
 
-    virtual void addMovement(tjs_uint64 eventTime, float x, float y) = 0;
+        void clear() override;
 
-    virtual bool getEstimator(Estimator *outEstimator) const = 0;
-};
+        void addMovement(tjs_uint64 eventTime, float x, float y) override;
 
-/*
- * Velocity tracker algorithm based on least-squares linear
- * regression.
- */
-class LeastSquaresVelocityTrackerStrategy : public VelocityTrackerStrategy {
-public:
-    enum Weighting {
-        WEIGHTING_NONE, // No weights applied.  All data points are
-                        // equally reliable.
-        WEIGHTING_DELTA, // Weight by time delta.  Data points
-                         // clustered together are weighted less.
-        WEIGHTING_CENTRAL, // Weight such that points within a certain
-                           // horizon are weighed more than those
-                           // outside of that horizon.
-        WEIGHTING_RECENT, // Weight such that points older than a
-                          // certain amount are weighed less.
-    };
+        bool getEstimator(Estimator *outEstimator) const override;
 
-    // Degree must be no greater than Estimator::MAX_DEGREE.
-    LeastSquaresVelocityTrackerStrategy(tjs_uint32 degree,
-                                        Weighting weighting = WEIGHTING_NONE);
+    private:
+        // Sample horizon.
+        // We don't use too much history by default since we want to react
+        // to quick changes in direction. static const tjs_uint64 HORIZON
+        // = 100 * 1000000; // 100 ms
+        static const tjs_uint64 HORIZON = 100; // 100 ms
 
-    ~LeastSquaresVelocityTrackerStrategy() override;
+        // Number of samples to keep.
+        static const tjs_uint32 HISTORY_SIZE = 20;
 
-    void clear() override;
+        struct Movement {
+            tjs_uint64 eventTime;
+            Position positions;
+            bool usingThis;
 
-    void addMovement(tjs_uint64 eventTime, float x, float y) override;
-
-    bool getEstimator(Estimator *outEstimator) const override;
-
-private:
-    // Sample horizon.
-    // We don't use too much history by default since we want to react
-    // to quick changes in direction. static const tjs_uint64 HORIZON
-    // = 100 * 1000000; // 100 ms
-    static const tjs_uint64 HORIZON = 100; // 100 ms
-
-    // Number of samples to keep.
-    static const tjs_uint32 HISTORY_SIZE = 20;
-
-    struct Movement {
-        tjs_uint64 eventTime;
-        Position positions;
-        bool usingThis;
-
-        [[nodiscard]] inline const Position &getPosition() const {
-            return positions;
-        }
-    };
-
-    [[nodiscard]] float chooseWeight(tjs_uint32 index) const;
-
-    const tjs_uint32 mDegree;
-    const Weighting mWeighting;
-    tjs_uint32 mIndex;
-    Movement mMovements[HISTORY_SIZE];
-};
-
-/*
- * Calculates the velocity of pointer movements over time.
- * ポインタの動きの速度を計算する
- */
-class VelocityTracker {
-public:
-    // Creates a velocity tracker using the specified strategy.
-    // If strategy is nullptr, uses the default strategy for the
-    // platform.
-    VelocityTracker();
-
-    ~VelocityTracker();
-
-    // Resets the velocity tracker state.
-    void clear() {
-        mID = -1;
-        mStrategy.clear();
-    }
-
-    // Adds movement information for a set of pointers.
-    // The idBits bitfield specifies the pointer ids of the pointers
-    // whose positions are included in the movement. The positions
-    // array contains position information for each pointer in order
-    // by increasing id.  Its size should be equal to the number of
-    // one bits in idBits.
-    void addMovement(tjs_uint64 eventTime, float x, float y) {
-        mStrategy.addMovement(eventTime, x, y);
-    }
-
-    // Gets the velocity of the specified pointer id in position units
-    // per second. Returns false and sets the velocity components to
-    // zero if there is insufficient movement information for the
-    // pointer.
-    bool getVelocity(float &outVx, float &outVy) const;
-
-    bool getVelocity(float &speed) const {
-        float x, y;
-        if(getVelocity(x, y)) {
-            speed = hypotf(x, y);
-            return true;
-        }
-        return false;
-    }
-
-    // Gets an estimator for the recent movements of the specified
-    // pointer id. Returns false and clears the estimator if there is
-    // no information available about the pointer.
-    bool getEstimator(VelocityTrackerStrategy::Estimator *outEstimator) const {
-        return mStrategy.getEstimator(outEstimator);
-    }
-
-    inline void setID(tjs_int id) { mID = id; }
-
-    [[nodiscard]] inline tjs_int getID() const { return mID; }
-
-    inline void clearID() { mID = -1; }
-
-private:
-    class LeastSquaresVelocityTrackerStrategy mStrategy;
-
-    tjs_int mID;
-};
-
-// 余り効率のいい実装ではないが、数が少ないので問題ない速度のはず
-class VelocityTrackers {
-public:
-    static const tjs_int MAX_TRACKING = 10;
-
-private:
-    VelocityTracker tracker_[MAX_TRACKING];
-
-private:
-    [[nodiscard]] int findEmptyEntry() const {
-        for(int i = 0; i < MAX_TRACKING; i++) {
-            if(tracker_[i].getID() < 0) {
-                return i;
+            [[nodiscard]] inline const Position &getPosition() const {
+                return positions;
             }
-        }
-        return -1;
-    }
+        };
 
-    [[nodiscard]] int findEntry(tjs_int32 id) const {
-        for(int i = 0; i < MAX_TRACKING; i++) {
-            if(tracker_[i].getID() == id) {
-                return i;
-            }
-        }
-        return -1;
-    }
+        [[nodiscard]] float chooseWeight(tjs_uint32 index) const;
 
-public:
-    void start(tjs_int id) {
-        int index = findEmptyEntry();
-        if(index >= 0) {
-            tracker_[index].clear();
-            tracker_[index].setID(id);
-        }
-    }
+        const tjs_uint32 mDegree;
+        const Weighting mWeighting;
+        tjs_uint32 mIndex;
+        Movement mMovements[HISTORY_SIZE];
+    };
 
-    void update(tjs_int id, tjs_uint32 tick, float x, float y) {
-        int index = findEntry(id);
-        if(index >= 0) {
-            tracker_[index].addMovement(tick, x, y);
-        }
-    }
+    /*
+     * Calculates the velocity of pointer movements over time.
+     * ポインタの動きの速度を計算する
+     */
+    class VelocityTracker {
+    public:
+        // Creates a velocity tracker using the specified strategy.
+        // If strategy is nullptr, uses the default strategy for the
+        // platform.
+        VelocityTracker();
 
-    void end(tjs_int id) {
-        int index = findEntry(id);
-        if(index >= 0) {
-            tracker_[index].clearID();
-        }
-    }
+        ~VelocityTracker();
 
-    bool getVelocity(tjs_int id, float &x, float &y, float &speed) const {
-        int index = findEntry(id);
-        if(index >= 0) {
-            if(tracker_[index].getVelocity(x, y)) {
+        // Resets the velocity tracker state.
+        void clear() {
+            mID = -1;
+            mStrategy.clear();
+        }
+
+        // Adds movement information for a set of pointers.
+        // The idBits bitfield specifies the pointer ids of the pointers
+        // whose positions are included in the movement. The positions
+        // array contains position information for each pointer in order
+        // by increasing id.  Its size should be equal to the number of
+        // one bits in idBits.
+        void addMovement(tjs_uint64 eventTime, float x, float y) {
+            mStrategy.addMovement(eventTime, x, y);
+        }
+
+        // Gets the velocity of the specified pointer id in position units
+        // per second. Returns false and sets the velocity components to
+        // zero if there is insufficient movement information for the
+        // pointer.
+        bool getVelocity(float &outVx, float &outVy) const;
+
+        bool getVelocity(float &speed) const {
+            float x, y;
+            if(getVelocity(x, y)) {
                 speed = hypotf(x, y);
                 return true;
             }
+            return false;
         }
-        return false;
-    }
-};
+
+        // Gets an estimator for the recent movements of the specified
+        // pointer id. Returns false and clears the estimator if there is
+        // no information available about the pointer.
+        bool
+        getEstimator(VelocityTrackerStrategy::Estimator *outEstimator) const {
+            return mStrategy.getEstimator(outEstimator);
+        }
+
+        inline void setID(tjs_int id) { mID = id; }
+
+        [[nodiscard]] inline tjs_int getID() const { return mID; }
+
+        inline void clearID() { mID = -1; }
+
+    private:
+        class LeastSquaresVelocityTrackerStrategy mStrategy;
+
+        tjs_int mID;
+    };
+
+    // 余り効率のいい実装ではないが、数が少ないので問題ない速度のはず
+    class VelocityTrackers {
+    public:
+        static const tjs_int MAX_TRACKING = 10;
+
+    private:
+        VelocityTracker tracker_[MAX_TRACKING];
+
+    private:
+        [[nodiscard]] int findEmptyEntry() const {
+            for(int i = 0; i < MAX_TRACKING; i++) {
+                if(tracker_[i].getID() < 0) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        [[nodiscard]] int findEntry(tjs_int32 id) const {
+            for(int i = 0; i < MAX_TRACKING; i++) {
+                if(tracker_[i].getID() == id) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+    public:
+        void start(tjs_int id) {
+            int index = findEmptyEntry();
+            if(index >= 0) {
+                tracker_[index].clear();
+                tracker_[index].setID(id);
+            }
+        }
+
+        void update(tjs_int id, tjs_uint32 tick, float x, float y) {
+            int index = findEntry(id);
+            if(index >= 0) {
+                tracker_[index].addMovement(tick, x, y);
+            }
+        }
+
+        void end(tjs_int id) {
+            int index = findEntry(id);
+            if(index >= 0) {
+                tracker_[index].clearID();
+            }
+        }
+
+        bool getVelocity(tjs_int id, float &x, float &y, float &speed) const {
+            int index = findEntry(id);
+            if(index >= 0) {
+                if(tracker_[index].getVelocity(x, y)) {
+                    speed = hypotf(x, y);
+                    return true;
+                }
+            }
+            return false;
+        }
+    };
+
+} // namespace krkr::utils
+
+using krkr::utils::VelocityTrackerStrategy;
+using krkr::utils::LeastSquaresVelocityTrackerStrategy;
+using krkr::utils::VelocityTracker;
+using krkr::utils::VelocityTrackers;
 
 #endif // _LIBINPUT_VELOCITY_TRACKER_H
