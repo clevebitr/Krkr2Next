@@ -17,11 +17,6 @@
 
 namespace krkr::sound {
 
-//---------------------------------------------------------------------------
-
-//---------------------------------------------------------------------------
-// tTJSNI_BaseCDDASoundBuffer
-//---------------------------------------------------------------------------
 class tTJSNI_BaseCDDASoundBuffer : public tTJSNI_SoundBuffer {
     typedef tTJSNI_SoundBuffer inherited;
 
@@ -36,7 +31,6 @@ public:
 protected:
 public:
 };
-//---------------------------------------------------------------------------
 
 } // namespace krkr::sound
 
@@ -44,11 +38,6 @@ public:
 
 namespace krkr::sound {
 
-//---------------------------------------------------------------------------
-
-//---------------------------------------------------------------------------
-// tTJSNC_CDDASoundBuffer : TJS CDDASoundBuffer class
-//---------------------------------------------------------------------------
 class tTJSNC_CDDASoundBuffer : public tTJSNativeClass {
 public:
     tTJSNC_CDDASoundBuffer();
@@ -59,9 +48,7 @@ protected:
     tTJSNativeInstance *CreateNativeInstance() override;
 };
 
-//---------------------------------------------------------------------------
 extern tTJSNativeClass *TVPCreateNativeClass_CDDASoundBuffer();
-//---------------------------------------------------------------------------
 
 } // namespace krkr::sound
 
