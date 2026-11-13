@@ -20,6 +20,11 @@
 #define S_IFREG 0x8000 // Regular
 #endif
 
+// 全局 COM 类型，不能跟着 io 一起进 namespace。
+struct IStream;
+
+namespace krkr::io {
+
 struct tTVPLocalFileInfo {
     const char *NativeName;
     unsigned short Mode; // S_IFMT
@@ -108,7 +113,6 @@ public:
 
 class tTVPIStreamAdapter;
 
-struct IStream;
 //---------------------------------------------------------------------------
 // IStream creator
 //---------------------------------------------------------------------------
@@ -189,5 +193,22 @@ bool TVPSaveStreamToFile(tTJSBinaryStream *st, tjs_uint64 offset,
 
 // 复位 Storage 层缓存，使 engine_destroy 后可干净二次启动（runtime-restart）。
 void TVPResetStorageImplForRestart();
+
+} // namespace krkr::io
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::io::tTVPLocalFileInfo;
+using krkr::io::TVPGetLocalFileListAt;
+using krkr::io::tTVPLocalFileStream;
+using krkr::io::TVPCheckExistentLocalFolder;
+using krkr::io::TVPCheckExistentLocalFile;
+using krkr::io::TVPCreateFolders;
+using krkr::io::TVPCreateIStream;
+using krkr::io::tTVPBinaryStreamAdapter;
+using krkr::io::TVPCreateBinaryStreamAdapter;
+using krkr::io::tTVPPluginHolder;
+using krkr::io::TVPListDir;
+using krkr::io::TVPSaveStreamToFile;
+using krkr::io::TVPResetStorageImplForRestart;
 
 #endif

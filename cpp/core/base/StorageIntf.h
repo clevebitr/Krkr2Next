@@ -179,6 +179,8 @@ using krkr::io::iTVPStorageMedia;
 //---------------------------------------------------------------------------
 // must be implemented in each platform
 //---------------------------------------------------------------------------
+namespace krkr::io {
+
 extern tTVPArchive *TVPOpenArchive(const ttstr &name, bool normalizeFileName);
 // open archive and return tTVPArchive instance.
 
@@ -235,6 +237,19 @@ extern bool TVPRemoveFolder(const ttstr &name);
 bool TVPCreateFolders(const ttstr &folder);
 // create folder along with the argument recursively (like mkdir -p).
 // 'folder' must be a local native name.
+
+} // namespace krkr::io
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::io::TVPOpenArchive;
+using krkr::io::TVPGetTemporaryName;
+using krkr::io::TVPGetAppPath;
+using krkr::io::TVPPreNormalizeStorageName;
+using krkr::io::TVPCreateFileMedia;
+using krkr::io::TVPOpenStream;
+using krkr::io::TVPRemoveFile;
+using krkr::io::TVPRemoveFolder;
+using krkr::io::TVPCreateFolders;
 
 //---------------------------------------------------------------------------
 
@@ -375,9 +390,18 @@ tjs_uint TVPGetXP3SegmentCacheTotalBytes();
 using krkr::io::TVPSegmentCacheLimit;
 using krkr::io::TVPGetXP3SegmentCacheTotalBytes;
 
+namespace krkr::io {
+
 void TVPAutoMountSiblingXP3Archives();
 void TVPAutoMountProjectXP3Archives();
 void TVPBoostAutoMountPaths();
+
+} // namespace krkr::io
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::io::TVPAutoMountSiblingXP3Archives;
+using krkr::io::TVPAutoMountProjectXP3Archives;
+using krkr::io::TVPBoostAutoMountPaths;
 
 //---------------------------------------------------------------------------
 
@@ -404,7 +428,14 @@ protected:
 using krkr::io::tTJSNC_Storages;
 
 //---------------------------------------------------------------------------
+namespace krkr::io {
+
 extern tTJSNativeClass *TVPCreateNativeClass_Storages();
+
+} // namespace krkr::io
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::io::TVPCreateNativeClass_Storages;
 //---------------------------------------------------------------------------
 
 namespace krkr::io {
@@ -436,6 +467,8 @@ protected:
 
 // TODO: 过渡兼容，调用点迁移完成后删除
 using krkr::io::tTVPStorageMedia;
+
+namespace krkr::io {
 
 class TArchiveStream : public tTJSBinaryStream {
     tTVPArchive *Owner;
@@ -488,5 +521,10 @@ public:
 
     tjs_uint64 GetSize() override { return DataLength; }
 };
+
+} // namespace krkr::io
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::io::TArchiveStream;
 
 #endif

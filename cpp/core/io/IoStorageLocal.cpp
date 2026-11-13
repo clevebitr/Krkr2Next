@@ -31,6 +31,7 @@
 #include "XP3Archive.h"
 #include "XP3ArchiveCxDecoder.h"
 #include "IoArchiveInternal.h"
+#include "IoStorageInternal.h"
 #include "FileSelector.h"
 
 #include "Application.h"
@@ -64,6 +65,17 @@ inline unsigned int lseek64(int fileHandle, __int64 offset, int origin) {
 #if defined(__APPLE__) || defined(__MACH__) || defined(__FreeBSD__)
 #define lseek64 lseek
 #endif
+
+// 这些符号必须保持全局：平台层/外部 TU 以全局名声明或定义它们。
+bool TVPWriteDataToFile(const ttstr &filepath, const void *data,
+                        unsigned int len);
+const std::vector<std::string> &TVPGetApplicationHomeDirectory();
+
+extern "C" const IID IID_IUnknown;
+extern "C" const IID IID_IStream;
+extern "C" const IID IID_ISequentialStream;
+
+namespace krkr::io {
 
 //---------------------------------------------------------------------------
 // tTVPFileMedia
@@ -335,7 +347,6 @@ static int _utf8_strcasecmp_nfc(const char *a, const char *b) {
 #endif
 
 #if defined(__APPLE__) && TARGET_OS_IPHONE
-const std::vector<std::string> &TVPGetApplicationHomeDirectory();
 const std::vector<ttstr> &_getPrefixPath() {
     static std::vector<ttstr> ret;
     if(ret.empty()) {
@@ -852,9 +863,6 @@ tTVPLocalFileStream::tTVPLocalFileStream(const ttstr &origname,
 }
 
 //---------------------------------------------------------------------------
-bool TVPWriteDataToFile(const ttstr &filepath, const void *data,
-                        unsigned int len);
-
 tTVPLocalFileStream::~tTVPLocalFileStream() {
     if(MemBuffer) {
         if(!TVPWriteDataToFile(FileName, MemBuffer->GetInternalBuffer(),
@@ -996,10 +1004,6 @@ tTVPIStreamAdapter::tTVPIStreamAdapter(tTJSBinaryStream *ref) {
 //---------------------------------------------------------------------------
 tTVPIStreamAdapter::~tTVPIStreamAdapter() { delete Stream; }
 //---------------------------------------------------------------------------
-extern "C" const IID IID_IUnknown;
-extern "C" const IID IID_IStream;
-extern "C" const IID IID_ISequentialStream;
-
 HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::QueryInterface(REFIID riid,
                                                              void **ppvObject) {
     if(!ppvObject)
@@ -1858,9 +1862,6 @@ void TVPBoostAutoMountPaths() {
     if(TVPAutoMountedPaths.empty())
         return;
 
-    extern std::vector<ttstr> TVPAutoPathList;
-    extern bool AutoPathTableInit;
-
     // 目标优先级（表语义：**列表靠前 = 优先**）：
     //     散装文件（工程目录里的散装补丁） > 补丁档案 > 其它档案
     //
@@ -1953,3 +1954,5 @@ void TVPBoostAutoMountPaths() {
         spdlog::info("TVPBoostAutoMountPaths: 队首 {} 条 = {}", kShow, head);
     }
 }
+
+} // namespace krkr::io
