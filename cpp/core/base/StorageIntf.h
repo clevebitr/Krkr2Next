@@ -18,7 +18,12 @@
 //---------------------------------------------------------------------------
 // archive delimiter
 //---------------------------------------------------------------------------
-extern tjs_char TVPArchiveDelimiter; //  = '>';
+namespace krkr::io
+{
+    extern tjs_char TVPArchiveDelimiter; //  = '>';
+} // namespace krkr::io
+
+using krkr::io::TVPArchiveDelimiter;
 
 //---------------------------------------------------------------------------
 // utilities
