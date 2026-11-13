@@ -1,6 +1,9 @@
 #pragma once
 
 #include "tjs.h"
+
+namespace krkr::extension {
+
 //---------------------------------------------------------------------------
 // tTVPAtInstallClass
 //---------------------------------------------------------------------------
@@ -34,3 +37,11 @@ extern void TVPCauseAtInstallExtensionClass(iTJSDispatch2 *global);
 // 复位「待安装扩展类」登记状态，使 engine_destroy
 // 后可干净二次启动（runtime-restart）。
 extern void TVPResetExtensionClassInstallStateForRestart();
+
+} // namespace krkr::extension
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::extension::tTVPAtInstallClass;
+using krkr::extension::TVPAddClassHandler;
+using krkr::extension::TVPCauseAtInstallExtensionClass;
+using krkr::extension::TVPResetExtensionClassInstallStateForRestart;

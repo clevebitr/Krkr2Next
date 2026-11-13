@@ -2,6 +2,8 @@
 #include "tjsCommHead.h"
 #include "Extension.h"
 
+namespace krkr::extension {
+
 //---------------------------------------------------------------------------
 // TVPAddClassHandler related
 //---------------------------------------------------------------------------
@@ -77,3 +79,5 @@ void TVPResetExtensionClassInstallStateForRestart() {
     TVPAtClassInstallInfos = nullptr;
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::extension
