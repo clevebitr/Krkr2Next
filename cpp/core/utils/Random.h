@@ -12,9 +12,14 @@
 #define RandomH
 //---------------------------------------------------------------------------
 
-TJS_EXP_FUNC_DEF(void, TVPPushEnvironNoise, (const void *buf, tjs_int bufsize));
+namespace krkr::utils
+{
+        TJS_EXP_FUNC_DEF(void, TVPPushEnvironNoise, (const void *buf, tjs_int bufsize));
+        TJS_EXP_FUNC_DEF(void, TVPGetRandomBits128, (void *dest));
+} // namespace krkr::utils
 
-TJS_EXP_FUNC_DEF(void, TVPGetRandomBits128, (void *dest));
-
+//TODO:过渡兼容完成后删除
+using krkr::utils::TVPPushEnvironNoise;
+using krkr::utils::TVPGetRandomBits128;
 //---------------------------------------------------------------------------
 #endif

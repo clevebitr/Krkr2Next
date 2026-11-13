@@ -14,15 +14,17 @@
 #include "md5.h"
 #include "tjsUtils.h"
 
+namespace krkr::utils {
+
+
 // this implements simple environment-noise based pseudo random
 // generator using MD5. may not be suitable for high security usage.
 
-//---------------------------------------------------------------------------
-tjs_uint8 TVPRandomSeedPool[0x1000 + 512];
-// 512 is to avoid buffer over-run posibility in multi-threaded access
-tjs_int TVPRandomSeedPoolPos = 0;
-tjs_uint8 TVPRandomSeedAtom; // need not to initialize
-//---------------------------------------------------------------------------
+namespace { 
+    tjs_uint8 TVPRandomSeedPool[0x1000 + 512];
+    tjs_int TVPRandomSeedPoolPos = 0;
+    tjs_uint8 TVPRandomSeedAtom; // need not to initialize
+}
 void TVPPushEnvironNoise(const void *buf, tjs_int bufsize) {
     const auto *p = (const tjs_uint8 *)buf;
     for(int i = 0; i < bufsize; i++) {
@@ -34,7 +36,6 @@ void TVPPushEnvironNoise(const void *buf, tjs_int bufsize) {
     TVPRandomSeedPoolPos &= 0xfff;
 }
 
-//---------------------------------------------------------------------------
 void TVPGetRandomBits128(void *dest) {
     // retrieve random bits
 
@@ -54,4 +55,4 @@ void TVPGetRandomBits128(void *dest) {
     // push hash itself
     TVPPushEnvironNoise(buf, 16);
 }
-//---------------------------------------------------------------------------
+} //namespace krkr::utils

@@ -1,5 +1,10 @@
 # KrKr2-Next-Compose
 
+## 注意
+### 项目正在重构！可能会出现大量错误以及兼容性问题  
+
+
+---
 面向 **Android** 的 KiriKiri2（吉里吉里2）运行环境：原生 Kotlin/Compose 宿主壳 +
 C++ 引擎核心，直连平台 EGL/GLES3 渲染，通过零拷贝 SurfaceTexture 把引擎画面交给宿主。
 

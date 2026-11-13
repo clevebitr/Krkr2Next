@@ -7,7 +7,6 @@ set(BASE_SOURCE_FILES
     ${BASE_PATH}/CharacterSet.cpp
     ${BASE_PATH}/EventIntf.cpp
     ${BASE_PATH}/ScriptMgnIntf.cpp
-    # 存储与归档实现（StorageIntf/StorageImpl/XP3/ZIP/7z/TAR）已搬入 cpp/core/io/（M1.2/M1.4）。
     ${BASE_PATH}/SysInitIntf.cpp
     ${BASE_PATH}/SystemIntf.cpp
     ${BASE_PATH}/TextStream.cpp
@@ -19,7 +18,6 @@ set(BASE_SOURCE_FILES
     ${BASE_PATH}/impl/FileSelector.cpp
     ${BASE_PATH}/impl/NativeEventQueue.cpp
     ${BASE_PATH}/impl/ScriptMgnImpl.cpp
-    # impl/StorageImpl.cpp 的实现已搬入 cpp/core/io/IoStorageLocal.cpp（M1.2）。
     ${BASE_PATH}/impl/SysInitImpl.cpp
     ${BASE_PATH}/impl/SystemImpl.cpp
     ${BASE_PATH}/impl/MsgImpl.cpp
@@ -32,10 +30,6 @@ set(BASE_HEADERS_DIR
 
 add_library(${PROJECT_NAME} STATIC ${BASE_SOURCE_FILES})
 target_include_directories(${PROJECT_NAME} PUBLIC ${BASE_HEADERS_DIR})
-# core_io_module：路径解析等已搬进 cpp/core/io（见该目录 CMakeLists 的依赖方向说明）。
-# 依赖是单向的 base -> io；io 不得反过来引用核心符号。
-# PUBLIC 只是为了让同层的其他模块（visual/plugin/environ）经 base 拿到 io 的符号，
-# 依赖方向本身仍是 base -> io。
 target_link_libraries(${PROJECT_NAME} PUBLIC tjs2 core_io_module PRIVATE core_visual_module core_plugin_module core_environ_module core_extension_module core_sound_module core_utils_module)
 
 find_package(uchardet CONFIG REQUIRED)
