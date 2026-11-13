@@ -1,5 +1,6 @@
 #include "tjsCommHead.h"
 #include "StorageIntf.h"
+#include "IoArchiveInternal.h"
 #include "UtilStreams.h"
 #include <algorithm>
 
@@ -255,6 +256,8 @@ typedef struct {
 #ifndef NOUNCRYPT
 #include "crypt.h"
 #endif
+
+namespace krkr::io {
 
 static voidpf zip_open64file(voidpf opaque, const void *filename, int mode) {
     if(mode == (ZLIB_FILEFUNC_MODE_READ | ZLIB_FILEFUNC_MODE_EXISTING))
@@ -2160,8 +2163,6 @@ ZipArchive::~ZipArchive() {
     }
 }
 
-void storeFilename(ttstr &name, const char *narrowName, const ttstr &filename);
-
 ZipArchive::ZipArchive(const ttstr &name, tTJSBinaryStream *st,
                        bool normalizeFileName) : tTVPArchive(name) {
     if(!st)
@@ -2193,3 +2194,5 @@ ZipArchive::ZipArchive(const ttstr &name, tTJSBinaryStream *st,
         }
     }
 }
+
+} // namespace krkr::io

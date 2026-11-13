@@ -10,6 +10,9 @@ extern "C" {
 }
 
 #include "StorageImpl.h"
+#include "IoArchiveInternal.h"
+
+namespace krkr::io {
 
 static ISzAlloc allocImp = { [](ISzAllocPtr p, size_t size) -> void * {
                                 return malloc(size);
@@ -286,3 +289,5 @@ void TVPUnpack7ZArchive(tTJSBinaryStream *st, ttstr outpath) {
     }
 }
 #endif
+
+} // namespace krkr::io

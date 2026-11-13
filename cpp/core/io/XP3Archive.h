@@ -14,6 +14,8 @@
 
 #include "StorageIntf.h"
 
+namespace krkr::io {
+
 /*[*/
 //---------------------------------------------------------------------------
 // Extraction filter related
@@ -221,5 +223,19 @@ public:
     tjs_uint64 GetSize() override;
 };
 //---------------------------------------------------------------------------
+
+} // namespace krkr::io
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::io::tTVPXP3ExtractionFilterInfo;
+using krkr::io::tTVPXP3ArchiveExtractionFilter;
+using krkr::io::tTVPXP3ArchiveContentFilter;
+using krkr::io::TVPSetXP3ArchiveExtractionFilter;
+using krkr::io::TVPSetXP3ArchiveContentFilter;
+using krkr::io::TVPIsXP3Archive;
+using krkr::io::TVPClearXP3SegmentCache;
+using krkr::io::tTVPXP3ArchiveSegment;
+using krkr::io::tTVPXP3Archive;
+using krkr::io::tTVPXP3ArchiveStream;
 
 #endif

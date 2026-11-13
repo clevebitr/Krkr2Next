@@ -30,6 +30,7 @@
 #include "Random.h"
 #include "XP3Archive.h"
 #include "XP3ArchiveCxDecoder.h"
+#include "IoArchiveInternal.h"
 #include "FileSelector.h"
 
 #include "Application.h"
@@ -678,15 +679,6 @@ bool TVPCheckExistentLocalFolder(const ttstr &name) {
     return s.st_mode & S_IFDIR;
 }
 //---------------------------------------------------------------------------
-
-tTVPArchive *TVPOpenZIPArchive(const ttstr &name, tTJSBinaryStream *st,
-                               bool normalizeFileName);
-
-tTVPArchive *TVPOpen7ZArchive(const ttstr &name, tTJSBinaryStream *st,
-                              bool normalizeFileName);
-
-tTVPArchive *TVPOpenTARArchive(const ttstr &name, tTJSBinaryStream *st,
-                               bool normalizeFileName);
 
 static tTVPArchive *(*ArchiveCreators[])(
     const ttstr &name, tTJSBinaryStream *st,
@@ -1406,10 +1398,6 @@ ttstr TVPSearchCD(const ttstr &name) {
     return {};
 }
 //---------------------------------------------------------------------------
-
-tTJSBinaryStream *TVPGetCachedArchiveHandle(void *pointer, const ttstr &name);
-
-void TVPReleaseCachedArchiveHandle(void *pointer, tTJSBinaryStream *stream);
 
 TArchiveStream::TArchiveStream(tTVPArchive *owner, tjs_uint64 off,
                                tjs_uint64 len) :

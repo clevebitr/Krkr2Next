@@ -3,11 +3,11 @@
 #include "UtilStreams.h"
 #include "Platform.h"
 #include "MsgIntf.h"
+#include "IoArchiveInternal.h"
+#include "tar.h"
 #include <algorithm>
 
-void TVPFreeArchiveHandlePoolByPointer(void *pointer);
-
-void TVPReleaseCachedArchiveHandle(void *pointer, tTJSBinaryStream *stream);
+namespace krkr::io {
 
 void storeFilename(ttstr &name, const char *narrowName, const ttstr &filename) {
     tjs_int len = TJS_narrowtowidelen(narrowName);
@@ -34,8 +34,6 @@ tjs_uint64 parseOctNum(const char *oct, int length) {
     }
     return num;
 }
-
-#include "tar.h"
 
 class TARArchive : public tTVPArchive {
     struct EntryInfo {
@@ -144,3 +142,5 @@ tTVPArchive *TVPOpenTARArchive(const ttstr &name, tTJSBinaryStream *st,
     }
     return arc;
 }
+
+} // namespace krkr::io

@@ -309,8 +309,16 @@ tjs_uint TVPGetAutoPathCacheCount();
 tjs_uint TVPGetAutoPathCacheLimit();
 tjs_uint TVPGetAutoPathTableCount();
 
+namespace krkr::io {
+
 extern tjs_uint TVPSegmentCacheLimit; // XP3 segment cache limit, in bytes.
 tjs_uint TVPGetXP3SegmentCacheTotalBytes();
+
+} // namespace krkr::io
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::io::TVPSegmentCacheLimit;
+using krkr::io::TVPGetXP3SegmentCacheTotalBytes;
 
 void TVPAutoMountSiblingXP3Archives();
 void TVPAutoMountProjectXP3Archives();

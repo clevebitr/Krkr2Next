@@ -18,6 +18,8 @@
 #include <utility>
 #include <vector>
 
+namespace krkr::io {
+
 namespace {
 
     enum class Op : std::uint32_t {
@@ -774,3 +776,5 @@ bool TVPDecodeBuiltinXP3Cx(std::uint32_t hash, std::uint64_t offset,
     decoder->Decode(hash, offset, buffer, size);
     return true;
 }
+
+} // namespace krkr::io

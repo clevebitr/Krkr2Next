@@ -14,6 +14,7 @@
 #include "XP3Archive.h"
 #include "IoPolicy.h"
 #include "XP3ArchiveCxDecoder.h"
+#include "IoArchiveInternal.h"
 #include "MsgIntf.h"
 #include "DebugIntf.h"
 #include "EventIntf.h"
@@ -26,6 +27,8 @@
 #include <limits>
 
 #include "TVPMmapAlloc.h"
+
+namespace krkr::io {
 
 bool TVPAllowExtractProtectedStorage = true;
 
@@ -1276,3 +1279,5 @@ tjs_uint tTVPXP3ArchiveStream::Write(const void *buffer, tjs_uint write_size) {
 //---------------------------------------------------------------------------
 tjs_uint64 tTVPXP3ArchiveStream::GetSize() { return OrgSize; }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::io
