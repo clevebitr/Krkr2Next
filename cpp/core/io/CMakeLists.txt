@@ -5,22 +5,11 @@ set(IO_PATH ${CMAKE_CURRENT_LIST_DIR})
 
 add_library(${PROJECT_NAME} STATIC
     ${IO_PATH}/IoPath.cpp
-    # 当前生效策略的注入点（io 不认识"层"，由 compat 注入）。
     ${IO_PATH}/IoPolicy.cpp
-    # 插件模块存在性查询的注入点（io 不直接依赖插件注册表）。
     ${IO_PATH}/IoModuleLocator.cpp
-    # 虚拟文件（伴生脚本等）的泛型提供点：io 只留注册表，具体名字由 compat 层注册。
     ${IO_PATH}/IoVirtualFile.cpp
-    # 存储系统实现（原 cpp/core/base/StorageIntf.cpp，git mv 保留历史）。
-    # 公开声明仍在 cpp/core/base/StorageIntf.h —— 约 200 个调用点不动，只换定义所在 TU。
     ${IO_PATH}/IoStorage.cpp
-    # 本地文件媒体 / 归档打开 / 启动挂载 / 补丁优先级（原
-    # cpp/core/base/impl/StorageImpl.cpp，git mv 保留历史）。声明仍在
-    # cpp/core/base/impl/StorageImpl.h。
     ${IO_PATH}/IoStorageLocal.cpp
-    # 归档后端（原 cpp/core/base/{XP3Archive*,ZIPArchive,7zArchive,TARArchive}.cpp，git mv）。
-    # 归档知识与 IO 组件同处一地；它们仍会用到核心基础设施（消息常量、UtilStreams、
-    # TVPMmapAlloc），那是**基础设施回边**，不是 IO 知识外泄。
     ${IO_PATH}/XP3Archive.cpp
     ${IO_PATH}/XP3ArchiveCxDecoder.cpp
     ${IO_PATH}/ZIPArchive.cpp
@@ -28,10 +17,6 @@ add_library(${PROJECT_NAME} STATIC
     ${IO_PATH}/TARArchive.cpp
 )
 
-# 自身要能解析 `StoragePolicy.h` / 其他 core 头：cpp/core 与 cpp/core/base 必须在
-# 本模块的包含路径里（编译本模块时，别的 target 的 INTERFACE 包含路径不可见）。
-# 包含路径照抄 core_base_module 的集合：本模块现在包含原 base 的存储实现，
-# 它会 include StorageIntf.h / MsgIntf.h / XP3Archive.h / ncbind.hpp 等。
 target_include_directories(${PROJECT_NAME} PUBLIC
     ${IO_PATH}
     ${CMAKE_CURRENT_LIST_DIR}/..
@@ -48,11 +33,6 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/../utils/win32
 )
 
-# 依赖方向（见 compat/README.md §2 与 IO 搬迁顺序）：
-#   core_base_module -> 本模块（存储/归档实现已在本模块）
-#   本模块 -> core_base_module：**只剩基础设施**（消息常量 MsgIntf、UtilStreams 的
-#   流基类、TVPMmapAlloc、CharacterSet 等），IO/归档知识本身**不再**依赖 base。
-# 两者都是 STATIC 库，CMake 允许 STATIC 之间的环并会在最终链接时重复它们。
 target_link_libraries(${PROJECT_NAME} PUBLIC
     tjs2
     core_base_module
@@ -66,10 +46,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     core_utils_module
 )
 
-# 归档后端需要的第三方依赖。**必须在本模块重复声明**：base 的这些依赖是 PRIVATE，
-# 编译期包含路径不会经 INTERFACE 传过来（`$<LINK_ONLY:...>` 只带链接），而
-# XP3Archive.cpp(<zlib.h>) / ZIPArchive.cpp(<minizip/ioapi.h>) / 7zArchive.cpp(<7zip/C/7z.h>)
-# 现在由本模块编译。
 find_package(ZLIB REQUIRED)
 find_package(zstd CONFIG REQUIRED)
 find_package(7zip CONFIG REQUIRED)
