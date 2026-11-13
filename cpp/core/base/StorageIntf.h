@@ -252,6 +252,8 @@ TJS_EXP_FUNC_DEF(void, TVPGetLocalName, (ttstr & name));
 
 ttstr TVPGetLocallyAccessibleName(const ttstr &name);
 
+namespace krkr::io {
+
 TJS_EXP_FUNC_DEF(ttstr, TVPExtractStorageExt, (const ttstr &name));
 // extract "name"'s extension and return it.
 
@@ -264,6 +266,14 @@ TJS_EXP_FUNC_DEF(ttstr, TVPExtractStoragePath, (const ttstr &name));
 TJS_EXP_FUNC_DEF(ttstr, TVPChopStorageExt, (const ttstr &name));
 // chop storage's extension and return it.
 // extensition delimiter '.' will not be held.
+
+} // namespace krkr::io
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::io::TVPExtractStorageExt;
+using krkr::io::TVPExtractStorageName;
+using krkr::io::TVPExtractStoragePath;
+using krkr::io::TVPChopStorageExt;
 
 TJS_EXP_FUNC_DEF(void, TVPAddAutoPath, (const ttstr &name));
 // add given path to auto search path

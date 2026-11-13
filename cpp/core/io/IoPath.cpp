@@ -106,10 +106,3 @@ namespace krkr::io {
     }
 
 } // namespace krkr::io
-
-// TODO: 过渡兼容,完成后删除
-using krkr::io::TVPExtractStorageExt;
-using krkr::io::TVPExtractStorageName;
-using krkr::io::TVPExtractStoragePath;
-using krkr::io::TVPChopStorageExt;
-using krkr::io::TVPArchiveDelimiter;
