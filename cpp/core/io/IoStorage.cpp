@@ -32,6 +32,12 @@
 #define TVP_DEFAULT_AUTOPATH_CACHE_NUM 256
 static const tjs_char *TVP_AUTOPATH_CACHE_MISS_MARKER = TJS_W("\x01");
 
+// 这两个符号被 IoStorageLocal.cpp 以全局 extern 使用，暂留全局。
+std::vector<ttstr> TVPAutoPathList;
+bool AutoPathTableInit = false;
+
+namespace krkr::io {
+
 //---------------------------------------------------------------------------
 // global variables
 //---------------------------------------------------------------------------
@@ -865,11 +871,9 @@ bool TVPIsExistentStorageNoSearch(const ttstr &_name) {
 // Auto search path support
 //---------------------------------------------------------------------------
 #define TVP_AUTO_PATH_HASH_SIZE 1024
-std::vector<ttstr> TVPAutoPathList;
 tTJSHashCache<ttstr, ttstr> TVPAutoPathCache(TVP_DEFAULT_AUTOPATH_CACHE_NUM);
 tTJSHashTable<ttstr, ttstr, tTJSHashFunc<ttstr>, TVP_AUTO_PATH_HASH_SIZE>
     TVPAutoPathTable;
-bool AutoPathTableInit = false;
 
 //---------------------------------------------------------------------------
 static void TVPInvalidateAutoPathTable() {
@@ -1527,3 +1531,5 @@ tTJSNativeInstance *tTJSNC_Storages::CreateNativeInstance() {
     return nullptr;
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::io

@@ -28,6 +28,8 @@ using krkr::io::TVPArchiveDelimiter;
 //---------------------------------------------------------------------------
 // utilities
 //---------------------------------------------------------------------------
+namespace krkr::io {
+
 ttstr TVPStringFromBMPUnicode(const tjs_uint16 *src, tjs_int maxlen = -1);
 //---------------------------------------------------------------------------
 
@@ -91,6 +93,13 @@ public:
     tjs_int GetFirstIndexStartsWith(const ttstr &prefix);
     // returns first index which have 'prefix' at start of the name.
 };
+
+} // namespace krkr::io
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::io::TVPStringFromBMPUnicode;
+using krkr::io::tTVPArchive;
+
 //---------------------------------------------------------------------------
 
 /*[*/
@@ -108,6 +117,8 @@ class tTJSBinaryStream;
 /*]*/
 #endif
 /*[*/
+namespace krkr::io {
+
 //---------------------------------------------------------------------------
 class iTVPStorageLister // callback class for GetListAt
 {
@@ -155,6 +166,13 @@ public:
     // filesystem. if true, returns local OS native name. otherwise
     // returns an empty string.
 };
+
+} // namespace krkr::io
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::io::iTVPStorageLister;
+using krkr::io::iTVPStorageMedia;
+
 //---------------------------------------------------------------------------
 /*]*/
 
@@ -223,6 +241,8 @@ bool TVPCreateFolders(const ttstr &folder);
 //---------------------------------------------------------------------------
 // implementation in this unit
 //---------------------------------------------------------------------------
+namespace krkr::io {
+
 TJS_EXP_FUNC_DEF(void, TVPRegisterStorageMedia, (iTVPStorageMedia * media));
 // register storage media
 TJS_EXP_FUNC_DEF(void, TVPUnregisterStorageMedia, (iTVPStorageMedia * media));
@@ -252,6 +272,19 @@ TJS_EXP_FUNC_DEF(void, TVPGetLocalName, (ttstr & name));
 
 ttstr TVPGetLocallyAccessibleName(const ttstr &name);
 
+} // namespace krkr::io
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::io::TVPRegisterStorageMedia;
+using krkr::io::TVPUnregisterStorageMedia;
+using krkr::io::TVPCreateStream;
+using krkr::io::TVPIsExistentStorageNoSearch;
+using krkr::io::TVPIsExistentStorageNoSearchNoNormalize;
+using krkr::io::TVPNormalizeStorageName;
+using krkr::io::TVPSetCurrentDirectory;
+using krkr::io::TVPGetLocalName;
+using krkr::io::TVPGetLocallyAccessibleName;
+
 namespace krkr::io {
 
 TJS_EXP_FUNC_DEF(ttstr, TVPExtractStorageExt, (const ttstr &name));
@@ -274,6 +307,8 @@ using krkr::io::TVPExtractStorageExt;
 using krkr::io::TVPExtractStorageName;
 using krkr::io::TVPExtractStoragePath;
 using krkr::io::TVPChopStorageExt;
+
+namespace krkr::io {
 
 TJS_EXP_FUNC_DEF(void, TVPAddAutoPath, (const ttstr &name));
 // add given path to auto search path
@@ -309,6 +344,26 @@ tjs_uint TVPGetAutoPathCacheCount();
 tjs_uint TVPGetAutoPathCacheLimit();
 tjs_uint TVPGetAutoPathTableCount();
 
+} // namespace krkr::io
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::io::TVPAddAutoPath;
+using krkr::io::TVPRemoveAutoPath;
+using krkr::io::TVPClearAutoPathListForRestart;
+using krkr::io::TVPGetPlacedPath;
+using krkr::io::TVPSearchPlacedPath;
+using krkr::io::TVPIsExistentStorage;
+using krkr::io::TVPClearStorageCaches;
+using krkr::io::TVPRemoveFromStorageCache;
+using krkr::io::TVPClearArchiveCache;
+using krkr::io::TVPSetArchiveCacheCount;
+using krkr::io::TVPGetArchiveCacheCount;
+using krkr::io::TVPGetArchiveCacheLimit;
+using krkr::io::TVPSetAutoPathCacheMaxCount;
+using krkr::io::TVPGetAutoPathCacheCount;
+using krkr::io::TVPGetAutoPathCacheLimit;
+using krkr::io::TVPGetAutoPathTableCount;
+
 namespace krkr::io {
 
 extern tjs_uint TVPSegmentCacheLimit; // XP3 segment cache limit, in bytes.
@@ -329,6 +384,8 @@ void TVPBoostAutoMountPaths();
 //---------------------------------------------------------------------------
 // tTJSNC_Storages : TJS Storages class
 //---------------------------------------------------------------------------
+namespace krkr::io {
+
 class tTJSNC_Storages : public tTJSNativeClass {
     typedef tTJSNativeClass inherited;
 
@@ -341,9 +398,16 @@ protected:
     tTJSNativeInstance *CreateNativeInstance() override;
 };
 
+} // namespace krkr::io
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::io::tTJSNC_Storages;
+
 //---------------------------------------------------------------------------
 extern tTJSNativeClass *TVPCreateNativeClass_Storages();
 //---------------------------------------------------------------------------
+
+namespace krkr::io {
 
 class tTVPStorageMedia : public iTVPStorageMedia {
 protected:
@@ -367,6 +431,11 @@ protected:
 
     void GetLocallyAccessibleName(ttstr &name) override {}
 };
+
+} // namespace krkr::io
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::io::tTVPStorageMedia;
 
 class TArchiveStream : public tTJSBinaryStream {
     tTVPArchive *Owner;
