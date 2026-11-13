@@ -13,6 +13,8 @@
 
 #include "tjsNative.h"
 
+namespace krkr::plugin {
+
 //---------------------------------------------------------------------------
 // tTJSNC_Plugins : TJS Plugins class
 //---------------------------------------------------------------------------
@@ -31,5 +33,11 @@ protected:
 //---------------------------------------------------------------------------
 extern tTJSNativeClass *TVPCreateNativeClass_Plugins();
 //---------------------------------------------------------------------------
+
+} // namespace krkr::plugin
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::plugin::tTJSNC_Plugins;
+using krkr::plugin::TVPCreateNativeClass_Plugins;
 
 #endif

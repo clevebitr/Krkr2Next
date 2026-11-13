@@ -43,6 +43,8 @@
 #define strcasecmp _stricmp
 #endif
 
+namespace krkr::plugin {
+
 //---------------------------------------------------------------------------
 bool TVPLoadInternalPlugin(const ttstr &_name);
 bool TVPRegisterGlobalObject(const tjs_char *name, iTJSDispatch2 *dsp);
@@ -762,3 +764,5 @@ tTJSNativeClass *TVPCreateNativeClass_Plugins() {
     return cls;
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::plugin

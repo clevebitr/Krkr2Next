@@ -18,6 +18,9 @@
 #ifdef TVP_SUPPORT_KPI
 #include "kmp_pi.h"
 #endif
+
+namespace krkr::plugin {
+
 #if 0
 
 //---------------------------------------------------------------------------
@@ -184,5 +187,34 @@ extern bool TVPPluginUnloadedAtSystemExit;
 void tvpLoadPlugins();
 void TVPUnregisterInternalPluginsForRestart();
 void TVPResetPluginSystemForRestart();
+
+//---------------------------------------------------------------------------
+
+} // namespace krkr::plugin
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::plugin::TVP_malloc;
+using krkr::plugin::TVP_free;
+using krkr::plugin::TVPGetAutoLoadPluginCount;
+using krkr::plugin::ZLIB_uncompress;
+using krkr::plugin::ZLIB_compress;
+using krkr::plugin::ZLIB_compress2;
+using krkr::plugin::TVP_md5_state_t;
+using krkr::plugin::TVP_md5_init;
+using krkr::plugin::TVP_md5_append;
+using krkr::plugin::TVP_md5_finish;
+using krkr::plugin::TVPProcessApplicationMessages;
+using krkr::plugin::TVPHandleApplicationMessage;
+using krkr::plugin::TVPRegisterGlobalObject;
+using krkr::plugin::TVPRemoveGlobalObject;
+using krkr::plugin::tTVPExceptionDesc;
+using krkr::plugin::tTVPTryBlockFunction;
+using krkr::plugin::tTVPCatchBlockFunction;
+using krkr::plugin::tTVPFinallyBlockFunction;
+using krkr::plugin::TVPDoTryBlock;
+using krkr::plugin::TVPPluginUnloadedAtSystemExit;
+using krkr::plugin::tvpLoadPlugins;
+using krkr::plugin::TVPUnregisterInternalPluginsForRestart;
+using krkr::plugin::TVPResetPluginSystemForRestart;
 
 #endif
