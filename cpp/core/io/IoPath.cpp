@@ -80,7 +80,7 @@ namespace krkr::io {
         return { s, (size_t)(p - s) };
     }
 
-    extern ttstr TVPChopStorageExt(const ttstr &name) {
+    ttstr TVPChopStorageExt(const ttstr &name) {
         // chop storage's extension and return it.
         const tjs_char *s = name.c_str();
         tjs_int slen = name.GetLen();
@@ -112,3 +112,4 @@ using krkr::io::TVPExtractStorageExt;
 using krkr::io::TVPExtractStorageName;
 using krkr::io::TVPExtractStoragePath;
 using krkr::io::TVPChopStorageExt;
+using krkr::io::TVPArchiveDelimiter;
