@@ -23,8 +23,11 @@
 */
 
 //---------------------------------------------------------------------------
+namespace krkr::utils {
+        void rdft(int, int, float *, int *, float *);
+} // namespace krkr::utils
 
-void rdft(int, int, float *, int *, float *);
+using krkr::utils::rdft;
 
 //---------------------------------------------------------------------------
 
