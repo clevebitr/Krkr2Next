@@ -10,7 +10,10 @@
 
 struct SwsContext;
 
+namespace krkr::sound {
 class iTVPSoundBuffer;
+}
+using krkr::sound::iTVPSoundBuffer;
 
 class TVPYUVSprite;
 

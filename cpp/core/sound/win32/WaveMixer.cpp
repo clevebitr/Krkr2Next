@@ -29,6 +29,8 @@
 #include <string.h>
 #include <unordered_set>
 
+namespace krkr::sound {
+
 class iTVPAudioRenderer;
 
 static iTVPAudioRenderer *TVPAudioRenderer;
@@ -809,3 +811,5 @@ void TVPALSoundWrap::SetSampleOffset(tjs_uint n /*= 0*/) {
     _samplesProcessed = n;
 }
 #endif
+
+} // namespace krkr::sound

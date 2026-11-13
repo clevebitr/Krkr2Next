@@ -7,7 +7,10 @@ extern "C" {
 #include "libavcodec/avcodec.h"
 }
 
+namespace krkr::sound {
 class iTVPSoundBuffer;
+}
+using krkr::sound::iTVPSoundBuffer;
 
 NS_KRMOVIE_BEGIN
 /**

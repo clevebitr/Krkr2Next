@@ -6,6 +6,8 @@
 
 #define TVPAL_BUFFER_COUNT 4
 
+namespace krkr::sound {
+
 struct ALSoundImpl;
 
 void TVPInitDirectSound(int freq = 48000);
@@ -104,3 +106,11 @@ public:
     void SetPosition(float x, float y, float z);
 };
 #endif
+
+} // namespace krkr::sound
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::sound::TVPInitDirectSound;
+using krkr::sound::TVPUninitDirectSound;
+using krkr::sound::iTVPSoundBuffer;
+using krkr::sound::TVPCreateSoundBuffer;

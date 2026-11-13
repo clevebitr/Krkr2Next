@@ -30,7 +30,10 @@
 struct IDirectSound;
 #endif
 
+namespace krkr::sound {
 class iTVPSoundBuffer;
+}
+using krkr::sound::iTVPSoundBuffer;
 
 /*]*/
 
