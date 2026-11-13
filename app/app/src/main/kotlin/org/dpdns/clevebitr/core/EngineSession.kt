@@ -12,7 +12,7 @@ import android.view.Surface
  * ## 为什么必须单线程
  *
  * `eglMakeCurrent` 是**线程绑定**的，而 `engine_tick` 会在**调用它的线程**上自动
- * attach ANativeWindow 并创建 EGL context（`engine_api.cpp` 的 Android 分支）。
+ * attach ANativeWindow 并创建 EGL context（`engine_api_lifecycle.cpp` 的 engine_tick）。
  * 因此 `engine_create` → 所有 `engine_tick` → `engine_destroy` 必须始终在同一条
  * 线程上执行，否则 EGL 上下文与当前线程不匹配，表现为黑屏或 GL 调用静默失败。
  *

@@ -247,82 +247,7 @@ extern "C" const unsigned char *KrkrLive2DEmbeddedShader(const char *path,
 // 注册的连续动画钩子），以及呈现走了哪条路。按「方法名+参数个数+参数类型序列」
 // 去重，只在该签名首次出现时打印一次（高频回调，必须去重）。
 // ---------------------------------------------------------------------------
-#if defined(KRKR_RENDER_PROBE)
-namespace {
-
-    const char *ProbeTypeName(const tTJSVariant *v) {
-        if(!v)
-            return "null";
-        switch(v->Type()) {
-            case tvtVoid:   return "void";
-            case tvtObject: return "object";
-            case tvtString: return "string";
-            case tvtInteger:return "int";
-            case tvtReal:   return "real";
-            case tvtOctet:  return "octet";
-            default:        return "?";
-        }
-    }
-
-    std::string ProbeValue(const tTJSVariant *v) {
-        if(!v)
-            return "null";
-        switch(v->Type()) {
-            case tvtInteger:
-                return std::to_string(static_cast<long long>(
-                    static_cast<tjs_int>(*v)));
-            case tvtReal:
-                return std::to_string(static_cast<double>(*v));
-            case tvtString: {
-                std::string s = ttstr(*v).AsStdString();
-                if(s.size() > 24)
-                    s = s.substr(0, 24) + "...";
-                return "\"" + s + "\"";
-            }
-            case tvtObject:
-                return "object";
-            default:
-                return ProbeTypeName(v);
-        }
-    }
-
-    bool ProbeFirstSeen(const std::string &sig) {
-        static std::unordered_map<std::string, long> counts;
-        long &c = counts[sig];
-        ++c;
-        return c == 1;
-    }
-
-    void ProbeCall(const char *who, const char *name, tjs_int n,
-                   tTJSVariant **p) {
-        std::string sig(name);
-        sig += '|';
-        sig += std::to_string(static_cast<long long>(n));
-        for(tjs_int i = 0; i < n; ++i) {
-            sig += ',';
-            sig += ProbeTypeName(p ? p[i] : nullptr);
-        }
-        if(!ProbeFirstSeen(sig))
-            return;
-        std::string args;
-        const tjs_int lim = (n < 10) ? n : 10;
-        for(tjs_int i = 0; i < lim; ++i) {
-            if(i)
-                args += ", ";
-            args += ProbeValue(p ? p[i] : nullptr);
-        }
-        if(n > lim)
-            args += ", ...";
-        spdlog::info("[probe] {}.{}(n={}) args=[{}]", who, name,
-                     static_cast<int>(n), args);
-    }
-
-} // namespace
-
-#define KRKR_PROBE_TJS(who, name, n, p) ProbeCall(who, name, n, p)
-#else
 #define KRKR_PROBE_TJS(who, name, n, p) ((void)0)
-#endif
 
 namespace {
 
@@ -868,19 +793,6 @@ public:
         renderer->IsPremultipliedAlpha(false);
         const long long msMvp = msSince(tMvp);
         msRenderer = msSince(tPhase);
-#if defined(KRKR_RENDER_PROBE)
-        // 进 CG 等几秒的常见大头是这一段，而它只做 CreateRenderer +
-        // BindTexture + SetMvpMatrix。细分一下，区分是渲染器/掩码缓冲创建、
-        // 纹理绑定，还是别的（例如首次着色器编译）在吃时间。
-        if(msRenderer > 200) {
-            spdlog::info("krkrlive2d: 渲染器阶段细分 createRenderer={}ms "
-                         "bindTexture={}ms mvp={}ms（{}x{}，{} 张纹理）",
-                         msCreateRenderer, msBindTex, msMvp,
-                         static_cast<int>(renderTargetW),
-                         static_cast<int>(renderTargetH),
-                         static_cast<int>(textureIds_.size()));
-        }
-#endif
         tPhase = std::chrono::steady_clock::now();
 
         csmInt32 eyeBlinkCount = setting_->GetEyeBlinkParameterCount();
@@ -1129,69 +1041,15 @@ public:
         glViewport(0, 0, fboW_, fboH_);
         glClearColor(0.f, 0.f, 0.f, 0.f);
         glClear(GL_COLOR_BUFFER_BIT);
-#if defined(KRKR_RENDER_PROBE)
-        ProbeFboStage("after-clear");
-#endif
 
         auto *renderer = GetRenderer<Rendering::CubismRenderer_OpenGLES2>();
         if(renderer) {
             UpdateProjection();
             renderer->SetMvpMatrix(&projMatrix_);
             renderer->DrawModel();
-#if defined(KRKR_RENDER_PROBE)
-            // 必须打在 DrawModel() **之后**：绘制前 SDK 还没绑 program 和纹理，
-            // 那时读到的 program=0/unit0Tex=0 是正常状态，判不了"绑了哪张纹理"。
-            ProbeDrawState();
-#endif
         }
-#if defined(KRKR_RENDER_PROBE)
-        ProbeFboStage("after-draw");
-#endif
         ApplyMosaicPostEffect();
-#if defined(KRKR_RENDER_PROBE)
-        ProbeFboStage("after-posteffect");
-#endif
 
-#if defined(KRKR_RENDER_PROBE)
-        // 采样内部 FBO。旧指标 nonZero/maxA **证明不了"立绘渲染出来了"**：
-        // 一整块 (255,255,255,0) 同样得 nonZero=9/9，而 maxA=255 只要 9 个点里
-        // 有 1 个不透明就成立。所以改按 **alpha>0 的点数** 统计，并额外报中心像素
-        // 与"白而透明"计数（预乘口径下 RGB>0 而 A=0 是非法像素）。
-        // 4x4 网格 + 中心共 17 次读取，每个模型仍只做两次（README 硬约束 4）。
-        {
-            static int s_samples = 0;
-            if(s_samples < 2) {
-                ++s_samples;
-                int aNonZero = 0, rgbNonZero = 0, whiteZero = 0, maxA = 0;
-                unsigned char ctr[4] = { 0, 0, 0, 0 };
-                glReadPixels(fboW_ / 2, fboH_ / 2, 1, 1, GL_RGBA,
-                             GL_UNSIGNED_BYTE, ctr);
-                for(int gy = 0; gy < 4; ++gy) {
-                    for(int gx = 0; gx < 4; ++gx) {
-                        unsigned char px[4] = { 0, 0, 0, 0 };
-                        glReadPixels(fboW_ * (2 * gx + 1) / 8,
-                                     fboH_ * (2 * gy + 1) / 8, 1, 1, GL_RGBA,
-                                     GL_UNSIGNED_BYTE, px);
-                        if(px[3] > 0)
-                            ++aNonZero;
-                        if(px[0] || px[1] || px[2])
-                            ++rgbNonZero;
-                        if(px[3] == 0 && px[0] == 255 && px[1] == 255 &&
-                           px[2] == 255)
-                            ++whiteZero;
-                        if(px[3] > maxA)
-                            maxA = px[3];
-                    }
-                }
-                spdlog::info("[probe] krkrlive2d: internal FBO {}x{} "
-                             "a>0={}/16 maxA={} rgbNonZero={}/16 "
-                             "white+transparent={}/16 center=({},{},{},{})",
-                             static_cast<int>(fboW_), static_cast<int>(fboH_),
-                             aNonZero, maxA, rgbNonZero, whiteZero, ctr[0],
-                             ctr[1], ctr[2], ctr[3]);
-            }
-        }
-#endif
 
         g_live2dRenderTarget = { internalFbo_, fboW_, fboH_ };
 
@@ -1199,58 +1057,6 @@ public:
         glViewport(savedVP[0], savedVP[1], savedVP[2], savedVP[3]);
     }
 
-#if defined(KRKR_RENDER_PROBE)
-    // 采 internalFbo_ 中心像素，分三个时机调用，用来区分：
-    //   after-clear 就已经是不透明黑 ⇒ 清屏色/绑定被外面污染了；
-    //   after-draw 才变黑          ⇒ 是模型自己画黑的。
-    void ProbeFboStage(const char *stage) {
-        static int s_stageSamples = 0;
-        if(s_stageSamples >= 6) // 3 个时机 × 每个模型 2 次
-            return;
-        ++s_stageSamples;
-        GLint fbo = 0;
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
-        unsigned char px[4] = { 0, 0, 0, 0 };
-        glReadPixels(fboW_ / 2, fboH_ / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
-        spdlog::info("[probe] krkrlive2d: {} fbo={} internal={} "
-                     "center=({},{},{},{})",
-                     stage, static_cast<int>(fbo),
-                     static_cast<int>(internalFbo_), px[0], px[1], px[2], px[3]);
-    }
-
-    // 绘制前一刻的 GL 状态：染色器程序、0 号纹理单元绑的是谁、那张纹理名是否有效、
-    // blend 与 glGetError。**只用 ES2 入口点** —— 本文件只有 gl2.h/gl2ext.h，
-    // ES3 的 glGetTexLevelParameteriv 连声明都没有（`GL_TEXTURE_WIDTH` 在 NDK 头里
-    // 也不存在，CI 实测过）。所以要判"纹理有没有 level-0 图像"，靠的是 krkrgles
-    // 那边纹理加载期的日志（`texId=` / `用 1x1 白色占位纹理`）与这里的 `unit0Tex`
-    // 对账：两者不一致就是绑错了纹理，占位纹理则会在那边明确打出来。
-    void ProbeDrawState() {
-        static int s_stateSamples = 0;
-        if(s_stateSamples >= 2)
-            return;
-        ++s_stateSamples;
-        GLint prog = 0, activeUnit = 0, tex0 = 0, bsrcA = 0, bdstA = 0;
-        glGetIntegerv(GL_ACTIVE_TEXTURE, &activeUnit);
-        glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
-        // 显式切到 0 号单元再读绑定：绘制结束后活动单元可能是 1/2（遮罩/混合），
-        // 直接读 GL_TEXTURE_BINDING_2D 拿到的不一定是模型纹理那一张。
-        glActiveTexture(GL_TEXTURE0);
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &tex0);
-        glActiveTexture(static_cast<GLenum>(activeUnit));
-        glGetIntegerv(GL_BLEND_SRC_ALPHA, &bsrcA);
-        glGetIntegerv(GL_BLEND_DST_ALPHA, &bdstA);
-        spdlog::info("[probe] krkrlive2d: draw state program={} activeUnit=0x{:04X} "
-                     "unit0Tex={} isTex0={} err=0x{:04X}",
-                     static_cast<int>(prog), static_cast<unsigned>(activeUnit),
-                     static_cast<int>(tex0),
-                     tex0 ? static_cast<int>(glIsTexture(tex0)) : 0,
-                     static_cast<unsigned>(glGetError()));
-        spdlog::info("[probe] krkrlive2d: draw blend enabled={} srcA=0x{:04X} "
-                     "dstA=0x{:04X}",
-                     glIsEnabled(GL_BLEND) ? 1 : 0, static_cast<unsigned>(bsrcA),
-                     static_cast<unsigned>(bdstA));
-    }
-#endif
 
     void BlitOverlay(GLint curFBO, const GLint vp[4]) {
         if(!loaded_ || !internalFbo_ || !fboTex_)
@@ -2236,19 +2042,6 @@ public:
     void OnContinuousCallback(tjs_uint64 /*tick*/) override {
         bool anyActive = false;
         iTJSDispatch2 *layer = KrkrGLES_GetRegisteredLayer();
-#if defined(KRKR_RENDER_PROBE)
-        {
-            static int s_lastHadLayer = -1;
-            const int had = layer ? 1 : 0;
-            if(had != s_lastHadLayer) {
-                s_lastHadLayer = had;
-                spdlog::info("[probe] krkrlive2d: registered layer {} -> {}"
-                             " presentation path",
-                             had ? "present" : "absent",
-                             had ? "CopyFBOToLayer" : "PostDrawHook overlay");
-            }
-        }
-#endif
 
         GLint savedFBO = 0;
         glGetIntegerv(GL_FRAMEBUFFER_BINDING, &savedFBO);
@@ -2281,17 +2074,6 @@ static Live2DContinuousCallback g_live2dContinuousCb;
 static bool g_continuousHookRegistered = false;
 
 static void Live2DPostDrawHook() {
-#if defined(KRKR_RENDER_PROBE)
-    {
-        static bool s_logged = false;
-        if(!s_logged) {
-            s_logged = true;
-            spdlog::info("[probe] krkrlive2d: PostDrawHook entered "
-                         "(registeredLayer={})",
-                         KrkrGLES_GetRegisteredLayer() ? "present" : "absent");
-        }
-    }
-#endif
     if(KrkrGLES_GetRegisteredLayer())
         return;
 
@@ -2343,25 +2125,20 @@ class Live2DDevice {
 public:
     Live2DDevice() = default;
     void beginScene() {
-        KRKR_PROBE_TJS("Live2DDevice", "beginScene", 0, nullptr);
         inScene_ = true;
     }
     void endScene() {
-        KRKR_PROBE_TJS("Live2DDevice", "endScene", 0, nullptr);
         inScene_ = false;
     }
     void onBeginScene() {
-        KRKR_PROBE_TJS("Live2DDevice", "onBeginScene", 0, nullptr);
         beginScene();
     }
     void onEndScene() {
-        KRKR_PROBE_TJS("Live2DDevice", "onEndScene", 0, nullptr);
         endScene();
     }
 
     static tjs_error renderCb(tTJSVariant *r, tjs_int numparams,
                               tTJSVariant **param, Live2DDevice *) {
-        KRKR_PROBE_TJS("Live2DDevice", "render", numparams, param);
         if(numparams > 0 && param && param[0] &&
            param[0]->Type() == tvtObject) {
             iTJSDispatch2 *obj = param[0]->AsObjectNoAddRef();
@@ -2405,7 +2182,6 @@ public:
     // --- Core callbacks ---
 
     static tjs_error loadCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
-            KRKR_PROBE_TJS("Live2DModel", "load", n, p);
         if(!s)
             return TJS_S_OK;
         if(n <= 0 || !p) {
@@ -2478,7 +2254,6 @@ public:
     }
 
     static tjs_error renderCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
-            KRKR_PROBE_TJS("Live2DModel", "render", n, p);
         if(s && s->cubismModel_ && s->cubismModel_->IsLoaded()) {
             GLint savedFBO = 0;
             glGetIntegerv(GL_FRAMEBUFFER_BINDING, &savedFBO);
@@ -2505,7 +2280,6 @@ public:
     // 都在每帧参与渲染。非 AetherKiri 层保持历史行为（空实现），因为老游戏是在
     // "show/hide 不起作用"的前提下写的，改变它会影响它们的显示逻辑。
     static tjs_error showCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
-            KRKR_PROBE_TJS("Live2DModel", "show", n, p);
         if(s && IsAetherKiriCompatEnabled()) {
             s->visible_ = true;
             if(s->cubismModel_)
@@ -2518,7 +2292,6 @@ public:
     }
 
     static tjs_error hideCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
-            KRKR_PROBE_TJS("Live2DModel", "hide", n, p);
         if(s && IsAetherKiriCompatEnabled()) {
             s->visible_ = false;
             if(s->cubismModel_)
@@ -2666,7 +2439,6 @@ public:
     }
 
     static tjs_error setExpressionCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
-            KRKR_PROBE_TJS("Live2DModel", "setExpression", n, p);
         if(s && n > 0 && p)
             s->expression_ = ToTTStr(*p[0]);
         if(r)
@@ -2754,7 +2526,6 @@ public:
     // 动作** —— 于是切 CG / 轮播动画时画面纹丝不动（模型一直在播加载时自动起播的
     // 那个动作），这是轮播失效的直接根因。这里改为真正落到 CubismMotionManager。
     static tjs_error startMotionCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
-            KRKR_PROBE_TJS("Live2DModel", "startMotion", n, p);
         if(!s)
             return TJS_S_OK;
 
@@ -3082,7 +2853,6 @@ public:
     }
 
     static tjs_error progressCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
-            KRKR_PROBE_TJS("Live2DModel", "progress", n, p);
         if(s && p && n > 0)
             s->progress_ = ToReal(*p[0], s->progress_);
         if(r && s)
@@ -3091,7 +2861,6 @@ public:
     }
 
     static tjs_error cloneCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, Live2DModel *s) {
-            KRKR_PROBE_TJS("Live2DModel", "clone", n, p);
         // Clone not supported for Cubism models (shared GPU resources)
         if(r)
             r->Clear();

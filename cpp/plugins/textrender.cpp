@@ -16,9 +16,6 @@
 #include "WindowIntf.h"
 #include "krkr_egl_context.h"
 
-#if defined(KRKR_RENDER_PROBE)
-#include <spdlog/spdlog.h>
-#endif
 
 #include <algorithm>
 #include <cmath>
@@ -517,22 +514,6 @@ EdgeShadowDrawTextCompat(tTJSVariant *result, tjs_int numparams,
     edgeWidth = std::clamp<tjs_int>(edgeWidth, 0, 12);
     textHeight = std::clamp<tjs_int>(textHeight, 8, 128);
 
-#if defined(KRKR_RENDER_PROBE)
-    { // 一次性探针：确认这一次绘制确实走了原生路径（不记录文本内容）。
-        static int logged = 0;
-        if(logged < 8) {
-            ++logged;
-            spdlog::info(
-                "probe: textrender EdgeShadowDrawText len={} x={} y={} "
-                "color=0x{:06x} edgeColor=0x{:06x} edgeWidth={} opacity={} "
-                "packed={}",
-                ttstr(*param[textIndex]).GetLen(), x, y,
-                static_cast<unsigned>(textRenderColor24(color)),
-                static_cast<unsigned>(textRenderColor24(edgeColor)), edgeWidth,
-                textOpacity, textRenderIsPackedGradient(color));
-        }
-    }
-#endif
 
     // 命名层文字：专用小透明层里 y=0 起画，某些字面 ink top 为负，会被裁剪框切掉顶部。
     const tjs_int requestedY = y;

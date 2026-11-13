@@ -16,16 +16,13 @@
  *   - krkr_GetApplicationContext(): global Application Context (host-shell
  * mode), returned WITHOUT extra ref (caller must not free).
  *   - krkr_GetNativeWindow() / krkr_GetSurfaceDimensions(): consumed by
- *     engine_api.cpp (Android) for auto-attaching the Surface render target.
+ *     engine_api_lifecycle.cpp (engine_tick, Android) for auto-attaching the
+ *     Surface render target.
  *     krkr_GetNativeWindow returns an ADDITIONAL reference that the caller must
  *     release with ANativeWindow_release().
  *   - JNI entry points called by org.dpdns.clevebitr.core.NativeEngine
  * (Kotlin): nativeSetSurface(window, width, height) / nativeDetachSurface() /
  *     nativeSetApplicationContext(context).
- *
- * ⚠️ JNI 符号名编码了 Java 包名与类名（`.` → `_`，`_` → `_1`）。改动
- * NativeEngine 的包名或类名时，必须同步修改本文件中的三个符号名，否则
- * 只会在运行时以 UnsatisfiedLinkError 暴露。CI 有对应的符号断言。
  *
  * Thread-safety: stored values are guarded by mutexes.
  */

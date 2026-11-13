@@ -18,9 +18,6 @@
 #include "tjsGlobalStringMap.h"
 #include "tjsDebug.h"
 
-#if defined(KRKR_RENDER_PROBE)
-#include <spdlog/spdlog.h>
-#endif
 
 #include <atomic>
 
@@ -1656,22 +1653,6 @@ namespace TJS {
                                                      objthis)) {
                 return TJS_S_OK;
             }
-#if defined(KRKR_RENDER_PROBE)
-            // 诊断：A 块回退也没兜住的成员。用于定位"明明在回退名单里却报
-            // does not exist"（例如 commitSavedata）到底是回退开关没开，还是
-            // 这条访问路径根本没走到 tTJSCustomObject::PropGet。
-            {
-                static thread_local int s_probeMisses = 0;
-                if(s_probeMisses < 32) {
-                    ++s_probeMisses;
-                    if(auto logger = spdlog::get("tjs2"))
-                        logger->debug(
-                            "probe: PropGet miss '{}' (compatFallbacks={})",
-                            ttstr(membername).AsStdString(),
-                            TJSCompatFallbacksEnabledFlag ? 1 : 0);
-                }
-            }
-#endif
         }
 
         if(!data && flag & TJS_MEMBERENSURE) {
@@ -1753,19 +1734,8 @@ namespace TJS {
         else
             data = Find(membername, hint);
 
-#if defined(KRKR_RENDER_PROBE)
-        if(!data) {
-            if(membername &&
-               TJS_strcmp(membername, TJS_W("diffEnterCount")) == 0) {
-                spdlog::info("probe: PropSet miss 'diffEnterCount', flag={:04X}",
-                             flag);
-            }
-            return TJS_E_MEMBERNOTFOUND; // not found
-        }
-#else
         if(!data)
             return TJS_E_MEMBERNOTFOUND; // not found
-#endif
 
         if(flag & TJS_HIDDENMEMBER)
             data->SymFlags |= TJS_SYMBOL_HIDDEN;

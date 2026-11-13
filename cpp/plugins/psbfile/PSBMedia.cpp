@@ -1320,36 +1320,6 @@ namespace PSB {
                             }
                         }
                     }
-#if defined(KRKR_RENDER_PROBE)
-                    {
-                        auto plogger = LOGGER;
-                        if(plogger && !f.src.empty() &&
-                           f.src.compare(0, 9, "src/logo/") == 0) {
-                            const bool nonWhite =
-                                f.packedColors[0] != 0xFFFFFFFFu ||
-                                f.packedColors[1] != 0xFFFFFFFFu ||
-                                f.packedColors[2] != 0xFFFFFFFFu ||
-                                f.packedColors[3] != 0xFFFFFFFFu;
-                            const bool isLineIcon =
-                                f.src == "src/logo/icon17" ||
-                                f.src == "src/logo/icon18" ||
-                                f.src == "src/logo/icon32" ||
-                                f.src == "src/logo/icon26";
-                            if(nonWhite || isLineIcon) {
-                                const bool hasColorKey =
-                                    (*content).find("color") !=
-                                    (*content).end();
-                                plogger->info(
-                                    "PSB frameColor: src='{}' time={}ms "
-                                    "type={} hasColorKey={} "
-                                    "pack={:08x},{:08x},{:08x},{:08x}",
-                                    f.src, f.time, f.type, hasColorKey ? 1 : 0,
-                                    f.packedColors[0], f.packedColors[1],
-                                    f.packedColors[2], f.packedColors[3]);
-                            }
-                        }
-                    }
-#endif
 
                     if(auto meshObj = std::dynamic_pointer_cast<PSBDictionary>(
                            (*content)["mesh"])) {

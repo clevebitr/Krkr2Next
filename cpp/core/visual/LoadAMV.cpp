@@ -113,12 +113,6 @@ static bool TryDecodeJpeg(const unsigned char *data, size_t size,
     int w = 0, h = 0, subsamp = 0;
     if(tjDecompressHeader2(dec, const_cast<unsigned char *>(data),
                            (unsigned long)size, &w, &h, &subsamp) != 0) {
-#if defined(KRKR_RENDER_PROBE)
-        spdlog::info(
-            "probe: AMV header 失败：{}（size={}，first={:02X}{:02X}）",
-            tjGetErrorStr2(dec), size, size > 0 ? data[0] : 0,
-            size > 1 ? data[1] : 0);
-#endif
         tjDestroy(dec);
         return false;
     }
@@ -130,12 +124,6 @@ static bool TryDecodeJpeg(const unsigned char *data, size_t size,
                             w * numComponents, h, pixelFormat, TJFLAG_FASTDCT);
     if(ret != 0) {
         int errCode = tjGetErrorCode(dec);
-#if defined(KRKR_RENDER_PROBE)
-        spdlog::info("probe: AMV tjDecompress2 失败：code={} msg={} {}x{} "
-                     "subsamp={} pf={} ncomp={}",
-                     static_cast<int>(errCode), tjGetErrorStr2(dec), w, h,
-                     subsamp, pixelFormat, numComponents);
-#endif
         if(errCode == TJERR_WARNING) {
             tjDestroy(dec);
             return true;
@@ -159,10 +147,6 @@ static bool DecodeJpegWithQT(const unsigned char *jpegData, size_t jpegSize,
         const bool ok = TryDecodeJpeg(patched.data(), patched.size(),
                                       pixelFormat, numComponents, outW, outH,
                                       pixelOut);
-#if defined(KRKR_RENDER_PROBE)
-        spdlog::info("probe: AMV DQT 注入重试 ok={} dqtSeg={}B jpeg={}B",
-                     ok ? 1 : 0, dqtSeg.size(), jpegSize);
-#endif
         return ok;
     }
     return false;
@@ -270,55 +254,6 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
     ReadExact(src, payload.data(), (tjs_uint)payloadLen);
     const unsigned char *payloadStart = payload.data();
 
-#if defined(KRKR_RENDER_PROBE)
-    {
-        // 结构探针：这份 AMV 的帧载荷不以 JPEG SOI 开头（首字节非 FFD8），
-        // 需要看清 [前缀][JPEG] 的边界、是否含 alpha 段、以及是否以 EOI 收尾。
-        //   SOI_count>1  ⇒ 载荷内有 color/alpha 两段 JPEG
-        //   tail16 以 FFD9 结尾 ⇒ 最后一段是完整 JPEG，前缀只需跳过
-        const int dump = static_cast<int>(std::min(payloadLen, (size_t)32));
-        std::string hex;
-        hex.reserve(dump * 2);
-        for(int i = 0; i < dump; i++) {
-            char buf[4];
-            std::snprintf(buf, sizeof(buf), "%02X", payload[i]);
-            hex += buf;
-        }
-
-        std::string soiList;
-        size_t soiCount = 0;
-        for(size_t i = 0; i + 1 < payloadLen; i++) {
-            if(payload[i] == 0xFF && payload[i + 1] == 0xD8) {
-                ++soiCount;
-                if(soiCount <= 8) {
-                    soiList += std::to_string(i);
-                    soiList += ',';
-                }
-            }
-        }
-
-        const int tailN = static_cast<int>(std::min(payloadLen, (size_t)16));
-        std::string tailHex;
-        tailHex.reserve(tailN * 2);
-        for(int i = 0; i < tailN; i++) {
-            char buf[4];
-            std::snprintf(buf, sizeof(buf), "%02X",
-                          payload[payloadLen - tailN + i]);
-            tailHex += buf;
-        }
-
-        spdlog::info(
-            "probe: AMV payload first32={} payloadLen={} extraHdr={} "
-            "sizeOfFrame={} SOI_count={} SOI_offsets=[{}] tail16={}",
-            hex, payloadLen, extraHdr, sizeOfFrame, soiCount, soiList,
-            tailHex);
-        spdlog::info(
-            "probe: AMV variant revision={} qt_size_plus_hdr={} unk={} unk2={} "
-            "attr={} frame={}x{} alpha={}x{}",
-            hdr.revision, hdr.qt_size_plus_hdr, hdr.unk, hdr.unk2,
-            hdr.alpha_decode_attr, imgW, imgH, frameW, frameH);
-    }
-#endif
 
     // --- Decode ---
     std::vector<tjs_uint32> rgba(imgW * imgH, 0);
@@ -404,34 +339,6 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
         std::vector<unsigned char> rgbPixels;
         if(!DecodeJpegWithQT(payloadStart, colorSize, dqtSeg, TJPF_RGBA, 4,
                              decW, decH, rgbPixels)) {
-#if defined(KRKR_RENDER_PROBE)
-            // 探针：载荷不以 SOI 开头时，试着从首个 FFD8 起解码，判定
-            // “前缀只需跳过”还是“数据本身不是 JPEG（被加密或其它变体）”。
-            {
-                size_t off = 0;
-                bool found = false;
-                for(size_t i = 0; i + 1 < payloadLen; i++) {
-                    if(payloadStart[i] == 0xFF &&
-                       payloadStart[i + 1] == 0xD8) {
-                        off = i;
-                        found = true;
-                        break;
-                    }
-                }
-                if(found) {
-                    int pw = 0, ph = 0;
-                    std::vector<unsigned char> tmp;
-                    const bool ok = TryDecodeJpeg(payloadStart + off,
-                                                  payloadLen - off, TJPF_RGBA,
-                                                  4, pw, ph, tmp);
-                    spdlog::info(
-                        "probe: AMV retry-from-SOI off={} len={} ok={} {}x{}",
-                        off, payloadLen - off, ok ? 1 : 0, pw, ph);
-                } else {
-                    spdlog::info("probe: AMV retry-from-SOI 未找到 FFD8");
-                }
-            }
-#endif
             TVPThrowExceptionMessage(TJS_W("AMV: color JPEG decode failed"));
         }
 

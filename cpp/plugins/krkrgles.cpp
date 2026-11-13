@@ -71,83 +71,7 @@ extern Live2DRenderTarget g_live2dRenderTarget;
 // 一次并带上参数值。这些回调会被每帧调用，不去重会刷屏（README 硬约束 4：
 // 高频日志必须采样/限频/去重/仅边沿）。默认关闭，靠 -DENABLE_RENDER_PROBE=ON 打开。
 // ---------------------------------------------------------------------------
-#if defined(KRKR_RENDER_PROBE)
-namespace {
-
-    const char *ProbeTypeName(const tTJSVariant *v) {
-        if(!v)
-            return "null";
-        switch(v->Type()) {
-            case tvtVoid:   return "void";
-            case tvtObject: return "object";
-            case tvtString: return "string";
-            case tvtInteger:return "int";
-            case tvtReal:   return "real";
-            case tvtOctet:  return "octet";
-            default:        return "?";
-        }
-    }
-
-    std::string ProbeValue(const tTJSVariant *v) {
-        if(!v)
-            return "null";
-        switch(v->Type()) {
-            case tvtInteger:
-                return std::to_string(static_cast<long long>(
-                    static_cast<tjs_int>(*v)));
-            case tvtReal:
-                return std::to_string(static_cast<double>(*v));
-            case tvtString: {
-                std::string s = ttstr(*v).AsStdString();
-                if(s.size() > 24)
-                    s = s.substr(0, 24) + "...";
-                return "\"" + s + "\"";
-            }
-            case tvtObject:
-                return "object";
-            default:
-                return ProbeTypeName(v);
-        }
-    }
-
-    // 返回 true 表示这个签名是第一次见到（调用方据此决定要不要打印）。
-    bool ProbeFirstSeen(const std::string &sig) {
-        static std::unordered_map<std::string, long> counts;
-        long &c = counts[sig];
-        ++c;
-        return c == 1;
-    }
-
-    void ProbeCall(const char *who, const char *name, tjs_int n,
-                   tTJSVariant **p) {
-        std::string sig(name);
-        sig += '|';
-        sig += std::to_string(static_cast<long long>(n));
-        for(tjs_int i = 0; i < n; ++i) {
-            sig += ',';
-            sig += ProbeTypeName(p ? p[i] : nullptr);
-        }
-        if(!ProbeFirstSeen(sig))
-            return;
-        std::string args;
-        const tjs_int lim = (n < 10) ? n : 10;
-        for(tjs_int i = 0; i < lim; ++i) {
-            if(i)
-                args += ", ";
-            args += ProbeValue(p ? p[i] : nullptr);
-        }
-        if(n > lim)
-            args += ", ...";
-        spdlog::info("[probe] {}.{}(n={}) args=[{}]", who, name,
-                     static_cast<int>(n), args);
-    }
-
-} // namespace
-
-#define KRKR_PROBE_TJS(who, name, n, p) ProbeCall(who, name, n, p)
-#else
 #define KRKR_PROBE_TJS(who, name, n, p) ((void)0)
-#endif
 
 namespace {
 
@@ -1378,35 +1302,10 @@ static bool CopyFBOToLayerGPU(GLuint srcFbo, GLsizei srcW, GLsizei srcH,
     // 静默失败最难查的地方。这里显式检查，失败就让位给 CPU 路径。
     const GLenum blitErr = glGetError();
     if(blitErr != GL_NO_ERROR) {
-#if defined(KRKR_RENDER_PROBE)
-        static bool s_blitFailLogged = false;
-        if(!s_blitFailLogged) {
-            s_blitFailLogged = true;
-            spdlog::warn("krkrgles: glBlitFramebuffer failed (err=0x{:04X}, "
-                         "src={}x{} layer={}x{} internal={}x{}) — CPU fallback",
-                         static_cast<unsigned>(blitErr), static_cast<int>(srcW),
-                         static_cast<int>(srcH), static_cast<int>(layerW),
-                         static_cast<int>(layerH), static_cast<int>(intW),
-                         static_cast<int>(intH));
-        }
-#endif
         glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
         return false;
     }
 
-#if defined(KRKR_RENDER_PROBE)
-    {
-        static bool s_gpuOkLogged = false;
-        if(!s_gpuOkLogged) {
-            s_gpuOkLogged = true;
-            spdlog::info("[probe] krkrgles: CopyFBOToLayer GPU ok src={}x{} "
-                         "dst={}x{} internal={}x{}",
-                         static_cast<int>(srcW), static_cast<int>(srcH),
-                         static_cast<int>(layerW), static_cast<int>(layerH),
-                         static_cast<int>(intW), static_cast<int>(intH));
-        }
-    }
-#endif
 
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
 
@@ -1507,27 +1406,6 @@ static bool CopyFBOToLayerCPU(GLuint fbo, GLsizei srcW, GLsizei srcH,
         static_cast<size_t>(srcW) * static_cast<size_t>(srcH) * 4u;
     if(s_rgba.size() < needed)
         s_rgba.resize(needed);
-#if defined(KRKR_RENDER_PROBE)
-    // readback **之前**的真相 + FBO id：与函数末尾那条（readback 之后）对照，
-    // 就能分辨"读回错了"还是"中途被重清 / 换了 FBO"。
-    // 只做两次，避免每帧多一次同步读回（README 硬约束 4）。
-    {
-        static int s_preSamples = 0;
-        if(s_preSamples < 2) {
-            ++s_preSamples;
-            unsigned char pre[4] = { 0, 0, 0, 0 };
-            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-            glReadPixels(srcW / 2, srcH / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE,
-                         pre);
-            glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
-            spdlog::info("[probe] krkrgles: copy pre fbo={} {}x{} "
-                         "center=({},{},{},{})",
-                         static_cast<unsigned>(fbo), static_cast<int>(srcW),
-                         static_cast<int>(srcH), pre[0], pre[1], pre[2],
-                         pre[3]);
-        }
-    }
-#endif
     // 读回本帧（同步）：PBO 双缓冲那条路只会给**上一帧**的内容，并且真机上
     // 一直带 GL_INVALID_OPERATION(0x0502)，等于交付的是过期像素；正确性优先，
     // 这里直接用同步读回。
@@ -1562,40 +1440,6 @@ static bool CopyFBOToLayerCPU(GLuint fbo, GLsizei srcW, GLsizei srcH,
         ConvertRGBA_to_BGRA(srcPixels, srcW, srcH, dst, pitch, copyW, copyH);
     }
 
-#if defined(KRKR_RENDER_PROBE)
-    // 三个中心像素一起看，直接判定是哪一段错：
-    //   fbo  —— 现读一次 FBO（真相）
-    //   src  —— 读回通道产出的（PBO 异步路径会给上一帧的内容）
-    //   dst  —— 转换后真正写进图层缓冲的
-    // 只在头两次拷贝打，避免每帧 glReadPixels（README 硬约束 4）。
-    {
-        static int s_copySamples = 0;
-        if(s_copySamples < 2) {
-            ++s_copySamples;
-            unsigned char fboCtr[4] = { 0, 0, 0, 0 };
-            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-            glReadPixels(srcW / 2, srcH / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE,
-                         fboCtr);
-            glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
-            const unsigned char *srcC =
-                srcPixels + static_cast<size_t>(srcW) * (srcH / 2) * 4u +
-                static_cast<size_t>(srcW / 2) * 4u;
-            const unsigned char *dstC =
-                dst + static_cast<size_t>(pitch) * (layerH / 2) +
-                static_cast<size_t>(layerW / 2) * 4u;
-            spdlog::info("[probe] krkrgles: copy path={} fbo={} fbo0=({},{},{},{}) "
-                         "src=({},{},{},{}) dst=({},{},{},{}) pitch={} "
-                         "copy={}x{} err=0x{:04X}",
-                         bgraRead ? "sync-read(bgra)" : "sync-read(rgba)",
-                         static_cast<unsigned>(fbo), fboCtr[0],
-                         fboCtr[1], fboCtr[2], fboCtr[3], srcC[0], srcC[1],
-                         srcC[2], srcC[3], dstC[0], dstC[1], dstC[2], dstC[3],
-                         static_cast<int>(pitch), static_cast<int>(copyW),
-                         static_cast<int>(copyH),
-                         static_cast<unsigned>(glGetError()));
-        }
-    }
-#endif
 
     tTVPRect rc(0, 0, copyW, copyH);
     layerNI->Update(rc);
@@ -2392,7 +2236,6 @@ namespace { // reopen anonymous namespace
         OffscreenFBO &GetFBO() { return fbo_; }
 
         static tjs_error entryUpdateObjectCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
-            KRKR_PROBE_TJS("GLESModule", "entryUpdateObject", n, p);
             if(n > 0 && p) {
                 iTJSDispatch2 *layer = FindLayerInParams(n, p);
                 if(layer) {
@@ -2428,7 +2271,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error beginSceneCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
-            KRKR_PROBE_TJS("GLESModule", "beginScene", n, p);
             if(s) {
                 tjs_int w = NormalizeExtent(s->screenWidth_, 1920);
                 tjs_int h = NormalizeExtent(s->screenHeight_, 1080);
@@ -2443,7 +2285,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error endSceneCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
-            KRKR_PROBE_TJS("GLESModule", "endScene", n, p);
             if(s) {
                 s->fbo_.Unbind();
                 s->sceneActive_ = false;
@@ -2454,7 +2295,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error finalizeCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
-            KRKR_PROBE_TJS("GLESModule", "finalize", n, p);
             if(s) {
                 RemoveYuzuMotionRenderable(0, nullptr,
                                            reinterpret_cast<uintptr_t>(s));
@@ -2466,7 +2306,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error captureCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
-            KRKR_PROBE_TJS("GLESModule", "capture", n, p);
             tjs_int w = NormalizeExtent(s ? s->screenWidth_ : 0, 1920);
             tjs_int h = NormalizeExtent(s ? s->screenHeight_ : 0, 1080);
             InvokeCaptureCallback("GLESModule.capture", w, h, n, p);
@@ -2491,7 +2330,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error copyLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
-            KRKR_PROBE_TJS("GLESModule", "copyLayer", n, p);
             iTJSDispatch2 *layer = FindLayerInParams(n, p);
             if(layer) {
                 if(s && s->fbo_.GetFBO()) {
@@ -2513,12 +2351,10 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error glesCopyLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
-            KRKR_PROBE_TJS("GLESModule", "glesCopyLayer", n, p);
             return copyLayerCb(r, n, p, s);
         }
 
         static tjs_error drawLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
-            KRKR_PROBE_TJS("GLESModule", "drawLayer", n, p);
             const bool drawn = DrawLayerNative(n, p);
             if(r)
                 *r = drawn;
@@ -2526,12 +2362,10 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error glesDrawLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
-            KRKR_PROBE_TJS("GLESModule", "glesDrawLayer", n, p);
             return drawLayerCb(r, n, p, s);
         }
 
         static tjs_error drawAffineCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
-            KRKR_PROBE_TJS("GLESModule", "drawAffine", n, p);
             const bool drawn = DrawAffineNative(n, p);
             if(r)
                 *r = drawn;
@@ -2539,12 +2373,10 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error drawAffineGLESCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
-            KRKR_PROBE_TJS("GLESModule", "drawAffineGLES", n, p);
             return drawAffineCb(r, n, p, s);
         }
 
         static tjs_error renderCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
-            KRKR_PROBE_TJS("GLESModule", "render", n, p);
             RenderYuzuMotionRenderables("GLESModule.render");
             if(r)
                 *r = true;
@@ -2552,7 +2384,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error setMatrixCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESModule *s) {
-            KRKR_PROBE_TJS("GLESModule", "setMatrix", n, p);
             if(r)
                 *r = true;
             return TJS_S_OK;
@@ -2684,7 +2515,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error getModuleCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "getModule", n, p);
             static std::unordered_map<
                 uintptr_t, std::unordered_map<ModuleName, tTJSVariant>>
                 sm;
@@ -2740,7 +2570,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error beginSceneCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "beginScene", n, p);
             auto *mod = s ? s->FindModule() : nullptr;
             if(mod)
                 return GLESModule::beginSceneCb(r, n, p, mod);
@@ -2750,7 +2579,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error endSceneCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "endScene", n, p);
             auto *mod = s ? s->FindModule() : nullptr;
             if(mod)
                 return GLESModule::endSceneCb(r, n, p, mod);
@@ -2760,7 +2588,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error entryUpdateObjectCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "entryUpdateObject", n, p);
             if(n > 0 && p) {
                 iTJSDispatch2 *layer = FindLayerInParams(n, p);
                 if(layer)
@@ -2775,7 +2602,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error captureCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "capture", n, p);
             tjs_int w = NormalizeExtent(s ? s->screenWidth_ : 0, 1920);
             tjs_int h = NormalizeExtent(s ? s->screenHeight_ : 0, 1080);
 
@@ -2790,39 +2616,6 @@ namespace { // reopen anonymous namespace
             // 有声音、且日志零报错的直接原因（宿主探针实测：引擎画了 140 个图层，
             // 合成结果 nonBlack=0/25、全黑不透明）。
             iTJSDispatch2 *layer = FindLayerInParams(n, p);
-#if defined(KRKR_RENDER_PROBE)
-            // 探针：捕获目标到底是谁——是不是一个真正的 Layer、多大、透明度多少。
-            // 全动画黑屏的最后一段就卡在"内容写进了哪一层、那一层有没有上屏"。
-            {
-                static std::unordered_map<void *, bool> s_seen;
-                if(layer && s_seen.size() < 8 &&
-                   s_seen.find(static_cast<void *>(layer)) == s_seen.end()) {
-                    s_seen[static_cast<void *>(layer)] = true;
-                    tTJSVariant wv, hv, ov;
-                    layer->PropGet(0, TJS_W("imageWidth"), nullptr, &wv, layer);
-                    layer->PropGet(0, TJS_W("imageHeight"), nullptr, &hv, layer);
-                    layer->PropGet(0, TJS_W("opacity"), nullptr, &ov, layer);
-                    const bool isLayer =
-                        layer->IsInstanceOf(0, nullptr, nullptr, TJS_W("Layer"),
-                                            nullptr) == TJS_S_TRUE;
-                    spdlog::info("[probe] krkrgles: capture target #{} ptr={} "
-                                 "isLayer={} image={}x{} opacity={}",
-                                 static_cast<int>(s_seen.size()),
-                                 static_cast<const void *>(layer), isLayer,
-                                 static_cast<int>(ToInt(wv, 0)),
-                                 static_cast<int>(ToInt(hv, 0)),
-                                 static_cast<int>(ToInt(ov, 255)));
-                } else if(!layer) {
-                    static bool s_reported = false;
-                    if(!s_reported) {
-                        s_reported = true;
-                        spdlog::warn("[probe] krkrgles: capture 参数里没找到图层"
-                                     "（p0 类型={}）——结果无处可放",
-                                     ProbeTypeName(n > 0 ? p[0] : nullptr));
-                    }
-                }
-            }
-#endif
             if(s && layer && s->fbo_.EnsureSize(static_cast<GLsizei>(w),
                                                 static_cast<GLsizei>(h))) {
                 // Bind() 自带"绑定 + 设视口 + 清成透明"；游戏传的 color=0 正是这个值，
@@ -2838,73 +2631,12 @@ namespace { // reopen anonymous namespace
                                  ((color >> 24) & 0xff) / 255.0f);
                     glClear(GL_COLOR_BUFFER_BIT);
                 }
-#if defined(KRKR_RENDER_PROBE)
-                // 交付出 (255,255,255,0) 时先排除"清屏色"这个因：color 若是
-                // 0x00FFFFFF，清屏结果正好是白 + 透明。只打前 4 次。
-                {
-                    static int s_colorSamples = 0;
-                    if(s_colorSamples < 4) {
-                        ++s_colorSamples;
-                        spdlog::info("[probe] krkrgles: capture color=0x{:08X} "
-                                     "fbo={} {}x{}",
-                                     static_cast<unsigned>(color),
-                                     static_cast<unsigned>(s->fbo_.GetFBO()),
-                                     static_cast<int>(w), static_cast<int>(h));
-                    }
-                }
-#endif
                 // 回调期间置位：Live2D 的 render() 据此把模型也画进这个捕获 FBO。
                 // RAII 保证回调抛异常时也会复位（否则标志会永久卡在 true）。
                 {
                     CaptureScope captureScope;
                     InvokeCaptureCallback("GLESAdaptor.capture", w, h, n, p);
                 }
-#if defined(KRKR_RENDER_PROBE)
-                // 探针：回调结束后、拷贝之前，捕获 FBO 里到底有什么。
-                // 与下面"图层 CPU 缓冲"那处配套：前者判"模型有没有进捕获 FBO"，
-                // 后者判"内容有没有落进图层"。5 个点、仅首次，够分辨且不改结果。
-                {
-                    static bool s_fboSampled = false;
-                    if(!s_fboSampled) {
-                        s_fboSampled = true;
-                        GLint keepFbo = 0;
-                        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &keepFbo);
-                        const GLsizei sx = static_cast<GLsizei>(w);
-                        const GLsizei sy = static_cast<GLsizei>(h);
-                        const GLsizei xs[5] = { sx / 2, sx / 8, sx * 7 / 8,
-                                                sx / 8, sx * 7 / 8 };
-                        const GLsizei ys[5] = { sy / 2, sy / 8, sy / 8,
-                                                sy * 7 / 8, sy * 7 / 8 };
-                        int aNonZero = 0, whiteZero = 0;
-                        unsigned char ctr[4] = { 0, 0, 0, 0 };
-                        glBindFramebuffer(GL_FRAMEBUFFER, s->fbo_.GetFBO());
-                        for(int i = 0; i < 5; ++i) {
-                            unsigned char px[4] = { 0, 0, 0, 0 };
-                            glReadPixels(xs[i], ys[i], 1, 1, GL_RGBA,
-                                         GL_UNSIGNED_BYTE, px);
-                            if(px[3] > 0)
-                                ++aNonZero;
-                            if(px[3] == 0 && px[0] == 255 && px[1] == 255 &&
-                               px[2] == 255)
-                                ++whiteZero;
-                            if(i == 0) {
-                                ctr[0] = px[0];
-                                ctr[1] = px[1];
-                                ctr[2] = px[2];
-                                ctr[3] = px[3];
-                            }
-                        }
-                        glBindFramebuffer(GL_FRAMEBUFFER,
-                                          static_cast<GLuint>(keepFbo));
-                        spdlog::info("[probe] krkrgles: capture FBO {}x{} "
-                                     "samples=5 a>0={} white+transparent={} "
-                                     "center=({},{},{},{})",
-                                     static_cast<int>(sx), static_cast<int>(sy),
-                                     aNonZero, whiteZero, ctr[0], ctr[1],
-                                     ctr[2], ctr[3]);
-                    }
-                }
-#endif
                 // 结果交给图层。官方参考实现的落点是图层的 **CPU 像素缓冲**
                 // （setSize + mainImageBufferForWrite），而不是只写 GL 纹理：
                 // 引擎随后按 CPU 位图重传纹理会把"只写在纹理上"的内容覆盖回去。
@@ -2928,55 +2660,6 @@ namespace { // reopen anonymous namespace
                                    static_cast<GLsizei>(h), layer,
                                    s->fbo_.GetPrevFbo());
                 }
-#if defined(KRKR_RENDER_PROBE)
-                if(layerNI) {
-                    static bool s_sampled = false;
-                    if(!s_sampled) {
-                        s_sampled = true;
-                        const auto *buf = reinterpret_cast<const unsigned char *>(
-                            layerNI->GetMainImagePixelBufferForWrite());
-                        const tjs_int pitch =
-                            layerNI->GetMainImagePixelBufferPitch();
-                        const tjs_int lw = layerNI->GetWidth();
-                        const tjs_int lh = layerNI->GetHeight();
-                        if(buf && pitch > 0 && lw > 2 && lh > 2) {
-                            // 3x3 采样：只看中心会误判——中心可能正好落在模型的
-                            // 透明区，而别处有内容。同时统计"白而透明"
-                            // (255,255,255,0)，它在预乘口径下是非法像素，
-                            // 能区分"空"与"被写坏"。copied 用来确认走了哪条路径。
-                            int aNonZero = 0, whiteZero = 0, sampled = 0;
-                            unsigned char ctr[4] = { 0, 0, 0, 0 };
-                            for(int gy = 1; gy <= 3; ++gy) {
-                                for(int gx = 1; gx <= 3; ++gx) {
-                                    const unsigned char *c =
-                                        buf + static_cast<size_t>(pitch) *
-                                                  (lh * gy / 4) +
-                                        static_cast<size_t>(lw * gx / 4) * 4u;
-                                    ++sampled;
-                                    if(c[3] > 0)
-                                        ++aNonZero;
-                                    if(c[3] == 0 && c[0] == 255 && c[1] == 255 &&
-                                       c[2] == 255)
-                                        ++whiteZero;
-                                    if(gx == 2 && gy == 2) {
-                                        ctr[0] = c[0];
-                                        ctr[1] = c[1];
-                                        ctr[2] = c[2];
-                                        ctr[3] = c[3];
-                                    }
-                                }
-                            }
-                            spdlog::info(
-                                "[probe] krkrgles: layer CPU buffer copied={} "
-                                "{}x{} samples={} a>0={} white+transparent={} "
-                                "center=({},{},{},{})",
-                                copied ? 1 : 0, static_cast<int>(lw),
-                                static_cast<int>(lh), sampled, aNonZero, whiteZero,
-                                ctr[0], ctr[1], ctr[2], ctr[3]);
-                        }
-                    }
-                }
-#endif
                 s->fbo_.Unbind();
             } else {
                 InvokeCaptureCallback("GLESAdaptor.capture", w, h, n, p);
@@ -3002,7 +2685,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error copyLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "copyLayer", n, p);
             auto *mod = s ? s->FindModule() : nullptr;
             if(mod)
                 return GLESModule::copyLayerCb(r, n, p, mod);
@@ -3012,12 +2694,10 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error glesCopyLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "glesCopyLayer", n, p);
             return copyLayerCb(r, n, p, s);
         }
 
         static tjs_error drawLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "drawLayer", n, p);
             const bool drawn = DrawLayerNative(n, p);
             if(r)
                 *r = drawn;
@@ -3025,12 +2705,10 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error glesDrawLayerCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "glesDrawLayer", n, p);
             return drawLayerCb(r, n, p, s);
         }
 
         static tjs_error drawAffineCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "drawAffine", n, p);
             const bool drawn = DrawAffineNative(n, p);
             if(r)
                 *r = drawn;
@@ -3038,12 +2716,10 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error drawAffineGLESCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "drawAffineGLES", n, p);
             return drawAffineCb(r, n, p, s);
         }
 
         static tjs_error renderCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "render", n, p);
             RenderYuzuMotionRenderables("GLESAdaptor.render");
             if(r)
                 *r = true;
@@ -3051,7 +2727,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error setMatrixCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "setMatrix", n, p);
             if(r)
                 *r = true;
             return TJS_S_OK;
@@ -3086,7 +2761,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error finalizeCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "finalize", n, p);
             RemoveYuzuMotionRenderable(0, nullptr,
                                        reinterpret_cast<uintptr_t>(s));
             if(r)
@@ -3095,7 +2769,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error glesEntryCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "glesEntry", n, p);
             RegisterYuzuMotionRenderable(n, p, reinterpret_cast<uintptr_t>(s),
                                          "GLESAdaptor.glesEntry");
             if(r)
@@ -3104,7 +2777,6 @@ namespace { // reopen anonymous namespace
         }
 
         static tjs_error glesRemoveCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-            KRKR_PROBE_TJS("GLESAdaptor", "glesRemove", n, p);
             RemoveYuzuMotionRenderable(n, p, reinterpret_cast<uintptr_t>(s));
             if(r)
                 *r = true;

@@ -2459,38 +2459,6 @@ static std::map<const tTJSNI_BaseLayer *, TVPKagAssignmentStreak>
 // 被本函数**搬回可见页**的层：它们后续的交付要走交换语义（AssignMotionImages）。
 static std::set<const tTJSNI_BaseLayer *> TVPMotionSwapAssignmentTargets;
 
-#if defined(KRKR_RENDER_PROBE)
-// 改投判定的拒绝原因探针：每个 (目标名, 原因) 只记一条。
-//
-// 为什么需要：真机上运动帧明明已画好却看不到，而“为什么不改投到可见页”只看得到
-// 结果（没有 `LayerAssign route=` 行）。这里把每道门播出来，下一次真机日志就能定死是
-// “可见页没找到”还是“判据认为不该改”。
-static void TVPProbeExchangeRouteDenied(const tTJSNI_BaseLayer *target,
-                                        const char *reason) {
-    static std::mutex mutex;
-    static std::set<std::string> seen;
-    if(!target)
-        return;
-    const std::string key = target->GetName().AsStdString() + "|" + reason;
-    {
-        std::lock_guard<std::mutex> lock(mutex);
-        if(seen.size() >= 40 || !seen.insert(key).second)
-            return;
-    }
-    auto *page = target->GetParent();
-    auto *root = page ? page->GetParent() : nullptr;
-    spdlog::info("probe: exch-route denied reason={} target='{}' "
-                 "visible={} parentVisible={} page='{}'(vis={}) "
-                 "root='{}' size={}x{}",
-                 reason, target->GetName().AsStdString(),
-                 target->GetVisible() ? 1 : 0,
-                 target->GetParentVisible() ? 1 : 0,
-                 page ? page->GetName().AsStdString() : std::string("<none>"),
-                 page && page->GetVisible() && page->GetParentVisible() ? 1 : 0,
-                 root ? root->GetName().AsStdString() : std::string("<none>"),
-                 target->GetWidth(), target->GetHeight());
-}
-#endif
 
 // 页对判定：名字是 表-背景 / 裏-背景 的层就是 KAG 的背景页。
 static bool TVPIsKagBackgroundPage(const tTJSNI_BaseLayer *layer) {
@@ -2582,11 +2550,6 @@ TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
     if(!target || !source || target->GetName().IsEmpty() ||
        !target->GetVisible() || !source->GetName().IsEmpty() ||
        source->GetVisible()) {
-#if defined(KRKR_RENDER_PROBE)
-        if(target && source && !source->GetVisible() &&
-           source->GetName().IsEmpty())
-            TVPProbeExchangeRouteDenied(target, "bad-signature");
-#endif
         return nullptr;
     }
 
@@ -2607,9 +2570,6 @@ TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
         }
     }
     if(!hidden_page || !page_root) {
-#if defined(KRKR_RENDER_PROBE)
-        TVPProbeExchangeRouteDenied(target, "no-page-root");
-#endif
         return nullptr;
     }
 
@@ -2622,9 +2582,6 @@ TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
         if(page_visible) {
             last_visible = true;
             TVPExchangedHiddenKagPages.erase(hidden_page);
-#if defined(KRKR_RENDER_PROBE)
-            TVPProbeExchangeRouteDenied(target, "page-visible");
-#endif
             return nullptr;
         }
         if(last_visible)
@@ -2653,9 +2610,6 @@ TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
         break;
     }
     if(!visible_page) {
-#if defined(KRKR_RENDER_PROBE)
-        TVPProbeExchangeRouteDenied(target, "no-visible-page");
-#endif
         return nullptr;
     }
 
@@ -2722,9 +2676,6 @@ TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
     if(visible_page_has_content_layer ||
        hidden_page->DebugIsInTransition() ||
        visible_page->DebugIsInTransition()) {
-#if defined(KRKR_RENDER_PROBE)
-        TVPProbeExchangeRouteDenied(target, "page-busy");
-#endif
         std::lock_guard<std::mutex> lock(TVPExchangedKagPageMutex);
         TVPHiddenKagAssignmentStreaks.erase(target);
         return nullptr;
@@ -2746,9 +2697,6 @@ TVPResolveExchangedKagAssignmentTarget(tTJSNI_BaseLayer *target,
         persistent_hidden_target = ++streak.count >= 12;
     }
     if(!persistent_hidden_target) {
-#if defined(KRKR_RENDER_PROBE)
-        TVPProbeExchangeRouteDenied(target, "streak-not-reached");
-#endif
         return nullptr;
     }
 
@@ -8930,18 +8878,6 @@ tTJSNC_Layer::tTJSNC_Layer() : tTJSNativeClass(TJS_W("Layer")) {
         if(numparams < 1)
             return TJS_E_BADPARAMCOUNT;
         ttstr name(*param[0]);
-#if defined(KRKR_RENDER_PROBE)
-        // 诊断 diffimage2.tjs 的递归：脚本把本方法包了一层并自递归；若递归点
-        // 在这里，日志里会看到重复的实参。
-        {
-            static thread_local int s_probeCalls = 0;
-            if(s_probeCalls < 64) {
-                ++s_probeCalls;
-                spdlog::info("probe: Layer.loadImages({}) #{}",
-                             name.AsStdString(), s_probeCalls);
-            }
-        }
-#endif
         tjs_uint32 key = clNone; // TODO Intfなのに固有値が
         if(numparams >= 2 && param[1]->Type() != tvtVoid)
             key = (tjs_uint32)param[1]->AsInteger();

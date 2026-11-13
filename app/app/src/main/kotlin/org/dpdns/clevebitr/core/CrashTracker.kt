@@ -23,7 +23,7 @@ import java.io.StringWriter
  *
  * ## B. 原生崩溃（引擎里的 SIGSEGV 等）—— 只能下次启动再报
  *
- * 引擎的 `CrashSignalHandler`（`bridge/engine_api/src/engine_api.cpp`）打印完
+ * 引擎的 `CrashSignalHandler`（`bridge/engine_api/src/engine_api_logging.cpp`）打印完
  * `FATAL SIGNAL n` 与原生栈后会 `signal(SIG_DFL); raise(sig)` 把进程交还给系统，
  * **Kotlin 拦不到**；`libc: Fatal signal` 那行还是 system uid 打的，应用侧 logcat
  * 也看不到。所以原生崩溃只能靠：引擎日志（已落在 `logs/engine.log`）+ 会话标记

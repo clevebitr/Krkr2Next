@@ -83,7 +83,8 @@ endif()
 
 # 引擎运行时日志级别覆盖（独立于 debug/release）。
 # empty=auto：按构建类型默认（Release→info，Debug→debug）。
-# 显式设置时覆盖 NDEBUG 推断，经 KRKR_LOG_LEVEL_NUM 传给 engine_api.cpp，
+# 显式设置时覆盖 NDEBUG 推断，经 KRKR_LOG_LEVEL_NUM 传给 engine_api 日志模块
+# （bridge/engine_api/src/engine_api_logging.cpp），
 # 供 CI/本地命令行在 workflow 里单独选择日志级别（排查时无需改代码）。
 # 取值：trace|debug|info|warn|err|critical|off（大小写不敏感）。
 set(KRKR_LOG_LEVEL "" CACHE STRING "engine runtime log level override: trace|debug|info|warn|err|critical|off (empty=auto by build type)")

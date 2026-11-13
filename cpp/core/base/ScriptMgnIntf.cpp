@@ -846,56 +846,12 @@ static void TVPApplyPostScriptCompatibilityPatches(const ttstr &shortname) {
         }
     }
 
-#if defined(KRKR_RENDER_PROBE)
-    // D3D/分离渲染路径的判定快照。
-    //
-    // 为什么需要：两作（千恋万花 / NEKOPARA 4）的 motion 贴图都已经加载，但帧交付到
-    // 了不可见页；先要弄清游戏到底选了哪条路径（D3DAdaptor 的 captureCanvas vs
-    // SeparateLayerAdaptor 的私有渲染层）——这个选择由游戏脚本根据
-    // `Motion.enableD3D` / `Motion.Player.useD3D` / `window.d3dMotion` 决定，
-    // 而它在日志里从来没有痕迹。
-    if(lower == TJS_W("motion.tjs") ||
-       lower == TJS_W("affinesourcemotion.tjs") ||
-       lower == TJS_W("d3daffinesourcemotion.tjs")) {
-        try {
-            tTJSVariant snapshot;
-            // 每一项单独 try：`enableD3D` 可能是 stub 对象，`+` 转换会抛 E_CONVERT，
-            // 整段写在一个表达式里就会得到一个什么都没说的 “snapshot failed”。
-            TVPExecuteExpression(
-                TJS_W("(function(){var g=global;var out=\"\";\r\n"
-                      "try { out += \"enableD3D=\" + ((typeof g.Motion!=\"undefined\") ? String(g.Motion.enableD3D) : \"n/a\"); } catch(e) { out += \"enableD3D=err\"; }\r\n"
-                      "try { out += \" useD3D=\" + ((typeof g.Motion!=\"undefined\" && typeof g.Motion.Player!=\"undefined\") ? String(g.Motion.Player.useD3D) : \"n/a\"); } catch(e) { out += \" useD3D=err\"; }\r\n"
-                      "try { var w=(typeof g.window!=\"undefined\" && g.window!==void)?g.window:((typeof g.Window!=\"undefined\")?g.Window:void);\r\n"
-                      "      out += \" d3dMotion=\" + ((w!==void && typeof w.d3dMotion!=\"undefined\") ? String(w.d3dMotion) : \"undefined\"); } catch(e) { out += \" d3dMotion=err\"; }\r\n"
-                      "try { out += \" D3DAdaptor=\" + ((typeof g.Motion!=\"undefined\") ? typeof g.Motion.D3DAdaptor : \"n/a\"); } catch(e) { out += \" D3DAdaptor=err\"; }\r\n"
-                      "try { out += \" SeparateAdaptor=\" + ((typeof g.Motion!=\"undefined\") ? typeof g.Motion.SeparateLayerAdaptor : \"n/a\"); } catch(e) { out += \" SeparateAdaptor=err\"; }\r\n"
-                      "try { out += \" useLzfs=\" + ((typeof g.MotionResourceManager!=\"undefined\") ? \"yes\" : \"no\"); } catch(e) {}\r\n"
-                      "return out;})()"),
-                &snapshot);
-            spdlog::info("probe: motion d3d decision after {}:{}",
-                         shortname.AsStdString(),
-                         ttstr(snapshot).AsStdString());
-        } catch(...) {
-            spdlog::warn("probe: motion d3d decision snapshot failed after {}",
-                         shortname.AsStdString());
-        }
-    }
-#endif
 }
 
 void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
                        tTJSVariant *result, bool isexpression,
                        const tjs_char *modestr) {
     // execute storage which contains script
-#if defined(KRKR_RENDER_PROBE)
-    { // StorageExec 探针：全量记录 startup 链实际执行的 storage（含 exec#
-      // 累计序号），
-        // 首开 vs restart 逐脚本 diff，钉死"跳过 KAG boot"是从哪个脚本断的。
-        static unsigned s_exec = 0;
-        spdlog::info("StorageExec: exec#{} name={}", ++s_exec,
-                     name.AsStdString());
-    }
-#endif
     if(!TVPScriptEngine)
         TVPThrowInternalError;
 
@@ -1288,88 +1244,25 @@ void TVPExecuteStartupScript() {
                             place.AsStdString().c_str());
 #endif
         TVPStartupSuccess = false;
-#if defined(KRKR_RENDER_PROBE)
-        { // EngineState[entry]: startup.tjs 执行前 dump 引擎状态，首开 vs
-          // restart 对照残留
-            extern bool TVPSystemControlAlive;
-            spdlog::info(
-                "EngineState[entry]: wndCount={} mainWnd={} sysUninit={} "
-                "ctlAlive={} "
-                "projDirSet={} dataPathSet={} startupSuccess={} cmdArgGen={}",
-                TVPGetWindowCount(), (void *)TVPMainWindow,
-                (int)TVPSystemUninitCalled, (int)TVPSystemControlAlive,
-                (int)(!TVPProjectDir.IsEmpty()), (int)(!TVPDataPath.IsEmpty()),
-                (int)TVPStartupSuccess,
-                (tjs_int)TVPGetCommandLineArgumentGeneration());
-            spdlog::default_logger()->flush();
-        }
-#endif
         // —— startup.tjs 执行探针：抓 restart 时 startup 提前抛错的时机/消息。
         // 黑屏特征：startup.tjs 抛异常(而 system/Initialize.tjs
         // 存在)时被静默吞掉改走 fallback， KAG boot
         // 被绕过。此探针记录是"完成"还是"抛错"及错误内容，钉死跳 KvK boot
         // 的具体 gate。
-#if defined(KRKR_RENDER_PROBE)
-        auto StartupProbeLog = [](const char *kind, const ttstr &msg) {
-            spdlog::info(
-                "StartupProbe: startup.tjs threw({}) sysInitExists={} msg={}",
-                kind, (int)TVPIsExistentStorage(TJS_W("system/Initialize.tjs")),
-                msg.AsStdString());
-            spdlog::default_logger()->flush();
-        };
-#endif
         try {
             iTJSTextReadStream *stream = TVPCreateTextStreamForRead(place, "");
             stream->Destruct();
             TVPExecuteStorage(TVPStartupScriptName);
             TVPStartupSuccess = true;
-#if defined(KRKR_RENDER_PROBE)
-            spdlog::info(
-                "StartupProbe: startup.tjs completed without throwing");
-            spdlog::default_logger()->flush();
-#endif
         }
-#if defined(KRKR_RENDER_PROBE)
-        catch(const TJS::eTJSScriptError &e) {
-            StartupProbeLog("eTJSScriptError", e.GetMessage());
-            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
-                throw;
-        } catch(const TJS::eTJS &e) {
-            StartupProbeLog("eTJS", e.GetMessage());
-            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
-                throw;
-        } catch(const std::exception &e) {
-            StartupProbeLog("std::exception", ttstr(e.what()));
-            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
-                throw;
-        } catch(const char *e) {
-            StartupProbeLog("const char*", ttstr(e));
-            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
-                throw;
-        } catch(const tjs_char *e) {
-            StartupProbeLog("tjs_char*", ttstr(e));
-            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
-                throw;
-        } catch(...) {
-            StartupProbeLog("unknown", TJS_W(""));
-            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs")))
-                throw;
-        }
-#else
         catch(...) {
             if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs"))) {
                 throw;
             }
         }
-#endif
         if(!TVPStartupSuccess) {
             // try direct execute initialize.tjs to compatible for
             // some patch
-#if defined(KRKR_RENDER_PROBE)
-            spdlog::info("StartupProbe: running FALLBACK system/Initialize.tjs "
-                         "(startup.tjs failed)");
-            spdlog::default_logger()->flush();
-#endif
 #if defined(__ANDROID__)
             __android_log_print(
                 ANDROID_LOG_INFO, "krkr2",
@@ -1385,21 +1278,6 @@ void TVPExecuteStartupScript() {
         // 之前，那时 KAGWindow 还不存在（见
         // TVPGetPatchWindowPrerequisitesScript）
         TVPInstallPatchWindowPrerequisites();
-#if defined(KRKR_RENDER_PROBE)
-        { // EngineState[exit]: startup.tjs 结束后 dump，对照 entry 看状态变化
-            extern bool TVPSystemControlAlive;
-            spdlog::info(
-                "EngineState[exit]: wndCount={} mainWnd={} sysUninit={} "
-                "ctlAlive={} "
-                "projDirSet={} dataPathSet={} startupSuccess={} cmdArgGen={}",
-                TVPGetWindowCount(), (void *)TVPMainWindow,
-                (int)TVPSystemUninitCalled, (int)TVPSystemControlAlive,
-                (int)(!TVPProjectDir.IsEmpty()), (int)(!TVPDataPath.IsEmpty()),
-                (int)TVPStartupSuccess,
-                (tjs_int)TVPGetCommandLineArgumentGeneration());
-            spdlog::default_logger()->flush();
-        }
-#endif
 #if defined(__ANDROID__)
         __android_log_print(ANDROID_LOG_INFO, "krkr2",
                             "Startup script ended successfully");

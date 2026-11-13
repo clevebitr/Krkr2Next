@@ -54,6 +54,7 @@ ENGINE_SYMBOLS=(
     engine_create
     engine_destroy
     engine_drain_startup_logs
+    engine_get_compat_profile
     engine_get_frame_desc
     engine_get_frame_rendered_flag
     engine_get_host_native_view
@@ -63,6 +64,9 @@ ENGINE_SYMBOLS=(
     engine_get_renderer_info
     engine_get_runtime_api_version
     engine_get_startup_state
+    engine_invoke_window_menu
+    engine_is_modal_active
+    engine_list_window_menu
     engine_open_game
     engine_open_game_async
     engine_pause

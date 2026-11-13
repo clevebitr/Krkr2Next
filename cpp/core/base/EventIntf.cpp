@@ -620,13 +620,6 @@ void TVPDeliverWindowUpdateEvents() {
     //   -> win update 在投递、失败在 UpdateContent/Show 段；
     // 若此处始终空/不被调用                        ->
     // 游戏/脚本根本没请求重绘（RequestUpdate 未发生）。
-#if defined(KRKR_RENDER_PROBE)
-    if(!TVPWinUpdateEventQueue.empty()) {
-        spdlog::info("DeliverWinUpdate: queue={} -> UpdateContent",
-                     TVPWinUpdateEventQueue.size());
-        spdlog::default_logger()->flush();
-    }
-#endif
     TVPWindowUpdateEventsDelivering = true;
 
     try {
@@ -887,15 +880,6 @@ void TVPDeliverContinuousEvent() {
     // KRKR_RENDER_PROBE）：连续处理器/连续事件是否注册并在跑。
     // 二次打开若两向量都空且不再增长 ->
     // 游戏没注册每帧连续驱动（脚本推进/连续重绘未建立）。
-#if defined(KRKR_RENDER_PROBE)
-    {
-        static unsigned s_cont = 0;
-        if((++s_cont % 30) == 1)
-            spdlog::info("ContinuousProbe: eventVec={} handlerVec={}",
-                         TVPContinuousEventVector.size(),
-                         TVPContinuousHandlerVector.size());
-    }
-#endif
     TVPContinuousEventProcessing = true;
     try {
         try {

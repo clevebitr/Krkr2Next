@@ -95,7 +95,7 @@ object LogFiles {
     // ── 每游戏日志 ─────────────────────────────────────────────────────────
     //
     // 为什么需要：引擎日志此前只有一份进程级 `engine.log`，而 `engine_set_log_file_path`
-    // 是**可以重复调用**的（内部会先摘掉旧 sink，见 engine_api.cpp 的
+    // 是**可以重复调用**的（内部会先摘掉旧 sink，见 engine_api_logging.cpp 的
     // DetachFileSinkFromLoggers）。所以开游戏时把它切到该游戏自己的文件即可，
     // 多个游戏不再混在一个文件里。
     //

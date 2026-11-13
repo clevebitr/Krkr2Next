@@ -55,14 +55,6 @@ extern tjs_int TVPGetLayerCount();
 static void (*g_postDrawHook)() = nullptr;
 void TVPSetPostDrawHook(void (*hook)()) { g_postDrawHook = hook; }
 
-// ---------------------------------------------------------------------------
-// 黑屏探针状态：连续若干次采样显示「引擎在画 + blit 源纹理全黑」时，判定为
-// 黑屏持久化，并输出诊断（含视频 overlay 是否在播，用于验证 krmovie Present
-// 是否被 stub 阻塞)。
-// ---------------------------------------------------------------------------
-static int s_blackSampleCount = 0; // 连续「黑且有绘制」的采样次数
-static bool s_blackReported = false; // 本段黑屏是否已上报
-static const int kBlackReportThreshold = 3;
 
 // ---------------------------------------------------------------------------
 // 视频 overlay 帧（krmovie 的 overlay 模式电影）—— 引擎侧
@@ -465,39 +457,6 @@ public:
             // FBO.
             extern void TVPSetRenderTarget(GLuint);
 
-            // ── 决定性探针：对比 blit 源纹理(nativeGLTex) 与引擎当前合成所写的
-            // render-target 附件纹理 id。
-            //   nativeGLTex == rtTex -> 引擎写进了我们采样的同一纹理：
-            //      源黑 = 引擎画了黑/没画（问题在合成内容/脚本，非纹理脱节）。
-            //   nativeGLTex != rtTex -> 引擎画进了别的纹理：二次打开主
-            //   DrawBuffer 与
-            //      blit 源脱节（重启状态残留）。仅 KRKR_RENDER_PROBE 时编译。
-#if defined(KRKR_RENDER_PROBE)
-            {
-                GLint curFbo = 0;
-                glGetIntegerv(GL_FRAMEBUFFER_BINDING, &curFbo);
-                GLint rtTex = 0, rtType = 0;
-                if(curFbo != 0) {
-                    glGetFramebufferAttachmentParameteriv(
-                        GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                        GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &rtType);
-                    if(rtType == GL_TEXTURE) {
-                        glGetFramebufferAttachmentParameteriv(
-                            GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                            GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &rtTex);
-                    }
-                }
-                spdlog::info(
-                    "HostWindowLayer::RTProbe: blitSrcTex={} engineCurFbo={} "
-                    "fboAttachedTex={} rtType=0x{:x}{}",
-                    static_cast<unsigned>(nativeGLTex),
-                    static_cast<int>(curFbo), static_cast<int>(rtTex),
-                    static_cast<unsigned>(rtType),
-                    (nativeGLTex == static_cast<uint32_t>(rtTex)) ? " [SAME]"
-                                                                  : " [DIFF]");
-            }
-#endif // KRKR_RENDER_PROBE
-
             TVPSetRenderTarget(0);
             blitSrcTexture = static_cast<GLuint>(nativeGLTex);
         } else {
@@ -548,113 +507,6 @@ public:
             }
         }
 
-        // ── 诊断插桩：记录 blit 分支，并对 blit 源纹理抽样 ──
-        // 目的：区分黑屏（IOSurface 全黑）的根因归属。
-        //   SourceSample !黑 -> 引擎合成纹理有画面，黑屏在「blit 到
-        //   IOSurface」这步 SourceSample 全黑 -> 引擎 GL
-        //   合成本身没把画面画进源纹理。
-        // 频率提到每 5 帧，并在同一采样点对源纹理连续读两次（相隔若干 draw 后）
-        // 以排除「单帧瞬时闪」；同时打印全局图层对象数 layers，区分
-        // 「引擎没建/没东西画」与「画了但没进源纹理」两条线。
-        // 诊断插桩：仅当编译期定义 KRKR_RENDER_PROBE 时运行（每 5
-        // 帧读像素+打日志， 属黑屏/渲染诊断探针）。默认 release 关闭，避免每帧
-        // glReadPixels 与日志刷屏； 遇到黑屏/渲染问题再打开。
-#if defined(KRKR_RENDER_PROBE)
-        static int s_blitDbg = 0;
-        const bool kBlitDump = ((s_blitDbg++) % 5) == 1;
-#else
-        const bool kBlitDump = false;
-#endif
-        if(kBlitDump) {
-            // 引擎本段(自上次 GetRenderStat 清零以来)实际执行的 GL 绘制次数：
-            //   draw 持续增长 -> 引擎在合成图层，黑的是「画了但没进 tex4」
-            //   draw 归零      -> 引擎没发起合成，问题在调度/无可见图层
-            unsigned int engDraw = 0;
-            uint64_t engVmem = 0;
-            if(::TVPGetRenderManager()) {
-                ::TVPGetRenderManager()->GetRenderStat(engDraw, engVmem);
-            }
-            spdlog::info(
-                "HostWindowLayer::UpdateDrawBuffer: path={} nativeTex={} "
-                "srcTex={} blitTex={} {}x{} texInternal={}x{} layers={} "
-                "draw={}",
-                nativeGLTex ? "GPU" : "CPU", nativeGLTex, blitSrcTexture,
-                blit_texture_, static_cast<unsigned>(tw),
-                static_cast<unsigned>(th),
-                static_cast<unsigned>(tex->GetInternalWidth()),
-                static_cast<unsigned>(tex->GetInternalHeight()),
-                TVPGetLayerCount(), engDraw);
-            if(blitSrcTexture != 0) {
-                GLint prevFbo = 0;
-                glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
-                GLuint dbgFbo = 0;
-                glGenFramebuffers(1, &dbgFbo);
-                glBindFramebuffer(GL_FRAMEBUFFER, dbgFbo);
-                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                       GL_TEXTURE_2D, blitSrcTexture, 0);
-                int nonBlack =
-                    0; // 提升到 blitSrcTexture 作用域，供下方黑屏探针使用
-                if(glCheckFramebufferStatus(GL_FRAMEBUFFER) ==
-                   GL_FRAMEBUFFER_COMPLETE) {
-                    // glFlush 一次后再采，确认 readback
-                    // 读到最终合成结果而非中途状态
-                    glFlush();
-                    uint64_t sR = 0, sG = 0, sB = 0, sA = 0;
-                    unsigned char px[4];
-                    for(int gy = 0; gy < 5; ++gy)
-                        for(int gx = 0; gx < 5; ++gx) {
-                            const int x = (int)((gx + 0.5f) *
-                                                static_cast<float>(tw) / 5.0f);
-                            const int y = (int)((gy + 0.5f) *
-                                                static_cast<float>(th) / 5.0f);
-                            px[0] = px[1] = px[2] = px[3] = 0;
-                            glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE,
-                                         px);
-                            sR += px[0];
-                            sG += px[1];
-                            sB += px[2];
-                            sA += px[3];
-                            if(px[0] > 8 || px[1] > 8 || px[2] > 8)
-                                ++nonBlack;
-                        }
-                    spdlog::info("HostWindowLayer::SourceSample: "
-                                 "nonBlack={}/25 avg=({},{},{},{})",
-                                 nonBlack, (int)(sR / 25), (int)(sG / 25),
-                                 (int)(sB / 25), (int)(sA / 25));
-                } else {
-                    spdlog::warn(
-                        "HostWindowLayer::SourceSample: FBO incomplete 0x{:x}",
-                        glCheckFramebufferStatus(GL_FRAMEBUFFER));
-                }
-                glBindFramebuffer(GL_FRAMEBUFFER, prevFbo);
-                glDeleteFramebuffers(1, &dbgFbo);
-
-                // ── 黑屏探针 ─────────────────────────────────────────────
-                // 判定：引擎在持续绘制(engDraw>0) 但 blit
-                // 源纹理采样全黑(nonBlack==0)。 连续 kBlackReportThreshold
-                // 次出现即判定黑屏已持久化，上报：
-                //   1) 视频 overlay 是否在播（验证 krmovie Present stub
-                //   阻塞假设）； 2)
-                //   引擎当前绘制计数与图层数，供定位脚本/调度问题。
-                // 视频 overlay 播放期间场景本身就可能是黑的（KAG 把图层清掉、
-                // 画面全靠 overlay），此时黑屏不是异常，不计数。
-                if(engDraw > 0 && nonBlack == 0 && !VideoOverlayFrameActive()) {
-                    ++s_blackSampleCount;
-                    if(s_blackSampleCount >= kBlackReportThreshold &&
-                       !s_blackReported) {
-                        s_blackReported = true;
-                        std::string ovl = tTJSNI_VideoOverlay::DumpDebugStats();
-                        spdlog::warn("HostWindowLayer::BlackScreen: engine "
-                                     "keeps drawing (draw={}, layers={}) but "
-                                     "blit source is black. {}",
-                                     engDraw, TVPGetLayerCount(), ovl);
-                    }
-                } else {
-                    s_blackSampleCount = 0;
-                    s_blackReported = false;
-                }
-            }
-        }
 
         // ── Phase 2: Bind IOSurface render target and blit ───────
         // Now that the source texture is ready, switch to the
@@ -765,28 +617,6 @@ public:
         glUseProgram(0);
         glBindTexture(GL_TEXTURE_2D, 0);
 
-        // 诊断：blit 全屏 quad 后立刻读当前绑定 FBO（IOSurface fbo2）中心像素
-        //  + glGetError，区分「blit 绘制没写进 fbo2」还是「写进去了但 IOSurface
-        //  层未落地」。
-        // 中心像素非黑 -> blit 写入成功，问题在
-        // SurfaceTexture/宿主侧落地与同步； 中心像素黑   -> blit 全屏 quad
-        // 绘制本身失败（shader/uniform/状态）。
-        if(kBlitDump) {
-            GLenum postErr = glGetError();
-            unsigned char dbgPx[4] = { 0, 0, 0, 0 };
-            GLint dbgFbo = 0;
-            glGetIntegerv(GL_FRAMEBUFFER_BINDING, &dbgFbo);
-            if(fbW > 0 && fbH > 0) {
-                glReadPixels(static_cast<GLint>(fbW / 2),
-                             static_cast<GLint>(fbH / 2), 1, 1, GL_RGBA,
-                             GL_UNSIGNED_BYTE, dbgPx);
-            }
-            spdlog::info("HostWindowLayer::PostBlit: err=0x{:x} curFbo={} "
-                         "size={}x{} center=({},{},{},{})",
-                         static_cast<unsigned>(postErr), dbgFbo,
-                         static_cast<unsigned>(fbW), static_cast<unsigned>(fbH),
-                         dbgPx[0], dbgPx[1], dbgPx[2], dbgPx[3]);
-        }
 
         // overlay 模式电影：视频帧叠画在场景之上；Live2D 等 postDrawHook 内容
         // 仍可再压一层。

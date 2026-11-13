@@ -1442,14 +1442,6 @@ namespace motion {
                     if(mi >= 0 && mi < n)
                         ++maskRemaining[mi];
             }
-            // 逐组诊断（只写日志、不改行为）：回答“本可以折叠的组里，哪些没折、
-            // 内容到底进了组层 gl 还是根本没进”——上一轮 `folded=4 groups=6` 就是
-            // 靠这个才能定案到底是“没活跃节点”还是“收尾路径漏了”。
-            std::vector<int> glNodes(n, 0);    // 画进组层的节点数（按最外层组）
-            std::vector<char> foldedFlag(n, 0); // 本组是否折过
-            std::vector<char> drewMaskFlag(n, 0);
-            int mlNodesDrawn = 0; // 本轮画进蒙版层的节点数（全局）
-            int mlNodesAsContent = 0; // 其中"同时作为普通内容"又画到 dest 的次数
             // Save previous clip state for str_clip containers.
             // 保存 str_clip 容器之前的裁剪状态，绘制后恢复。
             ClipState prevClip;
@@ -1467,7 +1459,6 @@ namespace motion {
                 float posZ = 0.0f;
                 int index = -1;
                 ttstr path;
-                std::string src; // only used by the probe's `trace` dump
                 std::array<std::uint32_t, 4> tint{ 0xFFFFFFFFu, 0xFFFFFFFFu,
                                                    0xFFFFFFFFu, 0xFFFFFFFFu };
                 ClipState clip;
@@ -1476,148 +1467,6 @@ namespace motion {
             std::vector<PendingDraw> pendingDraws;
             if(kEmoteZSort)
                 pendingDraws.reserve(static_cast<size_t>(n));
-#if defined(KRKR_RENDER_PROBE)
-            // ── 运行期调试指令（仅探针构建）──────────────────────────────
-            // Runtime debug directives (probe builds only). The file is polled
-            // every 30 passes; editing it on the device re-configures the next
-            // frames, so ONE build covers many isolation experiments (which
-            // item covers the face, what a layer really looks like, ...).
-            //   skip <substr>      不画 label/src 含 substr 的条目
-            //   only <substr>      只画匹配的条目（蒙版节点仍照画）
-            //   opa  <substr> <v>  强制不透明度 v（0..255）
-            //   zadd <substr> <d>  posZ += d（测绘制次序）
-            //   trace              打印本轮排序后的完整绘制列表
-            struct EmoteDbgRule {
-                int kind = 0; // 0 skip, 1 only, 2 opa, 3 zadd, 4 zset, 5 notint
-                std::string needle;
-                float value = 0.0f;
-            };
-            static std::vector<EmoteDbgRule> s_dbgRules;
-            static bool s_dbgHasOnly = false;
-            static bool s_dbgTrace = false;
-            static bool s_dbgTraceOnce = false;
-            static std::vector<std::string> s_dbgFrameNeedles;
-            static std::map<std::string, tjs_int> s_dbgEvalLastLog;
-            static long long s_dbgMtime = -1;
-            static unsigned s_dbgPoll = 0;
-            if((s_dbgPoll++ % 5u) == 1u) {
-                static const char *kDbgPaths[] = {
-                    "/sdcard/Android/media/org.dpdns.clevebitr/"
-                    "emote-debug.txt",
-                    "/storage/emulated/0/Android/media/org.dpdns.clevebitr/"
-                    "emote-debug.txt",
-                };
-                for(const char *dbgPath : kDbgPaths) {
-                    struct stat st {};
-                    if(::stat(dbgPath, &st) != 0)
-                        continue;
-                    const long long mt = static_cast<long long>(st.st_mtime);
-                    if(mt == s_dbgMtime)
-                        break;
-                    std::ifstream in(dbgPath);
-                    if(!in)
-                        break;
-                    std::vector<EmoteDbgRule> rules;
-                    bool hasOnly = false, trace = false;
-                    std::vector<std::string> frameNeedles;
-                    std::string line;
-                    while(std::getline(in, line)) {
-                        if(line.empty() || line[0] == '#')
-                            continue;
-                        std::istringstream ls(line);
-                        std::string cmd, needle, val;
-                        ls >> cmd;
-                        if(cmd == "trace") {
-                            trace = true;
-                            continue;
-                        }
-                        if(cmd == "frames") {
-                            // `frames <needle>`：帧求值探针（只写日志）。
-                            if(ls >> needle)
-                                frameNeedles.push_back(needle);
-                            continue;
-                        }
-                        if(!(ls >> needle))
-                            continue;
-                        EmoteDbgRule r;
-                        r.needle = needle;
-                        if(cmd == "skip")
-                            r.kind = 0;
-                        else if(cmd == "only") {
-                            r.kind = 1;
-                            hasOnly = true;
-                        } else if(cmd == "opa")
-                            r.kind = 2;
-                        else if(cmd == "zadd")
-                            r.kind = 3;
-                        else if(cmd == "zset")
-                            r.kind = 4;
-                        else if(cmd == "notint")
-                            r.kind = 5;
-                        else
-                            continue;
-                        if(r.kind == 2 || r.kind == 3 || r.kind == 4) {
-                            if(!(ls >> val))
-                                continue;
-                            r.value = std::strtof(val.c_str(), nullptr);
-                        }
-                        rules.push_back(std::move(r));
-                    }
-                    s_dbgRules.swap(rules);
-                    s_dbgHasOnly = hasOnly;
-                    s_dbgTrace = trace;
-                    s_dbgTraceOnce = true; // dump the next pass once
-                    s_dbgFrameNeedles.swap(frameNeedles);
-                    s_dbgEvalLastLog.clear();
-                    s_dbgMtime = mt; // 防止每次轮询重复读取同一份文件
-                    if(logger)
-                        logger->info("emote-debug: reloaded {} rules "
-                                     "(only={} trace={} frames={}) from '{}'",
-                                     s_dbgRules.size(), s_dbgHasOnly,
-                                     s_dbgTrace,
-                                     static_cast<int>(s_dbgFrameNeedles.size()),
-                                     dbgPath);
-                    // `frames <needle>`：把匹配节点的帧表 dump 出来（time/type/visible）。
-                    // 回答“某个部件为什么整轮都不画”：看它选中的帧是不是 type-0（隐藏）。
-                    if(logger && !s_dbgFrameNeedles.empty()) {
-                        for(const auto &needle : s_dbgFrameNeedles) {
-                            int shown = 0;
-                            for(size_t i = 0;
-                                i < _motionNodes.size() && shown < 6; ++i) {
-                                const auto &nd = _motionNodes[i];
-                                bool hit = nd.label.find(needle) !=
-                                    std::string::npos;
-                                if(!hit && !nd.frames.empty())
-                                    hit = nd.frames.front().src.find(needle) !=
-                                        std::string::npos;
-                                if(!hit)
-                                    continue;
-                                ++shown;
-                                logger->info(
-                                    "emote-frames: node[{}] '{}' nodeType={} "
-                                    "frames={} sub={} ref='{}' launch={} "
-                                    "loop={} paramIdx={}",
-                                    static_cast<int>(i), nd.label, nd.type,
-                                    static_cast<int>(nd.frames.size()),
-                                    nd.submotionContent ? 1 : 0,
-                                    nd.subRefSrc, nd.subLaunchTime,
-                                    nd.subLoopTime, nd.parameterizeIndex);
-                                for(size_t k = 0;
-                                    k < nd.frames.size() && k < 24; ++k) {
-                                    const auto &f = nd.frames[k];
-                                    logger->info(
-                                        "emote-frames:   f[{}] time={} type={} "
-                                        "vis={} mask=0x{:x} src='{}'",
-                                        static_cast<int>(k), f.time, f.type,
-                                        f.visible ? 1 : 0, f.mask, f.src);
-                                }
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
-#endif
             // 条目在**先序**里生效的裁剪。第二趟按 Z 重排后逐条重新套用，否则
             // 延迟绘制会全部落进先序里最后那个 str_clip / viewport 区域。
             // Clip in effect for an item in pre-order; re-applied per item in pass 2.
@@ -1628,7 +1477,6 @@ namespace motion {
             // stencil 合成供给：确有带蒙版的 type-12 合成组时，每轮预备并清空
             // 两块画布大小的离屏层（内容→组层、蒙版→蒙版层）。
             bool stencilActive = false;
-            int compositeGroupCount = 0;
             if(anyStencil) {
                 int compositeGroups = 0;
                 for(int gi = 0; gi < n; gi++) {
@@ -1636,22 +1484,10 @@ namespace motion {
                        !_motionNodes[gi].stencilMaskNodeIndices.empty())
                         compositeGroups++;
                 }
-                // 本壳的离屏组层是**单缓冲**：所有 type-12 组的内容都会画进同一块组层，
-                // 所以只能对“唯一一个合成组”做折叠。多组时若仍折叠，就会把第一个组的
-                // 蒙版乘到**全部组**的内容上 ⇒ 整层几乎全透明。
-                //
-                // 真机（NEKOPARA 4，2026-09-24 19:08）每帧都有
-                // `drawAnimatedTree stencil: multiple composites (2..6), only first
-                // folded`，而立绘完全看不到 —— 多组时宁可不做蒙版折叠（直接画到目标
-                // 层，蒙版效果不精确，但画面可见）。
-                // 旧实现只在“唯一一个合成组”时折叠，多组时**整个跳过**蒙版
-                // （真机 NEKOPARA 4 每帧 6 个合成组 ⇒ 立绘从头到尾没有任何蒙版，
-                // 该被蒙版裁掉/合成的部分原样画出来）。现在改为**逐组折叠**：
-                // 单缓冲 scratch（gl/ml）每组画完立即折进 dest 再清空复用，
-                // 于是组数不再设限。见 stencilRootOf 与 flushStencilGroup。
+                // 离屏组层是单缓冲：每组画完立即折叠进 dest 再清空复用。
+                // 逐组折叠，组数不设限；见 stencilRootOf 与 flushStencilGroup。
                 if(compositeGroups >= 1)
                     stencilActive = true;
-                compositeGroupCount = compositeGroups;
                 if(stencilActive) {
                     iTJSDispatch2 *gl =
                         getOrCreateStencilLayer(dest, false, cw, ch);
@@ -1675,11 +1511,6 @@ namespace motion {
             int maskPendingRefs = 0;
             for(const int m : maskRemaining)
                 maskPendingRefs += m;
-            // 本轮的折叠统计（用于一次性打印“到底哪几组折了、哪几组蒙版是空的”，
-            // 而不是像以前那样每 600 帧只采样一个组）。
-            int passFoldCount = 0;
-            int passEmptyMaskFolds = 0;
-            std::string passEmptyMaskLabels;
             auto flushStencilGroup = [&]() {
                 const int gi = curFoldGroup;
                 curFoldGroup = -1;
@@ -1699,11 +1530,6 @@ namespace motion {
                     getOrCreateStencilLayer(dest, false, cw, ch);
                 iTJSDispatch2 *ml = getOrCreateStencilLayer(dest, true, cw, ch);
                 const bool hadContent = drewGroup;
-                const bool hadMask = drewMask;
-                if(gi >= 0 && gi < n) {
-                    foldedFlag[gi] = 1;
-                    drewMaskFlag[gi] = hadMask ? 1 : 0;
-                }
                 drewGroup = drewMask = false;
                 if(gl && ml && hadContent) {
                     const auto &gnd = _motionNodes[gi];
@@ -1738,18 +1564,6 @@ namespace motion {
                                 l->warn("drawAnimatedTree stencil: composite "
                                         "blit exception");
                         }
-                    }
-                    // 统计每一组的折叠结果，由调用方在每个渲染轮的末尾一次性打出。
-                    ++passFoldCount;
-                    if(!hadMask) {
-                        ++passEmptyMaskFolds;
-                        if(passEmptyMaskLabels.size() < 160)
-                            passEmptyMaskLabels +=
-                                gnd.label + "(" +
-                                std::to_string(
-                                    static_cast<int>(
-                                        gnd.stencilMaskNodeIndices.size())) +
-                                "),";
                     }
                 }
                 if(gl)
@@ -1795,18 +1609,13 @@ namespace motion {
                     if(stencilMaskOf[i]) {
                         drawTarget =
                             getOrCreateStencilLayer(dest, true, cw, ch);
-                        if(drawTarget) {
+                        if(drawTarget)
                             drewMask = true;
-                            ++mlNodesDrawn;
-                        }
                     } else {
                         drawTarget =
                             getOrCreateStencilLayer(dest, false, cw, ch);
-                        if(drawTarget) {
+                        if(drawTarget)
                             drewGroup = true;
-                            if(stencilRootOf[i] >= 0)
-                                ++glNodes[stencilRootOf[i]];
-                        }
                     }
                     if(stencilRootOf[i] >= 0)
                         curFoldGroup = stencilRootOf[i];
@@ -1840,8 +1649,7 @@ namespace motion {
                     // 蒙版节点同时是**可见内容**：再按原 z 序画一遍到 dest。
                     // A mask node is ALSO normal visible content, so paint it
                     // into dest as well (see kEmoteDrawStencilMaskAsContent).
-                    if(paintTo(dest))
-                        ++mlNodesAsContent;
+                    paintTo(dest);
                 }
             };
             for(int i = 0; i < n; i++) {
@@ -1989,43 +1797,6 @@ namespace motion {
                     }
                     if(hold)
                         afBase = hold;
-                }
-                // `frames <needle>` 探针：选中帧的 time/type/visible 对不上时
-                // 一眼能看出“选中的是 type-0（隐藏）帧”。
-                {
-                    bool hit = false;
-                    for(const auto &needle : s_dbgFrameNeedles) {
-                        if(needle.empty())
-                            continue;
-                        if(node.label.find(needle) != std::string::npos ||
-                           (!node.frames.empty() &&
-                            node.frames.front().src.find(needle) !=
-                                std::string::npos)) {
-                            hit = true;
-                            break;
-                        }
-                    }
-                    if(hit && logger) {
-                        const std::string key =
-                            std::to_string(i) + "|" + node.label;
-                        auto lit = s_dbgEvalLastLog.find(key);
-                        const bool due = lit == s_dbgEvalLastLog.end() ||
-                            effNow < lit->second ||
-                            (effNow - lit->second) >= 60;
-                        if(due) {
-                            s_dbgEvalLastLog[key] = effNow;
-                            logger->info(
-                                "emote-eval: node[{}] '{}' effNow={} "
-                                "afTime={} afType={} afVis={} frames={} "
-                                "sub={} loop={} launch={} src='{}'",
-                                i, node.label, effNow, afBase->time,
-                                afBase->type, afBase->visible ? 1 : 0,
-                                static_cast<int>(node.frames.size()),
-                                node.submotionContent ? 1 : 0,
-                                node.subLoopTime, node.subLaunchTime,
-                                afBase->src);
-                        }
-                    }
                 }
                 nodeActiveFrame[i] =
                     afBase; // for mesh parents / 供 mesh 父节点使用
@@ -3280,56 +3051,9 @@ namespace motion {
                 const int ih = static_cast<int>(hVar.AsInteger());
                 if(iw <= 0 || ih <= 0)
                     continue;
-                // Load probe (P-load): for the m2logo line icons the authored
-                // texture is a 3x16 paletted bar (icon32 dark / icon18 gray),
-                // yet the engine often ends up with a 1x1 texture (invisible
-                // vertical line). Log the resolved path, the actually-loaded
-                // size, and the cached image metadata so one run shows whether
-                // the width/height meta is wrong or the Open/convert path fails
-                // for these sprites. 加载探针(P-load)：m2logo 线框 icon
-                // 的原创纹理是 3x16 调色条
-                // （icon32 深色/icon18 浅灰），但引擎常得到 1x1（竖线不可见）。
-                // 打印解析路径、实际加载尺寸与缓存的图像元数据，一次看清是元数据
-                // 宽高错了还是 Open/convert 对这些精灵失败。
-#if defined(KRKR_RENDER_PROBE)
-                if(logger &&
-                   (af->src == "src/logo/icon17" ||
-                    af->src == "src/logo/icon18" ||
-                    af->src == "src/logo/icon32" ||
-                    af->src == "src/logo/icon26" || node.label == "line" ||
-                    node.label == "line2")) {
-                    PSB::PSBMedia::CachedImageInfo gi;
-                    const bool hasGi = PSB::GetGlobalPSBMedia() &&
-                        PSB::GetGlobalPSBMedia()->getImageInfo(
-                            storageStr + "/" + res + "/pixel.png", gi);
-                    logger->info(
-                        "loadProbe: node='{}' src='{}' res='{}' loaded={}x{} "
-                        "hasMeta={} meta={}x{} compress={} type='{}' "
-                        "palBytes={}",
-                        node.label, af->src, res, iw, ih, hasGi ? 1 : 0,
-                        hasGi ? gi.width : 0, hasGi ? gi.height : 0,
-                        static_cast<int>(gi.compress), gi.type,
-                        gi.palette.size());
-                }
-#endif
-                // Draw an M2 content sprite with the REFERENCE
-                // single-world-matrix + origin anchor model (`org = pos -
-                // M*(originX+ox, originY+oy)`, quad `org + M*[0..iw,0..ih]`). A
-                // sprite's position px,py is its world position (loX=interpCx,
-                // ox/oy NOT in position — adding ox double-counts and drifts
-                // the sprite); the transform (flip×angle×scale, wm11..wm22) and
-                // the anchored translation are ONE matrix, so rotation pivots
-                // about the icon/ox hotspot rather than the box center. Anchor
-                // resolution (resolveCoordOrigin + per-icon origin) is below.
-                // 用参考的**单一世界矩阵+原点锚定**模型绘制 M2 内容精灵（`org =
-                // pos - M*(originX+ox, oy)`，四边形 `org +
-                // M*[0..iw,0..ih]`）。精灵位置 px,py
-                // 即世界位置（loX=interpCx，ox/oy **不进位置**——加 ox
-                // 会双计并使
-                // 精灵漂移）；变换(flip×angle×scale，wm11..wm22)与锚定平移合成一个矩阵，
-                // 旋转天然绕 icon/ox
-                // 热区而非盒子中心。锚点解析见下（resolveCoordOrigin
-                // + 逐 icon origin）。
+                // 用单一世界矩阵 + 原点锚定模型绘制内容精灵：
+                // org = pos - M*(originX+ox, originY+oy)，四边形 org + M*[0..iw,0..ih]。
+                // px,py 是世界位置，ox/oy 不进位置；变换与锚定平移合成一个矩阵。
                 const int coordOrigin = resolveCoordOrigin();
                 // Reference model (libkrkr2
                 // updateLayersPhase3_VertexComputation / AetherKiri: `org = pos
@@ -3465,53 +3189,6 @@ namespace motion {
                 const tjs_real mC = static_cast<tjs_real>(mC0);
                 const tjs_real mD = static_cast<tjs_real>(mD0);
 
-#if defined(KRKR_RENDER_PROBE)
-                if(logger && now >= 190.0 &&
-                   (af->src == "src/logo/icon25" ||
-                    af->src == "src/logo/icon26" ||
-                    af->src == "src/logo/icon27" ||
-                    af->src == "src/logo/icon28" ||
-                    af->src == "src/logo/icon29" ||
-                    af->src == "src/logo/icon48")) {
-                    auto screenX = [&](float pixX, float pixY) -> float {
-                        return static_cast<float>(outputTx) +
-                            mA * (pixX - anchorX) + mB * (pixY - anchorY);
-                    };
-                    auto screenY = [&](float pixX, float pixY) -> float {
-                        return static_cast<float>(outputTy) +
-                            mC * (pixX - anchorX) + mD * (pixY - anchorY);
-                    };
-                    float minX = screenX(0, 0), maxX = minX;
-                    float minY = screenY(0, 0), maxY = minY;
-                    const float corners[4][2] = { { 0, 0 },
-                                                  { static_cast<float>(iw), 0 },
-                                                  { 0, static_cast<float>(ih) },
-                                                  { static_cast<float>(iw),
-                                                    static_cast<float>(ih) } };
-                    for(const auto &co : corners) {
-                        const float sx = screenX(co[0], co[1]);
-                        const float sy = screenY(co[0], co[1]);
-                        minX = std::min(minX, sx);
-                        maxX = std::max(maxX, sx);
-                        minY = std::min(minY, sy);
-                        maxY = std::max(maxY, sy);
-                    }
-                    logger->info(
-                        "m2foldProbe: '{}' now={:.1f}ms t={} src='{}' "
-                        "ang={:.1f} "
-                        "aabbX=[{:.1f},{:.1f}] aabbY=[{:.1f},{:.1f}] w={:.0f} "
-                        "h={:.0f} "
-                        "anchor=({:.1f},{:.1f}) ic={}",
-                        node.label, static_cast<float>(now),
-                        static_cast<tjs_int>(af->time), af->src, finalAngle,
-                        minX, maxX, minY, maxY, (maxX - minX), (maxY - minY),
-                        anchorX, anchorY,
-                        (hasIconOrigin
-                             ? (std::to_string(static_cast<int>(iconOrX)) +
-                                "," + std::to_string(static_cast<int>(iconOrY)))
-                             : std::string("-")));
-                }
-#endif
                 tjs_int opaClamp = std::clamp(wop, 0, 255);
                 // Apply the M2 PER-CORNER vertex-color tint to the glyph
                 // texture before drawing (identity when all corners white).
@@ -3591,166 +3268,14 @@ namespace motion {
                     tTJSVariant(blendOm), // 12 blend mode / 混合模式
                     tTJSVariant(opaClamp), // 13 opacity
                 };
-                // 真正的 stencil 分流/逐组收尾/绘制在共用的 paintItem 里（见上）；
-                // 此处只预算“本条目是否会进 scratch”，供探针打印 dst=。
-                // The actual stencil divert / fold / draw lives in paintItem; here we
-                // only pre-compute whether this item goes to a scratch layer (for the
-                // probe's dst= column).
-                float dbgZAdd = 0.0f;
-                bool dbgZSet = false, dbgNoTint = false;
-                float dbgZValue = 0.0f;
-#if defined(KRKR_RENDER_PROBE)
-                if(!s_dbgRules.empty()) {
-                    bool dbgSkip = false, dbgOnlyHit = false;
-                    int dbgOpa = -1;
-                    for(const auto &r : s_dbgRules) {
-                        // 尾部 `$` = 必须以该子串**结尾**（避免 `#custom/1` 误中
-                        // `#custom/12`）。A trailing `$` anchors the match at the
-                        // end of the string (so `#custom/1$` cannot hit
-                        // `#custom/12`).
-                        const bool anchored =
-                            !r.needle.empty() && r.needle.back() == '$';
-                        const std::string nd =
-                            anchored ? r.needle.substr(0, r.needle.size() - 1)
-                                     : r.needle;
-                        auto hits = [&](const std::string &s) {
-                            if(nd.empty())
-                                return false;
-                            if(!anchored)
-                                return s.find(nd) != std::string::npos;
-                            return s.size() >= nd.size() &&
-                                s.compare(s.size() - nd.size(), nd.size(),
-                                          nd) == 0;
-                        };
-                        if(!hits(node.label) && !hits(af->src))
-                            continue;
-                        if(r.kind == 0)
-                            dbgSkip = true;
-                        else if(r.kind == 1)
-                            dbgOnlyHit = true;
-                        else if(r.kind == 2)
-                            dbgOpa = static_cast<int>(r.value);
-                        else if(r.kind == 3)
-                            dbgZAdd += r.value;
-                        else if(r.kind == 4) {
-                            dbgZSet = true;
-                            dbgZValue = r.value;
-                        } else if(r.kind == 5)
-                            dbgNoTint = true;
-                    }
-                    if(dbgSkip ||
-                       (s_dbgHasOnly && !dbgOnlyHit && !stencilMaskOf[i]))
-                        continue;
-                    if(dbgOpa >= 0)
-                        opArgs[13] = tTJSVariant(
-                            static_cast<tjs_int>(std::clamp(dbgOpa, 0, 255)));
-                }
-#endif
-                [[maybe_unused]] const bool willUseScratch =
-                    stencilActive &&
-                    (stencilMaskOf[i] || stencilRootOf[i] >= 0);
-#if defined(KRKR_RENDER_PROBE)
-                // 条目级探针（每个 motion 前 8 个条目）：帧画到了哪个层、变换后的落点
-                // 与尺寸、以及游戏给的缩放是否作用上。回答两类问题：
-                //   1) 立绘“过大” —— 直接看 m/tx/ty 与 gameScale 的组合是否与画布相符；
-                //   2) SD “没有背景” —— 看 bg 条目到底有没有被画（不在列表里就是被跳过）。
-                if(logger) {
-                    static std::mutex s_itemProbeMutex;
-                    static std::map<std::string, int> s_itemProbeCount;
-                    const std::string key = _loadedStorage.AsStdString();
-                    int n = 0;
-                    {
-                        std::lock_guard<std::mutex> lock(s_itemProbeMutex);
-                        n = s_itemProbeCount[key]++;
-                    }
-                    // 上限 64：NEKOPARA 4 的 e-mote 模型每帧画 31~38 张，头/脸/
-                    // 手臂等条目排在列表末尾，旧的 8 条上限把它们全挡掉了。
-                    if(n < 64) {
-                        logger->info(
-                            "probe: item motion='{}' label='{}' src='{}' dst={} "
-                            "idx={} parent='{}' world=({:.1f},{:.1f}) "
-                            "coord=({:.1f},{:.1f}) posZ={:.2f} "
-                            "srcSize={}x{} m=[{:.3f},{:.3f},{:.3f},{:.3f}] "
-                            "tx={:.1f} ty={:.1f} gameScale={:.3f}/{:.3f} "
-                            "boxScale={:.3f}/{:.3f} stencilGroup={} opa={} "
-                            "bm={} nodeType={} stencilType={} "
-                            "frameScale={:.3f}/{:.3f} worldScale={:.3f}/{:.3f}",
-                            key, node.label, af->src,
-                            willUseScratch ? "scratch" : "dest", i,
-                            (node.parentIndex >= 0)
-                                ? _motionNodes[node.parentIndex].label
-                                : std::string("<root>"),
-                            static_cast<double>(wx[i]),
-                            static_cast<double>(wy[i]),
-                            static_cast<double>(af->cx),
-                            static_cast<double>(af->cy),
-                            static_cast<double>(wz[i]), iw, ih,
-                            static_cast<double>(mA), static_cast<double>(mB),
-                            static_cast<double>(mC), static_cast<double>(mD),
-                            static_cast<double>(outputTx),
-                            static_cast<double>(outputTy), gameScX, gameScY,
-                            static_cast<double>(boxScX),
-                            static_cast<double>(boxScY), stencilGroupOf[i],
-                            static_cast<int>(opaClamp),
-                            static_cast<int>(af->blendMode), node.type,
-                            node.stencilType, static_cast<double>(af->scaleX),
-                            static_cast<double>(af->scaleY),
-                            static_cast<double>(wslx[i]),
-                            static_cast<double>(wsly[i]));
-                        // 图像/元数据/单位缩放探针：确认 e-mote 的 `_le` 布局单位缩放
-                        // 是否已被剔除（unit）、以及图片元数据尺寸与纹理像素尺寸的关系
-                        // （NEKOPARA 4 的部件纹理 479x904 而模型空间只有几十像素）。
-                        logger->info(
-                            "probe: item meta motion='{}' label='{}' src='{}' "
-                            "tex={}x{} meta={}x{} ic={} anchor=({:.1f},{:.1f}) "
-                            "unit={:.5f} mA={:.3f}",
-                            key, node.label, af->src, iw, ih,
-                            hasImgMeta ? metaW : 0, hasImgMeta ? metaH : 0,
-                            hasIconOrigin ? 1 : 0,
-                            static_cast<double>(anchorX),
-                            static_cast<double>(anchorY), imgUnit,
-                            static_cast<double>(mA));
-                        // 节点链探针：把该条目的祖先链（序号/标签/自身缩放/累加缩放/
-                        // inheritMask）打出来。用来定位“立绘过大”到底是链上哪一级的
-                        // 自身缩放不对或继承位不对（NEKOPARA 4 真机：条目矩阵
-                        // 10.5～114.9，而游戏只给了 setScale(0.75) + 仿射 1.5）。
-                        std::string chain;
-                        int guard = 0;
-                        for(int ci = i; ci >= 0 && guard++ < 32;
-                            ci = _motionNodes[ci].parentIndex) {
-                            const auto &cn = _motionNodes[ci];
-                            chain += " > ";
-                            chain += cn.label.empty() ? std::string("<unnamed>")
-                                                      : cn.label;
-                            chain += "#" + std::to_string(ci);
-                            chain += " os=" + std::to_string(wosx[ci]) + "/" +
-                                     std::to_string(wosy[ci]);
-                            chain += " acc=" + std::to_string(wsx[ci]) + "/" +
-                                     std::to_string(wsy[ci]);
-                            chain += " un=" + std::to_string(wunitx[ci]) + "/" +
-                                     std::to_string(wunity[ci]);
-                            chain += " inh=" + std::to_string(cn.inheritMask);
-                        }
-                        logger->info(
-                            "probe: item chain motion='{}' label='{}' :{}", key,
-                            node.label, chain);
-                    }
-                }
-#endif
                 if(kEmoteZSort) {
                     // 延迟绘制：本条目收集到第二趟，按累积 posZ 统一排序后再画。
                     // Defer to pass 2 (sorted by accumulated posZ).
                     PendingDraw pd;
-                    pd.posZ = dbgZSet ? dbgZValue : (wz[i] + dbgZAdd);
+                    pd.posZ = wz[i];
                     pd.index = i;
                     pd.path = path;
-                    pd.src = af->src;
                     pd.tint = effPacked;
-#if defined(KRKR_RENDER_PROBE)
-                    if(dbgNoTint)
-                        pd.tint = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu,
-                                    0xFFFFFFFFu };
-#endif
                     pd.clip = activeClip;
                     pd.args = opArgs;
                     pendingDraws.push_back(std::move(pd));
@@ -3803,32 +3328,6 @@ namespace motion {
                 }
                 if(appliedClipValid)
                     writeClip(dest, prevClip);
-#if defined(KRKR_RENDER_PROBE)
-                // `trace` 指令：把本轮排序后的完整绘制列表打出来（条目级，一次
-                // 一行）。用来对着参考画面点清“谁最后画、谁盖住谁”。
-                // `trace` directive: dump the full sorted draw list for this pass.
-                static unsigned s_dbgTracePass = 0;
-                if((s_dbgTrace && (s_dbgTraceOnce || ((++s_dbgTracePass) % 120) == 1)) &&
-                   logger) {
-                    s_dbgTraceOnce = false;
-                    {
-                        for(size_t ti = 0; ti < pendingDraws.size(); ++ti) {
-                            const auto &td = pendingDraws[ti];
-                            const auto &tn = _motionNodes[td.index];
-                            logger->info(
-                                "zdraw #{} z={:.2f} label='{}' src='{}' "
-                                "scratch={} opa={}",
-                                ti, static_cast<double>(td.posZ), tn.label,
-                                td.src,
-                                (stencilMaskOf[td.index] ||
-                                 stencilRootOf[td.index] >= 0)
-                                    ? 1
-                                    : 0,
-                                static_cast<int>(td.args[13].AsInteger()));
-                        }
-                    }
-                }
-#endif
                 // 每轮一条节流日志：确认排序确实发生并给出 Z 范围（真机验证用）。
                 if(logger) {
                     static unsigned s_zSortPass = 0;
@@ -3853,75 +3352,10 @@ namespace motion {
                 writeClip(dest, prevClip);
                 _strClipActiveParent = -1;
             }
-            // ③ stencil composite fold: alpha-multiply the mask into the group
-            // and blit the masked group onto the destination as one
-            // normal-alpha pass. Only the first active composite type-12 group
-            // is folded this pass (the scratch layers are single-buffered); a
-            // probe notes every composite. ③ stencil 合成收尾：把蒙版 alpha
-            // 乘进组层，再把蒙版后的组层以普通 alpha
-            // 一道合成到目标。本轮只折叠第一个活跃的 type-12
-            // 合成组（离屏层为单缓冲）；
-            // 离屏层为单缓冲，超出一个合成组时只处理第一个。
-            // 末尾把最后一个还在累积的合成组折掉（多组时前面每一组都在循环里折过）。
+            // ③ stencil composite fold：把蒙版 alpha 乘进组层，再以普通 alpha
+            // 合成到目标。scratch 为单缓冲，每组画完立即折叠并清空复用。
             if(stencilActive)
                 flushStencilGroup();
-            // 每轮一条完整的折叠统计（节流到 1/600 轮）：直接回答“组有没有被折”
-            // 与“哪几组的蒙版是空的”两个问题，不再需要逐组采样。
-            if(stencilActive && logger) {
-                static unsigned s_stencilPassProbe = 0;
-                if((++s_stencilPassProbe % 600) == 1) {
-                    logger->info("drawAnimatedTree stencil: pass folded={} "
-                                 "emptyMask={} labels=[{}] groups={}",
-                                 passFoldCount, passEmptyMaskFolds,
-                                 passEmptyMaskLabels, compositeGroupCount);
-                    // 逐组明细：哪一组、是否折过、组层里画了几个节点、本轮蒙版层
-                    // 总共画了几个节点。上限 12 组/轮，避免刷日志。
-                    int shown = 0;
-                    for(int gi = 0; gi < n && shown < 12; gi++) {
-                        const auto &gnd = _motionNodes[gi];
-                        if(!gnd.hasStencil ||
-                           gnd.stencilMaskNodeIndices.empty())
-                            continue;
-                        // 子树规模 + 每个蒙版索引**实际落在哪个组**：把“组不折叠”
-                        // 拆成两种互斥原因 —— ① subtree=0 说明 stencilRootOf 算错
-                        // （父链重映射还有漏，是我的 bug）；② subtree>0 但
-                        // glNodes=0 说明子树节点全部被跳过（可见性/无活跃帧判定）。
-                        int subtree = 0;
-                        for(int si = 0; si < n; si++)
-                            if(stencilRootOf[si] == gi)
-                                ++subtree;
-                        std::string maskInfo;
-                        for(size_t mj = 0;
-                            mj < gnd.stencilMaskNodeIndices.size() && mj < 4;
-                            ++mj) {
-                            const int mi = gnd.stencilMaskNodeIndices[mj];
-                            if(!maskInfo.empty())
-                                maskInfo += ",";
-                            maskInfo += std::to_string(mi);
-                            if(mi >= 0 && mi < n) {
-                                maskInfo += "->root";
-                                maskInfo +=
-                                    std::to_string(stencilRootOf[mi]);
-                            } else {
-                                maskInfo += "(OOR)";
-                            }
-                        }
-                        logger->info(
-                            "drawAnimatedTree stencil: group[{}] '{}' "
-                            "type={} root={} folded={} maskDrawn={} glNodes={} "
-                            "subtree={} maskIdx=[{}]",
-                            gi, gnd.label, gnd.stencilType, stencilRootOf[gi],
-                            static_cast<int>(foldedFlag[gi]),
-                            static_cast<int>(drewMaskFlag[gi]), glNodes[gi],
-                            subtree, maskInfo);
-                        ++shown;
-                    }
-                    logger->info("drawAnimatedTree stencil: pass mlNodesDrawn={} "
-                                 "mlAsContent={} maskPendingRefsEnd={}",
-                                 mlNodesDrawn, mlNodesAsContent,
-                                 maskPendingRefs);
-                }
-            }
             return drawn;
         }
 
@@ -4436,35 +3870,6 @@ namespace motion {
             auto *adaptor =
                 ncbInstanceAdaptor<SeparateLayerAdaptor>::GetNativeInstance(
                     target);
-            // TEMP DIAGNOSTIC（千恋万花 SD 不可见）：每种绘制目标只记一次，标明走的是
-            // 哪条解析分支（SeparateLayerAdaptor 的 target/owner，或普通 Layer）。
-            {
-                static std::mutex s_rrlMutex;
-                static std::set<const void *> s_rrlSeen;
-                bool logIt = false;
-                {
-                    std::lock_guard<std::mutex> lock(s_rrlMutex);
-                    if(s_rrlSeen.size() < 40 &&
-                       s_rrlSeen.insert(static_cast<const void *>(target))
-                           .second)
-                        logIt = true;
-                }
-                if(logIt) {
-                    if(auto lg = spdlog::get("plugin"))
-                        lg->info(
-                            "probe: resolveRealLayer target={} "
-                            "isSeparateAdaptor={} adaptorTarget={} "
-                            "adaptorOwner={}",
-                            static_cast<const void *>(target),
-                            adaptor ? 1 : 0,
-                            (adaptor && adaptor->getTarget())
-                                ? static_cast<const void *>(adaptor->getTarget())
-                                : nullptr,
-                            (adaptor && adaptor->getOwner())
-                                ? static_cast<const void *>(adaptor->getOwner())
-                                : nullptr);
-                }
-            }
             if(adaptor) {
                 auto *rt = adaptor->getTarget();
                 if(rt)
@@ -4690,13 +4095,7 @@ namespace motion {
                 tTJSVariant falseVar(false);
                 newLayer->PropSet(TJS_MEMBERENSURE, TJS_W("visible"), nullptr,
                                   &falseVar, newLayer);
-                // Size the scratch to the canvas so group/mask draws land at
-                // raw canvas coords (K2 Layer supports width/height resize;
-                // ignored if the runtime rejects it — the composite probe will
-                // tell).
-                // 把离屏层设成画布大小，让组/蒙版绘制落在原始画布坐标（K2 Layer
-                // 支持 width/height
-                // 调整；若运行时拒绝则忽略——合成探针会反映）。
+                // 把离屏层设成画布大小，让组/蒙版绘制落在原始画布坐标。
                 if(canvasW > 0.0f || canvasH > 0.0f) {
                     tTJSVariant wVarV(static_cast<tjs_real>(canvasW));
                     tTJSVariant hVarV(static_cast<tjs_real>(canvasH));
@@ -4816,12 +4215,6 @@ namespace motion {
                     }
                 }
                 groupNI->Update(tTVPRect(0, 0, w, h));
-#if defined(KRKR_RENDER_PROBE)
-                auto logger = _logger();
-                if(logger && recoveredRgbAlpha)
-                    logger->info("applyStencilComposite: RGB-rotation alpha "
-                                 "recovered in mask");
-#endif
                 return true;
             } catch(...) {
                 return false;
