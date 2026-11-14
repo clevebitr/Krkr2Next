@@ -1,9 +1,2 @@
-# Shell 脚本必须是 LF。
-#
-# 原因不是洁癖：Windows 侧 core.autocrlf=true 会把 checkout 出来的 .sh 变成 CRLF，
-# 而 WSL / CI 的 bash 对 CRLF 的报错是 "$'\r': command not found" / 
-# "cannot execute: required file not found" —— 看起来像权限问题，实际是换行符，
-# 每次都要重新排查一遍。构建入口是 scripts/*.sh，编译在 WSL 里做，所以这条必须有。
-
 *.sh   text eol=lf
 *.bash text eol=lf
