@@ -31,6 +31,8 @@ extern "C" void SDL_SetMainReady();
 extern std::thread::id TVPMainThreadID;
 std::string TVPGetCurrentLanguage();
 
+namespace krkr::environ {
+
 // ---------------------------------------------------------------------------
 // Static member
 // ---------------------------------------------------------------------------
@@ -154,3 +156,5 @@ void TVPEngineBootstrap::InitializeGraphics(uint32_t width, uint32_t height) {
 void TVPEngineBootstrap::InitializeLocale() {
     LocaleConfigManager::GetInstance()->Initialize(TVPGetCurrentLanguage());
 }
+
+} // namespace krkr::environ

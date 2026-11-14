@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <string>
 
+namespace krkr::environ {
+
 class TVPEngineBootstrap {
 public:
     /**
@@ -54,3 +56,8 @@ private:
 
     static bool s_initialized;
 };
+
+} // namespace krkr::environ
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::environ::TVPEngineBootstrap;
