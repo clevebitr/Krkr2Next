@@ -24,6 +24,8 @@
 #include "NativeEventQueue.h"
 #include "UserEvent.h"
 
+namespace krkr::base {
+
 //---------------------------------------------------------------------------
 // TVPInvokeEvents
 //---------------------------------------------------------------------------
@@ -270,3 +272,5 @@ static tTVPAtExit
     TVPTimerThreadUninitAtExit(TVP_ATEXIT_PRI_SHUTDOWN,
                                TVPReleaseContinuousHandlerCallLimitThread);
 //---------------------------------------------------------------------------
+
+} // namespace krkr::base

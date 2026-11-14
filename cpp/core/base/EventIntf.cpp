@@ -25,6 +25,8 @@
 //---------------------------------------------------------------------------
 // tTVPEvent  : script event class
 //---------------------------------------------------------------------------
+namespace krkr::base {
+
 extern tjs_uint64 TVPEventSequenceNumber;
 
 class tTVPEvent {
@@ -1212,3 +1214,5 @@ tTJSNativeClass *TVPCreateNativeClass_AsyncTrigger() {
     return new tTJSNC_AsyncTrigger();
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::base

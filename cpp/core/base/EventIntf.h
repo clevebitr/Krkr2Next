@@ -19,6 +19,8 @@
 //---------------------------------------------------------------------------
 // Event dispatching
 //---------------------------------------------------------------------------
+namespace krkr::base {
+
 extern void TVPDeliverAllEvents(); // called from (indirectly) the OS
 
 extern bool TVPEventDisabled; // do not write to this variable directly
@@ -134,10 +136,16 @@ TJS_EXP_FUNC_DEF(void, TVPCancelSourceEvents, (iTJSDispatch2 * source));
 // removes all events that has specified source.
 //---------------------------------------------------------------------------
 
+} // namespace krkr::base
+
 //---------------------------------------------------------------------------
 // Window update event related
 //---------------------------------------------------------------------------
+// 前置声明留在 namespace 外：tTJSNI_BaseWindow 是 visual 的类
+// （定义在 visual/WindowIntf.h），不归 krkr::base。
 class tTJSNI_BaseWindow;
+
+namespace krkr::base {
 
 extern void TVPPostWindowUpdate(tTJSNI_BaseWindow *window);
 
@@ -374,5 +382,56 @@ protected:
 //---------------------------------------------------------------------------
 extern tTJSNativeClass *TVPCreateNativeClass_AsyncTrigger();
 //---------------------------------------------------------------------------
+
+} // namespace krkr::base
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::base::TVPDeliverAllEvents;
+using krkr::base::TVPEventDisabled;
+using krkr::base::TVPInvokeEvents;
+using krkr::base::TVPEventReceived;
+using krkr::base::TVPCallDeliverAllEventsOnIdle;
+using krkr::base::TVPBreathe;
+using krkr::base::TVPGetBreathing;
+using krkr::base::TVPSetSystemEventDisabledState;
+using krkr::base::TVPGetSystemEventDisabledState;
+using krkr::base::TVPPostEvent;
+using krkr::base::TVPCancelEvents;
+using krkr::base::TVPAreEventsInQueue;
+using krkr::base::TVPCountEventsInQueue;
+using krkr::base::TVPCancelEventsByTag;
+using krkr::base::TVPCancelSourceEvents;
+using krkr::base::TVPPostWindowUpdate;
+using krkr::base::TVPRemoveWindowUpdate;
+using krkr::base::TVPDeliverWindowUpdateEvents;
+using krkr::base::tTVPBaseInputEvent;
+using krkr::base::tTVPUniqueTagForInputEvent;
+using krkr::base::TVPInputEventTagMax;
+using krkr::base::TVPPostInputEvent;
+using krkr::base::TVPCancelInputEvents;
+using krkr::base::TVPGetInputEventCount;
+using krkr::base::TVPCreateEventObject;
+using krkr::base::TVPActionName;
+using krkr::base::tTVPContinuousEventCallbackIntf;
+using krkr::base::TVPAddContinuousEventHook;
+using krkr::base::TVPRemoveContinuousEventHook;
+using krkr::base::TVPBeginContinuousEvent;
+using krkr::base::TVPEndContinuousEvent;
+using krkr::base::TVPDeliverContinuousEvent;
+using krkr::base::TVPAddContinuousHandler;
+using krkr::base::TVPRemoveContinuousHandler;
+using krkr::base::TVPProcessContinuousHandlerEventFlag;
+using krkr::base::tTVPCompactEventCallbackIntf;
+using krkr::base::TVPAddCompactEventHook;
+using krkr::base::TVPRemoveCompactEventHook;
+using krkr::base::TVPDeliverCompactEvent;
+using krkr::base::tTVPAsyncTriggerMode;
+using krkr::base::tTJSNI_AsyncTrigger;
+using krkr::base::tTJSNC_AsyncTrigger;
+using krkr::base::TVPCreateNativeClass_AsyncTrigger;
+// 枚举值不会随类型自动导入（AGENTS §9.3）：utils/TimerIntf.cpp 里裸用了它们。
+using krkr::base::atmNormal;
+using krkr::base::atmExclusive;
+using krkr::base::atmAtIdle;
 
 #endif
