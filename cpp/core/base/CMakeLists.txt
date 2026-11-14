@@ -21,6 +21,17 @@ set(BASE_SOURCE_FILES
     ${BASE_PATH}/impl/SysInitImpl.cpp
     ${BASE_PATH}/impl/SystemImpl.cpp
     ${BASE_PATH}/impl/MsgImpl.cpp
+
+    # 以下 7 个原本在 core/utils：它们的实现需要 base（消息/事件/初始化）
+    # 与 environ（Application/SystemControl），本质是引擎服务而不是工具。
+    # 接口头仍留在 core/utils，所以 utils 保持只依赖 tjs2 的叶子身份。
+    ${BASE_PATH}/impl/DebugIntf.cpp
+    ${BASE_PATH}/impl/ClipboardImpl.cpp
+    ${BASE_PATH}/impl/MiscUtility.cpp
+    ${BASE_PATH}/impl/ThreadImpl.cpp
+    ${BASE_PATH}/impl/TickCount.cpp
+    ${BASE_PATH}/impl/TimerImpl.cpp
+    ${BASE_PATH}/impl/TimerIntf.cpp
 )
 
 set(BASE_HEADERS_DIR

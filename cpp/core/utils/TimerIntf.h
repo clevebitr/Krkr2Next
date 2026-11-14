@@ -12,7 +12,7 @@
 #define TimerIntfH
 
 #include "tjsNative.h"
-#include "EventIntf.h"
+#include "AsyncTriggerMode.h" // tTVPAsyncTriggerMode（krkr::utils）
 
 namespace krkr::utils {
 

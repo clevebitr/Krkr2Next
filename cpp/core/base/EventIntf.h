@@ -15,6 +15,7 @@
 #define EventIntfH
 
 #include "tjsNative.h"
+#include "AsyncTriggerMode.h" // tTVPAsyncTriggerMode（定义在 krkr::utils，见该头注释）
 
 //---------------------------------------------------------------------------
 // Event dispatching
@@ -317,7 +318,8 @@ extern void TVPDeliverCompactEvent(tjs_int level);
 //---------------------------------------------------------------------------
 // AsyncTrigger related
 //---------------------------------------------------------------------------
-enum tTVPAsyncTriggerMode { atmNormal, atmExclusive, atmAtIdle };
+// tTVPAsyncTriggerMode 已下移到 core/utils/AsyncTriggerMode.h：
+// Timer（utils）与 AsyncTrigger（base）共用，放下层才不制造 utils -> base 反向边。
 /*]*/
 
 //---------------------------------------------------------------------------
@@ -425,13 +427,10 @@ using krkr::base::tTVPCompactEventCallbackIntf;
 using krkr::base::TVPAddCompactEventHook;
 using krkr::base::TVPRemoveCompactEventHook;
 using krkr::base::TVPDeliverCompactEvent;
-using krkr::base::tTVPAsyncTriggerMode;
 using krkr::base::tTJSNI_AsyncTrigger;
 using krkr::base::tTJSNC_AsyncTrigger;
 using krkr::base::TVPCreateNativeClass_AsyncTrigger;
-// 枚举值不会随类型自动导入（AGENTS §9.3）：utils/TimerIntf.cpp 里裸用了它们。
-using krkr::base::atmNormal;
-using krkr::base::atmExclusive;
-using krkr::base::atmAtIdle;
+// tTVPAsyncTriggerMode / atmNormal・atmExclusive・atmAtIdle 的 using 在
+// core/utils/AsyncTriggerMode.h 里（它属于 krkr::utils）。
 
 #endif
