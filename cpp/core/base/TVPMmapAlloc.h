@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <cstddef>
 
+namespace krkr::base {
+
 inline void *TVPMmapAlloc(size_t size) {
     static const size_t pageSize = (size_t)sysconf(_SC_PAGESIZE);
     size_t totalSize = size + sizeof(size_t);
@@ -25,6 +27,12 @@ inline void TVPMmapFree(void *mem) {
     size_t totalSize = *(size_t *)base;
     munmap(base, totalSize);
 }
+
+} // namespace krkr::base
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::base::TVPMmapAlloc;
+using krkr::base::TVPMmapFree;
 
 #define TVP_USE_MMAP_TEMP 1
 #endif

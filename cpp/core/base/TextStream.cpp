@@ -14,6 +14,8 @@
 #include "CharacterSet.h"
 #include "BinaryStream.h"
 
+namespace krkr::base {
+
 static std::string G_DefaultReadEncoding = "UTF-8";
 
 static bool hasNonAsciiBytes(const unsigned char *raw, size_t size) {
@@ -486,3 +488,5 @@ void TVPSetDefaultReadEncoding(const ttstr &encoding) {
 const tjs_char *TVPGetDefaultReadEncoding() {
     return ttstr{ G_DefaultReadEncoding }.c_str();
 }
+
+} // namespace krkr::base

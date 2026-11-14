@@ -14,6 +14,9 @@
 #include "MsgIntf.h"
 
 //---------------------------------------------------------------------------
+
+namespace krkr::base {
+
 static tjs_int inline TVPWideCharToUtf8(tjs_char in, char *out) {
     // convert a wide character 'in' to utf-8 character 'out'
     if(in < (1 << 7)) {
@@ -246,3 +249,5 @@ tjs_int TVPUtf8ToWideCharString(const char *in, tjs_uint length,
     return count;
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::base
