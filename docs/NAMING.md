@@ -95,6 +95,8 @@
 | MIDL / SDK 头 | `kmp_pi.h`、`oldwaveunpacker.h`、`tvpsnd.h`（COM ABI）、`iconv.h`、`utf8.h`、`md5.{c,h}`、`encoding/*.c` | 第三方或生成物，重命名会破坏 ABI/生成链路 |
 | `ncbind.hpp` / `ncb_invoke.hpp` / `ncb_foreach.inc` | NCB 宏层 | `NCB_*` 宏族改造是独立一轮（`plugin/README.md`），文件名跟着宏一起动 |
 | `tar.h` | TAR 格式结构体 | 与 POSIX `tar.h` 同名，改名要同步所有 `#include`（低优先，可改） |
+| **插件可见宿主 API** | `TVP_malloc` `TVP_free` `ZLIB_*` `TVP_md5_*` `TVPDoTryBlock` `TVPRegisterGlobalObject` `TVPRemoveGlobalObject` `TVPRegisteredPlugins` `tvpLoadPlugins` 及 `tTVP{Try,Catch,Finally}BlockFunction` | 这些名字写在 **NCB 宏体**里（`ncbi` / `NCB_*` / `TVP_TRY` 展开成它们），只有和 NCB 宏改造同一批才能改（见 `cpp/core/plugin/README.md` §没做的） |
+| **TJS 注册表工厂族** | `TVPCreateNativeClass_*` | 归属要等 `DECISIONS.md` #9 的注册表反转；现在改名会在反转时再改一次 |
 | `7zArchive.cpp` | — | **不是例外**：它属于 N2，目标 `SevenZipArchive.cpp` |
 | `*.tjs` 资源 | `resources/` | 脚本资源，不是 C++ |
 
@@ -107,7 +109,7 @@
 | 轮次 | 模块 | 自有遗留符号 | 状态 |
 |---|---|---:|---|
 | 1 | `extension` | 4 | ✅ **已完成**（`TVPAddClassHandler`→`AddClassHandler`、`TVPCauseAtInstallExtensionClass`→`InstallRegisteredClasses`、`TVPResetExtensionClassInstallStateForRestart`→`ResetInstallStateForRestart`、`tTVPAtInstallClass`→`AtInstallClass`；4 条过渡 `using` 同 commit 删除） |
-| 2 | `plugin` | 16（draft） | 🟡 map 已起草未审阅；与 NCB 宏改造错开 |
+| 2 | `plugin` | 23（已应用） | ✅ **插件管理函数 / 类型 / 宏完成**（68 处 / 7 文件，49→29）；余下 29 个全是登记例外（插件 ABI、NCB 宏类型、注册表工厂族）与别的模块的符号 |
 | 3 | `utils` | 14（draft） | 🟡 map 已起草；4 个新名冲突待人工处理（`TVPTimer`→`Timer` 撞名） |
 | 4 | `io` | 123（已应用） | ✅ **函数/类型/宏已完成**（1023 处替换 / 83 文件，`7zArchive.cpp` → `SevenZipArchive.cpp`）；遗留 176→70，余下是**跨模块符号**（base/utils 的，各轮处理）与 **N7 全局变量**（`io-globals.tsv` 待做） |
 | 5 | `compat` | 0 | ✅ 自有符号已是新风格（`--draft` 扫出 0 个），无需改名 |
@@ -172,3 +174,32 @@ tTVPAtInstallClass	AtInstallClass	type
 
 > `IO` 例外：`namespace krkr::io` 用小写（namespace 保持全小写）；
 > 类型名里用 `Io`（`IoPath` `IoVirtualFile`），与现有代码一致。
+
+---
+
+## 9. 工作量估算（基于前 3 轮实测）
+
+| 轮次 | 模块 | 符号 | 替换处 | 文件 | 耗时 |
+|---|---|---:|---:|---:|---|
+| 1 | `extension` | 7 | 21 | 4 | ~15 min（含工具摸索） |
+| 2 | `io` | 123 | 1023 | 83 | ~50 min（含 4 处工具修正） |
+| 3 | `plugin` | 23 | 68 | 7 | ~15 min |
+
+**吞吐 ≈ 100~150 符号/小时**（工具成熟后，不含编译回归）。
+
+| 剩余模块 | 自有符号（draft 口径） | 纯改名 | 含编译回归 |
+|---|---:|---|---|
+| `io` 剩余（N7 全局变量） | 28 | ~0.5 h | ~0.5 天 |
+| `utils` | 37 | ~0.5 h | 0.5~1 天 |
+| `sound` | 132 | ~1.5 h | 1~2 天 |
+| `environ` | 134 | ~1.5 h | 1~2 天 |
+| `base` | ~250（不含 153 个消息例外） | ~3 h | 2~4 天（注册表族要等反转） |
+
+结论：**纯改名还剩 6~8 小时**（再 5 轮，与我这两轮同量级）；
+**含编译验证 1.5~2 周**；加上仓库里积压的未编译提交的首次全量验证（3~5 天），
+**总计 2~3 周**（不含 `visual` / `movie`，它们再 +1.5~2 周）。
+
+两个不确定性会影响工期：
+1. **宏的 token pasting**（`TVP_GL_FUNC_DECL` 一族 282 处）—— 若有 `TVP##name` 拼接，
+   改名只能在编译期暴露；
+2. **插件 ABI 是否解除例外** —— 解除就要和 NCB 宏改造同批做，工期 +1~2 天。

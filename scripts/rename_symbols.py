@@ -295,7 +295,8 @@ def run_map(map_path: Path, roots: list[str], apply: bool, in_strings: bool,
     string_hits = 0
     bridge_removed = 0
 
-    bridge_line_re = re.compile(r"^\s*using\s+%s::\w+;\s*$" % re.escape(qualify))
+    bridge_line_re = re.compile(r"^\s*using\s+%s::(\w+);\s*$" % re.escape(qualify))
+    renamed_names = {e.new for e in entries} | {e.old for e in entries}
 
     for p, text in texts.items():
         in_owner = owner_path in p.resolve().parents or p.resolve() == owner_path
@@ -303,9 +304,12 @@ def run_map(map_path: Path, roots: list[str], apply: bool, in_strings: bool,
         # 先删过渡 using，再替换符号：反过来的话 `using krkr::m::Old;` 会先变成
         # `using New;`（非法 C++），删桥接的正则就再也匹配不上了。
         if drop_bridges and in_owner:
+            # 只删**本轮真的改名**的那些桥接：`using krkr::plugin::TVP_malloc;` 这种
+            # 对应符号仍在用旧名（契约 §4 的 ABI 例外），删掉会让插件侧编译失败。
             kept = []
             for line in text.splitlines(keepends=True):
-                if bridge_line_re.match(line):
+                m = bridge_line_re.match(line)
+                if m and m.group(1) in renamed_names:
                     bridge_removed += 1
                     continue
                 kept.append(line)

@@ -971,3 +971,45 @@ lowerCamelCase、去 `TVP` 前缀，常量用 UpperCamelCase（`TVPArchiveDelimi
 `check_naming.py` 合计遗留：1297 → **1101**（base 411 / environ 285 / sound 224 /
 io 70 / utils 58 / plugin 49 / compat 3 / extension 1）。
 "合计"会随任何一轮一次下降几十，因为跨模块引用也一起被改了。
+
+## 2026-11-15 — 命名统一第 3 轮：plugin（23 符号 / 68 处），插件 ABI 登记为例外
+
+\## 结果
+
+`plugin` 遗留 **49 → 29**，替换 68 处 / 7 个文件，删 5 条本轮对应的过渡 using。
+余下 29 个全部是**登记例外**或**别的模块的符号**：
+
+| 类别 | 例子 | 处理 |
+|---|---|---|
+| 插件可见宿主 API | `TVP_malloc` `TVP_free` `ZLIB_*` `TVP_md5_*` `TVPDoTryBlock` `TVPRegisterGlobalObject` | 例外（§4）：名字写在 NCB 宏体里 |
+| NCB 宏用的类型 | `tTVP{Try,Catch,Finally}BlockFunction` | 同上 |
+| TJS 注册表工厂族 | `TVPCreateNativeClass_Plugins` | 等 #9 注册表反转 |
+| 别的模块的符号 | `TVPExecuteStorage` `TVPGetScriptDispatch` `TVPAddImportantLog` … | 各自轮次 |
+
+\## 决策：插件 ABI 不改名，理由是"它和宏耦合"而不是"它风险高"
+
+实测：`cpp/plugins/` 里 **0 处**直接调用 `TVP_malloc` / `TVPRegisterGlobalObject` ——
+它们全是通过 `ncbi`、`NCB_*`、`TVP_TRY` 宏展开出来的。也就是说这些名字**事实上是
+宏 ABI**，改名必须同时改 11 个宏族（`plugin/README.md` §没做的 那条）。
+单改函数不改宏 → 宏展开出旧名 → 编译错误；单改宏不改函数 → 同一份错误。
+所以这不是"谨慎"，而是**必须和 NCB 改造同批**。
+
+`TVPDoTryBlock` 有 5 处插件直接调用、`TVP_md5_init` 有 3 处 —— 这两个要么跟着宏一起改，
+要么保留；本轮选择保留（它们的调用点少，留给 NCB 那一轮一次做完）。
+
+\## 工具修正：删除过渡 using 必须按符号白名单
+
+原来删 owner 里所有 `using krkr::plugin::X;`，但 plugin 有 **65 条**桥接，
+本轮只改了其中 5 个符号对应的行；其余 60 条（`TVP_malloc`、`ncbClassInfo` 等）
+对应的符号仍在用旧名/未改名，删掉就会让插件侧编译失败。
+现在只删"本轮 map 里出现过的 old/new 名"对应的行。
+
+\## 数据
+
+| 轮次 | 模块 | 符号 | 替换 | 文件 | 耗时 |
+|---|---|---:|---:|---:|---|
+| 1 | extension | 7 | 21 | 4 | ~15 min |
+| 2 | io | 123 | 1023 | 83 | ~50 min |
+| 3 | plugin | 23 | 68 | 7 | ~15 min |
+
+`check_naming.py` 合计遗留：1297 → 1101 → **1080**。
