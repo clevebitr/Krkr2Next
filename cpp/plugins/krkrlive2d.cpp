@@ -30,7 +30,7 @@
 #include "WindowIntf.h"
 // TVPGetCommandLine：仍用于其它命令行开关；兼容层判定见 IsAetherKiriCompatEnabled。
 #include "SysInitIntf.h"
-#include "compat/CompatLayer.h"
+#include "compat/layer/CompatLayer.h"
 
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>

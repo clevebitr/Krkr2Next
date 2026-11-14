@@ -14,7 +14,7 @@
 #include "DebugIntf.h"
 #include "ScriptMgnIntf.h"
 #include "ncbind.hpp"
-#include "compat/ModuleGate.h"
+#include "compat/layer/ModuleGate.h"
 
 #ifndef TJS_INTF_METHOD
 #define TJS_INTF_METHOD

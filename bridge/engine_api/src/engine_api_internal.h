@@ -63,7 +63,7 @@ extern "C" void krkr_GetSurfaceDimensions(uint32_t *, uint32_t *);
 #include "base/core/StorageImpl.h"
 #include "environ/intf/SysInitImpl.h"
 
-#include "compat/CompatLayer.h"
+#include "compat/layer/CompatLayer.h"
 #include "extension/Extension.h"
 #include "plugin/loader/PluginImpl.h"
 #include "psbfile/PSBMedia.h"

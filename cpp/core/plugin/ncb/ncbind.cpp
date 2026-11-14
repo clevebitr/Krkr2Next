@@ -1,5 +1,5 @@
 #include "ncbind.hpp"
-#include "compat/ModuleGate.h"
+#include "compat/layer/ModuleGate.h"
 #include <set>
 #include <spdlog/spdlog.h>
 

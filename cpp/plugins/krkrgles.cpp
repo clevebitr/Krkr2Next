@@ -2,7 +2,7 @@
 #include "ncbind.hpp"
 #include "ScriptMgnIntf.h"
 #include "SysInitIntf.h"
-#include "compat/CompatLayer.h"
+#include "compat/layer/CompatLayer.h"
 #include "EventIntf.h"
 #include "LayerImpl.h"
 #include "BitmapIntf.h"

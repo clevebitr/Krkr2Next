@@ -20,7 +20,7 @@
 //
 #include "DebugIntf.h"
 #include "ncbind.hpp"
-#include "compat/ModuleGate.h"
+#include "compat/layer/ModuleGate.h"
 
 #include <cctype>
 #include <cstdio>

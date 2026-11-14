@@ -17,7 +17,7 @@
 #include "MsgIntf.h"
 #include "StorageIntf.h"
 #include "ncbind.hpp"
-#include "compat/ModuleGate.h"
+#include "compat/layer/ModuleGate.h"
 
 #include <algorithm>
 #include <cctype>
