@@ -35,7 +35,7 @@
 #include "VideoOvlImpl.h"
 // TVPPostWindowUpdate（BringToFront / ShowWindowAsModal 用它请求重绘）
 #include "EventIntf.h"
-// 关窗确认闸门与模态输入泵（krkr::host）在 SysInitImpl.h 里声明；
+// 关窗确认闸门与模态输入泵（krkr::base）在 SysInitImpl.h 里声明；
 // 卡死探针的阶段标记在下面这个头里 —— 模态循环每帧要刷心跳，否则会被看门狗
 // 当成"渲染线程 1.5s 没推进"误报。
 #include "../../utils/StallWatchdog.h"
@@ -336,7 +336,7 @@ public:
                 break;
             if(owner_ && !TVPIsWindowRegistered(owner_))
                 break; // 窗口被脚本 invalidate 掉了，没有可等的对话框
-            krkr::host::PumpModalInput();
+            krkr::base::PumpModalInput();
             if(::Application)
                 ::Application->Run();
             krkr::stall::MarkStage("host: 等待模态对话框（脚本阻塞在 showModal）");
@@ -808,7 +808,7 @@ public:
         // （kag.close() → MainWindow.close() → Window.close()）唯一的下场就是这里，
         // 而用户要的正是"选继续就接着玩"。请求交给 engine_tick 用
         // ENGINE_RESULT_WINDOW_CLOSE_REQUESTED 报给壳；壳确认后才走下面的真关窗。
-        if(krkr::host::RequestWindowClose())
+        if(krkr::base::RequestWindowClose())
             return;
         closing_ = true;
         spdlog::debug("HostWindowLayer::Close called");

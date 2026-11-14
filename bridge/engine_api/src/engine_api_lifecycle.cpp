@@ -182,8 +182,8 @@ engine_result_t engine_create(const engine_create_desc_t *desc, engine_handle_t 
     EnsureRuntimeLoggersInitialized();
     EnsureInternalPluginAnchorsLinked();
     TVPHostSuppressProcessExit = true;
-    krkr::host::SetDeferWindowClose(true);
-    krkr::host::SetModalInputPump(&PumpModalInputOnTickThreadImpl);
+    krkr::base::SetDeferWindowClose(true);
+    krkr::base::SetModalInputPump(&PumpModalInputOnTickThreadImpl);
 
     auto *impl = new (std::nothrow) engine_handle_s();
     if (impl == nullptr) {
@@ -579,7 +579,7 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
         return SetHandleErrorAndReturnLocked(impl, ENGINE_RESULT_GAME_TERMINATED,
                                              "runtime has been terminated");
     }
-    if (krkr::host::WindowClosePending()) {
+    if (krkr::base::WindowClosePending()) {
         ClearHandleErrorLocked(impl);
         SetThreadError(nullptr);
         return ENGINE_RESULT_WINDOW_CLOSE_REQUESTED;
@@ -871,7 +871,7 @@ engine_result_t engine_resolve_window_close(engine_handle_t handle, int32_t allo
     result = ValidateHandleThreadLocked(impl);
     if (result != ENGINE_RESULT_OK) return result;
     if (allow_close) {
-        krkr::host::ConfirmWindowClose();
+        krkr::base::ConfirmWindowClose();
         krkr::stall::SetPaused(false);
         spdlog::info("engine_resolve_window_close: 宿主确认退出，已执行关窗终止");
         ClearHandleErrorLocked(impl);
@@ -882,7 +882,7 @@ engine_result_t engine_resolve_window_close(engine_handle_t handle, int32_t allo
         SetHandleErrorLocked(impl, "cannot keep playing: the runtime already terminated");
         return ENGINE_RESULT_INVALID_STATE;
     }
-    krkr::host::CancelWindowClose();
+    krkr::base::CancelWindowClose();
     krkr::stall::SetPaused(false);
     krkr::stall::MarkStage("engine_tick: 已取消关窗请求，恢复运行");
     spdlog::info("engine_resolve_window_close: 宿主选择继续游戏，已取消关窗请求");

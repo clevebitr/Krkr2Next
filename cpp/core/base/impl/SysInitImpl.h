@@ -49,7 +49,7 @@ extern void TVPResetSysInitImplForRestart();
 //   - 允许 → 回到真正的关窗终止流程（下一帧 engine_tick 报 WINDOW_CLOSED）；
 //   - 不允许 → 只清请求，窗口与脚本都完好，游戏接着跑。
 // 只有宿主显式开启（SetDeferWindowClose(true)）才生效，默认关闭保持原行为。
-namespace krkr::host {
+namespace krkr::base {
 /** 宿主是否要求"关窗前先问用户"。 */
 void SetDeferWindowClose(bool defer);
 bool DeferWindowClose();
@@ -70,7 +70,7 @@ using ModalInputPump = std::function<void()>;
 void SetModalInputPump(ModalInputPump pump);
 /** 模态循环每帧调用：派发宿主在别的线程投递的输入（无回调时是空操作）。 */
 void PumpModalInput();
-} // namespace krkr::host
+} // namespace krkr::base
 
 //---------------------------------------------------------------------------
 

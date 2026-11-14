@@ -411,7 +411,7 @@ bool TVPHostSuppressProcessExit = false;
 //---------------------------------------------------------------------------
 // 关窗确认闸门状态（见 SysInitImpl.h 的说明）。原子即可：写方是宿主线程
 // （engine_resolve_window_close，其实也就是 tick 的 owner 线程）与渲染线程。
-namespace krkr::host {
+namespace krkr::base {
 namespace {
 std::atomic<bool> g_deferWindowClose{ false };
 std::atomic<bool> g_windowClosePending{ false };
@@ -496,7 +496,7 @@ void PumpModalInput() {
     if(pump)
         pump();
 }
-} // namespace krkr::host
+} // namespace krkr::base
 
 //---------------------------------------------------------------------------
 void TVPTerminateAsync(int code) {
@@ -813,7 +813,7 @@ void TVPResetSysInitImplForRestart() {
 
     // 上一局的未决关窗请求不能带到新启动的引擎里（否则新游戏一 tick 就被报成
     // "请求关窗"）。闸门开关由宿主在 engine_create 里重新打开。
-    krkr::host::CancelWindowClose();
+    krkr::base::CancelWindowClose();
 
     TVPProjectDirSelected = false;
     TVPNativeProjectDir.Clear();
