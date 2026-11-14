@@ -12,7 +12,6 @@
 
 #include "MsgIntf.h"
 #include "MsgImpl.h"
-#include "PluginImpl.h"
 
 #include "CharacterSet.h"
 // #include "resource.h"
