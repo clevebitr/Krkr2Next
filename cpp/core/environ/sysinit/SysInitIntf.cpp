@@ -193,7 +193,7 @@ void TVPResetRuntimeForRestart() {
     // tTVPAtExit 一次性、首次已消费 → 重启不再执行
     // ShutdownWaveSoundBuffers，上一游戏的 BGM/音效由 TVPWaveSoundBufferThread
     // 继续混音输出、叠进下一游戏。这里显式停掉。 （实现见
-    // cpp/core/sound/win32/WaveImpl.cpp TVPStopAllWaveSoundsForRestart）
+    // cpp/core/sound/impl/WaveImpl.cpp TVPStopAllWaveSoundsForRestart）
     TVPStopAllWaveSoundsForRestart();
 }
 //---------------------------------------------------------------------------

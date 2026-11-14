@@ -60,7 +60,10 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     ${KRKR2CORE_PATH}/environ/sdl
     ${KRKR2CORE_PATH}/extension
     ${KRKR2CORE_PATH}/sound
-    ${KRKR2CORE_PATH}/sound/win32
+    ${KRKR2CORE_PATH}/sound/common
+    ${KRKR2CORE_PATH}/sound/intf
+    ${KRKR2CORE_PATH}/sound/codec
+    ${KRKR2CORE_PATH}/sound/impl
     ${KRKR2CORE_PATH}/tjs2
     ${KRKR2CORE_PATH}/utils
     ${KRKR2CORE_PATH}/utils/win32

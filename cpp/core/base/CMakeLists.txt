@@ -74,7 +74,7 @@ target_link_libraries(core_base_core PRIVATE core_utils_module)
 #   ZLIB       → BinaryStream.cpp（<zlib.h>）
 # 其余几个（unrar / LibXml2 / SDL2 / zstd / minizip）base 自己并不 include，
 # 但它们历史上挂在 base 的 PRIVATE 链接上，符号被整个引擎共享
-# （例如 SDL2 的符号实际由 sound/win32/WaveMixer.cpp 使用）。在拿到编译验证
+# （例如 SDL2 的符号实际由 sound/impl/WaveMixer.cpp 使用）。在拿到编译验证
 # 之前按原样保留，避免静默改变最终链接行。
 find_package(uchardet CONFIG REQUIRED)
 find_package(unrar CONFIG REQUIRED)
