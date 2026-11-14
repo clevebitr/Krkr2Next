@@ -4,7 +4,7 @@
 #include "CompatLayer.h"
 
 #include "AetherKiriCompanions.h"
-#include "io/IoPolicy.h"
+#include "io/policy/IoPolicy.h"
 #include "tjsObject.h"
 
 #include <cstring>

@@ -63,7 +63,7 @@ namespace krkr::io {
         bool mountSiblingsForArchiveProject = false;
 
         // XP3 段缓存预算（字节）：旧层 1 MiB，AetherKiri 256 MiB。
-        // 生效规则：显式覆盖 > 本值（见 io/IoPolicy.h 的 EffectiveSegmentCacheLimitBytes）。
+        // 生效规则：显式覆盖 > 本值（见 policy/IoPolicy.h 的 EffectiveSegmentCacheLimitBytes）。
         unsigned long long xp3SegmentCacheBytes = 1ull << 20;
     };
 

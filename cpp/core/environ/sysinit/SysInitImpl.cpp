@@ -219,7 +219,7 @@ void krkr::base::TVPBeforeSystemInit() {
             // 同步告知 IO 组件：这是**显式覆盖**，优先级高于激活层的策略值
             // （否则策略里的 1 MiB/256 MiB 会把这个“极低内存就关缓存”的决定盖掉）。
             // 状态声明在 StorageIntf.h（krkr::io 块）里，io 只读它——base 不再 include
-            // io/IoPolicy.h。
+            // io/policy/IoPolicy.h。
             TVPSegmentCacheLimitOverridden = true;
             TVPSegmentCacheLimitOverrideBytes = 0;
             TVPFreeUnusedLayerCache = true; // in LayerIntf.cpp

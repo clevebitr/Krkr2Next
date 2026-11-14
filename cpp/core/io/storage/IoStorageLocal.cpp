@@ -622,7 +622,7 @@ ttstr TVPGetAppPath() {
         // 档案工程（`.../data.xp3>`）下 TVPExtractStoragePath 会保留末尾的 '>'，
         // 于是 `TVPGetAppPath() + "patch.tjs"` 变成"包里找 patch.tjs"、临时文件名也会
         // 指向包内（写入会失败）。旧层（classic）保持这个历史行为；AetherKiri 层按策略
-        // 去掉 '>'，取档案所在目录（见 io/StoragePolicy.h 的 stripArchiveDelimiterInAppPath）。
+        // 去掉 '>'，取档案所在目录（见 io/policy/StoragePolicy.h 的 stripArchiveDelimiterInAppPath）。
         if(krkr::io::ActiveStoragePolicy().stripArchiveDelimiterInAppPath) {
             const tjs_int len = dir.GetLen();
             if(len > 0 && dir.GetLastChar() == TVPArchiveDelimiter)
@@ -1640,7 +1640,7 @@ void TVPAutoMountSiblingXP3Archives() {
         tjs_char delimStr[2] = { TVPArchiveDelimiter, 0 };
         ttstr archiveBase = archivePath + ttstr(delimStr);
 
-        // 包内目录条目的处理顺序由策略决定（见 io/StoragePolicy.h 的 archiveRoot）：
+        // 包内目录条目的处理顺序由策略决定（见 io/policy/StoragePolicy.h 的 archiveRoot）：
         //   旧层 RootFirst：字典序，根目录 "" 天然最先（历史行为）；
         //   AetherKiri 层 RootLast：把根目录留到最后，避免 tools/startup.tjs 之类
         //   嵌套目录遮住包根的同名文件（上游 ArchiveAutoPathOrder.h 的理由）。
@@ -1766,7 +1766,7 @@ void TVPAutoMountProjectXP3Archives() {
 
         tjs_char delimStr[2] = { TVPArchiveDelimiter, 0 };
         ttstr archiveBase = archivePath + ttstr(delimStr);
-        // 包内目录条目的处理顺序由策略决定（见 io/StoragePolicy.h 的 archiveRoot）：
+        // 包内目录条目的处理顺序由策略决定（见 io/policy/StoragePolicy.h 的 archiveRoot）：
         //   旧层 RootFirst：字典序，根目录 "" 天然最先（历史行为）；
         //   AetherKiri 层 RootLast：把根目录留到最后，避免 tools/startup.tjs 之类
         //   嵌套目录遮住包根的同名文件（上游 ArchiveAutoPathOrder.h 的理由）。
@@ -1879,7 +1879,7 @@ void TVPBoostAutoMountPaths() {
     const auto isArchivePath = [](const ttstr &p) {
         return p.AsStdString().find('>') != std::string::npos;
     };
-    // 补丁判定规则按**激活层策略**选择（见 io/StoragePolicy.h）：
+    // 补丁判定规则按**激活层策略**选择（见 io/policy/StoragePolicy.h）：
     //   SubstringContainsPatch（旧层，缺省）：路径里含 "patch" 子串就算（历史行为）
     //   PrefixPatchWithSequence（AetherKiri 层）：patch / patchN / patchXXX
     const krkr::io::StoragePolicy &policy = krkr::io::ActiveStoragePolicy();

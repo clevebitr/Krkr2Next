@@ -10,7 +10,7 @@
 //---------------------------------------------------------------------------
 #include <set>
 #include <vector>
-#include "io/IoModuleLocator.h"
+#include "io/path/IoModuleLocator.h"
 #include <algorithm>
 #include <functional>
 

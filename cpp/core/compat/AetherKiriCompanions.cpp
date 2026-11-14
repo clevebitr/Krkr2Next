@@ -6,7 +6,7 @@
 #include "CompatLayer.h"
 
 #include "base/core/StorageIntf.h"
-#include "io/IoVirtualFile.h"
+#include "io/storage/IoVirtualFile.h"
 
 #include <algorithm>
 #include <cctype>

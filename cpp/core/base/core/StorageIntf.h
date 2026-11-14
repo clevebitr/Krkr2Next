@@ -386,11 +386,11 @@ tjs_uint TVPGetXP3SegmentCacheTotalBytes();
 
 // XP3 段缓存预算的显式覆盖（低内存路径用）。
 //
-// 为什么覆盖状态放在这里而不是 io/IoPolicy.cpp 的匿名命名空间里：
+// 为什么覆盖状态放在这里而不是 io/policy/IoPolicy.cpp 的匿名命名空间里：
 // 低内存判定在 base/impl/SysInitImpl.cpp，而 `TVPSegmentCacheLimit` 是静态初始化期
 // 定型的全局、层策略激活又更晚（engine_create），所以需要一份“显式覆盖”标记。
 // 状态放在 base 拥有的这个头里，就变成 io 读 base（已存在的正向边），
-// 而不是 base 反向 include io/IoPolicy.h。
+// 而不是 base 反向 include io/policy/IoPolicy.h。
 extern bool TVPSegmentCacheLimitOverridden;
 extern unsigned long long TVPSegmentCacheLimitOverrideBytes;
 

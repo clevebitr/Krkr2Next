@@ -29,7 +29,7 @@ add_library(${PROJECT_NAME} STATIC
     ${COMPAT_D3DEMOTE_SOURCE}
 )
 
-# 自身要能解析 `io/StoragePolicy.h`：cpp/core 必须在本模块的包含路径里。
+# 自身要能解析 `io/policy/StoragePolicy.h`：cpp/core 必须在本模块的包含路径里。
 # （krkr2core 的 INTERFACE 包含路径只作用于链接它的目标，编译本模块时不可见 ——
 #  CI 35335370234 就是栽在这一条上。）
 target_include_directories(${PROJECT_NAME} PUBLIC
@@ -39,5 +39,5 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 
 # 只依赖 tjs2（spdlog 由 tjs2 传递提供）。本模块不允许依赖 krkr2plugin、
 # cpp/core/io 的**实现细节**或任何具体游戏/发行版代码（见 compat/README.md §2）；
-# 但允许经 io 的**接口**（io/IoVirtualFile.h 的注册点）贡献虚拟文件。
+# 但允许经 io 的**接口**（io/storage/IoVirtualFile.h 的注册点）贡献虚拟文件。
 target_link_libraries(${PROJECT_NAME} PUBLIC tjs2)

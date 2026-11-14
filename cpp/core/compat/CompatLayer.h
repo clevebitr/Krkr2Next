@@ -14,7 +14,7 @@
 // 运行时行为没有影响，只提供日志与后续接线的单一入口。
 #pragma once
 
-#include "io/StoragePolicy.h"
+#include "io/policy/StoragePolicy.h"
 
 namespace krkr::compat {
 

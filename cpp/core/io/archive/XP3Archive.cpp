@@ -961,7 +961,7 @@ static void TVPCheckSegmentCacheLimit() {
     tTJSCriticalSectionHolder cs_holder(TVPSegmentCacheCS);
 
     // 生效预算 = 显式覆盖（低内存路径/脚本）> 激活层策略（旧层 1 MiB / AetherKiri 层 256 MiB）。
-    // 见 io/IoPolicy.h 的说明：不能直接用静态初始化期定型的 TVPSegmentCacheLimit。
+    // 见 io/policy/IoPolicy.h 的说明：不能直接用静态初始化期定型的 TVPSegmentCacheLimit。
     const tjs_uint limit = static_cast<tjs_uint>(
         krkr::io::EffectiveSegmentCacheLimitBytes());
     while(TVPSegmentCacheTotalBytes > limit) {
