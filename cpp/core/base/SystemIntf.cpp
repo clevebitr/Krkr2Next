@@ -30,6 +30,8 @@
 
 extern bool TVPStartupSuccess;
 
+namespace krkr::base {
+
 //---------------------------------------------------------------------------
 // TVPFireOnApplicationActivateEvent
 //---------------------------------------------------------------------------
@@ -485,3 +487,5 @@ tTJSNativeInstance *tTJSNC_System::CreateNativeInstance() {
     return nullptr;
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::base

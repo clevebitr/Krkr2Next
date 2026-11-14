@@ -88,7 +88,8 @@ bool TVPGetAsyncKeyState(tjs_uint keycode, bool getcurrent) {
 #endif
 }
 
-tjs_int TVPGetOSBits() { return sizeof(void *) * 8; }
+// 声明在 SystemIntf.h（krkr::base）；用限定名定义，节点比包 namespace 小。
+tjs_int krkr::base::TVPGetOSBits() { return sizeof(void *) * 8; }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -942,7 +943,7 @@ static void TVPRegisterStartupCompatGlobals() {
 //---------------------------------------------------------------------------
 // TVPCreateNativeClass_System
 //---------------------------------------------------------------------------
-tTJSNativeClass *TVPCreateNativeClass_System() {
+tTJSNativeClass *krkr::base::TVPCreateNativeClass_System() {
     tTJSNC_System *cls = new tTJSNC_System();
 
     TVPRegisterStartupCompatGlobals();
