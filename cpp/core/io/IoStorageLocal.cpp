@@ -16,7 +16,9 @@
 #include <filesystem>
 #include <algorithm>
 #include <cctype>
+#include <functional>
 #include <set>
+#include <string>
 #include <sys/stat.h>
 #include <vector>
 #include "MsgIntf.h"
@@ -35,7 +37,8 @@
 #include "IoStorageInternal.h"
 #include "FileSelector.h"
 
-#include "Application.h"
+// 这里曾 include "Application.h"（environ），实际上文件里只有一处 ExePath() 调用，
+// 而那处在 #if 0 里；它顺带提供的 <functional>/<string> 已在本文件显式补上。
 #include "StringUtil.h"
 #include "FilePathUtil.h"
 #include "Platform.h"
