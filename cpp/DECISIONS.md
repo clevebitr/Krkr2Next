@@ -735,3 +735,66 @@ intf/MIDIIntf.h:43             #include "MIDIImpl.h"
   的 15 条历史 include 面：README 里写明，未动。
 - `sound` 的 `MathAlgorithms` 重复声明、`xmmlib.cpp` / `WaveFormatConverter_SSE.cpp`
   不在构建里、`sound → movie` 的链接期半解：README 里写明，未动。
+
+## 2026-11-15 — environ / plugin 分四层 / 三层：整模块"契约头单独一层"什么时候成立
+
+\## 结论
+
+- `environ` → `intf/`(INTERFACE，只有契约头) + `sysinit/` + `platform/` + `app/`
+- `plugin` → `host/` + `ncb/` + `loader/`
+- 两个聚合层名字不变，`base`/`visual`/`movie`/`plugins` 调用点零改动。
+
+\## 决策一：一个模块要不要"纯头层"，看这些头是不是叶子
+
+`environ` 的头确实是叶子（`Application.h` 只 include `tjsVariant`/`tjsString`，
+`SysInitIntf.h` 谁都不 include），而所有 `.cpp` 都往上长 → 纯头层成立，
+于是 `environ` 内部变成 DAG。
+
+反例是 `sound`：它的 `intf/*.h` 在文件中段 include `impl/*.h`（`tTJSNC_*` 以
+`tTJSNI_*` 为基类），头不是叶子，所以 `sound` 没有"纯头层"，只能在 README 里把
+环写清楚、等下一轮拆。
+
+判断方法仍然是**读 include**，不是读名字：`Application.h` 听起来像"上层实现"，
+实际是叶子；`SysInitImpl.h` 名字带 Impl，实际也是叶子。
+
+\## 决策二：`environ/win32/` 解散，但不改 `utils/win32`、`environ` 里其它平台目录
+
+`win32/` 四个文件性质完全不同（`SystemControl.cpp` 在 Android 上也编译；
+`SystemControl.h` / `TVPWindow.h` 是被别处 include 的契约；`EmergencyExit.h` 是纯宏），
+一个"平台名"目录混着三种东西。这轮按"实现 → platform/、契约 → intf/"解散。
+
+`utils/win32/` 与 `plugins/` 里的平台目录**不动**：那里的文件多数确实带平台语义，
+改名需要先回答"哪些真的平台无关"，属于 TODO.md「命名误导」的后续条目。
+
+\## 决策三：plugin 这一轮只搬文件，不动 NCB 宏
+
+`ncbind.hpp` 被 50 个插件源文件 include，`NCB_*` 宏在插件作用域展开
+`template <>` 显式特化（宏体必须写限定名）。把它收成 `krkr::plugin::ncb`
+是 11 个宏族的同步改造 —— 与目录重组混做，失败时无法判断是"路径错"还是"特化错"。
+所以这一轮的收益是**把宏层的风险隔离在一个 target / 一个目录里**，而不是收口。
+
+\## 踩坑
+
+- **`bridge/engine_api/src/engine_api_internal.h` 是本仓库唯一大量使用显式路径的地方**
+  （`environ/Application.h` 这种）。模块一搬，8 条路径全废。更要紧的是里面有一条
+  `#include "environ/Platform.h"` —— `Platform.h` 早在 `a176393` 就下移到
+  `base/core/` 了，这条从那时起就是失效路径，只是没人编译到。**显式路径的代价是
+  它不会自己跟着文件走**；搬家时务必 `grep '"<模块>/'` 一遍。
+- **`scripts/check_jni_symbols.py` 里有硬编码路径**（`cpp/core/environ/android/AndroidUtils.cpp`）。
+  它读不到文件时**不会报错而是少查一个前缀**，于是 `check_static.sh` 依旧绿。
+  这是"假信心"的典型：静态检查工具自身的路径也要跟着搬。
+- **generator expression 会让"源文件存在性"检查假失败**：`$<$<BOOL:${MACOS}>:…>`
+  在桩工程里求值为空，但 `SOURCES` 属性里仍是字面 genex 字符串。
+  `check_cmake_graph.sh` 现在跳过含 `$<` 的条目。
+- **`apple/macos`、`apple/ios` 的源文件在仓库里根本不存在**（上游遗留的 genex）。
+  没有编译验证前不删，但它意味着 `if(APPLE)` 分支从来没有任何人跑过。
+- **纯头层用 INTERFACE 库而不是空 STATIC**：空 STATIC 在部分生成器上
+  会产生一个空 `.a`，链接行里多一个无意义条目；INTERFACE 库还能顺带承载
+  `target_include_directories`。
+
+\## 没有解决 / 没有验证
+
+- 仍然**未编译验证**。
+- `environ` 的四组跨模块环、`plugin` 的三组边、NCB 收口、插件契约：全部未动，
+  理由与拆法写在两个 README 的"已知的环"里。
+- `plugins/`（119 个源文件）仍无契约，仍是最后一块。

@@ -1,9 +1,9 @@
 # 文件结构重设计（设计稿）
 
 > 状态：**部分执行**。§3（base 拆 target）、base 目录重组、§3.3 的
-> `sysinit` 整簇搬进 `environ`、以及 `io` / `sound` 两个模块的按层重组
-> 已落地（`e1f80ea` / `7edaf4e` / 见 §9 后续条目，未编译验证）；其余步骤未执行。
-> 执行记录见 §9。
+> `sysinit` 整簇搬进 `environ`、以及 `io` / `sound` / `environ` / `plugin`
+> 四个模块的按层重组已落地（`e1f80ea` / `7edaf4e` / 见 §9 后续条目，未编译验证）；
+> 其余步骤未执行。执行记录见 §9。
 > 输入数据：2026-11 实测（`core/` 下 11 个模块的头文件引用图，已剔除 `tjsCommHead.h`）
 > 关联决策：`DECISIONS.md` #6（阶段计划）、#8（5 条建议）、#11（拆环结果）、#12（base 四目录）
 > 模块地图与重组约定：`cpp/core/README.md`
@@ -526,3 +526,68 @@ scripts/check_cmake_graph.sh base io sound
 
 它只证明 target 图对、文件在，**不证明能编译**。`./build.sh debug --engine-only`
 仍是唯一判据。
+
+### 2026-11-15 — `environ` 分四层（intf / sysinit / platform / app，未编译验证）
+
+**做了什么**
+
+34 个文件重排成四层，`core_environ_module` 变成 `intf`(INTERFACE) + 3 个 STATIC
++ 聚合层。`win32/` 目录**解散**：`SystemControl.cpp` → `platform/`，
+`SystemControl.h` / `TVPWindow.h` / `EmergencyExit.h` → `intf/`。
+`android/` `sdl/` `stubs/` 整体搬进 `platform/` 并保留子目录名。
+
+| 目录 | target | 内容 |
+|---|---|---|
+| `intf/` | `core_environ_intf` | 契约头：`Application.h` `SystemControl.h` `SysInitIntf.h` `SysInitImpl.h` `DetectCPU.h` `EngineBootstrap.h` `EngineLoop.h` `MainScene.h` `XP3ArchiveRepack.h` `TVPWindow.h` `EmergencyExit.h`（无 `.cpp`） |
+| `sysinit/` | `core_environ_sysinit` | `SysInitIntf.cpp` `SysInitImpl.cpp` `DetectCPU.cpp` `ConfigManager/*` `DumpSend.cpp` |
+| `platform/` | `core_environ_platform` | `SystemControl.cpp` + `android/` `sdl/` `stubs/` |
+| `app/` | `core_environ_app` | `Application.cpp` `EngineBootstrap.cpp` `EngineLoop.cpp` `MainScene.cpp` `XP3ArchiveRepack.cpp` |
+
+**为什么契约头能单独成层**
+
+实测这些头是叶子：`SysInitIntf.h`(38 处 include)、`Application.h`(20)、
+`SysInitImpl.h`(6)、`SystemControl.h`(6)、`DetectCPU.h`(4) 自己只 include
+`tjsString` / `tjsTypes` / `TVPTimer`；而所有 `.cpp` 都在往上长。
+`environ` **内部**因此是 DAG（`intf → sysinit → platform → app`），
+四组环（`base ↔ environ` / `environ ↔ visual` / `environ ↔ plugin` /
+`script ↔ environ`）全部是跨模块的，搬目录不动它们。
+
+**顺带修的（都是搬迁前的既有问题）**
+
+- `bridge/engine_api/src/engine_api_internal.h` 的 8 条显式路径：
+  7 条改成 `environ/intf/…`，另 1 条 `environ/Platform.h` 是 **a176393 之后的
+  失效路径**（`Platform.h` 已下移到 `base/core/`），改成 `base/core/Platform.h`。
+- `bridge/engine_api/CMakeLists.txt` 的 ANDROID include 根从 `cpp/core/environ`
+  改成 `cpp/core`（`KrkrJniHelper.h` 现在在 `environ/platform/android/`）。
+- `cpp/plugins/motionplayer/Player.h` 的相对路径
+  `../core/environ/sysinit/SysInitIntf.h`。
+- `scripts/check_jni_symbols.py` 里的 `AndroidUtils.cpp` 路径（**这条会直接影响
+  `check_static.sh` 的结论**：路径错了会变成"找不到源文件"而静默少查一个 JNI 前缀）。
+- `io/CMakeLists.txt` 历史 include 面里的 `../environ/win32`、
+  `SystemIntf.h` / `KRMoviePlayer.cpp` 提到旧路径的注释。
+
+### 2026-11-15 — `plugin` 分三层（host / ncb / loader，未编译验证）
+
+`core_plugin_module` 变成 3 个 STATIC + 聚合层，聚合层名字不变。
+
+| 目录 | target | 内容 | 外部 include 次数 |
+|---|---|---|---:|
+| `host/` | `core_plugin_host` | `PluginIntf.{h,cpp}` | 2 |
+| `ncb/` | `core_plugin_ncb` | `ncbind.{hpp,cpp}` `ncb_invoke.hpp` `ncb_foreach.inc` | 50 |
+| `loader/` | `core_plugin_loader` | `PluginImpl.{h,cpp}` | 5 |
+
+**只搬文件，不动宏**。`NCB_*` 宏会在插件作用域展开 `template <>` 显式特化
+（宏体必须是限定名，`using` 救不了），把 NCB 收成 `krkr::plugin::ncb` 是
+11 个宏族的同步改造，必须有编译器，属于独立的下一轮。
+
+这条也与 `STRUCTURE_DESIGN` §7「不改 `plugins/` 目录」一致：本轮动的是
+**核心侧的插件模块**，不是插件本身。
+
+### 2026-11-15 — `check_cmake_graph.sh` 修了两处误报
+
+1. STATIC 簇的 `SOURCES` 里带 generator expression（`$<BOOL:${MACOS}>:...apple/…mm>`）
+   时，桩工程里这些条件变量为空，`EXISTS` 检查会把 genex 字符串当成路径 → 假失败。
+   现在跳过含 `$<` 的条目（只检查字面路径）。
+2. 桩 `find_package` 补了 `tinyxml2`（`environ/sysinit/ConfigManager` 要用）。
+
+四个已重组模块一次跑通：`scripts/check_cmake_graph.sh base io sound environ plugin`。

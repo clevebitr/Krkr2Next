@@ -40,7 +40,7 @@ STUB_TARGETS=(
 # find_package 桩（vcpkg 才有真 config，CI 之外的机器上都没有）。
 STUB_PACKAGES=(
     ZLIB zstd 7zip unofficial-minizip Vorbis Opus OpusFile OpenAL
-    uchardet unrar LibArchive LibXml2 SDL2
+    uchardet unrar LibArchive LibXml2 SDL2 tinyxml2
 )
 
 WORK="$(mktemp -d)"
@@ -79,7 +79,7 @@ done
         "unofficial::minizip::minizip" "Vorbis::vorbis" "Vorbis::vorbisfile" \
         "Vorbis::vorbisenc" "Opus::opus" "OpusFile::opusfile" "OpenAL::OpenAL" \
         "uchardet::libuchardet" "unrar::unrar" "LibArchive::LibArchive" \
-        "LibXml2::LibXml2" "SDL2::SDL2"
+        "LibXml2::LibXml2" "SDL2::SDL2" "tinyxml2::tinyxml2"
     echo ')'
     echo '    add_library(${t} INTERFACE IMPORTED)'
     echo 'endforeach()'
@@ -106,6 +106,11 @@ done
     echo '    if(type STREQUAL "STATIC_LIBRARY")'
     echo '        get_target_property(srcs ${t} SOURCES)'
     echo '        foreach(s ${srcs})'
+    # generator expression（$<...>）在这里只求值为空串或不存在的文件，
+    # 因为桩工程里没有 MACOS/IOS 这些条件变量；按原样跳过，只检查字面路径。
+    echo '            if(s MATCHES "\\$<")'
+    echo '                continue()'
+    echo '            endif()'
     echo '            if(NOT EXISTS ${s})'
     echo '                message(FATAL_ERROR "${t}: 源文件不存在 ${s}")'
     echo '            endif()'
