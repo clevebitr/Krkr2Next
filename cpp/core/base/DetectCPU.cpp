@@ -29,7 +29,7 @@ tjs_uint32 TVPCPUType = 0; // CPU type
 tjs_uint32 TVPCPUFeatures = 0;
 }
 
-namespace krkr::environ {
+namespace krkr::base {
 
 static bool TVPCPUChecked = false;
 //---------------------------------------------------------------------------
@@ -177,4 +177,4 @@ tjs_uint32 TVPGetCPUType() {
 }
 //---------------------------------------------------------------------------
 
-} // namespace krkr::environ
+} // namespace krkr::base

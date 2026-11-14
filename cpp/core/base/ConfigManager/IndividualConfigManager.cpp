@@ -7,7 +7,7 @@
 #include <mutex>
 #include <unordered_map>
 
-namespace krkr::environ {
+namespace krkr::base {
 
 namespace {
     // 壳下发的选项覆盖（见 GlobalConfigManager.h 的说明）。独立于 AllConfig，
@@ -152,4 +152,4 @@ std::vector<std::string> IndividualConfigManager::GetCustomArgumentsForPush() {
     return inherit::GetCustomArgumentsForPush();
 }
 
-} // namespace krkr::environ
+} // namespace krkr::base

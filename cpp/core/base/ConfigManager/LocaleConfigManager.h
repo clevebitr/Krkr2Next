@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace krkr::environ {
+namespace krkr::base {
 
 class LocaleConfigManager {
 
@@ -27,7 +27,7 @@ private:
     std::string currentLangCode;
 };
 
-} // namespace krkr::environ
+} // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::environ::LocaleConfigManager;
+using krkr::base::LocaleConfigManager;

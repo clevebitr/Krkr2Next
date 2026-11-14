@@ -8,7 +8,6 @@ endif()
 set(ENVIRON_PATH ${CMAKE_CURRENT_LIST_DIR})
 set(ENVIRON_SOURCE_FILES
     ${ENVIRON_PATH}/Application.cpp
-    ${ENVIRON_PATH}/DetectCPU.cpp
     ${ENVIRON_PATH}/DumpSend.cpp
     ${ENVIRON_PATH}/EngineBootstrap.cpp
     ${ENVIRON_PATH}/EngineLoop.cpp
@@ -20,9 +19,6 @@ set(ENVIRON_SOURCE_FILES
 
     ${ENVIRON_PATH}/MainScene.cpp
 
-    ${ENVIRON_PATH}/ConfigManager/GlobalConfigManager.cpp
-    ${ENVIRON_PATH}/ConfigManager/IndividualConfigManager.cpp
-    ${ENVIRON_PATH}/ConfigManager/LocaleConfigManager.cpp
     ${ENVIRON_PATH}/sdl/tvpsdl.cpp
 
     # ui/ — all removed (Flutter handles UI now).

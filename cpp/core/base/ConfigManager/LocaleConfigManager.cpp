@@ -7,7 +7,7 @@
 #include <sstream>
 #include <spdlog/spdlog.h>
 
-namespace krkr::environ {
+namespace krkr::base {
 
 LocaleConfigManager::LocaleConfigManager() = default;
 
@@ -110,4 +110,4 @@ void LocaleConfigManager::Initialize(const std::string &sysLang) {
     }
 }
 
-} // namespace krkr::environ
+} // namespace krkr::base

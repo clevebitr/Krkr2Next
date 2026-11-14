@@ -6,7 +6,7 @@
 #include "FilePathUtil.h"
 #include "StorageIntf.h"
 
-namespace krkr::environ {
+namespace krkr::base {
 
 class ApplicationSpecialPath {
 public:
@@ -96,9 +96,9 @@ public:
 #endif
 };
 
-} // namespace krkr::environ
+} // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::environ::ApplicationSpecialPath;
+using krkr::base::ApplicationSpecialPath;
 
 #endif // __APPLICATION_SPECIAL_PATH_H__

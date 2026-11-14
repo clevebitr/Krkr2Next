@@ -4,7 +4,7 @@
 #include <vector>
 #include <map>
 
-namespace krkr::environ {
+namespace krkr::base {
 
 //---------------------------------------------------------------------------
 // 壳下发的引擎选项覆盖（`engine_set_option`）
@@ -86,11 +86,11 @@ public:
     static GlobalConfigManager *GetInstance();
 };
 
-} // namespace krkr::environ
+} // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::environ::TVPSetShellOption;
-using krkr::environ::TVPGetShellOption;
-using krkr::environ::TVPClearShellOptions;
-using krkr::environ::iSysConfigManager;
-using krkr::environ::GlobalConfigManager;
+using krkr::base::TVPSetShellOption;
+using krkr::base::TVPGetShellOption;
+using krkr::base::TVPClearShellOptions;
+using krkr::base::iSysConfigManager;
+using krkr::base::GlobalConfigManager;

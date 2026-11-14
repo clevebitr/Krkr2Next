@@ -5,6 +5,7 @@ set(BASE_PATH ${CMAKE_CURRENT_LIST_DIR})
 set(BASE_SOURCE_FILES
     ${BASE_PATH}/BinaryStream.cpp
     ${BASE_PATH}/CharacterSet.cpp
+    ${BASE_PATH}/DetectCPU.cpp
     ${BASE_PATH}/EventIntf.cpp
     ${BASE_PATH}/ScriptMgnIntf.cpp
     ${BASE_PATH}/SysInitIntf.cpp
@@ -21,6 +22,13 @@ set(BASE_SOURCE_FILES
     ${BASE_PATH}/impl/SysInitImpl.cpp
     ${BASE_PATH}/impl/SystemImpl.cpp
     ${BASE_PATH}/impl/MsgImpl.cpp
+
+    # 引擎配置（从 core/environ 搬来：base 与 visual 都要读配置值，
+    # 放在 environ 会造成 base -> environ 反向边）。目录名保持不变，
+    # 所有 `#include "ConfigManager/..."` 的写法无需修改。
+    ${BASE_PATH}/ConfigManager/GlobalConfigManager.cpp
+    ${BASE_PATH}/ConfigManager/IndividualConfigManager.cpp
+    ${BASE_PATH}/ConfigManager/LocaleConfigManager.cpp
 
     # 以下 7 个原本在 core/utils：它们的实现需要 base（消息/事件/初始化）
     # 与 environ（Application/SystemControl），本质是引擎服务而不是工具。

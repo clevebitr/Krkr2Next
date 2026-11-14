@@ -19,16 +19,16 @@ extern "C" {
 extern tjs_uint32 TVPCPUType;
 }
 
-namespace krkr::environ {
+namespace krkr::base {
 
 extern void TVPDetectCPU();
 TJS_EXP_FUNC_DEF(tjs_uint32, TVPGetCPUType, ());
 
-} // namespace krkr::environ
+} // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::environ::TVPDetectCPU;
-using krkr::environ::TVPGetCPUType;
+using krkr::base::TVPDetectCPU;
+using krkr::base::TVPGetCPUType;
 
 //---------------------------------------------------------------------------
 #endif

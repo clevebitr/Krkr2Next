@@ -4,7 +4,7 @@
 #include <vector>
 #include "GlobalConfigManager.h"
 
-namespace krkr::environ {
+namespace krkr::base {
 
 class IndividualConfigManager : public iSysConfigManager {
     typedef iSysConfigManager inherit;
@@ -41,7 +41,7 @@ std::string
 IndividualConfigManager::GetValue<std::string>(const std::string &name,
                                                const std::string &defVal);
 
-} // namespace krkr::environ
+} // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::environ::IndividualConfigManager;
+using krkr::base::IndividualConfigManager;
