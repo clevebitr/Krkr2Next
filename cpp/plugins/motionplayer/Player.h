@@ -26,7 +26,7 @@
 #include "tjsDictionary.h"
 #include "../core/base/core/StorageIntf.h"
 #include "../core/base/script/ScriptMgnIntf.h"
-#include "../core/environ/sysinit/SysInitIntf.h"
+#include "../core/environ/intf/SysInitIntf.h"
 #include "../core/visual/WindowIntf.h"
 #include "../core/visual/LayerIntf.h"
 #include "../psbfile/PSBMedia.h"

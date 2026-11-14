@@ -36,7 +36,7 @@ extern tTJSNativeClass *TVPCreateNativeClass_System();
 } // namespace krkr::base
 
 //---------------------------------------------------------------------------
-// 以下两个由各平台实现（environ/android、environ/stubs），暂留全局。
+// 以下两个由各平台实现（environ/platform/android、environ/platform/stubs），暂留全局。
 //---------------------------------------------------------------------------
 TJS_EXP_FUNC_DEF(ttstr, TVPGetPlatformName, ());
 // retrieve platform name (eg. "Win32")

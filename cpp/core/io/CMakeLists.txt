@@ -53,8 +53,8 @@ set(IO_LEGACY_INCLUDE_DIRS
     ${CMAKE_CURRENT_LIST_DIR}/../visual
     ${CMAKE_CURRENT_LIST_DIR}/../visual/impl
     ${CMAKE_CURRENT_LIST_DIR}/../environ
+    ${CMAKE_CURRENT_LIST_DIR}/../environ/intf
     ${CMAKE_CURRENT_LIST_DIR}/../environ/sysinit
-    ${CMAKE_CURRENT_LIST_DIR}/../environ/win32
     ${CMAKE_CURRENT_LIST_DIR}/../utils
     ${CMAKE_CURRENT_LIST_DIR}/../utils/win32
 )
@@ -83,7 +83,7 @@ io_add_layer(core_io_policy
 # path/ —— 路径与模块定位
 #
 # IoPath.cpp      : 路径规范化 / 扩展名提取 / auto path 片段（TVP* 转发在这里）
-# IoModuleLocator : 模块存在性查询的注入点（plugin/PluginImpl.cpp 用它）
+# IoModuleLocator : 模块存在性查询的注入点（plugin/loader/PluginImpl.cpp 用它）
 #---------------------------------------------------------------------------
 io_add_layer(core_io_path
     ${IO_PATH}/path/IoPath.cpp

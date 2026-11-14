@@ -7,7 +7,7 @@
  *
  * Aligned with upstream reAAAq/KrKr2-Next (krkr2_android.cpp): also stores the
  * JavaVM (for JNI calls from native threads), the Application Context (used by
- * environ/android/AndroidUtils.cpp as a KR2Activity fallback in host-shell
+ * environ/platform/android/AndroidUtils.cpp as a KR2Activity fallback in host-shell
  * mode), and provides a JNI_OnLoad that hands the VM to krkr::JniHelper.
  *
  * Symbols provided:
@@ -40,7 +40,7 @@
 #include <string>
 #include <vector>
 
-#include "android/KrkrJniHelper.h"
+#include "platform/android/KrkrJniHelper.h"
 #include "engine_api.h"
 
 #define LOG_TAG "krkr2"

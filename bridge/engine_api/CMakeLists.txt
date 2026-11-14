@@ -38,9 +38,10 @@ target_include_directories(engine_api
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 if(ANDROID)
-    # engine_api_android_jni.cpp needs krkr::JniHelper (android/KrkrJniHelper.h).
+    # engine_api_android_jni.cpp needs krkr::JniHelper
+    # (environ/platform/android/KrkrJniHelper.h，经 cpp/core 解析).
     target_include_directories(engine_api PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../cpp/core/environ
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../cpp/core
     )
 endif()
 

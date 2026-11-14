@@ -37,7 +37,7 @@ PAIRS = (
     ),
     (
         REPO_ROOT / "app/app/src/main/kotlin/org/tvp/kirikiri2/KR2Activity.kt",
-        REPO_ROOT / "cpp/core/environ/android/AndroidUtils.cpp",
+        REPO_ROOT / "cpp/core/environ/platform/android/AndroidUtils.cpp",
     ),
 )
 

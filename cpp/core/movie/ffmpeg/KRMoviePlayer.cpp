@@ -25,7 +25,7 @@ extern "C" {
 
 extern std::thread::id TVPMainThreadID;
 
-// 宿主视频 overlay 提交接口 —— 实现落在 cpp/core/environ/stubs/ui_stubs.cpp 的
+// 宿主视频 overlay 提交接口 —— 实现落在 cpp/core/environ/platform/stubs/ui_stubs.cpp 的
 // HostWindowLayer（与 TVPSetPostDrawHook 同一种做法：本地 extern 声明，不新增
 // 头文件）。引擎把解码出的 RGBA 帧拷给宿主层，宿主层在本帧场景 blit 之后把它
 // 当作一张纹理叠画到宿主 render target 上（overlay 模式下视频盖在画面之上）。
