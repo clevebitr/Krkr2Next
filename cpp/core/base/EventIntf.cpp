@@ -952,7 +952,7 @@ void TVPRemoveCompactEventHook(tTVPCompactEventCallbackIntf *cb) {
 }
 
 //---------------------------------------------------------------------------
-extern void TVPDoSaveSystemVariables();
+// TVPDoSaveSystemVariables 的声明由 SystemImpl.h 提供（已在上面 include）。
 
 void TVPDeliverCompactEvent(tjs_int level) {
     // must be called by each platforms's implementation

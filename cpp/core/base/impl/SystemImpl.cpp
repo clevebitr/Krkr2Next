@@ -58,7 +58,7 @@ using krkr::environ::TVPGetJoyPadAsyncState; // 声明来自 DInputMgn.h
 //---------------------------------------------------------------------------
 // TVPGetAsyncKeyState
 //---------------------------------------------------------------------------
-bool TVPGetAsyncKeyState(tjs_uint keycode, bool getcurrent) {
+bool krkr::base::TVPGetAsyncKeyState(tjs_uint keycode, bool getcurrent) {
     // get keyboard state asynchronously.
     // return current key state if getcurrent is true.
     // otherwise, return whether the key is pushed during previous
@@ -95,7 +95,7 @@ tjs_int krkr::base::TVPGetOSBits() { return sizeof(void *) * 8; }
 //---------------------------------------------------------------------------
 // TVPShellExecute
 //---------------------------------------------------------------------------
-bool TVPShellExecute(const ttstr &target, const ttstr &param) {
+bool krkr::base::TVPShellExecute(const ttstr &target, const ttstr &param) {
     // open or execute target file
 //	ttstr file = TVPGetNativeName(TVPNormalizeStorageName(target));
 #if 0
@@ -505,13 +505,13 @@ public:
 tTVPUniqueTagForInputEvent tTVPOnApplicationActivateEvent::Tag;
 
 //---------------------------------------------------------------------------
-void TVPPostApplicationActivateEvent() {
+void krkr::base::TVPPostApplicationActivateEvent() {
     TVPPostInputEvent(new tTVPOnApplicationActivateEvent(true),
                       TVP_EPT_REMOVE_POST);
 }
 
 //---------------------------------------------------------------------------
-void TVPPostApplicationDeactivateEvent() {
+void krkr::base::TVPPostApplicationDeactivateEvent() {
     TVPPostInputEvent(new tTVPOnApplicationActivateEvent(false),
                       TVP_EPT_REMOVE_POST);
 }
@@ -616,7 +616,7 @@ static void TVPHeapDump()
 #endif
 bool TVPAutoSaveBookMark = false;
 
-extern void TVPDoSaveSystemVariables() {
+extern void krkr::base::TVPDoSaveSystemVariables() {
     try {
         // hack for save system variable
         iTJSDispatch2 *global = TVPGetScriptDispatch();
