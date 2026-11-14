@@ -7,6 +7,8 @@
 #include <mutex>
 #include <unordered_map>
 
+namespace krkr::environ {
+
 namespace {
     // 壳下发的选项覆盖（见 GlobalConfigManager.h 的说明）。独立于 AllConfig，
     // 因此 `UsePreferenceAt()` 的 Clear()/Initialize() 不会把它清掉。
@@ -149,3 +151,5 @@ std::vector<std::string> IndividualConfigManager::GetCustomArgumentsForPush() {
     }
     return inherit::GetCustomArgumentsForPush();
 }
+
+} // namespace krkr::environ

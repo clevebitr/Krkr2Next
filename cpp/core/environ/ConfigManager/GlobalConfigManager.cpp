@@ -8,6 +8,9 @@
 
 bool TVPWriteDataToFile(const ttstr &filepath, const void *data,
                         unsigned int len);
+
+namespace krkr::environ {
+
 class XMLMemPrinter : public tinyxml2::XMLPrinter {
     tTVPMemoryStream _stream;
     char _buffer[4096];
@@ -210,3 +213,5 @@ std::vector<std::string> iSysConfigManager::GetCustomArgumentsForPush() {
     }
     return ret;
 }
+
+} // namespace krkr::environ

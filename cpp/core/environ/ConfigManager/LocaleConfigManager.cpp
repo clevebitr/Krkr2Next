@@ -7,6 +7,8 @@
 #include <sstream>
 #include <spdlog/spdlog.h>
 
+namespace krkr::environ {
+
 LocaleConfigManager::LocaleConfigManager() = default;
 
 // Helper: check if a file exists using std::filesystem
@@ -107,3 +109,5 @@ void LocaleConfigManager::Initialize(const std::string &sysLang) {
         }
     }
 }
+
+} // namespace krkr::environ
