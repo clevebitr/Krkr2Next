@@ -9,6 +9,8 @@
 #include "ConfigManager/LocaleConfigManager.h"
 #include "StorageImpl.h"
 
+namespace krkr::environ {
+
 static void ClearDumps(const std::string &dumpdir,
                        std::vector<std::string> &allDumps) {
     for(const std::string &path : allDumps) {
@@ -174,3 +176,5 @@ void TVPCheckAndSendDumps(const std::string &dumpdir,
         }
     }
 }
+
+} // namespace krkr::environ
