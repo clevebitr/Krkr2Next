@@ -19,6 +19,8 @@
 //---------------------------------------------------------------------------
 // implementation in this unit
 //---------------------------------------------------------------------------
+namespace krkr::base {
+
 extern ttstr TVPStartupScriptName;
 
 extern void TVPInitScriptEngine();
@@ -179,5 +181,30 @@ protected:
 //---------------------------------------------------------------------------
 extern tTJSNativeClass *TVPCreateNativeClass_Scripts();
 //---------------------------------------------------------------------------
+
+} // namespace krkr::base
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::base::TVPStartupScriptName;
+using krkr::base::TVPInitScriptEngine;
+using krkr::base::TVPUninitScriptEngine;
+using krkr::base::TVPRestartScriptEngine;
+using krkr::base::TVPResetScriptEngineForRestart;
+using krkr::base::TVPGetScriptEngine;
+using krkr::base::TVPGetScriptDispatch;
+using krkr::base::TVPExecuteScript;
+using krkr::base::TVPExecuteExpression;
+using krkr::base::TVPExecuteStorage;
+using krkr::base::TVPDumpScriptEngine;
+using krkr::base::TVPExecuteBytecode;
+using krkr::base::TVPCreateMessageMapFile;
+using krkr::base::TVPExecuteStartupScript;
+using krkr::base::TVPShowScriptException;
+using krkr::base::TVPBeforeProcessUnhandledException;
+using krkr::base::TVPProcessUnhandledException;
+using krkr::base::TVPInitializeStartupScript;
+using krkr::base::TVPCheckProcessLog;
+using krkr::base::tTJSNC_Scripts;
+using krkr::base::TVPCreateNativeClass_Scripts;
 
 #endif

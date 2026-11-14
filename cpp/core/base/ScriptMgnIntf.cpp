@@ -65,6 +65,12 @@
 //---------------------------------------------------------------------------
 // Script system initialization script
 //---------------------------------------------------------------------------
+
+// 定义在 environ/Application.cpp（全局作用域），声明留 namespace 外。
+extern ttstr TVPGetErrorDialogTitle();
+
+namespace krkr::base {
+
 static const tjs_nchar *TVPInitTJSScript =
     // note that this script is stored as narrow string
     TJS_N(R"(const
@@ -1498,7 +1504,6 @@ void TVPBeforeProcessUnhandledException() { TVPDumpHWException(); }
         And disable the script event dispatching to avoid massive
    occurrence of errors.
 */
-extern ttstr TVPGetErrorDialogTitle();
 
 static void TVPTerminateAfterScriptException(const ttstr &reason) {
     if(TVPHostSuppressProcessExit) {
@@ -2101,3 +2106,5 @@ tTJSNativeClass *TVPCreateNativeClass_Scripts() {
     return cls;
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::base

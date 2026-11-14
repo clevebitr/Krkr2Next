@@ -119,8 +119,7 @@ static tTJSVariant RegisterData;
 
 ttstr TVPGetAppDataPath();
 
-void TVPExecuteStorage(const ttstr &name, tTJSVariant *result,
-                       bool isexpression, const tjs_char *modestr);
+// TVPExecuteStorage 的声明由 ScriptMgnIntf.h 提供（已在上面 include）。
 
 static void InitRegisterData() {
     static bool dataInited = false;
