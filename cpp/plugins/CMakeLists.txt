@@ -67,7 +67,10 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     ${KRKR2CORE_PATH}/sound/impl
     ${KRKR2CORE_PATH}/tjs2
     ${KRKR2CORE_PATH}/utils
-    ${KRKR2CORE_PATH}/utils/win32
+    ${KRKR2CORE_PATH}/utils/c_api
+    ${KRKR2CORE_PATH}/utils/misc
+    ${KRKR2CORE_PATH}/utils/intf
+    ${KRKR2CORE_PATH}/utils/impl
     ${KRKR2CORE_PATH}/visual
 )
 

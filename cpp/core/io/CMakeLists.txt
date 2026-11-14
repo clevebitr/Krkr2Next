@@ -56,7 +56,10 @@ set(IO_LEGACY_INCLUDE_DIRS
     ${CMAKE_CURRENT_LIST_DIR}/../environ/intf
     ${CMAKE_CURRENT_LIST_DIR}/../environ/sysinit
     ${CMAKE_CURRENT_LIST_DIR}/../utils
-    ${CMAKE_CURRENT_LIST_DIR}/../utils/win32
+    ${CMAKE_CURRENT_LIST_DIR}/../utils/c_api
+    ${CMAKE_CURRENT_LIST_DIR}/../utils/misc
+    ${CMAKE_CURRENT_LIST_DIR}/../utils/intf
+    ${CMAKE_CURRENT_LIST_DIR}/../utils/impl
 )
 
 # 四个簇的共同点：都是 STATIC、都对外暴露 tjs2 类型、共享同一张公共头面。
