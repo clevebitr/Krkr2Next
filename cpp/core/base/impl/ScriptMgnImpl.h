@@ -17,7 +17,8 @@
 //---------------------------------------------------------------------------
 // TVPInitializeStartupScript
 //---------------------------------------------------------------------------
-extern void TVPInitializeStartupScript();
+// 声明已由 ScriptMgnIntf.h 提供（现在在 krkr::base，并带全局 using）。
+// 这里曾经重复声明过一份，会与那个 using 冲突，已删。
 // extern bool TVPCheckProcessLog(int argc, char *argv[]);
 
 //---------------------------------------------------------------------------
