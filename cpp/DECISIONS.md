@@ -859,3 +859,66 @@ include 集合里不再有 `base/core/StorageIntf.h` 与 `io/storage/IoVirtualFi
   `CreateNew` 注入口）。
 - `compat` 的半接线（策略 → 存储实现）没动；`ModuleGate` 仍默认放行。
 - `visual` / `movie` 未开始；`plugins/`（119 个源文件）仍无契约。
+
+## 2026-11-15 — 命名统一：先定契约与工具，再逐模块动手
+
+\## 结论
+
+`docs/NAMING.md` 定稿六条规则（namespace / 文件名 / 函数 / 类型 / 宏 / 局部变量），
+配套三个东西：
+
+| 工具 | 作用 |
+|---|---|
+| `scripts/check_naming.py` | 存量 ratchet：`遗留符号 / 不合规文件名 / 过渡 using` 三个指标只能降，基线 `scripts/naming/baseline.tsv` |
+| `scripts/rename_symbols.py` | map 驱动的机械改名（`--draft` 起草 / dry-run / `--apply`） |
+| `scripts/rename/maps/*.tsv` | 每个模块一份**可审阅**的映射表 |
+
+第 1 轮 `extension` 已落地，作为流程验证。
+
+\## 决策一：规则来自"新代码已经在这么写"，不是新发明
+
+`SevenZipArchive` / `ActiveStoragePolicy` / `EngineLoop` / `JniHelper` /
+`AetherKiriCompanionRegistrar` —— 新代码本来就去掉了 `TVP` 前缀、用 namespace
+表达归属。本契约只是把遗留名搬过来。这也是为什么 `compat` 的 draft 扫出 **0** 个
+符号：它的自有符号早就是新风格。
+
+\## 决策二：外部调用点一律替换成**全限定名**
+
+`krkr` 在 `namespace krkr::x` 内部仍解析到全局 `::krkr`，所以
+`krkr::io::OpenArchive` 在任何作用域都合法。这让 codemod **不需要理解调用点的
+作用域** —— 没有编译器时这是唯一可靠的策略。代价是插件侧出现显式前缀，
+而那正是契约 §3 想要的（旧名彻底消失，不靠 `using` 苟活）。
+
+\## 决策三：删除过渡 `using` 与改名必须同一个 commit
+
+426 条 `using krkr::…;` 是 namespace 迁移时的"调用点不改"手段。命名统一之后它们
+把旧名字继续留在全局，等于统一没发生。工具在 owner 模块内自动删这些行
+（`--keep-bridges` 可保留）。
+
+\## 踩坑
+
+- **桥接删除必须在替换之前**：先替换会让 `using krkr::extension::TVPAddClassHandler;`
+  变成 `using AddClassHandler;`（非法 C++），删桥接的正则再也匹配不上。
+  第一次跑就踩了，现已改成"先删桥接、再替换"。
+- **`clang-format` 会污染 diff**：`extension/Extension.cpp` 原文件本来就不符合
+  `.clang-format`（108 行差异），跑一次格式化会把改名 commit 变成"改名 + 重排版"。
+  结论：改名轮里不跑 clang-format，缩进用一次性脚本对齐。CI 也没有格式检查，
+  所以不存在"必须格式化"的压力。
+- **`check_syntax.sh` 验证不了扩展点**：`tjsCommHead.h` → `tjs.h` → `tjsString.h`
+  要 boost，本机没有 vcpkg 的头。所以试点只能靠"符号全仓零残留 + 基线下降"证明，
+  **编译验证仍然欠着**。
+- **draft 与基线的口径不同**：`--draft` 只收本模块**有定义**的符号（io = 68），
+  基线统计模块内**出现过的所有**遗留标识符（io = 176）。差额是"调用别的模块的
+  符号"，它们会在各自那一轮被改。这两个数字不能互相校验，别误读成漏改。
+- **新名冲突必须人判**：`TVPTimer` → `Timer` 会撞 base 里已有的 `Timer`；
+  `tTVPRect` → `Rect` 会撞 visual 的 `Rect`。工具只报冲突，不改名 ——
+  这类判断没有机械答案（要么换名，要么先合并两个类型）。
+
+\## 没有解决 / 没有验证
+
+- 除 `extension` 外全部未动。draft map 已生成（plugin/utils/io/sound/environ），
+  **未审阅**，冲突列需要人工处理。
+- `base`（465 个符号）未起草：它含 153 个消息符号例外，且是 TJS 类注册表的所在地，
+  应该和 `DECISIONS #9` 的反转一起做。
+- `visual` / `movie` 结构不动，但 1–8 轮会顺带更新它们对这些名字的**调用点**。
+- 仍然**未编译验证**。

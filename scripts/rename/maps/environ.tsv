@@ -1,0 +1,107 @@
+# module: environ
+# qualify: krkr::environ
+# owner: cpp/core/environ
+#
+# 由 rename_symbols.py --draft 生成：只做前缀剥离，未做语义审阅。
+# 第 4 列是提示（冲突/无变化），apply 时忽略；人工确认后请删掉或改掉。
+TVP	TVP	fn	无变化
+TVPAddAtExitHandler	AddAtExitHandler	fn	
+TVPAddImportantLog	AddImportantLog	fn	
+TVPAddLog	AddLog	fn	
+TVPAddModalWindow	AddModalWindow	fn	
+TVPAfterSystemInit	AfterSystemInit	fn	
+TVPAfterSystemUninit	AfterSystemUninit	fn	
+TVPAutoMountProjectXP3Archives	AutoMountProjectXP3Archives	fn	
+TVPAutoMountSiblingXP3Archives	AutoMountSiblingXP3Archives	fn	
+TVPBeforeSystemInit	BeforeSystemInit	fn	
+TVPBeforeSystemUninit	BeforeSystemUninit	fn	
+TVPBindMaskToMain	BindMaskToMain	fn	冲突:cpp/core/visual/simd/tvpgl_simd_init.cpp
+TVPBoostAutoMountPaths	BoostAutoMountPaths	fn	
+TVPCauseAtExit	CauseAtExit	fn	
+TVPCheckAndSendDumps	CheckAndSendDumps	fn	
+TVPClampInt	ClampInt	fn	
+TVPClearLoggingHandlers	ClearLoggingHandlers	fn	
+TVPClearScnearioCache	ClearScnearioCache	fn	
+TVPClearXP3SegmentCache	ClearXP3SegmentCache	fn	
+TVPConsoleLog	ConsoleLog	fn	
+TVPCreateFolders	CreateFolders	fn	冲突:cpp/core/environ/platform/android/AndroidUtils.cpp
+TVPDeleteFile	DeleteFile	fn	冲突:cpp/core/environ/platform/android/AndroidUtils.cpp
+TVPDeliverAllEvents	DeliverAllEvents	fn	
+TVPDeliverCompactEvent	DeliverCompactEvent	fn	
+TVPDetectCPU	DetectCPU	fn	冲突:cpp/core/environ/app/XP3ArchiveRepack.cpp,cpp/core/environ/sysinit/SysInitImpl.cpp,cpp/core/sound/codec/PhaseVocoderDSP.cpp
+TVPDisableCPU	DisableCPU	fn	
+TVPDumpOptions	DumpOptions	fn	
+TVPEngineBootstrap	EngineBootstrap	type	冲突:bridge/engine_api/include/engine_options.h,bridge/engine_api/src/engine_api_internal.h,cpp/core/environ/app/EngineBootstrap.cpp
+TVPExecuteStorage	ExecuteStorage	fn	
+TVPExitApplication	ExitApplication	fn	
+TVPForceRegisterOpenGLRenderManager	ForceRegisterOpenGLRenderManager	fn	
+TVPForceSwapBuffer	ForceSwapBuffer	fn	
+TVPFormatMessage	FormatMessage	fn	
+TVPGL_IA32_Init	GL_IA32_Init	fn	
+TVPGL_SSE2_Init	GL_SSE2_Init	fn	
+TVPGetConfigFileOptions	GetConfigFileOptions	fn	
+TVPGetGraphicCacheLimit	GetGraphicCacheLimit	fn	
+TVPGetGraphicCacheTotalBytes	GetGraphicCacheTotalBytes	fn	
+TVPGetGraphicLoadHandler	GetGraphicLoadHandler	fn	
+TVPGetLayerTotalBitmapBytes	GetLayerTotalBitmapBytes	fn	
+TVPGetMemoryInfo	GetMemoryInfo	fn	
+TVPGetPackageVersionString	GetPackageVersionString	fn	
+TVPGetPlatformName	GetPlatformName	fn	
+TVPGetXP3SegmentCacheTotalBytes	GetXP3SegmentCacheTotalBytes	fn	
+TVPInitCompatibleNativeFunctions	InitCompatibleNativeFunctions	fn	
+TVPInitFontNames	InitFontNames	fn	冲突:cpp/core/visual/FontSystem.cpp,cpp/core/visual/FontSystem.h
+TVPInitProgramArgumentsAndDataPath	InitProgramArgumentsAndDataPath	fn	
+TVPInitRandomGenerator	InitRandomGenerator	fn	
+TVPInitScriptEngine	InitScriptEngine	fn	
+TVPInitTVPGL	InitTVPGL	fn	
+TVPInitUIExtension	InitUIExtension	fn	
+TVPInitializeBaseSystems	InitializeBaseSystems	fn	
+TVPInitializeStartupScript	InitializeStartupScript	fn	
+TVPListDir	ListDir	fn	
+TVPLoadMessage	LoadMessage	fn	
+TVPLockSoundMixer	LockSoundMixer	fn	
+TVPMainScene	MainScene	type	冲突:bridge/engine_api/src/engine_api_internal.h,cpp/core/environ/app/EngineLoop.cpp,cpp/core/environ/app/MainScene.cpp
+TVPOnError	OnError	fn	冲突:cpp/core/environ/app/XP3ArchiveRepack.cpp
+TVPParseCommandLineOne	ParseCommandLineOne	fn	
+TVPPostApplicationActivateEvent	PostApplicationActivateEvent	fn	
+TVPPostApplicationDeactivateEvent	PostApplicationDeactivateEvent	fn	
+TVPPostInputEvent	PostInputEvent	fn	冲突:cpp/core/visual/WindowIntf.cpp,cpp/core/visual/impl/WindowImpl.cpp,cpp/core/visual/impl/WindowImpl.h
+TVPPostWindowUpdate	PostWindowUpdate	fn	
+TVPPushEnvironNoise	PushEnvironNoise	fn	
+TVPResetVolumeToAllSoundBuffer	ResetVolumeToAllSoundBuffer	fn	
+TVPSaveAsTLG	SaveAsTLG	fn	
+TVPSavePVRv3	SavePVRv3	fn	
+TVPSetArchiveCacheCount	SetArchiveCacheCount	fn	
+TVPSetAutoPathCacheMaxCount	SetAutoPathCacheMaxCount	fn	
+TVPSetCurrentDirectory	SetCurrentDirectory	fn	冲突:cpp/core/io/storage/IoStorage.cpp
+TVPSetFontCacheForLowMem	SetFontCacheForLowMem	fn	
+TVPSetGraphicCacheLimit	SetGraphicCacheLimit	fn	
+TVPSetLogLocation	SetLogLocation	fn	
+TVPSetRenderTarget	SetRenderTarget	fn	冲突:cpp/core/visual/RenderManager.h,cpp/core/visual/ogl/RenderManager_ogl.cpp
+TVPSetXP3FilterScript	SetXP3FilterScript	fn	
+TVPShowSimpleMessageBox	ShowSimpleMessageBox	fn	
+TVPStopAllWaveSoundsForRestart	StopAllWaveSoundsForRestart	fn	
+TVPSystemInit	SystemInit	fn	
+TVPSystemUninit	SystemUninit	fn	
+TVPTerminateAsync	TerminateAsync	fn	
+TVPThrowExceptionMessage	ThrowExceptionMessage	fn	
+TVPUninitScriptEngine	UninitScriptEngine	fn	
+TVPUninitTVPGL	UninitTVPGL	fn	
+TVPUnlockSoundMixer	UnlockSoundMixer	fn	
+TVPUpdateLicense	UpdateLicense	fn	
+TVP_ATEXIT_PRI_CLEANUP	KRKR_ATEXIT_PRI_CLEANUP	macro	
+TVP_ATEXIT_PRI_PREPARE	KRKR_ATEXIT_PRI_PREPARE	macro	
+TVP_ATEXIT_PRI_RELEASE	KRKR_ATEXIT_PRI_RELEASE	macro	
+TVP_ATEXIT_PRI_SHUTDOWN	KRKR_ATEXIT_PRI_SHUTDOWN	macro	
+TVP_MAIN_DEBUG	KRKR_MAIN_DEBUG	macro	
+tTVPApplication	Application	type	冲突:bridge/engine_api/include/engine_api.h,bridge/engine_api/src/engine_api_android_jni.cpp,bridge/engine_api/src/engine_api_internal.h
+tTVPAsyncImageLoader	AsyncImageLoader	type	
+tTVPAtExit	AtExit	type	冲突:cpp/core/environ/intf/SysInitIntf.h
+tTVPAtExitInfo	AtExitInfo	type	
+tTVPBorderStyle	BorderStyle	type	
+tTVPCPUClockAccuracy	CPUClockAccuracy	type	
+tTVPSystemControl	SystemControl	type	冲突:cpp/core/base/runtime/DebugIntf.cpp,cpp/core/base/runtime/EventImpl.cpp,cpp/core/base/script/ScriptMgnImpl.cpp
+tTVPWMRRegMode	WMRRegMode	type	
+tTVPWindow	Window	type	冲突:bridge/engine_api/include/engine_api.h,bridge/engine_api/include/engine_options.h,cpp/core/base/core/EventIntf.h
+tTVPXP3Archive	XP3Archive	fn	冲突:cpp/core/environ/app/XP3ArchiveRepack.cpp,cpp/core/environ/platform/SystemControl.cpp,cpp/core/io/archive/7zArchive.cpp
+tTVPXP3ArchiveEx	XP3ArchiveEx	type	

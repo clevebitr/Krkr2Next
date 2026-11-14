@@ -50,6 +50,11 @@ run "移植溯源清单" python3 "$SCRIPT_DIR/check_port_drift.py"
 #    无编译器时脚本自行跳过（退出码 2）。
 run "本地语法检查" bash "$SCRIPT_DIR/check_syntax.sh"
 
+# 4. 命名契约存量 ratchet（docs/NAMING.md）。
+#    三个指标（遗留 TVP 符号 / 不合规文件名 / 过渡 using）只能降不能升，
+#    基线在 scripts/naming/baseline.tsv。纯 python，不需要编译器。
+run "命名契约存量" python3 "$SCRIPT_DIR/check_naming.py"
+
 # 注意：check_gl_symbols.py **故意不在这里**。
 #
 # 它需要平台 GL 库才能跑，而"哪个平台的库"决定了结论：在 Android 构建 job 里
