@@ -25,6 +25,8 @@
 #include "DebugIntf.h"
 #include "ApplicationSpecialPath.h"
 
+namespace krkr::base {
+
 //---------------------------------------------------------------------------
 // TVPFormatMessage
 //---------------------------------------------------------------------------
@@ -201,3 +203,5 @@ void TVPGetTJSVersion(tjs_int &major, tjs_int &minor, tjs_int &release) {
     release = TJSVersionRelease;
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::base

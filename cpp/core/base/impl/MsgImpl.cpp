@@ -20,6 +20,8 @@
 //---------------------------------------------------------------------------
 // version retrieving
 //---------------------------------------------------------------------------
+namespace krkr::base {
+
 void TVPGetVersion() {
     static bool DoGet = true;
     if(DoGet) {
@@ -103,3 +105,5 @@ ttstr TVPReadAboutStringFromResource() {
     return ret;
 #endif
 }
+
+} // namespace krkr::base

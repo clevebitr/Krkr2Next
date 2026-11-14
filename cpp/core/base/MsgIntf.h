@@ -33,6 +33,8 @@
 //---------------------------------------------------------------------------
 // Utility Functions
 //---------------------------------------------------------------------------
+namespace krkr::base {
+
 TJS_EXP_FUNC_DEF(ttstr, TVPFormatMessage,
                  (const tjs_char *msg, const ttstr &p1));
 
@@ -56,6 +58,8 @@ TJS_EXP_FUNC_DEF(ttstr, TVPGetVersionInformation, ());
 
 TJS_EXP_FUNC_DEF(ttstr, TVPGetVersionString, ());
 
+} // namespace krkr::base
+
 #define TVPThrowInternalError                                                  \
     TVPThrowExceptionMessage(TVPInternalError, __FILE__, __LINE__)
 //---------------------------------------------------------------------------
@@ -63,6 +67,8 @@ TJS_EXP_FUNC_DEF(ttstr, TVPGetVersionString, ());
 //---------------------------------------------------------------------------
 // version retrieving
 //---------------------------------------------------------------------------
+namespace krkr::base {
+
 extern tjs_int TVPVersionMajor;
 extern tjs_int TVPVersionMinor;
 extern tjs_int TVPVersionRelease;
@@ -82,5 +88,25 @@ TJS_EXP_FUNC_DEF(void, TVPGetSystemVersion,
 TJS_EXP_FUNC_DEF(void, TVPGetTJSVersion,
                  (tjs_int & major, tjs_int &minor, tjs_int &release));
 //---------------------------------------------------------------------------
+
+} // namespace krkr::base
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::base::TVPFormatMessage;
+using krkr::base::TVPThrowExceptionMessage;
+using krkr::base::TVPGetAboutString;
+using krkr::base::TVPGetVersionInformation;
+using krkr::base::TVPGetVersionString;
+using krkr::base::TVPVersionMajor;
+using krkr::base::TVPVersionMinor;
+using krkr::base::TVPVersionRelease;
+using krkr::base::TVPVersionBuild;
+using krkr::base::TVPGetVersion;
+using krkr::base::TVPGetSystemVersion;
+using krkr::base::TVPGetTJSVersion;
+
+// 消息目录（MsgIntfInc.h 的 151 条 + impl/MsgImpl.h 的 192 条 tTJSMessageHolder）
+// 刻意留在全局：两个文件都是 `gentext.pl Messages.xlsx` 的生成文件，
+// 手改会被覆盖；且共 343 个符号，全部搬进 namespace 要写 343 条 using。
 
 #endif
