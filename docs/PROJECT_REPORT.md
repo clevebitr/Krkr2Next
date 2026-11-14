@@ -326,6 +326,10 @@ core/tjs2        保持 TJS namespace，不迁移
 | §5 第 7 条「命名误导目录」 | `sound/win32` → `sound/impl`、`environ/win32` 已解散（实现 → `platform/`、契约 → `intf/`）；只剩 `utils/win32` 未解决 |
 | `environ` 未拆层（`sysinit/` 刚搬进来） | 已拆 `intf/`（纯契约头，INTERFACE 库）`sysinit/` `platform/` `app/` 四层；内部是 DAG，四组环全在跨模块 |
 | `plugin` 只做了宿主 API | 已拆 `host/` `ncb/` `loader/` 三层；宏层未动（NCB → `krkr::plugin::ncb` 仍待做） |
+| `utils` 已迁 namespace、`win32/` 参与编译 | 已拆 `c_api/` `misc/` `intf/` `impl/` 四层；`win32/` → `impl/`。至此全仓没有"名字说 Windows、实际编 Android"的目录 |
+| `compat` 是「新代码，规模小」 | 已拆 `layer/`（策略与门控）+ `companions/`（层专属内容），"策略不认识内容"变成构建图性质；半接线仍未接 |
+| `extension` 是「新代码，规模小」 | 判定为**有意不拆**（1 个实现文件），理由写在 `cpp/core/extension/README.md` |
+| 未重组的模块 | 只剩 `visual`(156 文件) 与 `movie`(85 文件) |
 | §4「工作区当前状态」 | 已提交；工作区干净 |
 | §6「验证手段」 | 新增 `scripts/check_cmake_graph.sh`：无 NDK 也能验 target 图与源文件存在性 |
 

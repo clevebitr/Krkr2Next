@@ -1,9 +1,10 @@
 # 文件结构重设计（设计稿）
 
 > 状态：**部分执行**。§3（base 拆 target）、base 目录重组、§3.3 的
-> `sysinit` 整簇搬进 `environ`、以及 `io` / `sound` / `environ` / `plugin`
-> 四个模块的按层重组已落地（`e1f80ea` / `7edaf4e` / 见 §9 后续条目，未编译验证）；
-> 其余步骤未执行。执行记录见 §9。
+> `sysinit` 整簇搬进 `environ`、以及 `io` / `sound` / `environ` / `plugin` /
+> `utils` / `compat` 六个模块的按层重组已落地（`e1f80ea` / `7edaf4e` /
+> 见 §9 后续条目，未编译验证）；`extension` 判定为「有意不拆」。
+> 只剩 `visual` 与 `movie`。执行记录见 §9。
 > 输入数据：2026-11 实测（`core/` 下 11 个模块的头文件引用图，已剔除 `tjsCommHead.h`）
 > 关联决策：`DECISIONS.md` #6（阶段计划）、#8（5 条建议）、#11（拆环结果）、#12（base 四目录）
 > 模块地图与重组约定：`cpp/core/README.md`
@@ -591,3 +592,59 @@ scripts/check_cmake_graph.sh base io sound
 2. 桩 `find_package` 补了 `tinyxml2`（`environ/sysinit/ConfigManager` 要用）。
 
 四个已重组模块一次跑通：`scripts/check_cmake_graph.sh base io sound environ plugin`。
+
+### 2026-11-15 — `utils` 分四层（c_api / misc / intf / impl，未编译验证）
+
+43 个文件切成四层；`win32/` 改名 `impl/`（那 9 个文件里 DebugImpl / PadImpl /
+TVPTimer 都在 CMake 源文件列表里，Android 照编）。
+
+| 目录 | target | 内容 |
+|---|---|---|
+| `c_api/` | `core_utils_c_api` | `md5.{c,h}`、`iconv/`、`encoding/*.c`（唯一只有 `.c` 源的簇） |
+| `misc/` | `core_utils_misc` | StringUtil / LogUtil / StallWatchdog / DeferredDestroyer / ObjectList / MiscUtility / Random / VelocityTracker / MathAlgorithms / RealFFT |
+| `intf/` | `core_utils_intf` | ThreadIntf / TimerIntf / PadIntf / ClipboardIntf / DebugIntf / TickCount.h / AsyncTriggerMode.h |
+| `impl/` | `core_utils_impl` | ThreadImpl / TimerImpl / PadImpl / ClipboardImpl / DebugImpl / TVPTimer |
+
+`utils` 是**同一个环的第二份样本**：`intf/*.h` 在文件中段 include `impl/*.h`
+（`tTJSNC_*` 以 `tTJSNI_*` 为基类），反向 `impl/*.h` 又 include 回 `intf/*.h`。
+所以 `sound` 那条环不是孤例，而是这个仓库处理 TJS native class 的通用形态 ——
+拆法也应该一次做完（`tTJSNI_*` 声明留 intf + `CreateNew` 注入口）。
+
+同时确认了 `utils` 的"半解"：**头依赖为零，链接依赖不为零**
+（`impl/TVPTimer.cpp` 用 `TVPGetRoughTickCount32`，实现在 `base/runtime/TickCount.cpp`）。
+
+### 2026-11-15 — `compat` 分两层（layer / companions，未编译验证）
+
+| 目录 | target | 内容 |
+|---|---|---|
+| `layer/` | `core_compat_layer` | `CompatLayer`（层 id / 激活 / IO 策略注入）、`ModuleGate`（模块门控） |
+| `companions/` | `core_compat_companions` | `AetherKiriCompanions`（虚拟文件 provider）+ `resources/D3DEmote.tjs` 生成物 |
+
+拆的价值不在文件数，而在**"策略不认识内容"变成 CMake 层面的性质**：
+`layer/` 不再 include `base/core/StorageIntf.h` 与 `io/storage/IoVirtualFile.h`。
+
+`compat` 是全仓被显式路径引用最多的模块（横切所有模块），**7 处调用点**本轮一起改：
+`plugins/krkrgles.cpp`、`plugins/krkrlive2d.cpp`、
+`plugins/compat/aetherkiri/{legacy_system_env,legacy_system_misc,legacy_zlib_version}.cpp`、
+`plugin/ncb/ncbind.cpp`、`bridge/engine_api/src/engine_api_internal.h`。
+
+`layer/CompatLayer.h` 的"半接线"（策略还没接到存储实现上）**没有动**：
+那是 `TODO.md` P0 第 3 条，要逐条接线（M1.2–M1.6），不是目录重组能解决的。
+
+### 2026-11-15 — `extension` 判定为「有意不拆」
+
+`extension` = `Extension.h` + `Extension.cpp`，一个实现文件、只依赖 `tjs2`。
+一个集群里少于两个可独立理解的实现文件时不拆 —— 否则只是多两个空壳 target。
+判据写进 `cpp/core/extension/README.md`，避免下一个人以为漏了。
+
+### 2026-11-15 — 至此 `core/` 只剩 `visual` 与 `movie` 未重组
+
+| 模块 | 状态 |
+|---|---|
+| `base` `io` `sound` `environ` `plugin` `utils` `compat` | ✅ 已按层拆分（目录 = target + INTERFACE 聚合层） |
+| `extension` | ✅ 有意不拆（1 个实现文件） |
+| `visual` `movie` | ❌ 未动（156 / 85 文件），且 `visual/simd/` 仍是 `namespace krkr2` |
+
+`utils` 一层的落地还顺带说明：**"全都拆"不是目标**。`base` 3 簇、`io` 4 簇、
+`sound` 4 簇、`environ` 4 簇、`plugin` 3 簇、`utils` 4 簇、`compat` 2 簇、
+`extension` 1 簇 —— 簇数按"有几个可独立理解的实现群"定，不按规则凑。

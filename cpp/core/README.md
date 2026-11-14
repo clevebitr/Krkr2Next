@@ -37,8 +37,9 @@ diff 只落在被重组模块的目录里。
 | `visual` | `core_visual_module` | ❌ 156 文件 / 10 万行，且有 `simd/` `gl/` `impl/` `ogl/` 三套历史落点 | — |
 | `movie` | `core_movie_module` | ❌ 85 文件，主体未动 | — |
 | `plugin` | `core_plugin_module` | ✅ `host/` `ncb/` `loader/` | [plugin/README.md](plugin/README.md) |
-| `utils` | `core_utils_module` | ❌ 叶子模块，且仍反向链 `core_base_module` | — |
-| `compat` / `extension` | `core_compat_module` / `core_extension_module` | ❌ 新代码，规模小 | — |
+| `utils` | `core_utils_module` | ✅ `c_api/` `misc/` `intf/` `impl/`（原 `win32/`） | [utils/README.md](utils/README.md) |
+| `compat` | `core_compat_module` | ✅ `layer/` `companions/` | [compat/README.md](compat/README.md) |
+| `extension` | `core_extension_module` | ❌ **有意不拆**（只有 1 个实现文件） | [extension/README.md](extension/README.md) |
 | `common` | （`include_directories` 直接暴露） | — 只有 `Defer.h` | — |
 
 ## 依赖方向（实测，2026-11）

@@ -798,3 +798,64 @@ intf/MIDIIntf.h:43             #include "MIDIImpl.h"
 - `environ` 的四组跨模块环、`plugin` 的三组边、NCB 收口、插件契约：全部未动，
   理由与拆法写在两个 README 的"已知的环"里。
 - `plugins/`（119 个源文件）仍无契约，仍是最后一块。
+
+## 2026-11-15 — utils / compat / extension：簇数按"有几个可独立理解的实现群"定
+
+\## 结论
+
+- `utils` → `c_api/`(C 接口与生成表) + `misc/`(纯 C++ 工具) + `intf/`(TJS 接口) +
+  `impl/`(原 `win32/`)，4 个 STATIC + 聚合层。
+- `compat` → `layer/`(策略与门控) + `companions/`(层专属内容)，2 个 STATIC + 聚合层。
+- `extension`（`Extension.h` + 1 个 `.cpp`）**不拆**，理由写进它自己的 README。
+
+至此 `core/` 只剩 `visual`(156 文件) 与 `movie`(85 文件) 未按层重组。
+
+\## 决策一：不追求"每个模块一样多簇"
+
+现在的分布：base 3 / io 4 / sound 4 / environ 4 / plugin 3 / utils 4 / compat 2 /
+extension 1。簇数是**用 include 图数出来的实现群数量**，不是规则推导的结果。
+判据：一个集群里至少要有两个可独立理解的实现文件，
+否则只是把空壳 target 加到链接行里（`extension` 就是反例，所以没拆）。
+
+\## 决策二：`utils/win32 → impl` 之后，全仓没有"名字说 Windows、实际编 Android"的目录
+
+这一列的清理是分三批做完的：`sound/win32 → sound/impl`、
+`environ/win32` 解散（实现进 `platform/`、契约进 `intf/`）、`utils/win32 → utils/impl`。
+判据都是同一句：**先问"它在 Android 上也编译吗"**，再决定是改名还是解散。
+现在只剩 `cpp/plugins/` 里的平台目录没动（那是插件侧，等插件契约）。
+
+\## 决策三：`compat` 拆层的价值是"策略不认识内容"能在 CMake 里验证
+
+拆之前 `CompatLayer.cpp` 与 `AetherKiriCompanions.cpp` 在同一个 target 里，
+所以"策略不 include 存储实现"这句话只能靠 review 保证。拆之后 `layer/` 的
+include 集合里不再有 `base/core/StorageIntf.h` 与 `io/storage/IoVirtualFile.h` ——
+**约束从文档变成了构建图**。这是把"半接线抽象"往可验证方向推的最小一步
+（接线本身仍然没做）。
+
+\## 踩坑
+
+- **`compat` 是全仓显式路径最多的模块（7 处）**：核心里 1 处
+  （`plugin/ncb/ncbind.cpp`）、插件里 5 处（`krkrgles` / `krkrlive2d` /
+  `aetherkiri/legacy_*` 三个）、bridge 1 处。横切型模块的目录一改，
+  波及面按"引用它的模块数"放大，不是按"它自己的文件数"。
+- **只有 `.c` 源的簇会让 CMake 报 "can not determine linker language"**：
+  `core_utils_c_api` 只含 `md5.c` / `encoding/*.c`，需要根 `project()` 开启 `C` 语言。
+  真实构建里根 `project(${APP_NAME})` 默认开 C+CXX 所以没事，但
+  `check_cmake_graph.sh` 的桩工程原来只声明 `LANGUAGES CXX` → 假失败。
+  已改为 `LANGUAGES C CXX`。
+- **`PadImpl.cpp` 里有 `#include "PadFormUnit.h"`，那个文件在本仓库不存在** ——
+  整段在 `#if 0` 里，是上游文本编辑器遗物。它解释了 TODO.md 的"298 处 #if 0"
+  为什么危险：读 include 图时会把不存在的头算成一条依赖（清理 #if 0 是独立一轮，
+  本轮只登记）。
+- **`utils` 的 `core_environ_module` PRIVATE 链接找不到使用者**：
+  真实的跨模块链接需求只有一条（`TVPGetRoughTickCount32`，在 base）。
+  没有链接验证前不动 —— 少了它可能只是少一次 `--start-group` 的机会，
+  也可能是某个模板实例的来源。
+
+\## 没有解决 / 没有验证
+
+- 仍然**未编译验证**。
+- `utils` 的 intf ↔ impl 环与 `sound` 同型，拆法同一批做（`tTJSNI_*` 声明 +
+  `CreateNew` 注入口）。
+- `compat` 的半接线（策略 → 存储实现）没动；`ModuleGate` 仍默认放行。
+- `visual` / `movie` 未开始；`plugins/`（119 个源文件）仍无契约。

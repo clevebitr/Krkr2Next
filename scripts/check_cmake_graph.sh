@@ -57,7 +57,8 @@ done
 
 {
     echo 'cmake_minimum_required(VERSION 3.28)'
-    echo 'project(check_cmake_graph LANGUAGES CXX)'
+    # 勾上 C：core/utils 的 c_api/ 簇只有 .c 源文件（真实构建里根 project() 已经开了 C CXX）
+    echo 'project(check_cmake_graph LANGUAGES C CXX)'
     echo "set(CMAKE_PREFIX_PATH \"$WORK/stubs\")"
     echo "set(CMAKE_LIBRARY_PATH \"$WORK/fakelib\")"
 
