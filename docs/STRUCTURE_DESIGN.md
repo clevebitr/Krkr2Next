@@ -1,6 +1,7 @@
 # 文件结构重设计（设计稿）
 
-> 状态：**设计稿，未执行**。前置条件见 §0。
+> 状态：**部分执行**。§3（base 拆 4 个 target）与 base 的四目录重组已落地
+> （`e1f80ea` / `7edaf4e`，未编译验证）；其余步骤未执行。执行记录见 §9。
 > 输入数据：2026-11 实测（`core/` 下 11 个模块的头文件引用图，已剔除 `tjsCommHead.h`）
 > 关联决策：`DECISIONS.md` #6（阶段计划）、#8（5 条建议）、#11（拆环结果）
 
@@ -323,3 +324,55 @@ tjs2
 
 **注意不要用"文件数"当指标**：搬迁文件不改变任何结构性质。唯一有意义的是
 "层间反向 include 数"和"双向依赖组数"。
+
+---
+
+## 9. 执行记录
+
+### 2026-11-14 — §3 base 拆 4 target + base 四目录重组（`e1f80ea` / `7edaf4e`）
+
+**做了什么**
+
+| 提交 | 内容 |
+|---|---|
+| `e1f80ea` | `core_base_module` 从 STATIC 拆成 `core_base_{core,runtime,script,sysinit}` 四个 STATIC + 一个 INTERFACE 聚合层（名字不变，调用方零改动）。同时删掉 `impl/MsgImpl.cpp` 对 `PluginImpl.h` 的死 include —— 它让 `core` 被迫依赖 `plugin`，而该文件没用到其中任何符号。 |
+| `7edaf4e` | 文件搬进 `core/` `runtime/` `script/` `sysinit/`；`impl/` 目录消失；新增 `cpp/core/base/README.md` 写清分层规矩与"新文件放哪"。 |
+
+**实际依赖（按 include 图实测，不是按名字猜）**
+
+```
+core_base_core     -> tjs2, utils
+core_base_runtime  -> core, sysinit, script, utils, visual, environ
+core_base_script   -> core, runtime, sysinit, utils, visual, sound, plugin, extension, environ
+core_base_sysinit  -> core, script, utils, visual, environ
+```
+
+`core` 是真的干净。§3.1 原本把 `EventIntf.cpp` / `EventImpl.cpp` /
+`NativeEventQueue.cpp` / `FileSelector.cpp` 放在 core，但实测它们要
+`ScriptMgnIntf.h`（script）、`Application.h`/`SystemControl.h`（environ）、
+`WindowImpl.h`（visual）。硬放在 core 会让 core 变成最脏的一层，所以按
+「这个文件 include 谁」改投 `runtime` —— 和本仓库既有的「头在下层、实现在上层」
+一致（`core/utils` 的接口头 + `core/base` 的实现就是同一套）。
+
+**intra-base 的环没消，只是显形了**
+
+- `script ↔ sysinit`：`SysInitIntf.cpp` 要 `ScriptMgnIntf.h`/`KAGParser.h`；
+  `ScriptMgnIntf.cpp` 要 `SysInitIntf.h`/`SysInitImpl.h`/`ConfigManager/*`。
+- `runtime → script`：`EventIntf.cpp` 推送事件到 TJS。
+- `sysinit → environ/visual`：`SysInitImpl.cpp`。
+
+这四个方向恰好就是下一步要做的三件事（TJS 类注册表反转、`iTVPApplication`
+接口抽取、`sysinit` 整体并入 `environ`）。拆 target 的价值在这里：**不用再打开
+60 个文件才能判断某条依赖属于哪一层**。
+
+**遗留（本步骤没做，也不该混进来做）**
+
+1. 公共 include 路径仍是四条 `-I` 指向四个目录 = 整块 base 还是一张扁平面。
+   收紧成门面头 + `#include "base/core/MsgIntf.h"` 是独立的调用点迁移任务。
+2. 第三方库仍集中在 `core_base_core`（`unrar` / `LibXml2` / `SDL2` / `zstd` /
+   `minizip` 其实 base 自己不用，符号是被全引擎共享的）。没有编译验证前不动。
+3. 没有编译验证：本地无 NDK / cmake。文件分配按静态 include 图，
+   `scripts/check_tu.sh --module base` 是第一个要跑的东西。
+4. 显式路径的调用点共 10 行，已随之更新：`io/IoVirtualFile.h`、
+   `compat/AetherKiriCompanions.cpp`、`bridge/engine_api_internal.h`、
+   `plugins/motionplayer/Player.h`。
