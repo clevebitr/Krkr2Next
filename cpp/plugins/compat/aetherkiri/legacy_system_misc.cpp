@@ -4,7 +4,7 @@
 // 来源：AetherKiri（rev 见 compat/upstream/aetherkiri_ports.json）
 //   - fpslimit.dll      → `cpp/plugins/compatSystemPlugins.cpp:832-846`
 //   - layeredwindow.dll → `cpp/plugins/compatLegacyPlugins.cpp:617-657`
-// 归属：**AetherKiri 层专属**（见 compat/ModuleGate.h）——旧层不注册这两个名字，
+// 归属：**AetherKiri 层专属**（见 compat/layer/ModuleGate.h）——旧层不注册这两个名字，
 // 因此缺省（classic）行为完全不变。
 //
 // 与上游的差别（移植清单里按 local-fix / partial-extract 记录）：
@@ -155,7 +155,7 @@ NCB_REGISTER_CLASS(DMMCloud) {
 }
 
 //---------------------------------------------------------------------------
-// 层归属登记（见 compat/ModuleGate.h）：本文件里的模块都只在 AetherKiri 层注册。
+// 层归属登记（见 compat/layer/ModuleGate.h）：本文件里的模块都只在 AetherKiri 层注册。
 //---------------------------------------------------------------------------
 namespace {
     struct AetherKiriOwnershipForMiscSystem {

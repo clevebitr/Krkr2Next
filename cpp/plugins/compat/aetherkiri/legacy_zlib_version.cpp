@@ -3,7 +3,7 @@
 //
 // 来源：AetherKiri `cpp/plugins/compatLegacyPlugins.cpp:199-331`（rev bd14a986，见
 // compat/upstream/aetherkiri_ports.json）。按本工程的"层"机制登记为 **AetherKiri 层专属**：
-// 只有激活 AetherKiri 层时才注册这两个模块（见 compat/ModuleGate.h）。
+// 只有激活 AetherKiri 层时才注册这两个模块（见 compat/layer/ModuleGate.h）。
 //
 // 与上游的差别（已在移植清单登记为 local-fix）：
 //   - `Version.engine` 返回本引擎名，而不是上游写死的 "AetherKiri"；

@@ -7,7 +7,7 @@
 //   - registory.dll / stdio.dll / javascript.dll / messenger.dll /
 //     msgreceiver.dll / tasktray.dll / adjustMonitor.dll
 //       → `cpp/plugins/compatSystemPlugins.cpp`
-// 归属：**AetherKiri 层专属**（见 compat/ModuleGate.h）——旧层不注册这些名字，
+// 归属：**AetherKiri 层专属**（见 compat/layer/ModuleGate.h）——旧层不注册这些名字，
 // 因此缺省（classic）行为完全不变。
 //
 // 为什么值得移植：这些是"脚本真的会调"的模块（KRKRZ/KAG 系常见），缺寄存器时
@@ -413,7 +413,7 @@ namespace {
 NCB_REGISTER_FUNCTION(AdjustMoni, adjustMoniCb);
 
 // ---------------------------------------------------------------------------
-// 层归属登记（见 compat/ModuleGate.h）：本文件里的模块都只在 AetherKiri 层注册。
+// 层归属登记（见 compat/layer/ModuleGate.h）：本文件里的模块都只在 AetherKiri 层注册。
 // ---------------------------------------------------------------------------
 namespace {
     struct AetherKiriOwnershipForSystemEnv {

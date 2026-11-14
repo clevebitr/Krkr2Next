@@ -41,7 +41,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     # Krkr2Compat 纯 TJS 兼容层（k2compat.dll）。默认不执行，只有显式开启引擎
     # 选项 k2compat_scripts=1 时才在框架就绪后安装（见 zcompat_plugin.cpp）。
     zcompat/k2compat_scripts.cpp
-    # AetherKiri 层专属的插件模拟（层归属见 compat/ModuleGate.h；来源与改动见
+    # AetherKiri 层专属的插件模拟（层归属见 compat/layer/ModuleGate.h；来源与改动见
     # compat/upstream/aetherkiri_ports.json）。
     compat/aetherkiri/legacy_zlib_version.cpp
     compat/aetherkiri/legacy_system_misc.cpp

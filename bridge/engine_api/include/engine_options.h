@@ -49,7 +49,7 @@
  *
  * KAGWindow 绘制设备工厂接管（`KAGWindow_createDrawDevice`）**不再属于本选项**：
  * 旧的 `kag` 取值已删除，该行为归 **AetherKiri 兼容层**，激活该层时由 krkrgles 在
- * post-regist 一并安装（见 cpp/core/compat/CompatLayer.h、cpp/plugins/krkrgles.cpp）。
+ * post-regist 一并安装（见 cpp/core/compat/layer/CompatLayer.h、cpp/plugins/krkrgles.cpp）。
  *
  * 由 krkrgles 插件在注册完成时（post-regist）读一次，所以"下次开游戏生效"。
  */

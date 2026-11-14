@@ -56,7 +56,7 @@ plugin_add_layer(core_plugin_host
 #---------------------------------------------------------------------------
 # ncb/ —— NCB 框架（宏 + 模板）
 #
-# ncbind.cpp 只 include ncbind.hpp + compat/ModuleGate.h；真正的宏展开发生在
+# ncbind.cpp 只 include ncbind.hpp + compat/layer/ModuleGate.h；真正的宏展开发生在
 # 每个插件 TU 里，所以这一簇的 .cpp 很薄，成本全在头文件上。
 #---------------------------------------------------------------------------
 plugin_add_layer(core_plugin_ncb
