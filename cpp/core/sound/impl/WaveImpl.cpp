@@ -284,7 +284,7 @@ class tTVPTSSWaveDecoderCreator : public tTVPWaveDecoderCreator
 public:
     tTVPWaveDecoder * Create(const ttstr & storagename,	const ttstr &extension)
     {
-        ITSSWaveDecoder * dec = TVPSearchAvailTSSWaveDecoder(storagename, extension);
+        ITSSWaveDecoder * dec = krkr::plugin::SearchAvailTSSWaveDecoder(storagename, extension);
         if(!dec) return nullptr;
 
         return new tTVPTSSWaveDecoder(dec);
@@ -365,7 +365,7 @@ class tTVPWaveUnpackerCreator : public tTVPWaveDecoderCreator {
 public:
     tTVPWaveDecoder *Create(const ttstr &storagename, const ttstr &extension) {
         IStream *stream;
-        IWaveUnpacker *dec = TVPSearchAvailWaveUnpacker(storagename, &stream);
+        IWaveUnpacker *dec = krkr::plugin::SearchAvailWaveUnpacker(storagename, &stream);
         if(!dec)
             return nullptr;
 
@@ -492,7 +492,7 @@ public:
     tTVPWaveDecoder *Create(const ttstr &storagename, const ttstr &extension) {
         SOUNDINFO info;
         KMPMODULE *module;
-        HKMP handle = TVPSearchAvailKMPWaveDecoder(storagename, &module, &info);
+        HKMP handle = krkr::plugin::SearchAvailKMPWaveDecoder(storagename, &module, &info);
         if(!handle)
             return nullptr;
 

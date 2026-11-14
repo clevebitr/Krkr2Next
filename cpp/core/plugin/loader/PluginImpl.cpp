@@ -48,7 +48,7 @@
 namespace krkr::plugin {
 
 //---------------------------------------------------------------------------
-bool TVPLoadInternalPlugin(const ttstr &_name);
+bool LoadInternalPlugin(const ttstr &_name);
 bool TVPRegisterGlobalObject(const tjs_char *name, iTJSDispatch2 *dsp);
 
 static iTJSDispatch2 *s_ProxyStorageMap = nullptr;
@@ -218,7 +218,7 @@ protected:
 
 tjs_uint32 tTJSNC_GamepadStub::ClassID = static_cast<tjs_uint32>(-1);
 
-class tTVPProxyStorageMedia : public iTVPStorageMedia {
+class ProxyStorageMedia : public iTVPStorageMedia {
     tjs_uint RefCount = 1;
 
     ttstr ResolveProxy(const ttstr &name) {
@@ -262,7 +262,7 @@ public:
     void GetLocallyAccessibleName(ttstr &name) override { name.Clear(); }
 };
 
-static void TVPRegisterProxyFsStub() {
+static void RegisterProxyFsStub() {
     iTJSDispatch2 *dict = TJSCreateDictionaryObject();
     if(!dict) return;
     s_ProxyStorageMap = dict;
@@ -270,14 +270,14 @@ static void TVPRegisterProxyFsStub() {
     TVPRegisterGlobalObject(TJS_W("ProxyStorageMap"), dict);
     dict->Release();
 
-    auto *media = new tTVPProxyStorageMedia();
+    auto *media = new ProxyStorageMedia();
     krkr::io::RegisterStorageMedia(media);
     media->Release();
     spdlog::info("Registered proxy storage media stub for missing proxyfs.dll");
 }
 
 // gamepad.dll 未实现时注册 stub，避免 exgamepad.tjs 访问 GamepadPort 报错（逆向见：global["GamepadPort"]/["Gamepad"]，脚本用 SystemConfig.GamepadPort）
-static void TVPRegisterGamepadStub() {
+static void RegisterGamepadStub() {
     iTJSDispatch2 *stub = new tTJSNC_GamepadStub();
     if(!stub)
         return;
@@ -304,7 +304,7 @@ static void TVPRegisterGamepadStub() {
     spdlog::info("Registered GamepadPort/Gamepad stub for missing gamepad.dll");
 }
 
-void TVPLoadPlugin(const ttstr &name) {
+void LoadPlugin(const ttstr &name) {
     // name 可能是完整路径(自动加载)或纯文件名(Plugins.link)，统一先取 storage 名，
     // 否则下面的名字映射对照纯文件名会因路径前缀而永远不命中。
     auto pluginName = krkr::io::ExtractStorageName(name);
@@ -313,20 +313,20 @@ void TVPLoadPlugin(const ttstr &name) {
     if(pluginName == TJS_W("motionplayer_nod3d.dll")) // 千恋万花等 Z 游戏
         pluginName = "motionplayer.dll";
 
-    if(TVPLoadInternalPlugin(pluginName)) {
+    if(LoadInternalPlugin(pluginName)) {
         spdlog::debug("Loading Plugin: {} Success", name.AsStdString());
     } else {
         spdlog::error("Loading Plugin: {} Failed", name.AsStdString());
         if(name == TJS_W("proxyfs.dll")) {
-            TVPRegisterProxyFsStub();
+            RegisterProxyFsStub();
         } else if(name == TJS_W("gamepad.dll")) {
-            TVPRegisterGamepadStub();
+            RegisterGamepadStub();
         }
     }
 }
 
 //---------------------------------------------------------------------------
-bool TVPUnloadPlugin(const ttstr &name) {
+bool UnloadPlugin(const ttstr &name) {
     // unload plugin
     return true;
 }
@@ -335,23 +335,23 @@ bool TVPUnloadPlugin(const ttstr &name) {
 //---------------------------------------------------------------------------
 // plug-in autoload support
 //---------------------------------------------------------------------------
-struct tTVPFoundPlugin {
+struct FoundPlugin {
     std::string Path;
     std::string Name;
 
-    bool operator<(const tTVPFoundPlugin &rhs) const { return Name < rhs.Name; }
+    bool operator<(const FoundPlugin &rhs) const { return Name < rhs.Name; }
 };
 
-static tjs_int TVPAutoLoadPluginCount = 0;
+static tjs_int autoLoadPluginCount = 0;
 
-static void TVPSearchPluginsAt(std::vector<tTVPFoundPlugin> &list,
+static void SearchPluginsAt(std::vector<FoundPlugin> &list,
                                std::string folder) {
     krkr::io::ListDir(folder, [&](const std::string &filename, int mask) {
         if(mask & S_IFREG) {
             if(filename.length() >= 4) {
                 const char *ext = filename.c_str() + filename.length() - 4;
                 if(!strcasecmp(ext, ".tpm") || !strcasecmp(ext, ".dll")) {
-                    tTVPFoundPlugin fp;
+                    FoundPlugin fp;
                     fp.Path = folder;
                     fp.Name = filename;
                     list.emplace_back(fp);
@@ -361,7 +361,7 @@ static void TVPSearchPluginsAt(std::vector<tTVPFoundPlugin> &list,
     });
 }
 
-void TVPLoadInternalPlugins() {
+void LoadInternalPlugins() {
     // 把"内置插件表查询"注入给 IO 组件（`krkr::io::IsExistentStorage("xxx.dll")` 用它回答）。
     // 注入点必须在 AllRegist() 之前：注册表填充前后 HasModule 的返回值不同，而注入前
     // io 侧返回 false —— 正好与"注册表还没填充"一致，所以行为不变（见 IoModuleLocator.h）。
@@ -370,8 +370,8 @@ void TVPLoadInternalPlugins() {
     ncbAutoRegister::LoadAllModules();
 }
 //---------------------------------------------------------------------------
-static void TVPResetPluginFallbackStubsForRestart() {
-    // 上游另注销 s_ProxyStorageMedia（tTVPProxyStorageMedia*）；本地 TVPRegisterProxyFsStub
+static void ResetPluginFallbackStubsForRestart() {
+    // 上游另注销 s_ProxyStorageMedia（ProxyStorageMedia*）；本地 RegisterProxyFsStub
     // 不保存 media 句柄，故只复位 ProxyStorageMap，使二次 init 能重新注册而不重复 AddRef。
     if(s_ProxyStorageMap) {
         s_ProxyStorageMap->Release();
@@ -379,19 +379,19 @@ static void TVPResetPluginFallbackStubsForRestart() {
     }
 }
 //---------------------------------------------------------------------------
-void TVPUnregisterInternalPluginsForRestart() { // 对照上游 PR#12
+void UnregisterInternalPluginsForRestart() { // 对照上游 PR#12
     spdlog::info("TVPUnregisterInternalPluginsForRestart: unregister internal plugins");
     ncbAutoRegister::AllUnregist();
-    TVPResetPluginFallbackStubsForRestart();
+    ResetPluginFallbackStubsForRestart();
 }
-void TVPResetPluginSystemForRestart() { // 对照上游 PR#12
+void ResetPluginSystemForRestart() { // 对照上游 PR#12
     spdlog::info("TVPResetPluginSystemForRestart: clear plugin restart state");
-    TVPAutoLoadPluginCount = 0;
-    TVPResetPluginFallbackStubsForRestart();
+    autoLoadPluginCount = 0;
+    ResetPluginFallbackStubsForRestart();
     ncbAutoRegister::ResetModuleStateForRestart();
 }
 
-bool TVPLoadInternalPlugin(const ttstr &_name) {
+bool LoadInternalPlugin(const ttstr &_name) {
     /* 1. 拿到 ttstr 的原始缓冲区 */
     const tjs_char *src = _name.c_str();
     size_t len = _name.length();
@@ -445,7 +445,7 @@ bool TVPLoadInternalPlugin(const ttstr &_name) {
 }
 
 void tvpLoadPlugins() {
-    TVPLoadInternalPlugins();
+    LoadInternalPlugins();
     // This function searches plugins which have an extension of
     // ".tpm" in the default path:
     //    1. a folder which holds kirikiri executable
@@ -455,28 +455,28 @@ void tvpLoadPlugins() {
 
     // search plugins from path: (exepath), (exepath)\system,
     // (exepath)\plugin
-    std::vector<tTVPFoundPlugin> list;
+    std::vector<FoundPlugin> list;
 
     std::string exepath = ExtractFileDir(TVPNativeProjectDir.AsStdString());
 
-    TVPSearchPluginsAt(list, exepath);
-    TVPSearchPluginsAt(list, exepath + "/system");
-    TVPSearchPluginsAt(list, exepath + "/plugin");
+    SearchPluginsAt(list, exepath);
+    SearchPluginsAt(list, exepath + "/system");
+    SearchPluginsAt(list, exepath + "/plugin");
 
     // sort by filename
     std::sort(list.begin(), list.end());
 
     // load each plugin
-    TVPAutoLoadPluginCount = (tjs_int)list.size();
+    autoLoadPluginCount = (tjs_int)list.size();
     for(auto &i : list) {
         TVPAddImportantLog(ttstr(TJS_W("(info) Loading ")) +
                            ttstr(i.Name.c_str()));
-        TVPLoadPlugin((i.Path + "/" + i.Name).c_str());
+        LoadPlugin((i.Path + "/" + i.Name).c_str());
     }
 }
 
 //---------------------------------------------------------------------------
-tjs_int TVPGetAutoLoadPluginCount() { return TVPAutoLoadPluginCount; }
+tjs_int GetAutoLoadPluginCount() { return autoLoadPluginCount; }
 
 //---------------------------------------------------------------------------
 // some service functions for plugin
@@ -503,7 +503,7 @@ int ZLIB_compress2(unsigned char *dest, unsigned long *destlen,
 //---------------------------------------------------------------------------
 #include "md5.h"
 
-static char TVP_assert_md5_state_t_size[(sizeof(TVP_md5_state_t) >=
+static char KRKR_ASSERT_MD5_STATE_T_SIZE[(sizeof(TVP_md5_state_t) >=
                                          sizeof(md5_state_t))];
 
 // if this errors, sizeof(TVP_md5_state_t) is not equal to
@@ -564,7 +564,7 @@ void TVPDoTryBlock(tTVPTryBlockFunction tryblock,
     } catch(const eTJS &e) {
         if(finallyblock)
             finallyblock(data);
-        tTVPExceptionDesc desc;
+        ExceptionDesc desc;
         desc.type = TJS_W("eTJS");
         desc.message = e.GetMessage();
         if(catchblock(data, desc))
@@ -573,7 +573,7 @@ void TVPDoTryBlock(tTVPTryBlockFunction tryblock,
     } catch(...) {
         if(finallyblock)
             finallyblock(data);
-        tTVPExceptionDesc desc;
+        ExceptionDesc desc;
         desc.type = TJS_W("unknown");
         if(catchblock(data, desc))
             throw;
@@ -652,7 +652,7 @@ tTJSNativeClass *TVPCreateNativeClass_Plugins() {
 
         ttstr name = *param[0];
 
-        TVPLoadPlugin(name);
+        LoadPlugin(name);
 
         return TJS_S_OK;
     }
@@ -697,7 +697,7 @@ tTJSNativeClass *TVPCreateNativeClass_Plugins() {
         }
 
         if(is_plugin) {
-            TVPLoadPlugin(name);
+            LoadPlugin(name);
         } else if(!is_bres_resource) {
             // 非 bres:// 且非插件：按普通脚本资源执行，与 link 的语义对齐
             TVPExecuteStorage(name);
@@ -731,7 +731,7 @@ tTJSNativeClass *TVPCreateNativeClass_Plugins() {
 
         ttstr name = *param[0];
 
-        bool res = TVPUnloadPlugin(name);
+        bool res = UnloadPlugin(name);
 
         if(result)
             *result = (tjs_int)res;

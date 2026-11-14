@@ -26,9 +26,9 @@ namespace krkr::plugin {
 //---------------------------------------------------------------------------
 /*[*/
 //---------------------------------------------------------------------------
-// iTVPFunctionExporter, exporting main module's functions
+// IFunctionExporter, exporting main module's functions
 //---------------------------------------------------------------------------
-struct iTVPFunctionExporter
+struct IFunctionExporter
 {
     virtual bool QueryFunctions(const tjs_char **name, void **function,
         tjs_uint count) = 0;
@@ -48,10 +48,10 @@ struct IWaveUnpacker;
 struct ITSSStorageProvider;
 extern "C"
 {
-    iTVPFunctionExporter * __stdcall TVPGetFunctionExporter();
+    IFunctionExporter * __stdcall GetFunctionExporter();
 
     // V2 plug-in
-    typedef HRESULT (_stdcall * tTVPV2LinkProc)(iTVPFunctionExporter *);
+    typedef HRESULT (_stdcall * tTVPV2LinkProc)(IFunctionExporter *);
     typedef HRESULT (_stdcall * tTVPV2UnlinkProc)();
 
     // TSS
@@ -72,17 +72,17 @@ extern "C"
 
 //---------------------------------------------------------------------------
 struct ITSSWaveDecoder;
-extern ITSSWaveDecoder * TVPSearchAvailTSSWaveDecoder(const ttstr & storage, const ttstr & extension);
+extern ITSSWaveDecoder * SearchAvailTSSWaveDecoder(const ttstr & storage, const ttstr & extension);
 #ifdef TVP_SUPPORT_OLD_WAVEUNPACKER
 class IWaveUnpacker;
-extern IWaveUnpacker * TVPSearchAvailWaveUnpacker(const ttstr & storage, IStream **stream);
+extern IWaveUnpacker * SearchAvailWaveUnpacker(const ttstr & storage, IStream **stream);
 #endif
 #ifdef TVP_SUPPORT_KPI
-extern void * TVPSearchAvailKMPWaveDecoder(const ttstr & storage, KMPMODULE ** module,
+extern void * SearchAvailKMPWaveDecoder(const ttstr & storage, KMPMODULE ** module,
     SOUNDINFO * info);
 #endif
-extern void TVPAddExportFunction(const tjs_char *name, void *ptr);
-extern void TVPAddExportFunction(const char *name, void *ptr);
+extern void AddExportFunction(const tjs_char *name, void *ptr);
+extern void AddExportFunction(const char *name, void *ptr);
 TJS_EXP_FUNC_DEF(void, TVPThrowPluginUnboundFunctionError, (const char *funcname));
 TJS_EXP_FUNC_DEF(void, TVPThrowPluginUnboundFunctionError, (const tjs_char *funcname));
 #endif
@@ -94,7 +94,7 @@ inline TJS_EXP_FUNC_DEF(void *, TVP_malloc, (size_t size)) {
 // size)) { return realloc(pp, size); }
 inline TJS_EXP_FUNC_DEF(void, TVP_free, (void *pp)) { return free(pp); }
 
-TJS_EXP_FUNC_DEF(tjs_int, TVPGetAutoLoadPluginCount, ());
+TJS_EXP_FUNC_DEF(tjs_int, GetAutoLoadPluginCount, ());
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -156,7 +156,7 @@ TJS_EXP_FUNC_DEF(bool, TVPRemoveGlobalObject, (const tjs_char *name));
 // 'finallyblock' can be nullptr, is to be executed whatever the
 // exception is generated or not.
 
-struct tTVPExceptionDesc {
+struct ExceptionDesc {
     ttstr type; // the exception type, currently 'eTJS' or 'unknown'
     ttstr message; // the exception message (if exists. otherwise
                    // empty).
@@ -165,7 +165,7 @@ struct tTVPExceptionDesc {
 typedef void(TJS_USERENTRY *tTVPTryBlockFunction)(void *data);
 
 typedef bool(TJS_USERENTRY *tTVPCatchBlockFunction)(
-    void *data, const tTVPExceptionDesc &desc);
+    void *data, const ExceptionDesc &desc);
 
 typedef void(TJS_USERENTRY *tTVPFinallyBlockFunction)(void *data);
 //---------------------------------------------------------------------------
@@ -182,11 +182,11 @@ TJS_EXP_FUNC_DEF(void, TVPDoTryBlock,
 // tjs_int &build));
 
 //---------------------------------------------------------------------------
-extern bool TVPPluginUnloadedAtSystemExit;
+extern bool pluginUnloadedAtSystemExit;
 
 void tvpLoadPlugins();
-void TVPUnregisterInternalPluginsForRestart();
-void TVPResetPluginSystemForRestart();
+void UnregisterInternalPluginsForRestart();
+void ResetPluginSystemForRestart();
 
 //---------------------------------------------------------------------------
 
@@ -195,7 +195,6 @@ void TVPResetPluginSystemForRestart();
 // TODO: 过渡兼容，调用点迁移完成后删除
 using krkr::plugin::TVP_malloc;
 using krkr::plugin::TVP_free;
-using krkr::plugin::TVPGetAutoLoadPluginCount;
 using krkr::plugin::ZLIB_uncompress;
 using krkr::plugin::ZLIB_compress;
 using krkr::plugin::ZLIB_compress2;
@@ -207,14 +206,10 @@ using krkr::plugin::TVPProcessApplicationMessages;
 using krkr::plugin::TVPHandleApplicationMessage;
 using krkr::plugin::TVPRegisterGlobalObject;
 using krkr::plugin::TVPRemoveGlobalObject;
-using krkr::plugin::tTVPExceptionDesc;
 using krkr::plugin::tTVPTryBlockFunction;
 using krkr::plugin::tTVPCatchBlockFunction;
 using krkr::plugin::tTVPFinallyBlockFunction;
 using krkr::plugin::TVPDoTryBlock;
-using krkr::plugin::TVPPluginUnloadedAtSystemExit;
 using krkr::plugin::tvpLoadPlugins;
-using krkr::plugin::TVPUnregisterInternalPluginsForRestart;
-using krkr::plugin::TVPResetPluginSystemForRestart;
 
 #endif

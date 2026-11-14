@@ -272,7 +272,7 @@ engine_result_t engine_destroy(engine_handle_t handle) {
 
         try {
             spdlog::info("engine_destroy: TVPUnregisterInternalPluginsForRestart begin");
-            TVPUnregisterInternalPluginsForRestart();
+            krkr::plugin::UnregisterInternalPluginsForRestart();
             spdlog::info("engine_destroy: TVPUnregisterInternalPluginsForRestart end");
         } catch (...) {
             spdlog::error("engine_destroy: TVPUnregisterInternalPluginsForRestart threw");
@@ -319,7 +319,7 @@ engine_result_t engine_destroy(engine_handle_t handle) {
             TVPResetDrawSceneOnceTimingForRestart();
             tTVPBitmapBitsAlloc::ResetForRestart();
             krkr::extension::ResetInstallStateForRestart();
-            TVPResetPluginSystemForRestart();
+            krkr::plugin::ResetPluginSystemForRestart();
             spdlog::info("engine_destroy: reset-for-restart done");
         } catch (...) {
             spdlog::error("engine_destroy: reset-for-restart threw");

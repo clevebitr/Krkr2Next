@@ -8,7 +8,7 @@
 //
 // 现在改成注入式：`core/plugin` 在启动期把查询函数注入进来，io 只认函数指针。
 // 未注入时返回 false —— 与"注册表还没填充时 HasModule 返回 false"语义一致，
-// 因此注入点放在 `TVPLoadInternalPlugins()` 的 `AllRegist()` 之前即可保持行为不变。
+// 因此注入点放在 `krkr::plugin::LoadInternalPlugins()` 的 `AllRegist()` 之前即可保持行为不变。
 #pragma once
 
 #include "tjs.h"

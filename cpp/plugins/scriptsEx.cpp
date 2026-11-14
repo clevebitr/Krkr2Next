@@ -12,7 +12,7 @@
 
 static bool TJS_USERENTRY
 
-_CatchFuncCall(void *data, const tTVPExceptionDesc &desc) {
+_CatchFuncCall(void *data, const krkr::plugin::ExceptionDesc &desc) {
     throw desc;
 }
 

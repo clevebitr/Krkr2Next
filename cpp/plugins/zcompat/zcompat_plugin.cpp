@@ -2,7 +2,7 @@
 // Z (krkrz / KIRIKIRI Z) 插件兼容模块
 //---------------------------------------------------------------------------
 // 游戏 plugin/ 目录下的 Z 系插件 DLL 在移动端不存在独立二进制（ncb 插件编进
-// libengine_api.so），由内部注册表直接命中。与 Kirikiroid2 一致：TVPLoadPlugin
+// libengine_api.so），由内部注册表直接命中。与 Kirikiroid2 一致：krkr::plugin::LoadPlugin
 // 密封所有 DLL 加载，功能内建在引擎核心 + 插件层，link 只查内部注册表。
 //
 // 各条目状态（详见 krkrz-compat.md）：
@@ -14,7 +14,7 @@
 //   - 源码已内嵌、默认不执行（引擎选项门控）：k2compat（Krkr2Compat 纯 TJS 层，
 //     k2compat_scripts.cpp；只有 k2compat_scripts=1 时才在框架就绪后安装）。
 //   - 名字映射（已有实现复用）：motionplayer_nod3d → motionplayer.dll（在
-//     PluginImpl.cpp 的 TVPLoadPlugin 映射）。
+//     PluginImpl.cpp 的 krkr::plugin::LoadPlugin 映射）。
 //   - 暂不可实现（源码不可得/桌面概念）：squirrel（VM 源码可得但待移植）、
 //     multiimage（闭源）、win32ole/PackinOne/extNagano/pkutil/xpzdec/
 //     yuzuex（桌面/工具/私有），挂名消除 Failed 噪音，属"先可 link，再实现"
@@ -217,7 +217,7 @@ static ncbCallbackAutoRegister g_z_win32ole(TJS_W("win32ole.dll"),
                                             &ZCompatStub, nullptr);
 
 // motionplayer_nod3d.dll —— 无 D3D 版 motionplayer（千恋万花）；已在
-// PluginImpl.cpp TVPLoadPlugin 映射到 motionplayer.dll 复用现有实现，无需挂名。
+// PluginImpl.cpp krkr::plugin::LoadPlugin 映射到 motionplayer.dll 复用现有实现，无需挂名。
 
 // PackinOne.dll —— 打包/资源插件，疑似闭源（krkrz-compat.md 判定 C 级跳过）；
 // 挂名消除 Failed 噪音，功能不实现。
@@ -236,7 +236,7 @@ static ncbCallbackAutoRegister g_z_pkutil(TJS_W("pkutil.dll"),
                                           ncbAutoRegister::PreRegist,
                                           &ZCompatStub, nullptr);
 
-// xpzdec.dll —— xpz 加密归档解码（.tpm 在 TVPLoadInternalPlugin 中归一为
+// xpzdec.dll —— xpz 加密归档解码（.tpm 在 krkr::plugin::LoadInternalPlugin 中归一为
 // .dll），挂名。
 static ncbCallbackAutoRegister g_z_xpzdec(TJS_W("xpzdec.dll"),
                                           ncbAutoRegister::PreRegist,
