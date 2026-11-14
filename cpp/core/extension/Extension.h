@@ -5,16 +5,17 @@
 namespace krkr::extension {
 
 //---------------------------------------------------------------------------
-// tTVPAtInstallClass
+// 扩展类安装登记：AtInstallClass 在静态初始化期登记，
+// AddClassHandler 收下这一条登记，安装阶段由 InstallRegisteredClasses 统一安装。
 //---------------------------------------------------------------------------
-extern void TVPAddClassHandler(const tjs_char *name,
-                               iTJSDispatch2 *(*handler)(iTJSDispatch2 *),
-                               const tjs_char *dependences);
-struct tTVPAtInstallClass {
-    tTVPAtInstallClass(const tjs_char *name,
-                       iTJSDispatch2 *(*handler)(iTJSDispatch2 *),
-                       const tjs_char *dependences) {
-        TVPAddClassHandler(name, handler, dependences);
+extern void AddClassHandler(const tjs_char *name,
+                            iTJSDispatch2 *(*handler)(iTJSDispatch2 *),
+                            const tjs_char *dependences);
+struct AtInstallClass {
+    AtInstallClass(const tjs_char *name,
+                   iTJSDispatch2 *(*handler)(iTJSDispatch2 *),
+                   const tjs_char *dependences) {
+        AddClassHandler(name, handler, dependences);
     }
 };
 
@@ -24,7 +25,7 @@ struct tTVPAtInstallClass {
 に入れておくと、VM初期化後、クラスを追加する段階で追加してくれます。
 静的リンクするとクラス追加されるpluginの様な機能です。
 pluginは実行時にクラス等追加しますが、extensionはビルドする時に、入れるクラスを選択する形です。
-static tTVPAtInstallClass TVPInstallClassFoo
+static AtInstallClass InstallClassFoo
         (TJS_W("ClassFoo"),
 TVPCreateNativeClass_ClassFoo,TJS_W("Window,Layer"));
 呼び出される関数にはglobalが渡されるので、必要であればそこからメンバなど取得します。
@@ -32,16 +33,10 @@ TVPCreateNativeClass_ClassFoo,TJS_W("Window,Layer"));
 はありません。
 登録時依存クラスを3番目に指定可能ですが、現在のところ無視されています。
 */
-extern void TVPCauseAtInstallExtensionClass(iTJSDispatch2 *global);
+extern void InstallRegisteredClasses(iTJSDispatch2 *global);
 
 // 复位「待安装扩展类」登记状态，使 engine_destroy
 // 后可干净二次启动（runtime-restart）。
-extern void TVPResetExtensionClassInstallStateForRestart();
+extern void ResetInstallStateForRestart();
 
 } // namespace krkr::extension
-
-// TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::extension::tTVPAtInstallClass;
-using krkr::extension::TVPAddClassHandler;
-using krkr::extension::TVPCauseAtInstallExtensionClass;
-using krkr::extension::TVPResetExtensionClassInstallStateForRestart;

@@ -1,0 +1,20 @@
+# module: extension
+# qualify: krkr::extension
+# owner: cpp/core/extension
+#
+# 第 1 轮试点（docs/NAMING.md §5）。4 个符号，调用点只有 2 处外部。
+# 名字是人工审阅过的，不是 --draft 的机械结果：
+#   TVPCauseAtInstallExtensionClass 的语义是"把登记的扩展类现在装上"，
+#   机械去掉前缀会得到 CauseAtInstallExtensionClass（读不通），故改为
+#   InstallRegisteredClasses。
+TVPAddClassHandler	AddClassHandler	fn
+TVPCauseAtInstallExtensionClass	InstallRegisteredClasses	fn
+TVPResetExtensionClassInstallStateForRestart	ResetInstallStateForRestart	fn
+tTVPAtInstallClass	AtInstallClass	type
+#
+# 文件内私有符号（只出现在 Extension.cpp），按契约 N4/N6 顺手改。
+# 布尔量不能再叫 TVPAtInstallClass：改名后会与结构体 AtInstallClass 撞名，
+# 故按语义改成 atClassesInstalled。
+tTVPAtClassInstallInfo	AtClassInstallInfo	type
+TVPAtClassInstallInfos	atClassInstallInfos	var
+TVPAtInstallClass	atClassesInstalled	var

@@ -559,7 +559,7 @@ void TVPInitScriptEngine() {
     registerObject(TJS_W("MenuItem"), TVPCreateNativeClass_MenuItem());
 
     // Add Extension Classes
-    TVPCauseAtInstallExtensionClass(global);
+    krkr::extension::InstallRegisteredClasses(global);
 
     // Garbage Collection Hook
     TVPAddCompactEventHook(&TVPTJSGCCallback);

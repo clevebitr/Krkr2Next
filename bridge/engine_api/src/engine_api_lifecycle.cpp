@@ -318,7 +318,7 @@ engine_result_t engine_destroy(engine_handle_t handle) {
             TVPResetTransIntfForRestart();
             TVPResetDrawSceneOnceTimingForRestart();
             tTVPBitmapBitsAlloc::ResetForRestart();
-            TVPResetExtensionClassInstallStateForRestart();
+            krkr::extension::ResetInstallStateForRestart();
             TVPResetPluginSystemForRestart();
             spdlog::info("engine_destroy: reset-for-restart done");
         } catch (...) {
