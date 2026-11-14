@@ -15,6 +15,8 @@
 #include <string>
 #include "TVPTimer.h"
 //---------------------------------------------------------------------------
+namespace krkr::environ {
+
 class tTVPSystemControl {
 private: // ÉÜÅ[ÉUÅ[êÈåæ
     bool ContinuousEventCalling;
@@ -71,5 +73,13 @@ extern bool TVPSystemControlAlive;
 
 void TVPRegisterPSBCacheInfoCallback(bool (*cb)(size_t &usedBytes,
                                                 size_t &limitBytes));
+
+} // namespace krkr::environ
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::environ::tTVPSystemControl;
+using krkr::environ::TVPSystemControl;
+using krkr::environ::TVPSystemControlAlive;
+using krkr::environ::TVPRegisterPSBCacheInfoCallback;
 
 #endif

@@ -47,6 +47,8 @@ extern "C" void TJS_GetObjByHashBits(int64_t out[8]);
 extern "C" void TJS_GetDictStats(int64_t *created, int64_t *destroyed);
 extern "C" void TJS_GetArrayStats(int64_t *created, int64_t *destroyed);
 
+namespace krkr::environ {
+
 static bool (*g_GetPSBCacheInfo)(size_t &usedBytes,
                                  size_t &limitBytes) = nullptr;
 
@@ -638,3 +640,5 @@ void tTVPSystemControl::SystemWatchTimerTimer() {
         LastShowModalWindowSentTick = tick;
     }
 }
+
+} // namespace krkr::environ
