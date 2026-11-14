@@ -16,7 +16,15 @@
 #include <list>
 #include <set> // `TVPRegisteredPlugins` 是 std::set；本头文件直接用它，必须自己包含
 
+namespace krkr::plugin {
+
+// 已注册（已成功加载）的插件模块名集合。
 inline std::set<ttstr> TVPRegisteredPlugins;
+
+} // namespace krkr::plugin
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::plugin::TVPRegisteredPlugins;
 
 ////////////////////////////////////////
 // ログ出力用マクロ
@@ -2091,6 +2099,8 @@ protected:
 
 
 
+namespace krkr::plugin {
+
 ////////////////////////////////////////
 /// TJSクラス自動レジストクラス（スレッドアンセーフなので必要なら適当に修正のこと）
 // 基本的に static const なインスタンスしか使用されないのでこれで十分な気はする
@@ -2246,6 +2256,15 @@ private:
 	NameT const _className;
 	NameT const _expName;
 };
+
+} // namespace krkr::plugin
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::plugin::ncbAutoRegister;
+using krkr::plugin::ncbNativeClassAutoRegister;
+using krkr::plugin::ncbModuleAliasAutoRegister;
+using krkr::plugin::ncbAttachTJS2ClassAutoRegister;
+using krkr::plugin::ncbRequireClassAutoRegister;
 
 ////////////////////////////////////////
 #define NCB_GET_INSTANCE_HOOK(cls) \

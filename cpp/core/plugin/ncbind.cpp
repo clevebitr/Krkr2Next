@@ -3,6 +3,8 @@
 #include <set>
 #include <spdlog/spdlog.h>
 
+namespace krkr::plugin {
+
 // static変数の実体
 
 // auto register 先頭ポインタ
@@ -233,3 +235,5 @@ void ncbAutoRegister::LoadAllModules()
 	}
     spdlog::trace("ncbAutoRegister::LoadAllModules: end");
 }
+
+} // namespace krkr::plugin
