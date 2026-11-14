@@ -1,5 +1,7 @@
 #pragma once
 
+namespace krkr::plugin {
+
 struct MethodCaller {
 	//--------------------------------------
 	// template prototypes
@@ -321,3 +323,9 @@ template <>           struct MC::tMethodHasResult<void> { enum { HasResult = fal
 #undef  MCAST_ARG_EXT
 
 template <typename T> static inline T method_cast(T method) { return method; }
+
+} // namespace krkr::plugin
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::plugin::MethodCaller;
+using krkr::plugin::method_cast;
