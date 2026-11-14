@@ -21,11 +21,6 @@ namespace krkr::plugin {
 // 已注册（已成功加载）的插件模块名集合。
 inline std::set<ttstr> TVPRegisteredPlugins;
 
-} // namespace krkr::plugin
-
-// TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::plugin::TVPRegisteredPlugins;
-
 ////////////////////////////////////////
 // ログ出力用マクロ
 
@@ -264,7 +259,7 @@ struct ncbTypeConvertor {
 	template <typename T> struct Conversion<void, T>    { enum { Exists = false, Same = false }; };
 //	template <>           struct Conversion<void, void> { enum { Exists = false, Same = true  }; };
 #define NCB_INNER_CONVERSION_SPECIALIZATION \
-	template <> struct ncbTypeConvertor::Conversion<void, void> { enum { Exists = false, Same = true  }; };
+	template <> struct krkr::plugin::ncbTypeConvertor::Conversion<void, void> { enum { Exists = false, Same = true  }; };
 
 	/// 修飾子取り外し(ポインタ，参照，const等を外した素の型が typedef される)
 	template <typename T> struct Stripper             { typedef T Type; };
@@ -378,7 +373,7 @@ struct ncbStrictResultConvertor {};
 
 /// SpecialMap に登録するマクロ
 #define NCB_TYPECONV_MAPSET(mapsel, type, conv, mod) \
-	template <> struct ncbTypeConvertor::SpecialMap<type, mapsel> { \
+	template <> struct krkr::plugin::ncbTypeConvertor::SpecialMap<type, mapsel> { \
 		enum { Exists = true, Modifier = mod, IsSource = mapsel }; \
 		typedef conv Type; \
 	}
@@ -565,10 +560,10 @@ struct ncbNativeObjectBoxing {
 
 /// 特殊化用のマクロ (自動変換でなく直で指定する場合はこのマクロを使用する)
 #define NCB_SET_TOVARIANT_CONVERTOR(type, convertor) \
-	template <> struct ncbTypeConvertor::SelectConvertorType<type, tTJSVariant> { typedef convertor Type; }
+	template <> struct krkr::plugin::ncbTypeConvertor::SelectConvertorType<type, tTJSVariant> { typedef convertor Type; }
 
 #define NCB_SET_TOVALUE_CONVERTOR(type, convertor) \
-	template <> struct ncbTypeConvertor::SelectConvertorType<tTJSVariant, type> { typedef convertor Type; }
+	template <> struct krkr::plugin::ncbTypeConvertor::SelectConvertorType<tTJSVariant, type> { typedef convertor Type; }
 
 #define NCB_SET_CONVERTOR(type, convertor) \
 	NCB_SET_TOVARIANT_CONVERTOR(type, convertor); \
@@ -2099,8 +2094,6 @@ protected:
 
 
 
-namespace krkr::plugin {
-
 ////////////////////////////////////////
 /// TJSクラス自動レジストクラス（スレッドアンセーフなので必要なら適当に修正のこと）
 // 基本的に static const なインスタンスしか使用されないのでこれで十分な気はする
@@ -2182,10 +2175,10 @@ protected:
 };
 
 #define NCB_REGISTER_CLASS_COMMON(cls, tmpl, nt, init) \
-	template    struct ncbClassInfo<cls>; \
+	template    struct krkr::plugin::ncbClassInfo<cls>; \
 /*	template <>        ncbClassInfo<cls>::InfoT ncbClassInfo<cls>::_info;*/ \
-	static tmpl<cls> tmpl ## _ ## cls init; \
-	template <> void   ncbRegistClass<nt<cls>>::Regist()
+	static krkr::plugin::tmpl<cls> tmpl ## _ ## cls init; \
+	template <> void   krkr::plugin::ncbRegistClass<krkr::plugin::nt<cls>>::Regist()
 
 #define NCB_REGISTER_CLASS_DELAY(name, cls) \
 	NCB_REGISTER_CLASS_COMMON(cls, ncbNativeClassAutoRegister, ncbRegistNativeClass, (NCB_MODULE_NAME, TJS_W(# name)))
@@ -2196,10 +2189,10 @@ protected:
 	NCB_REGISTER_CLASS_COMMON(cls, ncbNativeClassAutoRegister, ncbRegistNativeClass, (NCB_MODULE_NAME, TJS_W(# name)))
 
 #define NCB_REGISTER_SUBCLASS_DELAY(cls) \
-	template <> struct ncbSubClassCheck<cls> { enum { IsSubClass = true }; }; \
-	template    struct ncbClassInfo<cls>; \
+	template <> struct krkr::plugin::ncbSubClassCheck<cls> { enum { IsSubClass = true }; }; \
+	template    struct krkr::plugin::ncbClassInfo<cls>; \
 /*	template <>        ncbClassInfo<cls>::InfoT ncbClassInfo<cls>::_info;*/ \
-	template <> void   ncbRegistClass<ncbRegistSubClass<cls> >::Regist()
+	template <> void   krkr::plugin::ncbRegistClass<krkr::plugin::ncbRegistSubClass<cls> >::Regist()
 
 #define NCB_REGISTER_SUBCLASS(cls) \
 	NCB_TYPECONV_BOXING(cls); \
@@ -2257,18 +2250,9 @@ private:
 	NameT const _expName;
 };
 
-} // namespace krkr::plugin
-
-// TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::plugin::ncbAutoRegister;
-using krkr::plugin::ncbNativeClassAutoRegister;
-using krkr::plugin::ncbModuleAliasAutoRegister;
-using krkr::plugin::ncbAttachTJS2ClassAutoRegister;
-using krkr::plugin::ncbRequireClassAutoRegister;
-
 ////////////////////////////////////////
 #define NCB_GET_INSTANCE_HOOK(cls) \
-	template <> struct ncbNativeClassMethodBase::nativeInstanceGetter<cls> : public ncbNativeClassMethodBase::nativeInstanceGetterBase<cls>
+	template <> struct krkr::plugin::ncbNativeClassMethodBase::nativeInstanceGetter<cls> : public krkr::plugin::ncbNativeClassMethodBase::nativeInstanceGetterBase<cls>
 
 #define NCB_GET_INSTANCE_HOOK_CLASS nativeInstanceGetter
 
@@ -2282,15 +2266,15 @@ using krkr::plugin::ncbRequireClassAutoRegister;
 		return obj; } }
 
 #define NCB_ATTACH_CLASS_WITH_HOOK(cls, attach) \
-	template <> struct ncbNativeClassMethodBase::nativeInstanceGetter<cls>; \
+	template <> struct krkr::plugin::ncbNativeClassMethodBase::nativeInstanceGetter<cls>; \
 	NCB_REGISTER_CLASS_COMMON(cls, ncbAttachTJS2ClassAutoRegister, ncbAttachTJS2Class, (NCB_MODULE_NAME, TJS_W(# cls), TJS_W(# attach)))
 
 #define NCB_ATTACH_CLASS(cls, attach) \
 	NCB_ATTACHED_INSTANCE_DELAY_CREATE(cls); \
 	NCB_ATTACH_CLASS_WITH_HOOK(cls, attach)
 
-#define NCB_REQUIRE_CLASS(cls)          template struct ncbClassInfo<cls>; static ncbRequireClassAutoRegister<cls> ncbRequireClass_ ## cls(TJS_W(# cls), 0)
-#define NCB_REQUIRE_SUBCLASS(cls, name) template struct ncbClassInfo<cls>; static ncbRequireClassAutoRegister<cls> ncbRequireClass_ ## cls(TJS_W(# cls), TJS_W(# name))
+#define NCB_REQUIRE_CLASS(cls)          template struct krkr::plugin::ncbClassInfo<cls>; static krkr::plugin::ncbRequireClassAutoRegister<cls> ncbRequireClass_ ## cls(TJS_W(# cls), 0)
+#define NCB_REQUIRE_SUBCLASS(cls, name) template struct krkr::plugin::ncbClassInfo<cls>; static krkr::plugin::ncbRequireClassAutoRegister<cls> ncbRequireClass_ ## cls(TJS_W(# cls), TJS_W(# name))
 
 
 ////////////////////////////////////////
@@ -2440,7 +2424,7 @@ struct ncbNativeFunctionAutoRegisterTempl;
 
 #define NCB_REGISTER_FUNCTION_COMMON(name, tag, attach, function) \
 	struct ncbFunctionTag_ ## tag {}; \
-	template <> struct ncbNativeFunctionAutoRegisterTempl<ncbFunctionTag_ ## tag> : public ncbNativeFunctionAutoRegister \
+	template <> struct krkr::plugin::ncbNativeFunctionAutoRegisterTempl<ncbFunctionTag_ ## tag> : public krkr::plugin::ncbNativeFunctionAutoRegister \
 	{	ncbNativeFunctionAutoRegisterTempl() : ncbNativeFunctionAutoRegister(NCB_MODULE_NAME){} \
 		void Regist()   const { RegistFunction(TJS_W(# name), attach, &function); } \
 		void Unregist() const { UnregistFunction(TJS_W(# name), attach); } }; \
@@ -2472,6 +2456,49 @@ private:
 #define NCB_POST_REGIST_CALLBACK(cb)   NCB_REGISTER_CALLBACK(PostRegist, &cb, 0, cb ## _0)
 #define NCB_PRE_UNREGIST_CALLBACK(cb)  NCB_REGISTER_CALLBACK(PreRegist,  0, &cb, 0_ ## cb)
 #define NCB_POST_UNREGIST_CALLBACK(cb) NCB_REGISTER_CALLBACK(PostRegist, 0, &cb, 0_ ## cb)
+
+} // namespace krkr::plugin
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+// NCB_* 宏在插件 .cpp 的全局作用域展开，宏体里引用的类型必须在这里仍然可见。
+using krkr::plugin::TVPRegisteredPlugins;
+using krkr::plugin::ncbTypedefs;
+using krkr::plugin::ncbSubClassCheck;
+using krkr::plugin::ncbClassInfo;
+using krkr::plugin::ncbInstanceAdaptor;
+using krkr::plugin::ncbTypeConvertor;
+using krkr::plugin::ncbStrictResultConvertor;
+using krkr::plugin::ncbNarrowCharConvertor;
+using krkr::plugin::ncbWideCharConvertor;
+using krkr::plugin::ncbStringConvertor;
+using krkr::plugin::ncbNativeObjectBoxing;
+using krkr::plugin::ncbDispatchConvertor;
+using krkr::plugin::ncbPropAccessor;
+using krkr::plugin::ncbArrayAccessor;
+using krkr::plugin::ncbDictionaryAccessor;
+using krkr::plugin::ncbIMethodObject;
+using krkr::plugin::ncbNativeClassMethodBase;
+using krkr::plugin::ncbNativeClassMethod;
+using krkr::plugin::ncbNativeClassConstructor;
+using krkr::plugin::ncbNativeClassFactory;
+using krkr::plugin::ncbNativeClassProperty;
+using krkr::plugin::ncbRawCallbackMethod;
+using krkr::plugin::ncbRawCallbackPropertySelector;
+using krkr::plugin::ncbRawCallbackProperty;
+using krkr::plugin::ncbSubClassItem;
+using krkr::plugin::ncbRegistClass;
+using krkr::plugin::ncbRegistNativeClassBase;
+using krkr::plugin::ncbRegistNativeClass;
+using krkr::plugin::ncbRegistSubClass;
+using krkr::plugin::ncbAttachTJS2Class;
+using krkr::plugin::ncbAutoRegister;
+using krkr::plugin::ncbNativeClassAutoRegister;
+using krkr::plugin::ncbModuleAliasAutoRegister;
+using krkr::plugin::ncbAttachTJS2ClassAutoRegister;
+using krkr::plugin::ncbRequireClassAutoRegister;
+using krkr::plugin::ncbNativeFunctionAutoRegister;
+using krkr::plugin::ncbNativeFunctionAutoRegisterTempl;
+using krkr::plugin::ncbCallbackAutoRegister;
 
 
 #endif
