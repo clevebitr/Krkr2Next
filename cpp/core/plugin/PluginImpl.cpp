@@ -9,6 +9,7 @@
 // "Plugins" class implementation / Service for plug-ins
 //---------------------------------------------------------------------------
 #include <set>
+#include <vector>
 #include "io/IoModuleLocator.h"
 #include <algorithm>
 #include <functional>
@@ -36,7 +37,8 @@
 #endif
 
 #include "FilePathUtil.h"
-#include "Application.h"
+// Application.h（environ）原本在这里，但没有任何使用点；它顺带提供的
+// <vector> 已显式补上。去掉后 plugin -> environ 归零，environ <-> plugin 环解除。
 #include "SysInitImpl.h"
 
 #ifdef _MSC_VER

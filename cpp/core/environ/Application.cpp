@@ -24,7 +24,6 @@
 #include "SystemControl.h"
 // #include "MouseCursor.h"
 #include "SystemImpl.h"
-#include "WaveImpl.h"
 #include "GraphicsLoadThread.h"
 #include "Platform.h"
 #include "EventIntf.h"
