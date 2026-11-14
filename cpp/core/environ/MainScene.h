@@ -15,6 +15,8 @@
 // Use plain unsigned int instead of tjs_uint to avoid TJS2 header dependency
 using tjs_uint = unsigned int;
 
+namespace krkr::environ {
+
 class TVPMainScene {
     TVPMainScene();
 
@@ -61,3 +63,13 @@ int TVPDrawSceneOnce(int interval);
 void TVPResetDrawSceneOnceTimingForRestart();
 bool TVPGetKeyMouseAsyncState(unsigned int keycode, bool getcurrent);
 bool TVPGetJoyPadAsyncState(unsigned int keycode, bool getcurrent);
+
+} // namespace krkr::environ
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::environ::TVPMainScene;
+using krkr::environ::TVPSetPostUpdateEvent;
+using krkr::environ::TVPDrawSceneOnce;
+using krkr::environ::TVPResetDrawSceneOnceTimingForRestart;
+using krkr::environ::TVPGetKeyMouseAsyncState;
+using krkr::environ::TVPGetJoyPadAsyncState;

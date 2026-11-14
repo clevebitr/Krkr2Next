@@ -2696,7 +2696,14 @@ const void *tTVPOGLTexture2D::GetScanLineForRead(tjs_uint l) {
 #define TEST_SHADER_IGNORE_ALPHA(...)
 #endif
 
+// 定义在 environ/EngineLoop.cpp（krkr::environ）；命名空间限定声明，
+// 避免与 MainScene.h 可能带入的全局 using 冲突。
+namespace krkr::environ {
 void TVPSetPostUpdateEvent(void (*f)());
+} // namespace krkr::environ
+
+// TODO: 过渡兼容，命名空间迁移收尾后删除
+using krkr::environ::TVPSetPostUpdateEvent;
 static iTVPTexture2D *(*_CreateStaticTexture2D)(const void *dib, tjs_uint tw,
                                                 tjs_uint th, tjs_int pitch,
                                                 TVPTextureFormat::e fmt,

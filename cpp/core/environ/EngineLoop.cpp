@@ -33,6 +33,8 @@
 extern bool TVPCheckStartupPath(const std::string &path);
 extern void TVPForceSwapBuffer();
 
+namespace krkr::environ {
+
 // ---------------------------------------------------------------------------
 // Global state — previously in MainScene.cpp, now owned by EngineLoop
 // ---------------------------------------------------------------------------
@@ -442,3 +444,5 @@ void EngineLoop::HandleTextInput(const EngineInputEvent &event) {
         TVPPostInputEvent(new tTVPOnKeyPressInputEvent(win, ch));
     }
 }
+
+} // namespace krkr::environ

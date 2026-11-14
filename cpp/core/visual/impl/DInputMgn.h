@@ -181,7 +181,11 @@ public:
 //---------------------------------------------------------------------------
 // Utility functionss
 //---------------------------------------------------------------------------
+// 定义在 environ/EngineLoop.cpp（krkr::environ）；用命名空间限定声明而不是全局
+// 前置声明，避开“全局声明 + MainScene.h 的 using”冲突。
+namespace krkr::environ {
 bool TVPGetJoyPadAsyncState(tjs_uint keycode, bool getcurrent);
+} // namespace krkr::environ
 //---------------------------------------------------------------------------
 
 #endif

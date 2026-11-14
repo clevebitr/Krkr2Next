@@ -44,7 +44,12 @@
 
 // TVPDrawSceneOnce 定义在 environ/EngineLoop.cpp、声明在 environ/MainScene.h；
 // 这里只留一个声明（模态循环每帧调它做呈现 + 节拍）。
+namespace krkr::environ {
 int TVPDrawSceneOnce(int interval);
+} // namespace krkr::environ
+
+// TODO: 过渡兼容，命名空间迁移收尾后删除
+using krkr::environ::TVPDrawSceneOnce;
 
 // 全局图层对象计数（诊断用，区分「引擎没建图层/没东西画」与「画了但没进源纹理」）
 extern tjs_int TVPGetLayerCount();

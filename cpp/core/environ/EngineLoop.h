@@ -15,6 +15,8 @@
 #include <cstdint>
 #include <string>
 
+namespace krkr::environ {
+
 // ---------------------------------------------------------------------------
 // Input event types (mirror of engine_api.h, kept separate to avoid
 // a dependency from core → bridge).
@@ -138,3 +140,10 @@ private:
     int32_t last_mouse_down_x_ = 0;
     int32_t last_mouse_down_y_ = 0;
 };
+
+} // namespace krkr::environ
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::environ::EngineLoop;
+using krkr::environ::EngineInputEvent;
+using krkr::environ::EngineInputEventType;

@@ -46,7 +46,14 @@ static ttstr TVPAppTitle;
 static bool TVPAppTitleInit = false;
 //---------------------------------------------------------------------------
 
+namespace krkr::environ {
+// 定义在 environ/EngineLoop.cpp；这里只留声明，不引入 environ 头部依赖。
 bool TVPGetKeyMouseAsyncState(tjs_uint keycode, bool getcurrent);
+} // namespace krkr::environ
+
+// TODO: 过渡兼容，命名空间迁移收尾后删除
+using krkr::environ::TVPGetKeyMouseAsyncState;
+using krkr::environ::TVPGetJoyPadAsyncState; // 声明来自 DInputMgn.h
 
 //---------------------------------------------------------------------------
 // TVPGetAsyncKeyState

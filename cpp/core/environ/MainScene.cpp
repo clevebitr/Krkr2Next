@@ -12,6 +12,8 @@
 
 #include <spdlog/spdlog.h>
 
+namespace krkr::environ {
+
 // ---------------------------------------------------------------------------
 // Global functions — now defined in EngineLoop.cpp, only declared here
 // for backward compatibility with headers that expect them in MainScene.
@@ -71,3 +73,5 @@ bool TVPMainScene::startupFrom(const std::string &path) {
 void TVPMainScene::doStartup(const std::string &path) {
     // Delegated — EngineLoop::StartupFrom calls DoStartup internally
 }
+
+} // namespace krkr::environ
