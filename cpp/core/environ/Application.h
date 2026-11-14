@@ -11,7 +11,14 @@
 #include <tuple>
 #include <map>
 
+namespace krkr::environ {
+
 ttstr ExePath();
+
+} // namespace krkr::environ
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::environ::ExePath;
 
 // 見通しのよい方法に変更した方が良い
 extern int _argc;
@@ -34,6 +41,8 @@ enum {
 enum {
     mbOK = /*MB_OK*/ 0x00000000L,
 };
+namespace krkr::environ {
+
 enum class eTVPActiveEvent {
     onActive,
     onDeactive,
@@ -213,9 +222,18 @@ private:
 };
 std::vector<std::string> *LoadLinesFromFile(const ttstr &path);
 
+} // namespace krkr::environ
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::environ::eTVPActiveEvent;
+using krkr::environ::AcceleratorKey;
+using krkr::environ::AcceleratorKeyTable;
+using krkr::environ::tTVPApplication;
+
 // inline HINSTANCE GetHInstance() { return
 // ((HINSTANCE)GetModuleHandle(0)); }
-extern class tTVPApplication *Application;
+// 指针本身是进程级全局（宿主与 movie 侧直接访问），因此留 namespace 外。
+extern krkr::environ::tTVPApplication *Application;
 
 // 引擎主线程（= 运行 Application->Run() / engine_tick 的那条线程）。
 // 它在 Application.cpp 里以 dlopen 时的线程做初值，但宿主从非 UI 线程驱动引擎
@@ -223,7 +241,14 @@ extern class tTVPApplication *Application;
 // movie 子系统的 IsCurrentThread() 与 OOM 回调都依赖它。
 extern std::thread::id TVPMainThreadID;
 
+namespace krkr::environ {
+
 // 复位应用层状态，使 engine_destroy 后可干净二次启动（runtime-restart）。
 extern void TVPResetApplicationForRestart();
+
+} // namespace krkr::environ
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::environ::TVPResetApplicationForRestart;
 
 #endif // __T_APPLICATION_H__

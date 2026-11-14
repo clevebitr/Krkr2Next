@@ -89,7 +89,11 @@ ttstr TVPGetErrorDialogTitle() {
     }
 }
 
+namespace krkr::environ {
+
 ttstr ExePath() { return TVPNativeProjectDir; }
+
+} // namespace krkr::environ
 
 bool TVPCheckAbout();
 bool TVPCheckPrintDataPath();
@@ -281,6 +285,12 @@ int APIENTRY WinMain( _In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	return TVPTerminateCode;
 }
 #endif
+
+// 定义在 stubs/ui_stubs.cpp（全局作用域），声明留 namespace 外。
+void TVPConsoleLog(const ttstr &mes, bool important);
+
+namespace krkr::environ {
+
 tTVPApplication::tTVPApplication() :
     is_attach_console_(false), tarminate_(false), application_activating_(true),
     image_load_thread_(nullptr), has_map_report_process_(false) {}
@@ -547,7 +557,6 @@ void tTVPApplication::CloseConsole() {
 	}
 #endif
 }
-void TVPConsoleLog(const ttstr &mes, bool important);
 void tTVPApplication::PrintConsole(const ttstr &mes, bool important) {
     TVPConsoleLog(mes, important);
 }
@@ -1050,3 +1059,5 @@ unsigned long ColorToRGB(unsigned int col) {
             return col & 0xFFFFFF;
     }
 }
+
+} // namespace krkr::environ
