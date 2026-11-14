@@ -652,3 +652,86 @@ compat  -> io, tjs2, base
 验证：未编译。WSL + Linux 版 NDK（F:/runtime/android-ndk/r27d 是 Windows 版，WSL 里跑不了）。最短路径 `scripts/check_tu.sh --module environ` 与 `--module base`。
 
 顺带 fe53f2e：`.gitattributes` 把 `*.sh` 钉成 eol=lf 并把工作区脚本就地转 LF —— core.autocrlf=true 会让 WSL 里的 build.sh 报 `$'\r': command not found`。
+
+## 2026-11-15 — io / sound 分四层：先定"链接行放哪"的规则，再动目录
+
+\## 结论
+
+以 `base` 为范本，把 `io`（20 文件）和 `sound`（41 文件）各切成四个目录 /
+四个 STATIC target + 一个 INTERFACE 聚合层。聚合层名字不变
+（`core_io_module` / `core_sound_module`），所以 `base` / `environ` / `visual` /
+`movie` / `plugins` / `tools/xp3` 里一个字都没改。设计说明分别写在
+`cpp/core/io/README.md`、`cpp/core/sound/README.md`，模块约定写在
+`cpp/core/README.md`。
+
+\## 决策一：链接行放簇上还是放聚合层，取决于簇之间的边是不是 DAG
+
+- `base`：簇之间有 `script ↔ runtime`、`script ↔ environ` 的声明式环，
+  链接行只能写在各簇上（写不下去的部分反而显形了）。
+- `io` / `sound`：簇之间的边是 DAG（sound 的环只在 include 方向，见决策三），
+  于是**簇只 `PUBLIC tjs2`，真正的依赖全部挂在聚合层**，逐条对应搬迁前的
+  PUBLIC/PRIVATE 写法。
+
+写成规则：**簇之间的边是 DAG → 链接行集中（好对照、不新增 target 环）；
+有真环 → 链接行分散到簇上（让环显形）**。两种都是"不改最终链接行"的手段，
+不是审美选择。
+
+验证方式（本轮新增）：`scripts/check_cmake_graph.sh io sound` 打印聚合层的
+`INTERFACE_LINK_LIBRARIES`，与搬迁前的 target_link_libraries 逐条对照即可确认
+没有丢依赖、没有多依赖。
+
+\## 决策二：`sound/win32/` 改名 `impl/`，但 `utils/win32`、`environ/win32` 不动
+
+TODO.md 的"命名误导目录"一条：`sound/win32/` 里 6 个源文件在 Android 上全部参与编译
+（`WaveMixer.cpp` 就是 Android 的 oboe 后端），目录名与事实相反。
+`impl/` 表达的是"接口背后的实现"，与平台无关。
+
+不一起改另外两个，理由是**判据不同**：`utils/win32/`（`ClipboardImpl` /
+`DebugImpl` / `PadImpl`）与 `environ/win32/`（`SystemControl` / `TVPWindow` /
+`EmergencyExit`）里多数文件是真的 Windows 语义，改名会把"哪些是平台无关"这个
+未回答的问题藏起来。STRUCTURE_DESIGN §7 已经登记为"逐个确认后才改"。
+
+\## 决策三：搬目录 ≠ 拆环，sound 的 intf ↔ impl 必须在另一轮解决
+
+`sound` 的环不是目录问题，是头文件问题：四个接口头在**文件中段**include 实现头，
+
+```
+intf/WaveIntf.h:222            #include "WaveImpl.h"            // tTJSNI_WaveSoundBuffer 是 tTJSNC_WaveSoundBuffer 的基类
+intf/SoundBufferBaseIntf.h:101 #include "SoundBufferBaseImpl.h"
+intf/CDDAIntf.h:37             #include "CDDAImpl.h"
+intf/MIDIIntf.h:43             #include "MIDIImpl.h"
+```
+
+所以 `intf → impl` 的依赖被锁死，任何 include `WaveIntf.h` 的文件都会把 `impl/`
+拖进来。**换目录不会改变这条边**，只有"声明留 intf、`CreateNew` 走注入口"
+（`tTVPSoundObjectFactory`，与 #9 的 TJS 类注册表反转同一个模板）能拆。
+
+结论：这一轮把目录与 target 拆开，是为了**让这条边只出现在两个目录之间**
+（以前它藏在 27 个文件的扁平目录里）；拆它本身排在有编译器之后，和 #9、#10 一起做。
+
+\## 踩坑（下一个搬模块的人直接用）
+
+- **注释里的旧路径比 include 更容易漏**：`grep -rn "io/IoPolicy\|sound/win32"`
+  命中 8 处注释（`StorageIntf.h`、`SysInitImpl.cpp`、`StoragePolicy.h`、
+  `XP3Archive.cpp`、`IoStorageLocal.cpp`×4）。过期注释比没有注释更糟，
+  因为它们会被当成事实引用。
+- **显式路径调用点只有 4 处**（`compat/AetherKiriCompanions.cpp`、
+  `compat/CompatLayer.{h,cpp}`、`plugin/PluginImpl.cpp`），改起来很便宜；
+  但 `cpp/plugins/CMakeLists.txt` 里还有一份**手写的 include 目录清单**
+  （`${KRKR2CORE_PATH}/sound/win32`），它不随目标 include 面自动更新。
+- **`git mv` 在 Android 上会偶发 `index.lock: File exists`**（瞬时，不是残留锁）。
+  批量 `git mv` 要写重试，别去看是不是有别的 git 进程。
+- **Termux 里的 cmake 会认为 `ANDROID` 为真**（Termux 本身就是 Android），
+  所以在本机跑 `check_cmake_graph.sh` 会走进 `if(ANDROID)` 的 oboe 分支，
+  必须提供一个 `liboboe.a` 桩才能过。这条对 CI 不成立（CI 的 Linux 宿主 job
+  走 `else` 分支），两边行为不同，别据此判断平台分支写错了。
+- **`--allow-multiple-definition` 与 `check_tu.sh` 都不受影响**：搬目录不改符号、
+  不改 TU 数，`check_tu.sh --module io` 应该和搬之前同数量级。
+
+\## 没有解决 / 没有验证
+
+- 仍然**未编译验证**（本机无 NDK 交叉编译条件，按计划最后统一验证）。
+- `io ↔ base` 声明级环、`StoragePolicy` 半接线、`IO_LEGACY_INCLUDE_DIRS`
+  的 15 条历史 include 面：README 里写明，未动。
+- `sound` 的 `MathAlgorithms` 重复声明、`xmmlib.cpp` / `WaveFormatConverter_SSE.cpp`
+  不在构建里、`sound → movie` 的链接期半解：README 里写明，未动。

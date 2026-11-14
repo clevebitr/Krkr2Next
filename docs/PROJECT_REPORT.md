@@ -311,3 +311,29 @@ core/tjs2        保持 TJS namespace，不迁移
 - [ ] 启动日志与迁移前一致（至少一个测试游戏）
 - [ ] 一个 commit 只做一件事，并更新 AGENTS.md §2 进度表
 
+
+## 9. 2026-11 后续进展（覆盖本文前面若干已过期结论）
+
+本文 §2 / §3.2 / §4 / §5 的实测数字取自较早的一次快照（那时 `base` 还是
+60 文件 / 单 target，`sysinit/` 还在 base 里）。**结构部分以 `cpp/core/README.md`
+与 `docs/STRUCTURE_DESIGN.md` §9 为准**，下面只列差异：
+
+| 本文的说法 | 现在的状态 |
+|---|---|
+| `base` 仅 4 个文件迁 namespace，单 target | 已拆 `core/` `runtime/` `script/` 三层 + INTERFACE 聚合层；`sysinit/` 整簇并入 `environ/` |
+| `io` 20 文件扁平目录 | 已拆 `policy/` `path/` `archive/` `storage/` 四层（DAG，反向边 0 条） |
+| `sound` 有 `win32/` 子目录 | 已拆 `common/` `intf/` `codec/` `impl/` 四层；`win32/` 改名 `impl/`（它在 Android 上也编译） |
+| §5 第 7 条「命名误导目录」 | `sound/win32` 已解决；`utils/win32`、`environ/win32` 仍未解决（判据不同） |
+| §4「工作区当前状态」 | 已提交；工作区干净 |
+| §6「验证手段」 | 新增 `scripts/check_cmake_graph.sh`：无 NDK 也能验 target 图与源文件存在性 |
+
+**没有变的部分（仍是最高优先级）**
+
+- 5 组模块间双向依赖一组都没消。三条路径（TJS 类注册表反转、`iTVPApplication`
+  接口抽取、environ↔visual 的 visual 侧 11 处）全部需要编译器。
+- `--allow-multiple-definition` 仍在；半接线抽象（`CompatLayer` / `IoPolicy` /
+  `ModuleGate`）仍在；`#if 0` 299 处、`win32/` 命名、测试几乎为零。
+- `visual`（156 文件）与 `movie`（85 文件）**主体未动**，且 `visual/simd/` 仍是
+  `namespace krkr2`。这是剩余工作量的绝对大头。
+- **全部 namespace / 目录改动都还没有过编译器。** 模块整合时第一件事是
+  `./build.sh debug --engine-only`（风险最高的提交清单见 `docs/HANDOVER.md` §5.2）。

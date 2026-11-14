@@ -1,10 +1,12 @@
 # 文件结构重设计（设计稿）
 
 > 状态：**部分执行**。§3（base 拆 target）、base 目录重组、§3.3 的
-> `sysinit` 整簇搬进 `environ` 已落地（`e1f80ea` / `7edaf4e` / 见 §9 后续条目，
-> 未编译验证）；其余步骤未执行。执行记录见 §9。
+> `sysinit` 整簇搬进 `environ`、以及 `io` / `sound` 两个模块的按层重组
+> 已落地（`e1f80ea` / `7edaf4e` / 见 §9 后续条目，未编译验证）；其余步骤未执行。
+> 执行记录见 §9。
 > 输入数据：2026-11 实测（`core/` 下 11 个模块的头文件引用图，已剔除 `tjsCommHead.h`）
-> 关联决策：`DECISIONS.md` #6（阶段计划）、#8（5 条建议）、#11（拆环结果）
+> 关联决策：`DECISIONS.md` #6（阶段计划）、#8（5 条建议）、#11（拆环结果）、#12（base 四目录）
+> 模块地图与重组约定：`cpp/core/README.md`
 
 ---
 
@@ -412,3 +414,115 @@ environ/sysinit/ConfigManager/{Global,Individual,Locale}ConfigManager.cpp
 
 **遗留**：仍然没有编译验证。`scripts/check_tu.sh --module environ` +
 `--module base` 是验证这两次搬家的最短路径。
+
+### 2026-11-15 — `io` 分四层（policy / path / archive / storage，未编译验证）
+
+**做了什么**
+
+`cpp/core/io/` 的 20 个文件 `git mv` 进四个目录，`core_io_module` 从 1 个 STATIC
+变成 4 个 STATIC + 1 个 INTERFACE 聚合层（名字不变）。设计说明写在
+`cpp/core/io/README.md`。
+
+| 目录 | target | 内容 |
+|---|---|---|
+| `policy/` | `core_io_policy` | `StoragePolicy.h` `IoPolicy.{h,cpp}` |
+| `path/` | `core_io_path` | `IoPath.cpp` `IoModuleLocator.{h,cpp}` |
+| `archive/` | `core_io_archive` | XP3 / XP3-Cx / ZIP / 7z / TAR + `IoArchiveInternal.h` `tar.h` |
+| `storage/` | `core_io_storage` | `IoStorage.cpp` `IoStorageLocal.cpp` `IoStorageInternal.h` `IoVirtualFile.{h,cpp}` |
+
+**分层依据（实测 include 图，不是文件名）**
+
+```
+storage -> archive   IoStorage.cpp:26 / IoStorageLocal.cpp:34-35
+storage -> path      IoStorage.cpp:28 IoModuleLocator.h
+storage -> policy    IoStorage.cpp:18 / IoStorageLocal.cpp:28
+archive -> policy    XP3Archive.cpp:15
+path    -> —         IoPath.cpp 只 include base 的 StorageIntf.h
+policy  -> —         只 include StoragePolicy.h
+```
+
+反向边一条都没有：`io` 是真正的 DAG。这是四个模块里唯一能做到严格一层的。
+
+**与 base 的差别（有意为之）**
+
+base 把链接行写在各簇上，代价是簇之间出现 `script ↔ runtime` 的声明式环。
+io 只有 20 个文件，所以**簇只声明头面（`PUBLIC tjs2`），链接行集中在聚合层**，
+逐条对应搬迁前的 PUBLIC/PRIVATE 写法，不新增任何 target 环。
+
+**顺带处理的**
+
+- 4 处显式路径调用点：`compat/AetherKiriCompanions.cpp`、`compat/CompatLayer.cpp`、
+  `compat/CompatLayer.h`、`plugin/PluginImpl.cpp`。
+- 8 处指向旧路径的**注释**（`base/core/StorageIntf.h`、`environ/sysinit/SysInitImpl.cpp`、
+  `io/policy/StoragePolicy.h`、`io/archive/XP3Archive.cpp`、`io/storage/IoStorageLocal.cpp`）。
+  注释是最容易留下过期路径的地方，搬家时要一起 grep。
+
+**没有解决的**
+
+`io ↔ base` 的声明级环（base 的 `StorageIntf.h` 52 条 `using krkr::io::…` 门面转发
++ `StorageIntf.cpp` include io 实现头）、`StoragePolicy` 的半接线、
+`IO_LEGACY_INCLUDE_DIRS` 那 15 条历史 include 面。三者都在
+`cpp/core/io/README.md` §"已知的环"与 §"技术债"里写明。
+
+### 2026-11-15 — `sound` 分四层（common / intf / codec / impl，未编译验证）
+
+**做了什么**
+
+41 个文件 `git mv` 进四个目录，`core_sound_module` 变成 4 个 STATIC + INTERFACE
+聚合层。`win32/` 改名 `impl/`。设计说明写在 `cpp/core/sound/README.md`。
+
+| 目录 | target | 内容 |
+|---|---|---|
+| `common/` | `core_sound_common` | `RingBuffer.h` `WaveSegmentQueue.*` `WaveLoopManager.h` `xmmlib.*` `MathAlgorithms.*` `WaveFormatConverter*.cpp` |
+| `intf/` | `core_sound_intf` | `WaveIntf` `SoundBufferBaseIntf` `CDDAIntf` `MIDIIntf` + `WaveLoopManager.cpp` |
+| `codec/` | `core_sound_codec` | `FFWaveDecoder` `VorbisWaveDecoder` `PhaseVocoder{DSP,Filter}` |
+| `impl/` | `core_sound_impl` | `WaveImpl` `WaveMixer` `SoundBufferBaseImpl` `CDDAImpl` `MIDIImpl` `tvpsnd`（原 `win32/`） |
+
+**为什么 `win32/ → impl/`**
+
+TODO.md 点名的"命名误导目录"：`sound/win32/` 在 Android 上也全部参与编译，
+`WaveMixer.cpp` 就是 Android 的 oboe 后端。`core/utils/win32/`、
+`core/environ/win32/` 的同名问题**没有一起改**（§7 已说明要逐个确认）。
+
+**这一轮真正的发现：intf ↔ impl 是头文件环，不是目录问题**
+
+四个接口头在**文件中段**include 它的实现头，因为紧随其后的 `tTJSNC_*` 要拿
+`tTJSNI_*` 当基类：
+
+| 位置 | 语句 |
+|---|---|
+| `intf/WaveIntf.h:222` | `#include "WaveImpl.h"` |
+| `intf/SoundBufferBaseIntf.h:101` | `#include "SoundBufferBaseImpl.h"` |
+| `intf/CDDAIntf.h:37` | `#include "CDDAImpl.h"` |
+| `intf/MIDIIntf.h:43` | `#include "MIDIImpl.h"` |
+
+反向边是 `impl/*.h` 各自 include 回接口头。后果：任何 include `WaveIntf.h` 的
+文件（`base/script/ScriptMgnIntf.cpp`、`plugins/wutcwf.cpp`）都会把 `impl/` 拖进来。
+**搬目录不能消掉这个环**，拆法（`tTJSNI_*` 声明留 intf、`CreateNew` 走注入口）写在
+`sound/README.md` §"已知的环"，需要编译器，单独一轮。
+
+第二条环：`intf/WaveIntf.cpp` 要 `codec/` 的解码器头，`codec/*.h` 要 `WaveIntf.h`。
+
+**顺带处理的**
+
+`cpp/plugins/CMakeLists.txt` 的 `${KRKR2CORE_PATH}/sound/win32` include 项、
+`cpp/core/base/CMakeLists.txt` 与 `environ/sysinit/SysInitIntf.cpp` 里提到
+`sound/win32/WaveMixer.cpp` / `WaveImpl.cpp` 的注释。
+
+### 2026-11-15 — 新增 `scripts/check_cmake_graph.sh`（本轮唯一的新验证手段）
+
+没有 NDK/vcpkg 时也能验证"目录 = target"这类改动里最容易静默出错的两件事：
+
+1. 聚合层少写/写错一个簇 → 该簇的目标文件不进 `.so`（要到真机 dlopen 才炸）；
+2. 目录搬了、CMakeLists 里还是旧路径 → `add_library` 拿到不存在的源文件。
+
+原理：临时 project + 跨模块 target / `find_package` 桩，`include()` 目标模块的
+CMakeLists.txt，然后断言聚合层存在、所有 STATIC 簇的源文件存在。
+**不连 CI**（本轮明确不动 CI 流程），只作为本地与下一轮的手动步骤：
+
+```bash
+scripts/check_cmake_graph.sh base io sound
+```
+
+它只证明 target 图对、文件在，**不证明能编译**。`./build.sh debug --engine-only`
+仍是唯一判据。
