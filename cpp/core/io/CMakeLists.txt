@@ -23,13 +23,13 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/../base/core
     ${CMAKE_CURRENT_LIST_DIR}/../base/runtime
     ${CMAKE_CURRENT_LIST_DIR}/../base/script
-    ${CMAKE_CURRENT_LIST_DIR}/../base/sysinit
     ${CMAKE_CURRENT_LIST_DIR}/../common
     ${CMAKE_CURRENT_LIST_DIR}/../tjs2
     ${CMAKE_CURRENT_LIST_DIR}/../plugin
     ${CMAKE_CURRENT_LIST_DIR}/../visual
     ${CMAKE_CURRENT_LIST_DIR}/../visual/impl
     ${CMAKE_CURRENT_LIST_DIR}/../environ
+    ${CMAKE_CURRENT_LIST_DIR}/../environ/sysinit
     ${CMAKE_CURRENT_LIST_DIR}/../environ/win32
     ${CMAKE_CURRENT_LIST_DIR}/../utils
     ${CMAKE_CURRENT_LIST_DIR}/../utils/win32

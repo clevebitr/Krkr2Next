@@ -1,7 +1,8 @@
 # 文件结构重设计（设计稿）
 
-> 状态：**部分执行**。§3（base 拆 4 个 target）与 base 的四目录重组已落地
-> （`e1f80ea` / `7edaf4e`，未编译验证）；其余步骤未执行。执行记录见 §9。
+> 状态：**部分执行**。§3（base 拆 target）、base 目录重组、§3.3 的
+> `sysinit` 整簇搬进 `environ` 已落地（`e1f80ea` / `7edaf4e` / 见 §9 后续条目，
+> 未编译验证）；其余步骤未执行。执行记录见 §9。
 > 输入数据：2026-11 实测（`core/` 下 11 个模块的头文件引用图，已剔除 `tjsCommHead.h`）
 > 关联决策：`DECISIONS.md` #6（阶段计划）、#8（5 条建议）、#11（拆环结果）
 
@@ -376,3 +377,38 @@ core_base_sysinit  -> core, script, utils, visual, environ
 4. 显式路径的调用点共 10 行，已随之更新：`io/IoVirtualFile.h`、
    `compat/AetherKiriCompanions.cpp`、`bridge/engine_api_internal.h`、
    `plugins/motionplayer/Player.h`。
+
+### 2026-11-14 — §3.3 `base_sysinit` 整簇并入 `environ`（未编译验证）
+
+**做了什么**
+
+`cpp/core/base/sysinit/` → `cpp/core/environ/sysinit/`（`git mv` 整目录，
+历史保留），target `core_base_sysinit` 撤掉，源码并入 `core_environ_module`：
+
+```
+environ/sysinit/SysInitIntf.cpp  SysInitImpl.cpp  DetectCPU.cpp
+environ/sysinit/ConfigManager/{Global,Individual,Locale}ConfigManager.cpp
+```
+
+**为什么整簇搬，不是只搬一部分**
+
+`SysInitImpl.cpp` 要 `Application.h` / `SystemControl.h`（environ 自己）、
+`GraphicsLoaderIntf.h` / `LayerIntf.h`（visual）；`SysInitIntf.cpp` 要
+`ScriptMgnIntf.h` / `KAGParser.h`（base_script）。它从来不是 base 的低层设施，
+是启动路径。留在 base 里只会让"base 依赖 environ"这条账记错位置。
+
+**副作用（预期内的）**
+
+- base 现在只剩三簇，`core_base_runtime` / `core_base_script` 去掉了对
+  `core_base_sysinit` 的链接（它们的 `core_environ_module` 一条就够了）。
+- intra-base 的环从 `script ↔ sysinit` 变成 `script ↔ environ`，环本身没消。
+  要消它得做 §4 的第 1、2 步（注册表反转 + `iTVPApplication` 接口抽取），
+  两者都必须有编译器。
+- `ConfigManager/` 的 include 写法（`"ConfigManager/LocaleConfigManager.h"`）
+  与 10 处调用点都没改：`environ/sysinit` 进了 environ 的 PUBLIC include 路径，
+  和搬之前在 base 里靠 `-I base/sysinit` 解析是等价的。
+- `tinyxml2` 的 `find_package` 从 base 搬到 environ —— 原来就在 environ 里，
+  现在只是不必再从别处"蹭" include 目录。
+
+**遗留**：仍然没有编译验证。`scripts/check_tu.sh --module environ` +
+`--module base` 是验证这两次搬家的最短路径。

@@ -34,10 +34,27 @@ set(ENVIRON_SOURCE_FILES
     $<$<NOT:$<BOOL:${ANDROID}>>:${ENVIRON_PATH}/stubs/platform_linux.cpp>
 
     ${ENVIRON_PATH}/win32/SystemControl.cpp
+
+    # sysinit/ —— 启动序列、平台契约、配置、CPU 检测。
+    # 原本是 core/base 的第四簇（target core_base_sysinit），整体搬到这里：
+    # 它读 Application/SystemControl、要 GraphicsLoaderIntf/LayerIntf，本来就是
+    # 启动路径而不是"base 的低层设施"。搬家后 base 不再有一条"假装自己是低层"
+    # 的 environ 依赖（docs/STRUCTURE_DESIGN.md §3.3）。
+    ${ENVIRON_PATH}/sysinit/SysInitIntf.cpp
+    ${ENVIRON_PATH}/sysinit/SysInitImpl.cpp
+    ${ENVIRON_PATH}/sysinit/DetectCPU.cpp
+
+    ${ENVIRON_PATH}/sysinit/ConfigManager/GlobalConfigManager.cpp
+    ${ENVIRON_PATH}/sysinit/ConfigManager/IndividualConfigManager.cpp
+    ${ENVIRON_PATH}/sysinit/ConfigManager/LocaleConfigManager.cpp
 )
 
 set(ENVIRON_HEADERS_DIR
     ${ENVIRON_PATH}/
+    # sysinit/ 必须在 win32/ 之前：它对外提供 SysInitIntf.h / SysInitImpl.h /
+    # DetectCPU.h / ConfigManager/，目前 base 的 runtime、script 与 plugin、
+    # visual 都靠裸文件名 include 它们。
+    ${ENVIRON_PATH}/sysinit
     ${ENVIRON_PATH}/win32
     $<$<BOOL:${ANDROID}>:${ENVIRON_PATH}/android>
     ${ENVIRON_PATH}/sdl

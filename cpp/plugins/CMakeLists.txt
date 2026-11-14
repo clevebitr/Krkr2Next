@@ -54,8 +54,8 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     ${KRKR2CORE_PATH}/base/core
     ${KRKR2CORE_PATH}/base/runtime
     ${KRKR2CORE_PATH}/base/script
-    ${KRKR2CORE_PATH}/base/sysinit
     ${KRKR2CORE_PATH}/environ
+    ${KRKR2CORE_PATH}/environ/sysinit
     ${KRKR2CORE_PATH}/environ/win32
     ${KRKR2CORE_PATH}/environ/sdl
     ${KRKR2CORE_PATH}/extension
