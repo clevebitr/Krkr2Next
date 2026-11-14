@@ -24,7 +24,8 @@
 #include "StorageImpl.h"
 #include "StorageIntf.h"
 #include "IoPolicy.h"
-#include "WindowImpl.h"
+// 这里曾 include "WindowImpl.h"（visual），只为拿 TVPSelectFile；
+// 它的声明在 FileSelector.h（krkr::base）里，下面已 include。
 #include "SysInitIntf.h"
 #include "DebugIntf.h"
 #include "Random.h"
