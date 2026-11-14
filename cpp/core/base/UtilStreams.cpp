@@ -15,6 +15,9 @@
 #include "DebugIntf.h"
 
 #include "TVPMmapAlloc.h"
+
+namespace krkr::base {
+
 #ifdef TVP_USE_MMAP_TEMP
 static constexpr size_t kStreamMmapThreshold = 256 * 1024;
 #endif
@@ -980,3 +983,5 @@ tTVPUnpackArchive::~tTVPUnpackArchive() {
     if(ArcThread)
         delete ArcThread;
 }
+
+} // namespace krkr::base

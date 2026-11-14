@@ -14,6 +14,8 @@
 #include "StorageIntf.h"
 #include <functional>
 
+namespace krkr::base {
+
 //---------------------------------------------------------------------------
 // tTVPStreamHolder
 //---------------------------------------------------------------------------
@@ -243,5 +245,16 @@ private:
 
     tTVPUnpackArchiveThread *ArcThread = nullptr;
 };
+
+} // namespace krkr::base
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::base::tTVPStreamHolder;
+using krkr::base::tTVPLocalTempStorageHolder;
+using krkr::base::tTVPMemoryStream;
+using krkr::base::tTVPPartialStream;
+using krkr::base::tTVPUnpackArchiveCallbacks;
+using krkr::base::iTVPUnpackArchiveImpl;
+using krkr::base::tTVPUnpackArchive;
 
 #endif
