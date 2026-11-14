@@ -5,7 +5,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include "WaveIntf.h"
-#include "SysInitIntf.h"
 #include "StorageIntf.h"
 #include "DebugIntf.h"
 #include <algorithm>

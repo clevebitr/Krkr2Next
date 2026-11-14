@@ -17,7 +17,6 @@
 #endif
 
 #include "DebugIntf.h"
-#include "SysInitIntf.h"
 #include "TickCount.h"
 #include "WaveImpl.h"
 #include <SDL2/SDL.h>

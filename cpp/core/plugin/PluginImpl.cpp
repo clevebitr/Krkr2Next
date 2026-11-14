@@ -23,7 +23,7 @@
 #include "StorageImpl.h"
 
 #include "EventIntf.h"
-#include "TransIntf.h"
+// TransIntf.h（visual）原本在这里但没有任何使用点；去掉后 plugin -> visual 归零。
 #include "tjsArray.h"
 #include "DebugIntf.h"
 

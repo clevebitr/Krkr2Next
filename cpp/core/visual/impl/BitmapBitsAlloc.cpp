@@ -4,7 +4,6 @@
 #include "MsgIntf.h"
 #include "BitmapBitsAlloc.h"
 #include "SysInitIntf.h"
-#include "EventIntf.h"
 #include "DebugIntf.h"
 
 #include "TVPMmapAlloc.h"
