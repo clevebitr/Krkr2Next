@@ -156,7 +156,7 @@ static tjs_uint64 TVPTotalPhysMemory = 0;
 
 static void TVPInitProgramArgumentsAndDataPath(bool stop_after_datapath_got);
 
-void TVPBeforeSystemInit() {
+void krkr::base::TVPBeforeSystemInit() {
     // RegisterDllLoadHook();
     //  register DLL delayed import hook to support _inmm.dll
 
@@ -243,7 +243,7 @@ static bool TVPHighTimerPeriod = false;
 static uint32_t TVPTimeBeginPeriodRes = 0;
 
 //---------------------------------------------------------------------------
-void TVPAfterSystemInit() {
+void krkr::base::TVPAfterSystemInit() {
     // check CPU type
     TVPDetectCPU();
 
@@ -389,12 +389,12 @@ void TVPAfterSystemInit() {
 }
 
 //---------------------------------------------------------------------------
-void TVPBeforeSystemUninit() {
+void krkr::base::TVPBeforeSystemUninit() {
     // TVPDumpHWException(); // dump cached hw exceptoin
 }
 
 //---------------------------------------------------------------------------
-void TVPAfterSystemUninit() {}
+void krkr::base::TVPAfterSystemUninit() {}
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -499,7 +499,7 @@ void PumpModalInput() {
 } // namespace krkr::base
 
 //---------------------------------------------------------------------------
-void TVPTerminateAsync(int code) {
+void krkr::base::TVPTerminateAsync(int code) {
     // do "A"synchronous temination of application
     TVPTerminated = true;
     TVPTerminateCode = code;
@@ -516,7 +516,7 @@ void TVPTerminateAsync(int code) {
 }
 
 //---------------------------------------------------------------------------
-void TVPTerminateSync(int code) {
+void krkr::base::TVPTerminateSync(int code) {
     // do synchronous temination of application (never return)
     if(TVPHostSuppressProcessExit) {
         // In embedded host mode, calling TVPSystemUninit() here
@@ -532,7 +532,7 @@ void TVPTerminateSync(int code) {
 }
 
 //---------------------------------------------------------------------------
-void TVPMainWindowClosed() {
+void krkr::base::TVPMainWindowClosed() {
     // called from WindowIntf.cpp, caused by closing all window.
     if(TVPTerminateOnWindowClose) {
         // 记下"由窗口关闭引起"：宿主据此不提供"继续游戏"（窗口已经没了）。
@@ -589,7 +589,7 @@ static tjs_int TVPCommandLineArgumentGeneration = 0;
 static bool TVPDataPathDirectoryEnsured = false;
 
 //---------------------------------------------------------------------------
-tjs_int TVPGetCommandLineArgumentGeneration() {
+tjs_int krkr::base::TVPGetCommandLineArgumentGeneration() {
     return TVPCommandLineArgumentGeneration;
 }
 
@@ -722,7 +722,7 @@ static void TVPDumpOptions() {
 }
 
 //---------------------------------------------------------------------------
-bool TVPGetCommandLine(const tjs_char *name, tTJSVariant *value) {
+bool krkr::base::TVPGetCommandLine(const tjs_char *name, tTJSVariant *value) {
     TVPInitProgramArgumentsAndDataPath(false);
 
     tjs_int namelen = (tjs_int)TJS_strlen(name);
@@ -747,7 +747,7 @@ bool TVPGetCommandLine(const tjs_char *name, tTJSVariant *value) {
 }
 
 //---------------------------------------------------------------------------
-void TVPSetCommandLine(const tjs_char *name, const ttstr &value) {
+void krkr::base::TVPSetCommandLine(const tjs_char *name, const ttstr &value) {
     // If not yet initialized, store in early options to be merged after init
     if(!TVPProgramArgumentsInit) {
         ttstr nameStr(name);

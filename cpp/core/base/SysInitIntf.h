@@ -16,6 +16,8 @@
 //---------------------------------------------------------------------------
 
 //-- global data
+namespace krkr::base {
+
 extern ttstr TVPProjectDir; // project directory
 extern ttstr TVPDataPath; // data directory
 
@@ -86,6 +88,27 @@ TJS_EXP_FUNC_DEF(void, TVPSetCommandLine,
 // sets command line to the specified value.
 // note that this function does not check any consistency or
 // correctness of the value.
+
+} // namespace krkr::base
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::base::TVPProjectDir;
+using krkr::base::TVPDataPath;
+using krkr::base::TVPSystemInit;
+using krkr::base::TVPSystemUninit;
+using krkr::base::TVPBeforeSystemInit;
+using krkr::base::TVPAfterSystemInit;
+using krkr::base::TVPBeforeSystemUninit;
+using krkr::base::TVPAfterSystemUninit;
+using krkr::base::TVPTerminateAsync;
+using krkr::base::TVPTerminateSync;
+using krkr::base::TVPMainWindowClosed;
+using krkr::base::TVPSystemUninitCalled;
+using krkr::base::TVPResetRuntimeForRestart;
+using krkr::base::TVPAddAtExitHandler;
+using krkr::base::TVPGetCommandLine;
+using krkr::base::TVPGetCommandLineArgumentGeneration;
+using krkr::base::TVPSetCommandLine;
 
 //---------------------------------------------------------------------------
 

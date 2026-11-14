@@ -30,11 +30,21 @@
 //---------------------------------------------------------------------------
 // global data
 //---------------------------------------------------------------------------
+namespace krkr::base {
+
 ttstr TVPProjectDir; // project directory (in unified storage name)
 ttstr TVPDataPath; // data directory (in unified storage name)
+
+} // namespace krkr::base
 //---------------------------------------------------------------------------
 
 extern void TVPGL_C_Init();
+
+// TVPStopAllWaveSoundsForRestart 定义在 sound 模块的全局作用域。块作用域的
+// extern 声明在 namespace 内会绑到该 namespace，所以提到文件作用域。
+extern void TVPStopAllWaveSoundsForRestart();
+
+namespace krkr::base {
 
 //---------------------------------------------------------------------------
 // TVPSystemInit : Entire System Initialization
@@ -184,7 +194,8 @@ void TVPResetRuntimeForRestart() {
     // ShutdownWaveSoundBuffers，上一游戏的 BGM/音效由 TVPWaveSoundBufferThread
     // 继续混音输出、叠进下一游戏。这里显式停掉。 （实现见
     // cpp/core/sound/win32/WaveImpl.cpp TVPStopAllWaveSoundsForRestart）
-    extern void TVPStopAllWaveSoundsForRestart();
     TVPStopAllWaveSoundsForRestart();
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::base
