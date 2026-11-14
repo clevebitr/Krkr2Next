@@ -13,7 +13,7 @@
 
 #include <algorithm>
 #include "../../utils/StallWatchdog.h"
-#include "../movie/ffmpeg/MoviePlayerJanitor.h"
+#include "DeferredDestroyer.h"
 #include "MsgIntf.h"
 #include "VideoOvlImpl.h"
 #include "DebugIntf.h"
@@ -373,7 +373,7 @@ void tTJSNI_VideoOverlay::Close() {
         // "movie: Close→清理临时存储/消息"，之后 engine.log 一行都不再增长
         // （连卡死看门狗都打不出日志），只能杀进程；此前同一阶段还有过
         // 1.5~2.0s 的停顿。交给后台清理线程，渲染线程立刻返回。
-        krkr::movie::DeferredDestroyer<
+        krkr::utils::DeferredDestroyer<
             tTVPLocalTempStorageHolder>::Instance().Defer(
             LocalTempStorageHolder);
         LocalTempStorageHolder = nullptr;

@@ -1,4 +1,8 @@
-// MoviePlayerJanitor.h — 把"销毁播放器"从渲染线程挪到后台清理线程（header-only）
+// DeferredDestroyer.h — 把"销毁重量级对象"从当前线程挪到后台清理线程（header-only）
+//
+// 原名 movie/ffmpeg/MoviePlayerJanitor.h。它唯一的调用方是 visual 的
+// VideoOvlImpl（延迟销毁 tTVPLocalTempStorageHolder），movie 自己反而不用；
+// 放在 movie 目录会造成 visual -> movie 的反向头依赖，所以下移到 utils。
 //
 // 为什么必须这样：BasePlayer 的析构会走 CloseInputStream → StopThread()（join 解码
 // 线程）并排空消息队列。解码线程可能正卡在队列/同步等待上，于是 join 无限期不返回，
@@ -11,8 +15,8 @@
 // 也只卡在后台线程，并且日志里会留下"开始/完成"两行，一眼能看出是不是卡在销毁里。
 //
 // 生命周期是安全的：只是让对象**活得更久**（延迟释放），不会提前析构。
-#ifndef KRKR_MOVIE_PLAYER_JANITOR_H
-#define KRKR_MOVIE_PLAYER_JANITOR_H
+#ifndef KRKR_UTILS_DEFERRED_DESTROYER_H
+#define KRKR_UTILS_DEFERRED_DESTROYER_H
 
 #include <condition_variable>
 #include <deque>
@@ -21,8 +25,7 @@
 
 #include <spdlog/spdlog.h>
 
-namespace krkr {
-namespace movie {
+namespace krkr::utils {
 
 template <class T>
 class DeferredDestroyer {
@@ -74,7 +77,6 @@ private:
     bool m_started = false;
 };
 
-} // namespace movie
-} // namespace krkr
+} // namespace krkr::utils
 
-#endif // KRKR_MOVIE_PLAYER_JANITOR_H
+#endif // KRKR_UTILS_DEFERRED_DESTROYER_H

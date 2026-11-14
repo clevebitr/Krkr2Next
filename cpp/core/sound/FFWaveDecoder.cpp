@@ -3,7 +3,11 @@
 #include "StorageIntf.h"
 #include "DebugIntf.h"
 #include "BinaryStream.h"
-#include "krffmpeg.h"
+// 定义在 movie/ffmpeg/krffmpeg.cpp（幂等，内部有 FFInitilalized 守卫）。
+// 就地声明而不 include movie 的头：那会让 sound 反向依赖 movie 的公共头
+// （sound <-> movie 环的一半）。注意这只是消除**头**依赖，链接期 sound
+// 仍然引用 movie 的实现——真正的反转应该是 movie 注册音频解码器。
+void TVPInitLibAVCodec();
 
 extern "C" {
 #ifndef __STDC_CONSTANT_MACROS
