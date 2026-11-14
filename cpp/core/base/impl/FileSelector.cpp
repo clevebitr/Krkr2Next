@@ -25,6 +25,8 @@ std::string TVPShowFileSelector(const std::string &title,
                                 const std::string &filename,
                                 std::string initdir, bool issave);
 
+namespace krkr::base {
+
 //---------------------------------------------------------------------------
 // TVPSelectFile related
 //---------------------------------------------------------------------------
@@ -396,3 +398,5 @@ bool TVPSelectFile(iTJSDispatch2 *params) {
     return false;
 }
 //---------------------------------------------------------------------------
+
+} // namespace krkr::base

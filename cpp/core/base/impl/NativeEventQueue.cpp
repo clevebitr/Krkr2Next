@@ -2,6 +2,8 @@
 #include "NativeEventQueue.h"
 #include "Application.h"
 
+namespace krkr::base {
+
 void NativeEventQueueImplement::PostEvent(const NativeEvent &ev) {
     Application->PostUserMessage(
         [this, ev]() { Dispatch(*const_cast<NativeEvent *>(&ev)); }, this);
@@ -21,3 +23,5 @@ void NativeEventQueueImplement::Clear(int msg) {
             }
         });
 }
+
+} // namespace krkr::base

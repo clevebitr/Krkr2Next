@@ -4,6 +4,8 @@
 
 // 呼び出されるハンドラがシングルスレッドで動作するイベントキュー
 
+namespace krkr::base {
+
 class NativeEvent {
 public:
     // 	LRESULT Result;
@@ -80,5 +82,13 @@ public:
 
     T *GetOwner() { return owner_; }
 };
+
+} // namespace krkr::base
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::base::NativeEvent;
+using krkr::base::NativeEventQueueIntarface;
+using krkr::base::NativeEventQueueImplement;
+using krkr::base::NativeEventQueue;
 
 #endif // __NATIVE_EVENT_QUEUE_H__
