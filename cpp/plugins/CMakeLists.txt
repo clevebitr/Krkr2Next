@@ -51,7 +51,10 @@ target_sources(${PROJECT_NAME} PUBLIC
 
 target_include_directories(${PROJECT_NAME} PUBLIC
     ${KRKR2CORE_PATH}/
-    ${KRKR2CORE_PATH}/base
+    ${KRKR2CORE_PATH}/base/core
+    ${KRKR2CORE_PATH}/base/runtime
+    ${KRKR2CORE_PATH}/base/script
+    ${KRKR2CORE_PATH}/base/sysinit
     ${KRKR2CORE_PATH}/environ
     ${KRKR2CORE_PATH}/environ/win32
     ${KRKR2CORE_PATH}/environ/sdl

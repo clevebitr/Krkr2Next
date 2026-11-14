@@ -20,8 +20,10 @@ add_library(${PROJECT_NAME} STATIC
 target_include_directories(${PROJECT_NAME} PUBLIC
     ${IO_PATH}
     ${CMAKE_CURRENT_LIST_DIR}/..
-    ${CMAKE_CURRENT_LIST_DIR}/../base
-    ${CMAKE_CURRENT_LIST_DIR}/../base/impl
+    ${CMAKE_CURRENT_LIST_DIR}/../base/core
+    ${CMAKE_CURRENT_LIST_DIR}/../base/runtime
+    ${CMAKE_CURRENT_LIST_DIR}/../base/script
+    ${CMAKE_CURRENT_LIST_DIR}/../base/sysinit
     ${CMAKE_CURRENT_LIST_DIR}/../common
     ${CMAKE_CURRENT_LIST_DIR}/../tjs2
     ${CMAKE_CURRENT_LIST_DIR}/../plugin

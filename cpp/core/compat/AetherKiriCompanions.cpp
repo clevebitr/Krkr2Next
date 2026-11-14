@@ -5,7 +5,7 @@
 
 #include "CompatLayer.h"
 
-#include "base/StorageIntf.h"
+#include "base/core/StorageIntf.h"
 #include "io/IoVirtualFile.h"
 
 #include <algorithm>

@@ -19,7 +19,7 @@
 
 #include <string>
 
-#include "base/StorageIntf.h" // ttstr / tTJSBinaryStream（经 cpp/core 解析，io 与 compat 目标都成立）
+#include "base/core/StorageIntf.h" // ttstr / tTJSBinaryStream（经 cpp/core 解析，io 与 compat 目标都成立）
 
 namespace krkr::io {
 

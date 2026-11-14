@@ -56,12 +56,12 @@ extern "C" void krkr_GetSurfaceDimensions(uint32_t *, uint32_t *);
 #include "environ/MainScene.h"
 #include "environ/Platform.h"
 
-#include "base/EventIntf.h"
-#include "base/ScriptMgnIntf.h"
-#include "base/StorageIntf.h"
-#include "base/SysInitIntf.h"
-#include "base/impl/StorageImpl.h"
-#include "base/impl/SysInitImpl.h"
+#include "base/core/EventIntf.h"
+#include "base/script/ScriptMgnIntf.h"
+#include "base/core/StorageIntf.h"
+#include "base/sysinit/SysInitIntf.h"
+#include "base/core/StorageImpl.h"
+#include "base/sysinit/SysInitImpl.h"
 
 #include "compat/CompatLayer.h"
 #include "extension/Extension.h"

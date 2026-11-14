@@ -4,35 +4,39 @@ project(core_base_module LANGUAGES CXX)
 set(BASE_PATH ${CMAKE_CURRENT_LIST_DIR})
 
 #---------------------------------------------------------------------------
-# base = 四个按依赖层次切开的 target + 一个只做聚合的 INTERFACE 门面
+# base = 四个按依赖层次切开的目录 / target + 一个只做聚合的 INTERFACE 门面
 #
-# 历史上 base 是一个 60 文件的 STATIC 库，于是"base 依赖 7 个模块"这句话把
-# 低层（消息/流）和高层（启动/脚本注册表）的依赖记在了同一个名字上。切完之后：
+# 目录与 target 一一对应，读目录就知道依赖方向：
 #
-#   core_base_core     消息 / 流 / 字符集 / 存储门面 / 事件接口
-#                      → 只依赖 tjs2 + utils
-#   core_base_runtime  线程 / 定时器 / 时钟 / 调试输出 / 事件分发 / 文件选择框
-#                      → 依赖 core + sysinit + environ + visual
-#   core_base_script   TJS 脚本引擎 / System 对象 / KAGParser
-#                      → 依赖 core + runtime + sysinit + visual/sound/plugin/extension/environ
-#   core_base_sysinit  启动序列 / 平台契约 / 配置 / CPU 检测
-#                      → 依赖 core + script + visual + environ
+#   core/      core_base_core     消息 / 流 / 字符集 / 存储门面 / 事件接口
+#                                 → 只依赖 tjs2 + utils
+#   runtime/   core_base_runtime  线程 / 定时器 / 时钟 / 调试输出 / 事件分发 / 文件选择框
+#                                 → 依赖 core + sysinit + environ + visual
+#   script/    core_base_script   TJS 脚本引擎 / System 对象 / KAGParser
+#                                 → 依赖上述 + visual/sound/plugin/extension/environ
+#   sysinit/   core_base_sysinit  启动序列 / 平台契约 / 配置 / CPU 检测
+#                                 → 依赖 core + script + visual + environ
 #
-# 括号里的依赖就是"读这个 target 需要同时打开哪些目录"，不是链接凑数。
-# core 与 runtime 的对外依赖是干净的；script 与 sysinit 是顶层，互相引用
-# （script→sysinit 的头、sysinit→script 的启动回调），这是已知的两条环，
-# 拆 namespace 之后由 TJS 类注册表注入统一处理（见 docs/STRUCTURE_DESIGN.md §3.2）。
+# 一条贯穿 base 的规矩：**接口头放在它服务的那一层，实现放在需要上层的那一层**。
+# 例如 EventIntf.h 在 core/（50 个文件包含它，只需要 tjs2 类型），而 EventIntf.cpp
+# 在 runtime/（它要推送事件到 TJS，得看见 ScriptMgnIntf.h）。这不是失误，是这个
+# 仓库既有的分工方式（core/utils 的头 + core/base 的实现也是同一套）。
+#
+# 已知的两条 intra-base 环：script ↔ sysinit（启动时要跑脚本、脚本退出时要通知
+# sysinit）。静态库允许环，但它是"下一步要拆的东西"，见 docs/STRUCTURE_DESIGN.md §3.2。
 #
 # `core_base_module` 保留为 INTERFACE 聚合层，所以 io/environ/visual/plugins 里
 # 的 `target_link_libraries(... core_base_module)` 一个字都不用改。
 #---------------------------------------------------------------------------
 
-# base 的公共头目录。现在仍是两张扁平面（base/、base/impl），四个簇共用同一张面。
-# 下一步按 core/ runtime/ script/ sysinit/ 分目录，这一行会变成四条（见
-# docs/STRUCTURE_DESIGN.md §5）。
+# base 的公共头目录：四个簇都是"公开面"。
+# 现在 include 语句写的还是裸文件名（"MsgIntf.h"），靠这四条 -I 解析；等调用点
+# 迁移成 "base/core/MsgIntf.h" 这种显式路径后，这里可以收窄成只留门面。
 set(BASE_PUBLIC_INCLUDE_DIRS
-    ${BASE_PATH}/
-    ${BASE_PATH}/impl
+    ${BASE_PATH}/core
+    ${BASE_PATH}/runtime
+    ${BASE_PATH}/script
+    ${BASE_PATH}/sysinit
 )
 
 # 四个簇的共同点：都是 STATIC、都对外暴露 tjs2 类型、共享同一张公共头面。
@@ -43,23 +47,22 @@ function(base_add_cluster name)
 endfunction()
 
 #---------------------------------------------------------------------------
-# core_base_core —— 低层：谁都能用，它不用别人
+# core/ —— 低层：谁都能用，它不用别人
 #
-# 头：MsgIntf.h MsgIntfInc.h impl/MsgImpl.h
+# 头：MsgIntf.h MsgIntfInc.h MsgImpl.h
 #     CharacterSet.h TVPMmapAlloc.h BinaryStream.h TextStream.h UtilStreams.h
-#     StorageIntf.h impl/StorageImpl.h impl/FileSelector.h
-#     EventIntf.h impl/EventImpl.h UserEvent.h
+#     StorageIntf.h StorageImpl.h FileSelector.h
+#     EventIntf.h EventImpl.h UserEvent.h
 #     Platform.h ApplicationSpecialPath.h combase.h typedefine.h cpu_types.h vkdefine.h
 #---------------------------------------------------------------------------
 base_add_cluster(core_base_core
-    ${BASE_PATH}/CharacterSet.cpp
-    ${BASE_PATH}/BinaryStream.cpp
-    ${BASE_PATH}/TextStream.cpp
-    ${BASE_PATH}/UtilStreams.cpp
-    ${BASE_PATH}/MsgIntf.cpp
-
-    ${BASE_PATH}/impl/MiscUtility.cpp
-    ${BASE_PATH}/impl/MsgImpl.cpp
+    ${BASE_PATH}/core/CharacterSet.cpp
+    ${BASE_PATH}/core/BinaryStream.cpp
+    ${BASE_PATH}/core/TextStream.cpp
+    ${BASE_PATH}/core/UtilStreams.cpp
+    ${BASE_PATH}/core/MsgIntf.cpp
+    ${BASE_PATH}/core/MiscUtility.cpp
+    ${BASE_PATH}/core/MsgImpl.cpp
 )
 target_link_libraries(core_base_core PRIVATE core_utils_module)
 
@@ -93,25 +96,27 @@ target_link_libraries(core_base_core PRIVATE
 )
 
 #---------------------------------------------------------------------------
-# core_base_runtime —— 引擎运行时服务（不是"工具"：要消息、要事件、要 Application）
+# runtime/ —— 引擎运行时服务（不是"工具"：要消息、要事件、要 Application）
 #
-# 头：impl/NativeEventQueue.h（visual / sound 也在用）
-#     DebugIntf / ThreadIntf / TimerIntf / TickCount / ClipboardIntf 的接口头在
-#     core/utils，实现在这里 —— "头在下层、实现在上层"是本仓库的既定分工。
+# 这里放的是"接口头在 core/ 或 core/utils、实现必须看见上层"的那批文件：
+# EventIntf.cpp / EventImpl.cpp / FileSelector.cpp，加上 DebugIntf、ThreadImpl、
+# ClipboardImpl、TickCount、Timer* —— 这些在 DECISIONS.md #12 里被从 utils 搬过来，
+# 因为它们的实现要用 MsgIntf / SysInitIntf / EventIntf / SystemControl。
+#
+# 头：NativeEventQueue.h（visual / sound 也在用）
 #---------------------------------------------------------------------------
 base_add_cluster(core_base_runtime
-    ${BASE_PATH}/EventIntf.cpp
+    ${BASE_PATH}/runtime/EventIntf.cpp
+    ${BASE_PATH}/runtime/EventImpl.cpp
+    ${BASE_PATH}/runtime/NativeEventQueue.cpp
+    ${BASE_PATH}/runtime/FileSelector.cpp
 
-    ${BASE_PATH}/impl/EventImpl.cpp
-    ${BASE_PATH}/impl/NativeEventQueue.cpp
-    ${BASE_PATH}/impl/FileSelector.cpp
-
-    ${BASE_PATH}/impl/DebugIntf.cpp
-    ${BASE_PATH}/impl/ThreadImpl.cpp
-    ${BASE_PATH}/impl/ClipboardImpl.cpp
-    ${BASE_PATH}/impl/TickCount.cpp
-    ${BASE_PATH}/impl/TimerIntf.cpp
-    ${BASE_PATH}/impl/TimerImpl.cpp
+    ${BASE_PATH}/runtime/DebugIntf.cpp
+    ${BASE_PATH}/runtime/ThreadImpl.cpp
+    ${BASE_PATH}/runtime/ClipboardImpl.cpp
+    ${BASE_PATH}/runtime/TickCount.cpp
+    ${BASE_PATH}/runtime/TimerIntf.cpp
+    ${BASE_PATH}/runtime/TimerImpl.cpp
 )
 target_link_libraries(core_base_runtime PRIVATE
     core_base_core
@@ -123,18 +128,18 @@ target_link_libraries(core_base_runtime PRIVATE
 )
 
 #---------------------------------------------------------------------------
-# core_base_script —— TJS 脚本引擎 + System 对象 + KAGParser
+# script/ —— TJS 脚本引擎 + System 对象 + KAGParser
 #
 # 这一簇的跨模块依赖是一张"注册表"：21 个 TVPCreateNativeClass_* 工厂在这里
 # 被内联调用（DECISIONS.md #9）。拆环时它会整体反转成 base 留注入口、
 # environ 做注册，届时这里的 visual/sound/plugin/extension 依赖一起消失。
 #---------------------------------------------------------------------------
 base_add_cluster(core_base_script
-    ${BASE_PATH}/ScriptMgnIntf.cpp
-    ${BASE_PATH}/impl/ScriptMgnImpl.cpp
-    ${BASE_PATH}/KAGParser.cpp
-    ${BASE_PATH}/SystemIntf.cpp
-    ${BASE_PATH}/impl/SystemImpl.cpp
+    ${BASE_PATH}/script/ScriptMgnIntf.cpp
+    ${BASE_PATH}/script/ScriptMgnImpl.cpp
+    ${BASE_PATH}/script/KAGParser.cpp
+    ${BASE_PATH}/script/SystemIntf.cpp
+    ${BASE_PATH}/script/SystemImpl.cpp
 )
 target_link_libraries(core_base_script PRIVATE
     core_base_core
@@ -149,19 +154,22 @@ target_link_libraries(core_base_script PRIVATE
 )
 
 #---------------------------------------------------------------------------
-# core_base_sysinit —— 启动路径：初始化序列、平台契约、配置、CPU 检测
+# sysinit/ —— 启动路径：初始化序列、平台契约、配置、CPU 检测
 #
 # 本质属于 environ（DECISIONS.md #6 / STRUCTURE_DESIGN §3.3），等编译验证后
 # 整体搬过去，`base ↔ environ` 的环随之消失。
+#
+# ConfigManager/ 是唯一保留二级目录的子簇：调用点写的是
+# "ConfigManager/LocaleConfigManager.h"，保目录名就不用改 10 处调用点。
 #---------------------------------------------------------------------------
 base_add_cluster(core_base_sysinit
-    ${BASE_PATH}/SysInitIntf.cpp
-    ${BASE_PATH}/impl/SysInitImpl.cpp
-    ${BASE_PATH}/DetectCPU.cpp
+    ${BASE_PATH}/sysinit/SysInitIntf.cpp
+    ${BASE_PATH}/sysinit/SysInitImpl.cpp
+    ${BASE_PATH}/sysinit/DetectCPU.cpp
 
-    ${BASE_PATH}/ConfigManager/GlobalConfigManager.cpp
-    ${BASE_PATH}/ConfigManager/IndividualConfigManager.cpp
-    ${BASE_PATH}/ConfigManager/LocaleConfigManager.cpp
+    ${BASE_PATH}/sysinit/ConfigManager/GlobalConfigManager.cpp
+    ${BASE_PATH}/sysinit/ConfigManager/IndividualConfigManager.cpp
+    ${BASE_PATH}/sysinit/ConfigManager/LocaleConfigManager.cpp
 )
 target_link_libraries(core_base_sysinit PRIVATE
     core_base_core
