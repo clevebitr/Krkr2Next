@@ -310,7 +310,7 @@ engine_result_t engine_destroy(engine_handle_t handle) {
             TVPResetScriptEngineForRestart();
             TVPResetSysInitImplForRestart();
             TVPResetApplicationForRestart();
-            TVPResetStorageImplForRestart();
+            krkr::io::ResetStorageImplForRestart();
             TVPResetRenderManagerForRestart();
             TVPResetWindowListForRestart();
             TVPResetLayerBitmapImplForRestart();

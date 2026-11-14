@@ -1119,12 +1119,12 @@ const std::string &TVPGetInternalPreferencePath() {
 }
 
 // ---------------------------------------------------------------------------
-// TVPGetApplicationHomeDirectory — originally in MainScene.cpp
+// krkr::io::GetApplicationHomeDirectory — originally in MainScene.cpp
 // Returns list of directories where the application searches for data files.
 // ---------------------------------------------------------------------------
 static std::vector<std::string> s_appHomeDirs;
 
-const std::vector<std::string> &TVPGetApplicationHomeDirectory() {
+const std::vector<std::string> &krkr::io::GetApplicationHomeDirectory() {
     if(s_appHomeDirs.empty()) {
         if(!TVPNativeProjectDir.IsEmpty()) {
             std::string dir = TVPNativeProjectDir.AsNarrowStdString();

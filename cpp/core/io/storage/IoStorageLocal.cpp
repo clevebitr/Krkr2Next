@@ -71,9 +71,9 @@ inline unsigned int lseek64(int fileHandle, __int64 offset, int origin) {
 #endif
 
 // 这些符号必须保持全局：平台层/外部 TU 以全局名声明或定义它们。
-bool TVPWriteDataToFile(const ttstr &filepath, const void *data,
+bool WriteDataToFile(const ttstr &filepath, const void *data,
                         unsigned int len);
-const std::vector<std::string> &TVPGetApplicationHomeDirectory();
+const std::vector<std::string> &GetApplicationHomeDirectory();
 
 extern "C" const IID IID_IUnknown;
 extern "C" const IID IID_IStream;
@@ -82,15 +82,15 @@ extern "C" const IID IID_ISequentialStream;
 namespace krkr::io {
 
 //---------------------------------------------------------------------------
-// tTVPFileMedia
+// FileMedia
 //---------------------------------------------------------------------------
-class tTVPFileMedia : public iTVPStorageMedia {
+class FileMedia : public iTVPStorageMedia {
     tjs_uint RefCount;
 
 public:
-    tTVPFileMedia() { RefCount = 1; }
+    FileMedia() { RefCount = 1; }
 
-    ~tTVPFileMedia() override {}
+    ~FileMedia() override {}
 
     void AddRef() override { RefCount++; }
 
@@ -142,7 +142,7 @@ static void _tjs_normalize_nfc(ttstr &name) {
 #endif
 
 //---------------------------------------------------------------------------
-void tTVPFileMedia::NormalizeDomainName(ttstr &name) {
+void FileMedia::NormalizeDomainName(ttstr &name) {
     // normalize domain name
     // make all characters small
     tjs_char *p = name.Independ();
@@ -154,7 +154,7 @@ void tTVPFileMedia::NormalizeDomainName(ttstr &name) {
 }
 
 //---------------------------------------------------------------------------
-void tTVPFileMedia::NormalizePathName(ttstr &name) {
+void FileMedia::NormalizePathName(ttstr &name) {
     // normalize path name
     // make all characters small
     tjs_char *p = name.Independ();
@@ -169,18 +169,18 @@ void tTVPFileMedia::NormalizePathName(ttstr &name) {
 }
 
 //---------------------------------------------------------------------------
-bool tTVPFileMedia::CheckExistentStorage(const ttstr &name) {
+bool FileMedia::CheckExistentStorage(const ttstr &name) {
     if(name.IsEmpty())
         return false;
 
     ttstr _name(name);
     GetLocalName(_name);
 
-    return TVPCheckExistentLocalFile(_name);
+    return CheckExistentLocalFile(_name);
 }
 
 //---------------------------------------------------------------------------
-tTJSBinaryStream *tTVPFileMedia::Open(const ttstr &name, tjs_uint32 flags) {
+tTJSBinaryStream *FileMedia::Open(const ttstr &name, tjs_uint32 flags) {
     // open storage named "name".
     // currently only local/network(by OS) storage systems are
     // supported.
@@ -191,10 +191,10 @@ tTJSBinaryStream *tTVPFileMedia::Open(const ttstr &name, tjs_uint32 flags) {
     ttstr _name(name);
     GetLocalName(_name);
 
-    return new tTVPLocalFileStream(origname, _name, flags);
+    return new LocalFileStream(origname, _name, flags);
 }
 
-void TVPListDir(const std::string &u8folder,
+void ListDir(const std::string &u8folder,
                 std::function<void(const std::string &, int)> cb) {
 
 #ifdef _WIN32
@@ -259,7 +259,7 @@ void TVPListDir(const std::string &u8folder,
 #endif
 }
 
-void TVPGetLocalFileListAt(
+void GetLocalFileListAt(
     const ttstr &name,
     const std::function<void(const ttstr &, tTVPLocalFileInfo *)> &cb) {
     DIR *dirp;
@@ -300,10 +300,10 @@ void TVPGetLocalFileListAt(
 }
 
 //---------------------------------------------------------------------------
-void tTVPFileMedia::GetListAt(const ttstr &_name, iTVPStorageLister *lister) {
+void FileMedia::GetListAt(const ttstr &_name, iTVPStorageLister *lister) {
     ttstr name(_name);
     GetLocalName(name);
-    TVPGetLocalFileListAt(name,
+    GetLocalFileListAt(name,
                           [lister](const ttstr &name, tTVPLocalFileInfo *s) {
                               if(s->Mode & (S_IFREG)) {
                                   lister->Add(name);
@@ -354,7 +354,7 @@ static int _utf8_strcasecmp_nfc(const char *a, const char *b) {
 const std::vector<ttstr> &_getPrefixPath() {
     static std::vector<ttstr> ret;
     if(ret.empty()) {
-        for(const std::string &path : TVPGetApplicationHomeDirectory()) {
+        for(const std::string &path : GetApplicationHomeDirectory()) {
             ret.emplace_back(path);
         }
     }
@@ -363,7 +363,7 @@ const std::vector<ttstr> &_getPrefixPath() {
 const std::vector<std::string> &_getHomeDir() {
     static std::vector<std::string> ret;
     if(ret.empty()) {
-        for(const std::string &path : TVPGetApplicationHomeDirectory()) {
+        for(const std::string &path : GetApplicationHomeDirectory()) {
             ret.emplace_back(path + "/");
         }
     }
@@ -372,7 +372,7 @@ const std::vector<std::string> &_getHomeDir() {
 #endif // TARGET_OS_IPHONE
 
 //---------------------------------------------------------------------------
-void tTVPFileMedia::GetLocallyAccessibleName(ttstr &name) {
+void FileMedia::GetLocallyAccessibleName(ttstr &name) {
     ttstr newname;
 
     const tjs_char *ptr = name.c_str();
@@ -514,7 +514,7 @@ void tTVPFileMedia::GetLocallyAccessibleName(ttstr &name) {
 }
 
 //---------------------------------------------------------------------------
-void tTVPFileMedia::GetLocalName(ttstr &name) {
+void FileMedia::GetLocalName(ttstr &name) {
     ttstr tmp = name;
     GetLocallyAccessibleName(tmp);
     if(tmp.IsEmpty())
@@ -524,13 +524,13 @@ void tTVPFileMedia::GetLocalName(ttstr &name) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-iTVPStorageMedia *TVPCreateFileMedia() { return new tTVPFileMedia; }
+iTVPStorageMedia *CreateFileMedia() { return new FileMedia; }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPPreNormalizeStorageName
+// PreNormalizeStorageName
 //---------------------------------------------------------------------------
-void TVPPreNormalizeStorageName(ttstr &name) {
+void PreNormalizeStorageName(ttstr &name) {
     // if the name is an OS's native expression, change it according
     // with the TVP storage system naming rule.
     tjs_int namelen = name.GetLen();
@@ -570,15 +570,15 @@ void TVPPreNormalizeStorageName(ttstr &name) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPGetTemporaryName
+// GetTemporaryName
 //---------------------------------------------------------------------------
 static tjs_int TVPProcessID;
 
-ttstr TVPGetTemporaryName() {
+ttstr GetTemporaryName() {
     static tjs_int TVPTempUniqueNum =
         static_cast<tjs_int>(TVPGetRoughTickCount32());
     tjs_int num = TVPTempUniqueNum++;
-    ttstr TVPTempPath = TVPGetAppPath();
+    ttstr TVPTempPath = GetAppPath();
 
     unsigned char buf[16];
     TVPGetRandomBits128(buf);
@@ -591,36 +591,36 @@ ttstr TVPGetTemporaryName() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPRemoveFile
+// RemoveFile
 //---------------------------------------------------------------------------
-bool TVPRemoveFile(const ttstr &name) {
+bool RemoveFile(const ttstr &name) {
     tTJSNarrowStringHolder holder(name.c_str());
     return !remove(holder);
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPRemoveFolder
+// RemoveFolder
 //---------------------------------------------------------------------------
-bool TVPRemoveFolder(const ttstr &name) {
+bool RemoveFolder(const ttstr &name) {
     tTJSNarrowStringHolder holder(name.c_str());
     return !unlink(holder);
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPGetAppPath
+// GetAppPath
 //---------------------------------------------------------------------------
-// apppath 缓存提升到文件作用域，使 TVPResetStorageImplForRestart 可复位
+// apppath 缓存提升到文件作用域，使 ResetStorageImplForRestart 可复位
 // （TVPProjectDir 在 runtime-restart 时被清空，旧缓存必须重建）。
 static ttstr TVPAppPathCache;
 static bool TVPAppPathCacheValid = false;
 
-ttstr TVPGetAppPath() {
+ttstr GetAppPath() {
     if(!TVPAppPathCacheValid) {
         ttstr dir = TVPProjectDir;
-        // 档案工程（`.../data.xp3>`）下 TVPExtractStoragePath 会保留末尾的 '>'，
-        // 于是 `TVPGetAppPath() + "patch.tjs"` 变成"包里找 patch.tjs"、临时文件名也会
+        // 档案工程（`.../data.xp3>`）下 ExtractStoragePath 会保留末尾的 '>'，
+        // 于是 `GetAppPath() + "patch.tjs"` 变成"包里找 patch.tjs"、临时文件名也会
         // 指向包内（写入会失败）。旧层（classic）保持这个历史行为；AetherKiri 层按策略
         // 去掉 '>'，取档案所在目录（见 io/policy/StoragePolicy.h 的 stripArchiveDelimiterInAppPath）。
         if(krkr::io::ActiveStoragePolicy().stripArchiveDelimiterInAppPath) {
@@ -628,27 +628,27 @@ ttstr TVPGetAppPath() {
             if(len > 0 && dir.GetLastChar() == TVPArchiveDelimiter)
                 dir = ttstr(dir.c_str(), len - 1);
         }
-        TVPAppPathCache = TVPExtractStoragePath(dir);
+        TVPAppPathCache = ExtractStoragePath(dir);
         TVPAppPathCacheValid = true;
     }
     return TVPAppPathCache;
 }
 
-void TVPResetStorageImplForRestart() {
+void ResetStorageImplForRestart() {
     TVPAppPathCache.Clear();
     TVPAppPathCacheValid = false;
     // runtime-restart 切换游戏时清空累积的 auto-path（上一游戏工程归档路径+脚本
     // addAutoPath），否则旧游戏归档路径混入新游戏搜索表 →
     // 换不同游戏文件解析错乱/黑屏。 （TVPAutoMountedPaths 每次启动已被
-    // TVPBoostAutoMountPaths 消费清空，无需在此处理。）
-    TVPClearAutoPathListForRestart();
+    // BoostAutoMountPaths 消费清空，无需在此处理。）
+    ClearAutoPathListForRestart();
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPOpenStream
+// krkr::io::OpenStream
 //---------------------------------------------------------------------------
-tTJSBinaryStream *TVPOpenStream(const ttstr &_name, tjs_uint32 flags) {
+tTJSBinaryStream *krkr::io::OpenStream(const ttstr &_name, tjs_uint32 flags) {
     // open storage named "name".
     // currently only local/network(by OS) storage systems are
     // supported.
@@ -657,16 +657,16 @@ tTJSBinaryStream *TVPOpenStream(const ttstr &_name, tjs_uint32 flags) {
 
     const ttstr &origname = _name;
     ttstr name(_name);
-    TVPGetLocalName(name);
+    GetLocalPath(name);
 
-    return new tTVPLocalFileStream(origname, name, flags);
+    return new LocalFileStream(origname, name, flags);
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 // TVPCheckExistantLocalFile
 //---------------------------------------------------------------------------
-bool TVPCheckExistentLocalFile(const ttstr &name) {
+bool CheckExistentLocalFile(const ttstr &name) {
 #if 0
     DWORD attrib = ::GetFileAttributes(name.c_str());
     if(attrib == 0xffffffff || (attrib & FILE_ATTRIBUTE_DIRECTORY))
@@ -685,7 +685,7 @@ bool TVPCheckExistentLocalFile(const ttstr &name) {
 //---------------------------------------------------------------------------
 // TVPCheckExistantLocalFolder
 //---------------------------------------------------------------------------
-bool TVPCheckExistentLocalFolder(const ttstr &name) {
+bool CheckExistentLocalFolder(const ttstr &name) {
     tTVP_stat s{};
     if(!TVP_stat(name.c_str(), s)) {
         return false; // not exist
@@ -697,14 +697,14 @@ bool TVPCheckExistentLocalFolder(const ttstr &name) {
 
 static tTVPArchive *(*ArchiveCreators[])(
     const ttstr &name, tTJSBinaryStream *st,
-    bool normalizeFileName) = { TVPOpenZIPArchive, TVPOpen7ZArchive,
-                                TVPOpenTARArchive, tTVPXP3Archive::Create };
+    bool normalizeFileName) = { OpenZIPArchive, Open7ZArchive,
+                                OpenTARArchive, XP3Archive::Create };
 
 //---------------------------------------------------------------------------
-// TVPOpenArchive
+// OpenArchive
 //---------------------------------------------------------------------------
-tTVPArchive *TVPOpenArchive(const ttstr &name, bool normalizeFileName) {
-    tTJSBinaryStream *st = TVPCreateStream(name);
+tTVPArchive *OpenArchive(const ttstr &name, bool normalizeFileName) {
+    tTJSBinaryStream *st = CreateStream(name);
     if(!st)
         return nullptr;
     for(auto creator : ArchiveCreators) {
@@ -718,11 +718,11 @@ tTVPArchive *TVPOpenArchive(const ttstr &name, bool normalizeFileName) {
 }
 
 //---------------------------------------------------------------------------
-int TVPCheckArchive(const ttstr &localname) {
+int CheckArchive(const ttstr &localname) {
     tTVPArchive *arc = nullptr;
     int validArchive = 2; // archive but no startup.tjs
     try {
-        arc = TVPOpenArchive(TVPNormalizeStorageName(localname), false);
+        arc = OpenArchive(krkr::io::NormalizeStorageName(localname), false);
         if(arc) {
             tjs_uint count = arc->GetCount();
             ttstr str_startup_tjs = TJS_W("startup.tjs");
@@ -761,7 +761,7 @@ int TVPCheckArchive(const ttstr &localname) {
 //---------------------------------------------------------------------------
 // TVPLocalExtrectFilePath
 //---------------------------------------------------------------------------
-ttstr TVPLocalExtractFilePath(const ttstr &name) {
+ttstr LocalExtractFilePath(const ttstr &name) {
     // this extracts given name's path under local filename rule
     const tjs_char *p = name.c_str();
     tjs_int i = name.GetLen() - 1;
@@ -773,29 +773,29 @@ ttstr TVPLocalExtractFilePath(const ttstr &name) {
 }
 
 //---------------------------------------------------------------------------
-// tTVPLocalFileStream
+// LocalFileStream
 //---------------------------------------------------------------------------
-tTVPLocalFileStream::tTVPLocalFileStream(const ttstr &origname,
+LocalFileStream::LocalFileStream(const ttstr &origname,
                                          const ttstr &localname,
                                          tjs_uint32 flag) :
     MemBuffer(nullptr), FileName(localname), Handle(-1) {
     tjs_uint32 access = flag & TJS_BS_ACCESS_MASK;
     if(access == TJS_BS_WRITE) {
-        if(TVPCheckExistentLocalFile(localname)) {
+        if(CheckExistentLocalFile(localname)) {
         } else {
-            ttstr dirpath = TVPLocalExtractFilePath(localname);
+            ttstr dirpath = LocalExtractFilePath(localname);
             const tjs_char *p = dirpath.c_str();
             tjs_int i = dirpath.GetLen();
             if(p[i - 1] == TJS_W('/') || p[i - 1] == TJS_W('\\'))
                 i--;
             dirpath = dirpath.SubString(0, i);
-            if(!TVPCheckExistentLocalFolder(dirpath) &&
+            if(!CheckExistentLocalFolder(dirpath) &&
                !TVPCreateFolders(dirpath)) {
                 TVPThrowExceptionMessage(TVPCannotOpenStorage, origname);
             }
             //			_lastFileSystemChanged = true;
         }
-        MemBuffer = new tTVPMemoryStream();
+        MemBuffer = new MemoryStream();
         return;
     }
 
@@ -826,9 +826,9 @@ tTVPLocalFileStream::tTVPLocalFileStream(const ttstr &origname,
         if(access == TJS_BS_APPEND || access == TJS_BS_UPDATE) {
             Handle = _wopen(wpath.c_str(), O_RDONLY, 0666);
             if(Handle >= 0) {
-                tjs_uint64 size = tTVPLocalFileStream::GetSize();
+                tjs_uint64 size = LocalFileStream::GetSize();
                 if(size < 4 * 1024 * 1024) {
-                    MemBuffer = new tTVPMemoryStream();
+                    MemBuffer = new MemoryStream();
                     MemBuffer->SetSize(size);
                     read(Handle, MemBuffer->GetInternalBuffer(), size);
                 }
@@ -847,9 +847,9 @@ tTVPLocalFileStream::tTVPLocalFileStream(const ttstr &origname,
             // use whole file writing
             Handle = open(holder, O_RDONLY, 0666);
             if(Handle >= 0) {
-                tjs_uint64 size = tTVPLocalFileStream::GetSize();
+                tjs_uint64 size = LocalFileStream::GetSize();
                 if(size < 4 * 1024 * 1024) { // only support file size <= 4M
-                    MemBuffer = new tTVPMemoryStream();
+                    MemBuffer = new MemoryStream();
                     MemBuffer->SetSize(size);
                     read(Handle, MemBuffer->GetInternalBuffer(), size);
                 }
@@ -867,9 +867,9 @@ tTVPLocalFileStream::tTVPLocalFileStream(const ttstr &origname,
 }
 
 //---------------------------------------------------------------------------
-tTVPLocalFileStream::~tTVPLocalFileStream() {
+LocalFileStream::~LocalFileStream() {
     if(MemBuffer) {
-        if(!TVPWriteDataToFile(FileName, MemBuffer->GetInternalBuffer(),
+        if(!WriteDataToFile(FileName, MemBuffer->GetInternalBuffer(),
                                MemBuffer->GetSize())) {
             delete MemBuffer;
             ttstr filename(FileName);
@@ -890,7 +890,7 @@ tTVPLocalFileStream::~tTVPLocalFileStream() {
 }
 
 //---------------------------------------------------------------------------
-tjs_uint64 tTVPLocalFileStream::Seek(tjs_int64 offset, tjs_int whence) {
+tjs_uint64 LocalFileStream::Seek(tjs_int64 offset, tjs_int whence) {
     if(MemBuffer) {
         return MemBuffer->Seek(offset, whence);
     }
@@ -898,7 +898,7 @@ tjs_uint64 tTVPLocalFileStream::Seek(tjs_int64 offset, tjs_int whence) {
 }
 
 //---------------------------------------------------------------------------
-tjs_uint tTVPLocalFileStream::Read(void *buffer, tjs_uint read_size) {
+tjs_uint LocalFileStream::Read(void *buffer, tjs_uint read_size) {
     if(MemBuffer) {
         return MemBuffer->Read(buffer, read_size);
     }
@@ -906,7 +906,7 @@ tjs_uint tTVPLocalFileStream::Read(void *buffer, tjs_uint read_size) {
 }
 
 //---------------------------------------------------------------------------
-tjs_uint tTVPLocalFileStream::Write(const void *buffer, tjs_uint write_size) {
+tjs_uint LocalFileStream::Write(const void *buffer, tjs_uint write_size) {
     if(MemBuffer) {
         return MemBuffer->Write(buffer, write_size);
     }
@@ -914,7 +914,7 @@ tjs_uint tTVPLocalFileStream::Write(const void *buffer, tjs_uint write_size) {
 }
 
 //---------------------------------------------------------------------------
-void tTVPLocalFileStream::SetEndOfStorage() {
+void LocalFileStream::SetEndOfStorage() {
     if(MemBuffer) {
         return MemBuffer->SetEndOfStorage();
     }
@@ -922,7 +922,7 @@ void tTVPLocalFileStream::SetEndOfStorage() {
 }
 
 //---------------------------------------------------------------------------
-tjs_uint64 tTVPLocalFileStream::GetSize() {
+tjs_uint64 LocalFileStream::GetSize() {
     if(MemBuffer) {
         return MemBuffer->GetSize();
     }
@@ -935,19 +935,19 @@ tjs_uint64 tTVPLocalFileStream::GetSize() {
 /*
 this class provides COM's IStream adapter for tTJSBinaryStream
 */
-class tTVPIStreamAdapter : public IStream {
+class IStreamAdapter : public IStream {
     tTJSBinaryStream *Stream;
     ULONG RefCount;
 
 public:
-    tTVPIStreamAdapter(tTJSBinaryStream *ref);
+    IStreamAdapter(tTJSBinaryStream *ref);
 
     /*
     the stream passed by argument here is freed by this instance'
     destruction.
     */
 
-    virtual ~tTVPIStreamAdapter();
+    virtual ~IStreamAdapter();
 
     // IUnknown
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid,
@@ -995,20 +995,20 @@ public:
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPIStreamAdapter
+// IStreamAdapter
 //---------------------------------------------------------------------------
 /*
         this class provides adapter for COM's IStream
 */
-tTVPIStreamAdapter::tTVPIStreamAdapter(tTJSBinaryStream *ref) {
+IStreamAdapter::IStreamAdapter(tTJSBinaryStream *ref) {
     Stream = ref;
     RefCount = 1;
 }
 
 //---------------------------------------------------------------------------
-tTVPIStreamAdapter::~tTVPIStreamAdapter() { delete Stream; }
+IStreamAdapter::~IStreamAdapter() { delete Stream; }
 //---------------------------------------------------------------------------
-HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::QueryInterface(REFIID riid,
+HRESULT STDMETHODCALLTYPE IStreamAdapter::QueryInterface(REFIID riid,
                                                              void **ppvObject) {
     if(!ppvObject)
         return E_INVALIDARG;
@@ -1029,10 +1029,10 @@ HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::QueryInterface(REFIID riid,
 }
 
 //---------------------------------------------------------------------------
-ULONG STDMETHODCALLTYPE tTVPIStreamAdapter::AddRef() { return ++RefCount; }
+ULONG STDMETHODCALLTYPE IStreamAdapter::AddRef() { return ++RefCount; }
 
 //---------------------------------------------------------------------------
-ULONG STDMETHODCALLTYPE tTVPIStreamAdapter::Release() {
+ULONG STDMETHODCALLTYPE IStreamAdapter::Release() {
     if(RefCount == 1) {
         delete this;
         return 0;
@@ -1041,7 +1041,7 @@ ULONG STDMETHODCALLTYPE tTVPIStreamAdapter::Release() {
 }
 
 //---------------------------------------------------------------------------
-HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::Read(void *pv, ULONG cb,
+HRESULT STDMETHODCALLTYPE IStreamAdapter::Read(void *pv, ULONG cb,
                                                    ULONG *pcbRead) {
     try {
         ULONG read = Stream->Read(pv, cb);
@@ -1054,7 +1054,7 @@ HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::Read(void *pv, ULONG cb,
 }
 
 //---------------------------------------------------------------------------
-HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::Write(const void *pv, ULONG cb,
+HRESULT STDMETHODCALLTYPE IStreamAdapter::Write(const void *pv, ULONG cb,
                                                     ULONG *pcbWritten) {
     try {
         ULONG written = Stream->Write(pv, cb);
@@ -1067,7 +1067,7 @@ HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::Write(const void *pv, ULONG cb,
 }
 
 //---------------------------------------------------------------------------
-HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::Seek(
+HRESULT STDMETHODCALLTYPE IStreamAdapter::Seek(
     LARGE_INTEGER dlibMove, DWORD dwOrigin, ULARGE_INTEGER *plibNewPosition) {
     try {
         switch(dwOrigin) {
@@ -1103,39 +1103,39 @@ HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::Seek(
 
 //---------------------------------------------------------------------------
 HRESULT STDMETHODCALLTYPE
-tTVPIStreamAdapter::SetSize(ULARGE_INTEGER libNewSize) {
+IStreamAdapter::SetSize(ULARGE_INTEGER libNewSize) {
     return E_NOTIMPL;
 }
 
 //---------------------------------------------------------------------------
-HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::CopyTo(
+HRESULT STDMETHODCALLTYPE IStreamAdapter::CopyTo(
     IStream *pstm, ULARGE_INTEGER cb, ULARGE_INTEGER *pcbRead,
     ULARGE_INTEGER *pcbWritten) {
     return E_NOTIMPL;
 }
 
 //---------------------------------------------------------------------------
-HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::Commit(DWORD grfCommitFlags) {
+HRESULT STDMETHODCALLTYPE IStreamAdapter::Commit(DWORD grfCommitFlags) {
     return E_NOTIMPL;
 }
 
 //---------------------------------------------------------------------------
-HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::Revert() { return E_NOTIMPL; }
+HRESULT STDMETHODCALLTYPE IStreamAdapter::Revert() { return E_NOTIMPL; }
 
 //---------------------------------------------------------------------------
-HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::LockRegion(
+HRESULT STDMETHODCALLTYPE IStreamAdapter::LockRegion(
     ULARGE_INTEGER libOffset, ULARGE_INTEGER cb, DWORD dwLockType) {
     return E_NOTIMPL;
 }
 
 //---------------------------------------------------------------------------
-HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::UnlockRegion(
+HRESULT STDMETHODCALLTYPE IStreamAdapter::UnlockRegion(
     ULARGE_INTEGER libOffset, ULARGE_INTEGER cb, DWORD dwLockType) {
     return E_NOTIMPL;
 }
 
 //---------------------------------------------------------------------------
-HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::Stat(STATSTG *pstatstg,
+HRESULT STDMETHODCALLTYPE IStreamAdapter::Stat(STATSTG *pstatstg,
                                                    DWORD grfStatFlag) {
     // This method imcompletely fills the target structure, because
     // some informations like access mode or stream name are already
@@ -1180,48 +1180,48 @@ HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::Stat(STATSTG *pstatstg,
 }
 
 //---------------------------------------------------------------------------
-HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::Clone(IStream **ppstm) {
+HRESULT STDMETHODCALLTYPE IStreamAdapter::Clone(IStream **ppstm) {
     return E_NOTIMPL;
 }
 //---------------------------------------------------------------------------
 
-IStream *TVPCreateIStream(tTJSBinaryStream *s) {
-    return new tTVPIStreamAdapter(s);
+IStream *CreateIStream(tTJSBinaryStream *s) {
+    return new IStreamAdapter(s);
 }
 
 //---------------------------------------------------------------------------
 // IStream creator
 //---------------------------------------------------------------------------
-IStream *TVPCreateIStream(const ttstr &name, tjs_uint32 flags) {
+IStream *CreateIStream(const ttstr &name, tjs_uint32 flags) {
     // convert tTJSBinaryStream to IStream thru TStream
 
     tTJSBinaryStream *stream0 = nullptr;
     try {
-        stream0 = TVPCreateStream(name, flags);
+        stream0 = CreateStream(name, flags);
     } catch(...) {
         delete stream0;
         return nullptr;
     }
 
-    IStream *istream = new tTVPIStreamAdapter(stream0);
+    IStream *istream = new IStreamAdapter(stream0);
 
     return istream;
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPBinaryStreamAdapter
+// BinaryStreamAdapter
 //---------------------------------------------------------------------------
-tTVPBinaryStreamAdapter::tTVPBinaryStreamAdapter(IStream *ref) {
+BinaryStreamAdapter::BinaryStreamAdapter(IStream *ref) {
     Stream = ref;
     Stream->AddRef();
 }
 
 //---------------------------------------------------------------------------
-tTVPBinaryStreamAdapter::~tTVPBinaryStreamAdapter() { Stream->Release(); }
+BinaryStreamAdapter::~BinaryStreamAdapter() { Stream->Release(); }
 
 //---------------------------------------------------------------------------
-tjs_uint64 tTVPBinaryStreamAdapter::Seek(tjs_int64 offset, tjs_int whence) {
+tjs_uint64 BinaryStreamAdapter::Seek(tjs_int64 offset, tjs_int whence) {
     DWORD origin;
 
     switch(whence) {
@@ -1268,7 +1268,7 @@ tjs_uint64 tTVPBinaryStreamAdapter::Seek(tjs_int64 offset, tjs_int whence) {
 }
 
 //---------------------------------------------------------------------------
-tjs_uint tTVPBinaryStreamAdapter::Read(void *buffer, tjs_uint read_size) {
+tjs_uint BinaryStreamAdapter::Read(void *buffer, tjs_uint read_size) {
     ULONG cb = read_size;
     ULONG read;
     HRESULT hr = Stream->Read(buffer, cb, &read);
@@ -1278,7 +1278,7 @@ tjs_uint tTVPBinaryStreamAdapter::Read(void *buffer, tjs_uint read_size) {
 }
 
 //---------------------------------------------------------------------------
-tjs_uint tTVPBinaryStreamAdapter::Write(const void *buffer,
+tjs_uint BinaryStreamAdapter::Write(const void *buffer,
                                         tjs_uint write_size) {
     ULONG cb = write_size;
     ULONG written;
@@ -1289,7 +1289,7 @@ tjs_uint tTVPBinaryStreamAdapter::Write(const void *buffer,
 }
 
 //---------------------------------------------------------------------------
-tjs_uint64 tTVPBinaryStreamAdapter::GetSize() {
+tjs_uint64 BinaryStreamAdapter::GetSize() {
     HRESULT hr;
     STATSTG stg;
 
@@ -1302,7 +1302,7 @@ tjs_uint64 tTVPBinaryStreamAdapter::GetSize() {
 }
 
 //---------------------------------------------------------------------------
-void tTVPBinaryStreamAdapter::SetEndOfStorage() {
+void BinaryStreamAdapter::SetEndOfStorage() {
     ULARGE_INTEGER pos;
     pos.QuadPart = GetPosition();
     HRESULT hr = Stream->SetSize(pos);
@@ -1312,10 +1312,10 @@ void tTVPBinaryStreamAdapter::SetEndOfStorage() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCreateBinaryStreamAdapter
+// CreateBinaryStreamAdapter
 //---------------------------------------------------------------------------
-tTJSBinaryStream *TVPCreateBinaryStreamAdapter(IStream *refstream) {
-    return new tTVPBinaryStreamAdapter(refstream);
+tTJSBinaryStream *CreateBinaryStreamAdapter(IStream *refstream) {
+    return new BinaryStreamAdapter(refstream);
 }
 //---------------------------------------------------------------------------
 
@@ -1326,7 +1326,7 @@ tTVPPluginHolder::tTVPPluginHolder(const ttstr &aname) {
     LocalTempStorageHolder = nullptr;
 
     // search in TVP storage system
-    ttstr place(TVPGetPlacedPath(aname));
+    ttstr place(GetPlacedPath(aname));
     if(!place.IsEmpty()) {
         LocalTempStorageHolder = new tTVPLocalTempStorageHolder(place);
     } else {
@@ -1336,14 +1336,14 @@ tTVPPluginHolder::tTVPPluginHolder(const ttstr &aname) {
         ttstr exepath =
             IncludeTrailingBackslash(ExtractFileDir(ExePath()));
         ttstr pname = exepath + aname;
-        if(TVPCheckExistentLocalFile(pname))
+        if(CheckExistentLocalFile(pname))
         {
             LocalName = pname;
             return;
         }
 
         pname = exepath + TJS_W("system\\") + aname;
-        if(TVPCheckExistentLocalFile(pname))
+        if(CheckExistentLocalFile(pname))
         {
             LocalName = pname;
             return;
@@ -1354,7 +1354,7 @@ tTVPPluginHolder::tTVPPluginHolder(const ttstr &aname) {
 #else
         pname = exepath + TJS_W("plugin\\") + aname;
 #endif
-        if(TVPCheckExistentLocalFile(pname))
+        if(CheckExistentLocalFile(pname))
         {
             LocalName = pname;
             return;
@@ -1379,9 +1379,9 @@ const ttstr &tTVPPluginHolder::GetLocalName() const {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPSearchCD
+// SearchCD
 //---------------------------------------------------------------------------
-ttstr TVPSearchCD(const ttstr &name) {
+ttstr SearchCD(const ttstr &name) {
     // search CD which has specified volume label name.
     // return drive letter ( such as 'A' or 'B' )
     // return empty string if not found.
@@ -1411,13 +1411,13 @@ TArchiveStream::TArchiveStream(tTVPArchive *owner, tjs_uint64 off,
                                tjs_uint64 len) :
     Owner(owner), StartPos(off), DataLength(len) {
     Owner->AddRef();
-    _instr = TVPGetCachedArchiveHandle(Owner, Owner->ArchiveName);
+    _instr = GetCachedArchiveHandle(Owner, Owner->ArchiveName);
     CurrentPos = 0;
     _instr->SetPosition(off);
 }
 
 TArchiveStream::~TArchiveStream() {
-    TVPReleaseCachedArchiveHandle(Owner, _instr);
+    ReleaseCachedArchiveHandle(Owner, _instr);
     Owner->Release();
 }
 
@@ -1438,7 +1438,7 @@ tTJSNativeClass *TVPCreateNativeClass_Storages() {
             return TJS_E_BADPARAMCOUNT;
 
         if(result)
-            *result = TVPSearchCD(*param[0]);
+            *result = SearchCD(*param[0]);
 
         return TJS_S_OK;
     }
@@ -1451,8 +1451,8 @@ tTJSNativeClass *TVPCreateNativeClass_Storages() {
             return TJS_E_BADPARAMCOUNT;
 
         if(result) {
-            ttstr str(TVPNormalizeStorageName(*param[0]));
-            TVPGetLocalName(str);
+            ttstr str(krkr::io::NormalizeStorageName(*param[0]));
+            GetLocalPath(str);
             *result = str;
         }
 
@@ -1488,14 +1488,14 @@ static FILE *_fileopen(ttstr path) {
     std::string strpath = path.AsStdString();
     FILE *fp = fopen(strpath.c_str(), "wb");
     if(!fp) { // make dirs
-        path = TVPExtractStoragePath(path);
+        path = ExtractStoragePath(path);
         TVPCreateFolders(path);
         fp = fopen(strpath.c_str(), "wb");
     }
     return fp;
 }
 
-bool TVPSaveStreamToFile(tTJSBinaryStream *st, tjs_uint64 offset,
+bool SaveStreamToFile(tTJSBinaryStream *st, tjs_uint64 offset,
                          tjs_uint64 size, const ttstr &outpath) {
     FILE *fp = _fileopen(outpath);
     if(!fp)
@@ -1516,15 +1516,15 @@ bool TVPSaveStreamToFile(tTJSBinaryStream *st, tjs_uint64 offset,
 }
 
 //---------------------------------------------------------------------------
-// TVPAutoMountSiblingXP3Archives
+// AutoMountSiblingXP3Archives
 //---------------------------------------------------------------------------
 static std::vector<ttstr> TVPAutoMountedPaths;
 
-void TVPAutoMountSiblingXP3Archives() {
+void AutoMountSiblingXP3Archives() {
     // 一个进程可能先后开多个标题。绝不能把上一个包选定的 Cx 解码器漏给下一个
     // 工程，所以每次开始挂载前先复位。**必须放在下面的提前 return 之前**，
     // 否则用 xp3 当工程目录时这条复位不会执行。
-    TVPResetBuiltinXP3CxDecoder();
+    ResetBuiltinXP3CxDecoder();
 
     if(TVPProjectDir.GetLastChar() != TJS_W('/'))
         return;
@@ -1535,11 +1535,11 @@ void TVPAutoMountSiblingXP3Archives() {
     if(len == 0)
         return;
     ttstr projDir = TVPProjectDir.SubString(0, len);
-    ttstr parentStoragePath = TVPExtractStoragePath(projDir);
+    ttstr parentStoragePath = ExtractStoragePath(projDir);
     if(parentStoragePath.IsEmpty())
         return;
 
-    ttstr projBaseName = TVPExtractStorageName(projDir);
+    ttstr projBaseName = ExtractStorageName(projDir);
 
     spdlog::info("AutoMountXP3: TVPProjectDir={}", TVPProjectDir.AsStdString());
     spdlog::info("AutoMountXP3: parentStoragePath={}",
@@ -1548,7 +1548,7 @@ void TVPAutoMountSiblingXP3Archives() {
 
     ttstr nativeParent = parentStoragePath;
     try {
-        TVPGetLocalName(nativeParent);
+        GetLocalPath(nativeParent);
     } catch(eTJSError &e) {
         spdlog::error("AutoMountXP3: TVPGetLocalName threw: {}",
                       e.GetMessage().AsStdString());
@@ -1604,11 +1604,11 @@ void TVPAutoMountSiblingXP3Archives() {
 
     for(const auto &xp3Name : xp3Names) {
         ttstr archivePath = parentStoragePath + ttstr(xp3Name.c_str());
-        archivePath = TVPNormalizeStorageName(archivePath);
+        archivePath = krkr::io::NormalizeStorageName(archivePath);
 
         tTVPArchive *arc = nullptr;
         try {
-            arc = TVPOpenArchive(archivePath, true);
+            arc = OpenArchive(archivePath, true);
         } catch(...) {
             TVPAddImportantLog(
                 ttstr(TJS_W("(warn) Failed to open sibling archive: ")) +
@@ -1657,9 +1657,9 @@ void TVPAutoMountSiblingXP3Archives() {
                          static_cast<tjs_int>(d.size()));
             ttstr autoPath = archiveBase + dirStr;
             try {
-                TVPAddAutoPath(autoPath);
+                AddAutoPath(autoPath);
                 TVPAutoMountedPaths.push_back(
-                    TVPNormalizeStorageName(autoPath));
+                    krkr::io::NormalizeStorageName(autoPath));
             } catch(...) {
             }
         }
@@ -1675,14 +1675,14 @@ void TVPAutoMountSiblingXP3Archives() {
 
 //---------------------------------------------------------------------------
 // 挂载工程目录自身的 *.xp3（游戏自带的 data.xp3 / scenario.xp3 / patch.xp3
-// 等）。 TVPAutoMountSiblingXP3Archives 只扫工程*父*目录的兄弟 xp3
+// 等）。 AutoMountSiblingXP3Archives 只扫工程*父*目录的兄弟 xp3
 // 并跳过与工程同名者， 从不扫游戏目录自身，导致打包版游戏（xp3
 // 放在游戏文件夹内）的 startup.tjs 等
-// 永远查不到、启动失败。散装文件夹能启动只是因为它靠 TVPGetPlacedPath 的
+// 永远查不到、启动失败。散装文件夹能启动只是因为它靠 GetPlacedPath 的
 // "先查真实文件"分支裸读到了文件，把打包版这一缺陷掩盖了。
 // 这里补上"扫描工程目录自身 xp3"的挂载，逻辑与兄弟挂载完全一致
-// （TVPOpenArchive + 逐个目录 TVPAddAutoPath 注册进 auto-path 表）。
-void TVPAutoMountProjectXP3Archives() {
+// （OpenArchive + 逐个目录 AddAutoPath 注册进 auto-path 表）。
+void AutoMountProjectXP3Archives() {
     if(TVPProjectDir.GetLastChar() != TJS_W('/'))
         return;
 
@@ -1690,7 +1690,7 @@ void TVPAutoMountProjectXP3Archives() {
 
     ttstr nativeProj = projStorage;
     try {
-        TVPGetLocalName(nativeProj);
+        GetLocalPath(nativeProj);
     } catch(...) {
         spdlog::error("AutoMountProjectXP3: TVPGetLocalName threw for {}",
                       projStorage.AsStdString());
@@ -1731,11 +1731,11 @@ void TVPAutoMountProjectXP3Archives() {
 
     for(const auto &xp3Name : xp3Names) {
         ttstr archivePath = projStorage + ttstr(xp3Name.c_str());
-        archivePath = TVPNormalizeStorageName(archivePath);
+        archivePath = krkr::io::NormalizeStorageName(archivePath);
 
         tTVPArchive *arc = nullptr;
         try {
-            arc = TVPOpenArchive(archivePath, true);
+            arc = OpenArchive(archivePath, true);
         } catch(...) {
             TVPAddImportantLog(
                 ttstr(TJS_W("(warn) Failed to open project archive: ")) +
@@ -1783,9 +1783,9 @@ void TVPAutoMountProjectXP3Archives() {
                          static_cast<tjs_int>(d.size()));
             ttstr autoPath = archiveBase + dirStr;
             try {
-                TVPAddAutoPath(autoPath);
+                AddAutoPath(autoPath);
                 TVPAutoMountedPaths.push_back(
-                    TVPNormalizeStorageName(autoPath));
+                    krkr::io::NormalizeStorageName(autoPath));
             } catch(...) {
             }
         }
@@ -1816,7 +1816,7 @@ void TVPAutoMountProjectXP3Archives() {
 // 与旧层的区别：旧层用"路径里含 patch 子串"，`unpatched.xp3`、`spatchcock.xp3`
 // 都会被当成补丁；这个规则不会。
 //---------------------------------------------------------------------------
-static bool TVPIsPatchArchiveNameSequenced(std::string name, int *sequence) {
+static bool IsPatchArchiveNameSequenced(std::string name, int *sequence) {
     for(char &c : name)
         c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     if(name.size() > 4 && name.compare(name.size() - 4, 4, ".xp3") == 0)
@@ -1862,7 +1862,7 @@ static bool TVPIsPatchArchiveNameSequenced(std::string name, int *sequence) {
 }
 //---------------------------------------------------------------------------
 
-void TVPBoostAutoMountPaths() {
+void BoostAutoMountPaths() {
     if(TVPAutoMountedPaths.empty())
         return;
 
@@ -1894,7 +1894,7 @@ void TVPBoostAutoMountPaths() {
         if(sharp != std::string::npos)
             s.erase(sharp); // 只看档案名，不看档案内的目录名
         if(sequencedRule)
-            return TVPIsPatchArchiveNameSequenced(s, nullptr);
+            return IsPatchArchiveNameSequenced(s, nullptr);
         for(char &c : s)
             c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         return s.find("patch") != std::string::npos;

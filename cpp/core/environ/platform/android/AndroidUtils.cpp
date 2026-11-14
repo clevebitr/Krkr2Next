@@ -837,8 +837,8 @@ extern std::string Android_ShowInputDialog(const char *pszTitle,
 extern std::string Android_ShowFileBrowser(const char *pszTitle,
                                            const char *pszInitDir,
                                            bool showEditor);
-extern ttstr TVPGetAppPath();
-extern ttstr TVPGetLocallyAccessibleName(const ttstr &name);
+extern ttstr krkr::io::GetAppPath();
+extern ttstr krkr::io::GetLocallyAccessiblePath(const ttstr &name);
 
 std::vector<ttstr> Android_GetExternalStoragePath() {
     auto to_file_uri = [](const std::string &path) -> std::string {
@@ -983,7 +983,7 @@ bool TVPCheckStartupPath(const std::string &path) {
         methodInfo.env->DeleteLocalRef(jstrPath);
         if(success) {
             parent += "/savedata";
-            if(!TVPCheckExistentLocalFolder(parent)) {
+            if(!krkr::io::CheckExistentLocalFolder(parent)) {
                 TVPCreateFolders(parent);
             }
             jstrPath = methodInfo.env->NewStringUTF(parent.c_str());
@@ -1094,7 +1094,7 @@ static bool TVPWriteDataToFileJava(const std::string &filename,
     return false;
 }
 
-bool TVPWriteDataToFile(const ttstr &filepath, const void *data,
+bool krkr::io::WriteDataToFile(const ttstr &filepath, const void *data,
                         unsigned int size) {
     std::string filename = filepath.AsStdString();
     while(access(filename.c_str(), F_OK) == 0) {

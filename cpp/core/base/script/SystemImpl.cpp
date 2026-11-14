@@ -97,9 +97,9 @@ tjs_int krkr::base::TVPGetOSBits() { return sizeof(void *) * 8; }
 //---------------------------------------------------------------------------
 bool krkr::base::TVPShellExecute(const ttstr &target, const ttstr &param) {
     // open or execute target file
-//	ttstr file = TVPGetNativeName(TVPNormalizeStorageName(target));
+//	ttstr file = TVPGetNativeName(krkr::io::NormalizeStorageName(target));
 #if 0
-    return TVPIsExistentStorageNoSearchNoNormalize(target);
+    return krkr::io::IsExistentStorageNoSearchNoNormalize(target);
     if (::ShellExecute(nullptr, nullptr,
         target.c_str(),
         param.IsEmpty() ? nullptr : param.c_str(),
@@ -125,7 +125,7 @@ static void InitRegisterData() {
     static bool dataInited = false;
     if(!dataInited) {
         ttstr regfile = TVPGetAppDataPath() + TJS_W("RegisterData.tjs");
-        if(TVPIsExistentStorageNoSearch(regfile)) {
+        if(krkr::io::IsExistentStorageNoSearch(regfile)) {
             TVPExecuteStorage(regfile, &RegisterData, true, TJS_W(""));
         }
     }
@@ -371,12 +371,12 @@ ttstr TVPGetPersonalPath() {
 
     if(!path.IsEmpty())
     {
-        path = TVPNormalizeStorageName(path);
+        path = krkr::io::NormalizeStorageName(path);
         if(path.GetLastChar() != TJS_W('/')) path += TJS_W('/');
         return path;
     }
 #endif
-    return TVPGetAppPath();
+    return krkr::io::GetAppPath();
 }
 //---------------------------------------------------------------------------
 
@@ -392,12 +392,12 @@ ttstr TVPGetAppDataPath() {
 
     if(!path.IsEmpty())
     {
-        path = TVPNormalizeStorageName(path);
+        path = krkr::io::NormalizeStorageName(path);
         if(path.GetLastChar() != TJS_W('/')) path += TJS_W('/');
         return path;
     }
 #endif
-    return TVPGetAppPath();
+    return krkr::io::GetAppPath();
 }
 //---------------------------------------------------------------------------
 
@@ -415,7 +415,7 @@ ttstr TVPGetSavedGamesPath() {
     }
     return path;
 #endif
-    return TVPGetAppPath();
+    return krkr::io::GetAppPath();
 }
 //---------------------------------------------------------------------------
 
@@ -1227,7 +1227,7 @@ tTJSNativeClass *krkr::base::TVPCreateNativeClass_System() {
     // 与上游 AetherKiri 的 `System.arcPath` 对齐（KRKRZ 系 initialize.tjs 会读它）。
     // 语义 = 当前 app path（同 exePath）；这里是纯新增属性。
     TJS_BEGIN_NATIVE_PROP_DECL(arcPath){
-        TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetAppPath();
+        TJS_BEGIN_NATIVE_PROP_GETTER{ *result = krkr::io::GetAppPath();
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -1237,7 +1237,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, arcPath)
 //----------------------------------------------------------------------
     TJS_BEGIN_NATIVE_PROP_DECL(exePath){
-        TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetAppPath();
+        TJS_BEGIN_NATIVE_PROP_GETTER{ *result = krkr::io::GetAppPath();
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -1277,7 +1277,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, dataPath)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(exeName){ TJS_BEGIN_NATIVE_PROP_GETTER{
-    static ttstr exename(TVPNormalizeStorageName(ExePath()));
+    static ttstr exename(krkr::io::NormalizeStorageName(ExePath()));
 *result = exename;
 return TJS_S_OK;
 }

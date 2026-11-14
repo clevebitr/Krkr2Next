@@ -27,7 +27,7 @@ if(dir.GetLastChar() != TJS_W('/'))
         TJS_W("'/' must be specified at the end of given directory name."));
 
 // OSネイティブな表現に変換
-dir = TVPNormalizeStorageName(dir);
+dir = krkr::io::NormalizeStorageName(dir);
 
 // Array クラスのオブジェクトを作成
 iTJSDispatch2 *array = TJSCreateArrayObject();
@@ -37,8 +37,8 @@ try {
     tTJSArrayNI *ni;
     array->NativeInstanceSupport(TJS_NIS_GETINSTANCE, TJSGetArrayClassID(),
                                  (iTJSNativeInstance **)&ni);
-    TVPGetLocalName(dir);
-    TVPGetLocalFileListAt(dir, [ni](const ttstr &name, tTVPLocalFileInfo *s) {
+    krkr::io::GetLocalPath(dir);
+    krkr::io::GetLocalFileListAt(dir, [ni](const ttstr &name, tTVPLocalFileInfo *s) {
         if(s->Mode & (S_IFREG | S_IFDIR)) {
             ni->Items.emplace_back(name);
         }

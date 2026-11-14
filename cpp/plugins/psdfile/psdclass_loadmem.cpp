@@ -17,7 +17,7 @@ bool PSD::loadMemory(const ttstr &filename) {
 
     // まるごとメモリに読み込んで処理
     isLoaded = false;
-    IStream *stream = TVPCreateIStream(filename, TJS_BS_READ);
+    IStream *stream = krkr::io::CreateIStream(filename, TJS_BS_READ);
     if(stream) {
         try {
             // 全部メモリに読み込む

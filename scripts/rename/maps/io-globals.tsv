@@ -1,0 +1,34 @@
+# module: io
+# qualify: krkr::io
+# owner: cpp/core/io
+#
+# 由 rename_symbols.py --draft 生成：只做前缀剥离，未做语义审阅。
+# 第 4 列是提示（冲突/无变化），apply 时忽略；人工确认后请删掉或改掉。
+TVPAllowExtractProtectedStorage	AllowExtractProtectedStorage	var	
+TVPAppPathCache	AppPathCache	var	
+TVPAppPathCacheValid	AppPathCacheValid	var	
+TVPArchiveDelimiter	ArchiveDelimiter	var	
+TVPArchiveHandleCacheAge	ArchiveHandleCacheAge	var	
+TVPArchiveHandleCacheCS	ArchiveHandleCacheCS	var	
+TVPArchiveHandleCacheInit	ArchiveHandleCacheInit	var	
+TVPArchiveHandleCachePool	ArchiveHandleCachePool	var	
+TVPArchiveHandleCacheShutdown	ArchiveHandleCacheShutdown	var	
+TVPAutoMountedPaths	AutoMountedPaths	var	
+TVPAutoPathList	AutoPathList	var	
+TVPClearAutoPathCacheCallbackInit	ClearAutoPathCacheCallbackInit	var	
+TVPClearSegmentCacheCallbackInit	ClearSegmentCacheCallbackInit	var	
+TVPCreateNativeClass_Storages	CreateNativeClass_Storages	fn	
+TVPCreateStreamCS	CreateStreamCS	var	
+TVPCurrentMedia	CurrentMedia	var	
+TVPProcessID	ProcessID	var	
+TVPSegmentCache	SegmentCache	var	
+TVPSegmentCacheCS	SegmentCacheCS	var	
+TVPSegmentCacheLimit	SegmentCacheLimit	var	
+TVPSegmentCacheLimitOverridden	SegmentCacheLimitOverridden	var	
+TVPSegmentCacheLimitOverrideBytes	SegmentCacheLimitOverrideBytes	var	
+TVPSegmentCacheTotalBytes	SegmentCacheTotalBytes	var	
+TVPTempPath	TempPath	var	
+TVPTempUniqueNum	TempUniqueNum	var	
+TVPXP3ArchiveContentFilter	XP3ArchiveContentFilter	var	
+TVPXP3ArchiveExtractionFilter	XP3ArchiveExtractionFilter	var	
+TVP_AUTOPATH_CACHE_MISS_MARKER	KRKR_AUTOPATH_CACHE_MISS_MARKER	macro	

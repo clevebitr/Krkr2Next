@@ -30,7 +30,7 @@ using krkr::io::TVPArchiveDelimiter;
 //---------------------------------------------------------------------------
 namespace krkr::io {
 
-ttstr TVPStringFromBMPUnicode(const tjs_uint16 *src, tjs_int maxlen = -1);
+ttstr krkr::io::StringFromBMPUnicode(const tjs_uint16 *src, tjs_int maxlen = -1);
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ public:
 } // namespace krkr::io
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::io::TVPStringFromBMPUnicode;
+using krkr::io::StringFromBMPUnicode;
 using krkr::io::tTVPArchive;
 
 //---------------------------------------------------------------------------
@@ -181,28 +181,28 @@ using krkr::io::iTVPStorageMedia;
 //---------------------------------------------------------------------------
 namespace krkr::io {
 
-extern tTVPArchive *TVPOpenArchive(const ttstr &name, bool normalizeFileName);
+extern tTVPArchive *krkr::io::OpenArchive(const ttstr &name, bool normalizeFileName);
 // open archive and return tTVPArchive instance.
 
-TJS_EXP_FUNC_DEF(ttstr, TVPGetTemporaryName, ());
+TJS_EXP_FUNC_DEF(ttstr, krkr::io::GetTemporaryName, ());
 // retrieve file name to store temporary data ( must be unique, local
 // name )
 
-TJS_EXP_FUNC_DEF(ttstr, TVPGetAppPath, ());
+TJS_EXP_FUNC_DEF(ttstr, krkr::io::GetAppPath, ());
 // retrieve program path, in normalized storage name
 
-void TVPPreNormalizeStorageName(ttstr &name);
-// called by TVPNormalizeStorageName before it process the storage
+void krkr::io::PreNormalizeStorageName(ttstr &name);
+// called by krkr::io::NormalizeStorageName before it process the storage
 // name. user may pass the OS's native filename to the TVP storage
 // system, so that this function must convert it to the TVP storage
 // name rules.
 
-iTVPStorageMedia *TVPCreateFileMedia();
+iTVPStorageMedia *krkr::io::CreateFileMedia();
 // create basic default "file:" storage media
 // /*
-// extern void TVPPreNormalizeStorageName(ttstr &name);
+// extern void krkr::io::PreNormalizeStorageName(ttstr &name);
 //
-tTJSBinaryStream *TVPOpenStream(const ttstr &name, tjs_uint32 flags);
+tTJSBinaryStream *krkr::io::OpenStream(const ttstr &name, tjs_uint32 flags);
 //         // open a storage and return a tTJSBinaryStream instance.
 //         // name does not contain in-archive storage name but
 //         // is normalized.
@@ -219,18 +219,18 @@ tTJSBinaryStream *TVPOpenStream(const ttstr &name, tjs_uint32 flags);
 // extern ttstr TVPGetNativeName(const ttstr &name);
 //         // retrieve OS native name
 //
-// extern ttstr TVPGetLocallyAccessibleName(const ttstr &name);
+// extern ttstr krkr::io::GetLocallyAccessiblePath(const ttstr &name);
 //         // check wether given name is easily accessible from local OS
 // filesystem.
 //         // if true, returns local OS native name. otherwise returns an
 // empty string.
 //
 // */
-extern bool TVPRemoveFile(const ttstr &name);
+extern bool krkr::io::RemoveFile(const ttstr &name);
 
 // remove local file ( "name" is a local *native* name )
 // this must not throw an exception ( return false if error )
-extern bool TVPRemoveFolder(const ttstr &name);
+extern bool krkr::io::RemoveFolder(const ttstr &name);
 
 // remove local directory ( "name" is a local *native* name )
 // this must not throw an exception ( return false if error )
@@ -241,14 +241,14 @@ bool TVPCreateFolders(const ttstr &folder);
 } // namespace krkr::io
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::io::TVPOpenArchive;
-using krkr::io::TVPGetTemporaryName;
-using krkr::io::TVPGetAppPath;
-using krkr::io::TVPPreNormalizeStorageName;
-using krkr::io::TVPCreateFileMedia;
-using krkr::io::TVPOpenStream;
-using krkr::io::TVPRemoveFile;
-using krkr::io::TVPRemoveFolder;
+using krkr::io::OpenArchive;
+using krkr::io::GetTemporaryName;
+using krkr::io::GetAppPath;
+using krkr::io::PreNormalizeStorageName;
+using krkr::io::CreateFileMedia;
+using krkr::io::OpenStream;
+using krkr::io::RemoveFile;
+using krkr::io::RemoveFolder;
 using krkr::io::TVPCreateFolders;
 
 //---------------------------------------------------------------------------
@@ -258,131 +258,131 @@ using krkr::io::TVPCreateFolders;
 //---------------------------------------------------------------------------
 namespace krkr::io {
 
-TJS_EXP_FUNC_DEF(void, TVPRegisterStorageMedia, (iTVPStorageMedia * media));
+TJS_EXP_FUNC_DEF(void, krkr::io::RegisterStorageMedia, (iTVPStorageMedia * media));
 // register storage media
-TJS_EXP_FUNC_DEF(void, TVPUnregisterStorageMedia, (iTVPStorageMedia * media));
+TJS_EXP_FUNC_DEF(void, krkr::io::UnregisterStorageMedia, (iTVPStorageMedia * media));
 // remove storage media
 
-extern tTJSBinaryStream *TVPCreateStream(const ttstr &name,
+extern tTJSBinaryStream *krkr::io::CreateStream(const ttstr &name,
                                          tjs_uint32 flags = 0);
 // open "name" and return tTJSBinaryStream instance.
 // name will be local storage, network storage, in-archive storage,
 // etc...
 
-TJS_EXP_FUNC_DEF(bool, TVPIsExistentStorageNoSearch, (const ttstr &name));
+TJS_EXP_FUNC_DEF(bool, krkr::io::IsExistentStorageNoSearch, (const ttstr &name));
 // if "name" is exists, return true. otherwise return false.
 // this does not search any auto search path.
 
-TJS_EXP_FUNC_DEF(bool, TVPIsExistentStorageNoSearchNoNormalize,
+TJS_EXP_FUNC_DEF(bool, krkr::io::IsExistentStorageNoSearchNoNormalize,
                  (const ttstr &name));
 
-TJS_EXP_FUNC_DEF(ttstr, TVPNormalizeStorageName, (const ttstr &name));
+TJS_EXP_FUNC_DEF(ttstr, krkr::io::NormalizeStorageName, (const ttstr &name));
 
-TJS_EXP_FUNC_DEF(void, TVPSetCurrentDirectory, (const ttstr &name));
+TJS_EXP_FUNC_DEF(void, krkr::io::SetCurrentStorageDirectory, (const ttstr &name));
 // set system current directory.
 // directory must end with path delimiter '/',
 // or archive delimiter '>'.
 
-TJS_EXP_FUNC_DEF(void, TVPGetLocalName, (ttstr & name));
+TJS_EXP_FUNC_DEF(void, krkr::io::GetLocalPath, (ttstr & name));
 
-ttstr TVPGetLocallyAccessibleName(const ttstr &name);
+ttstr krkr::io::GetLocallyAccessiblePath(const ttstr &name);
 
 } // namespace krkr::io
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::io::TVPRegisterStorageMedia;
-using krkr::io::TVPUnregisterStorageMedia;
-using krkr::io::TVPCreateStream;
-using krkr::io::TVPIsExistentStorageNoSearch;
-using krkr::io::TVPIsExistentStorageNoSearchNoNormalize;
-using krkr::io::TVPNormalizeStorageName;
-using krkr::io::TVPSetCurrentDirectory;
-using krkr::io::TVPGetLocalName;
-using krkr::io::TVPGetLocallyAccessibleName;
+using krkr::io::RegisterStorageMedia;
+using krkr::io::UnregisterStorageMedia;
+using krkr::io::CreateStream;
+using krkr::io::IsExistentStorageNoSearch;
+using krkr::io::IsExistentStorageNoSearchNoNormalize;
+using krkr::io::NormalizeStorageName;
+using krkr::io::SetCurrentStorageDirectory;
+using krkr::io::GetLocalPath;
+using krkr::io::GetLocallyAccessiblePath;
 
 namespace krkr::io {
 
-TJS_EXP_FUNC_DEF(ttstr, TVPExtractStorageExt, (const ttstr &name));
+TJS_EXP_FUNC_DEF(ttstr, krkr::io::ExtractStorageExt, (const ttstr &name));
 // extract "name"'s extension and return it.
 
-TJS_EXP_FUNC_DEF(ttstr, TVPExtractStorageName, (const ttstr &name));
+TJS_EXP_FUNC_DEF(ttstr, krkr::io::ExtractStorageName, (const ttstr &name));
 // extract "name"'s storage name ( excluding path ) and return it.
 
-TJS_EXP_FUNC_DEF(ttstr, TVPExtractStoragePath, (const ttstr &name));
+TJS_EXP_FUNC_DEF(ttstr, krkr::io::ExtractStoragePath, (const ttstr &name));
 // extract "name"'s path ( including last delimiter ) and return it.
 
-TJS_EXP_FUNC_DEF(ttstr, TVPChopStorageExt, (const ttstr &name));
+TJS_EXP_FUNC_DEF(ttstr, krkr::io::ChopStorageExt, (const ttstr &name));
 // chop storage's extension and return it.
 // extensition delimiter '.' will not be held.
 
 } // namespace krkr::io
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::io::TVPExtractStorageExt;
-using krkr::io::TVPExtractStorageName;
-using krkr::io::TVPExtractStoragePath;
-using krkr::io::TVPChopStorageExt;
+using krkr::io::ExtractStorageExt;
+using krkr::io::ExtractStorageName;
+using krkr::io::ExtractStoragePath;
+using krkr::io::ChopStorageExt;
 
 namespace krkr::io {
 
-TJS_EXP_FUNC_DEF(void, TVPAddAutoPath, (const ttstr &name));
+TJS_EXP_FUNC_DEF(void, krkr::io::AddAutoPath, (const ttstr &name));
 // add given path to auto search path
 
-TJS_EXP_FUNC_DEF(void, TVPRemoveAutoPath, (const ttstr &name));
+TJS_EXP_FUNC_DEF(void, krkr::io::RemoveAutoPath, (const ttstr &name));
 // remove given path from auto search path
 
-extern void TVPClearAutoPathListForRestart();
+extern void krkr::io::ClearAutoPathListForRestart();
 // runtime-restart 时清空累积的 auto-path（上一游戏归档路径），供 reset 链调用
 
-TJS_EXP_FUNC_DEF(ttstr, TVPGetPlacedPath, (const ttstr &name));
+TJS_EXP_FUNC_DEF(ttstr, krkr::io::GetPlacedPath, (const ttstr &name));
 // search path and return the path which the "name" is placed.
 
-extern ttstr TVPSearchPlacedPath(const ttstr &name);
-// the same as TVPGetPlacedPath, except for rising exception when the
+extern ttstr krkr::io::SearchPlacedPath(const ttstr &name);
+// the same as krkr::io::GetPlacedPath, except for rising exception when the
 // storage is not found.
 
-TJS_EXP_FUNC_DEF(bool, TVPIsExistentStorage, (const ttstr &name));
+TJS_EXP_FUNC_DEF(bool, krkr::io::IsExistentStorage, (const ttstr &name));
 // if "name" is exists, return true. otherwise return false.
 // this searches auto search path.
 
-TJS_EXP_FUNC_DEF(void, TVPClearStorageCaches, ());
+TJS_EXP_FUNC_DEF(void, krkr::io::ClearStorageCaches, ());
 
 // clear all internal storage related caches.
-void TVPRemoveFromStorageCache(const ttstr &name);
-void TVPClearArchiveCache();
-void TVPSetArchiveCacheCount(tjs_uint max_count);
-tjs_uint TVPGetArchiveCacheCount();
-tjs_uint TVPGetArchiveCacheLimit();
+void krkr::io::RemoveFromStorageCache(const ttstr &name);
+void krkr::io::ClearArchiveCache();
+void krkr::io::SetArchiveCacheCount(tjs_uint max_count);
+tjs_uint krkr::io::GetArchiveCacheCount();
+tjs_uint krkr::io::GetArchiveCacheLimit();
 
-void TVPSetAutoPathCacheMaxCount(tjs_uint max_count);
-tjs_uint TVPGetAutoPathCacheCount();
-tjs_uint TVPGetAutoPathCacheLimit();
-tjs_uint TVPGetAutoPathTableCount();
+void krkr::io::SetAutoPathCacheMaxCount(tjs_uint max_count);
+tjs_uint krkr::io::GetAutoPathCacheCount();
+tjs_uint krkr::io::GetAutoPathCacheLimit();
+tjs_uint krkr::io::GetAutoPathTableCount();
 
 } // namespace krkr::io
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::io::TVPAddAutoPath;
-using krkr::io::TVPRemoveAutoPath;
-using krkr::io::TVPClearAutoPathListForRestart;
-using krkr::io::TVPGetPlacedPath;
-using krkr::io::TVPSearchPlacedPath;
-using krkr::io::TVPIsExistentStorage;
-using krkr::io::TVPClearStorageCaches;
-using krkr::io::TVPRemoveFromStorageCache;
-using krkr::io::TVPClearArchiveCache;
-using krkr::io::TVPSetArchiveCacheCount;
-using krkr::io::TVPGetArchiveCacheCount;
-using krkr::io::TVPGetArchiveCacheLimit;
-using krkr::io::TVPSetAutoPathCacheMaxCount;
-using krkr::io::TVPGetAutoPathCacheCount;
-using krkr::io::TVPGetAutoPathCacheLimit;
-using krkr::io::TVPGetAutoPathTableCount;
+using krkr::io::AddAutoPath;
+using krkr::io::RemoveAutoPath;
+using krkr::io::ClearAutoPathListForRestart;
+using krkr::io::GetPlacedPath;
+using krkr::io::SearchPlacedPath;
+using krkr::io::IsExistentStorage;
+using krkr::io::ClearStorageCaches;
+using krkr::io::RemoveFromStorageCache;
+using krkr::io::ClearArchiveCache;
+using krkr::io::SetArchiveCacheCount;
+using krkr::io::GetArchiveCacheCount;
+using krkr::io::GetArchiveCacheLimit;
+using krkr::io::SetAutoPathCacheMaxCount;
+using krkr::io::GetAutoPathCacheCount;
+using krkr::io::GetAutoPathCacheLimit;
+using krkr::io::GetAutoPathTableCount;
 
 namespace krkr::io {
 
 extern tjs_uint TVPSegmentCacheLimit; // XP3 segment cache limit, in bytes.
-tjs_uint TVPGetXP3SegmentCacheTotalBytes();
+tjs_uint krkr::io::GetXP3SegmentCacheTotalBytes();
 
 // XP3 段缓存预算的显式覆盖（低内存路径用）。
 //
@@ -398,22 +398,22 @@ extern unsigned long long TVPSegmentCacheLimitOverrideBytes;
 
 // TODO: 过渡兼容，调用点迁移完成后删除
 using krkr::io::TVPSegmentCacheLimit;
-using krkr::io::TVPGetXP3SegmentCacheTotalBytes;
+using krkr::io::GetXP3SegmentCacheTotalBytes;
 using krkr::io::TVPSegmentCacheLimitOverridden;
 using krkr::io::TVPSegmentCacheLimitOverrideBytes;
 
 namespace krkr::io {
 
-void TVPAutoMountSiblingXP3Archives();
-void TVPAutoMountProjectXP3Archives();
-void TVPBoostAutoMountPaths();
+void krkr::io::AutoMountSiblingXP3Archives();
+void krkr::io::AutoMountProjectXP3Archives();
+void krkr::io::BoostAutoMountPaths();
 
 } // namespace krkr::io
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::io::TVPAutoMountSiblingXP3Archives;
-using krkr::io::TVPAutoMountProjectXP3Archives;
-using krkr::io::TVPBoostAutoMountPaths;
+using krkr::io::AutoMountSiblingXP3Archives;
+using krkr::io::AutoMountProjectXP3Archives;
+using krkr::io::BoostAutoMountPaths;
 
 //---------------------------------------------------------------------------
 

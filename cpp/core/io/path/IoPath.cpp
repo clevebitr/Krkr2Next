@@ -8,7 +8,7 @@ namespace krkr::io {
 
     tjs_char TVPArchiveDelimiter = '>';
 
-    ttstr TVPExtractStorageExt(const ttstr &name) {
+    ttstr ExtractStorageExt(const ttstr &name) {
 
         const tjs_char *s = name.c_str();
         tjs_int slen = name.GetLen();
@@ -34,7 +34,7 @@ namespace krkr::io {
         return {};
     }
 
-    ttstr TVPExtractStorageName(const ttstr &name) {
+    ttstr ExtractStorageName(const ttstr &name) {
         // extract "name"'s storage name ( excluding path ) and return it.
         const tjs_char *s = name.c_str();
         tjs_int slen = name.GetLen();
@@ -58,7 +58,7 @@ namespace krkr::io {
             return { p, (size_t)(slen - (p - s)) };
     }
 
-    ttstr TVPExtractStoragePath(const ttstr &name) {
+    ttstr ExtractStoragePath(const ttstr &name) {
         // extract "name"'s path ( including last delimiter ) and return
         // it.
         const tjs_char *s = name.c_str();
@@ -80,7 +80,7 @@ namespace krkr::io {
         return { s, (size_t)(p - s) };
     }
 
-    ttstr TVPChopStorageExt(const ttstr &name) {
+    ttstr ChopStorageExt(const ttstr &name) {
         // chop storage's extension and return it.
         const tjs_char *s = name.c_str();
         tjs_int slen = name.GetLen();

@@ -1,8 +1,8 @@
 //
 // 虚拟文件提供者：逻辑上"存在"、但不在物理存储上的名字（引擎侧伴生脚本等）。
 //
-// 为什么放在 io：存储层（`TVPGetPlacedPath` / `TVPIsExistentStorageNoSearchNoNormalize` /
-// `TVPCreateStream`）需要在"物理文件缺失"时仍能解析并读出内容；而**提供哪些名字**
+// 为什么放在 io：存储层（`GetPlacedPath` / `IsExistentStorageNoSearchNoNormalize` /
+// `CreateStream`）需要在"物理文件缺失"时仍能解析并读出内容；而**提供哪些名字**
 // 属于层/发行版知识，不能写进 io（见 compat/README.md §2 的不变量）。所以 io 只留一个
 // 泛型注册点，由 compat 层在启动期注册 provider。
 //

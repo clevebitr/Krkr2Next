@@ -356,7 +356,7 @@ bool tTVPApplication::StartApplication(ttstr path) {
 
         spdlog::debug("StartApplication: normalizing storage path...");
         spdlog::default_logger()->flush();
-        TVPProjectDir = TVPNormalizeStorageName(path);
+        TVPProjectDir = krkr::io::NormalizeStorageName(path);
 
         spdlog::debug("StartApplication: TVPInitScriptEngine...");
         spdlog::default_logger()->flush();
@@ -399,8 +399,8 @@ bool tTVPApplication::StartApplication(ttstr path) {
         {
             // TVPNativeDataPath 已是 *native*
             // 路径（SysInitImpl::TVPEnsureDataPathDirectory 正是把它直接传给
-            // TVPCheckExistentLocalFolder/TVPCreateFolders 用的），
-            // 不能再对它调 TVPGetLocalName（那期望 virtual/storage 路径如
+            // krkr::io::CheckExistentLocalFolder/TVPCreateFolders 用的），
+            // 不能再对它调 krkr::io::GetLocalPath（那期望 virtual/storage 路径如
             // file://... 传 native 会抛异常，导致目录没建成、脚本 checkSave
             // 打开 savedata/savecheck 时报 "Cannot open storage"）。
             // TVPEnsureDataPathDirectory 在 TVPSystemInit 阶段跑过一次，但此时
@@ -429,14 +429,14 @@ bool tTVPApplication::StartApplication(ttstr path) {
         // start image load thread
         image_load_thread_->Resume();
 
-        TVPAutoMountSiblingXP3Archives();
+        krkr::io::AutoMountSiblingXP3Archives();
 
         // 挂载工程目录自身的 *.xp3（data.xp3/scenario.xp3 等）。
-        // TVPAutoMountSiblingXP3Archives 只扫父目录，游戏文件夹内的 xp3
+        // krkr::io::AutoMountSiblingXP3Archives 只扫父目录，游戏文件夹内的 xp3
         // 从未被挂载， 这是打包版游戏启动不了的根因；必须在
         // TVPInitializeStartupScript 之前挂载， 否则 startup.tjs 在包内时
-        // TVPSearchPlacedPath 找不到。
-        TVPAutoMountProjectXP3Archives();
+        // krkr::io::SearchPlacedPath 找不到。
+        krkr::io::AutoMountProjectXP3Archives();
 
         // 补丁优先级必须在**第一次**解析 startup.tjs 之前生效。
         //
@@ -447,10 +447,10 @@ bool tTVPApplication::StartApplication(ttstr path) {
         // 脚本永远读不到"。真机影响面：汉化/整合包（patch.xp3、patch_appendN.xp3）
         // 的启动脚本与首屏资源。
         //
-        // 安全性：TVPBoostAutoMountPaths 只把**补丁档案条目**插到第一条档案
+        // 安全性：krkr::io::BoostAutoMountPaths 只把**补丁档案条目**插到第一条档案
         // 条目之前，散装条目与非补丁档案都不动（见 StorageImpl.cpp 的实现注释）；
         // 表里没有对应文件的查询照旧回落到后面的条目。
-        TVPBoostAutoMountPaths();
+        krkr::io::BoostAutoMountPaths();
 
         spdlog::debug("StartApplication: TVPInitializeStartupScript...");
         spdlog::default_logger()->flush();

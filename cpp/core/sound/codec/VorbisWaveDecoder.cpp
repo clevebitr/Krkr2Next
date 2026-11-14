@@ -211,7 +211,7 @@ bool VorbisWaveDecoder::SetPosition(tjs_uint64 samplepos) {
 
 bool VorbisWaveDecoder::SetStream(const ttstr &url) {
     // set input stream
-    InputStream = TVPCreateStream(url, TJS_BS_READ);
+    InputStream = krkr::io::CreateStream(url, TJS_BS_READ);
     if(!InputStream)
         return false;
 
@@ -459,7 +459,7 @@ public:
     // others
     bool SetStream(const ttstr &url) {
         // set input stream
-        InputStream = TVPCreateStream(url, TJS_BS_READ);
+        InputStream = krkr::io::CreateStream(url, TJS_BS_READ);
         if(!InputStream)
             return false;
 

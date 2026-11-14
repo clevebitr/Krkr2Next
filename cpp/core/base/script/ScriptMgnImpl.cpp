@@ -176,7 +176,7 @@
 //         ::new (TVPObjectHashMapLogStream) tTVPPipeStream(write);
 
 //         // set object hash map log
-//         TJSObjectHashMapSetLog((tTVPLocalFileStream*)TVPObjectHashMapLogStream);
+//         TJSObjectHashMapSetLog((krkr::io::LocalFileStream*)TVPObjectHashMapLogStream);
 
 //         // write all objects to log
 //         TJSWriteAllUnfreedObjectsToLog();

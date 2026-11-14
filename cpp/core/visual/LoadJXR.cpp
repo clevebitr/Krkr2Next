@@ -99,8 +99,8 @@ void TVPLoadJXR(void *formatdata, void *callbackdata,
                 tTVPGraphicLoadMode mode) {
     CoInitialize(nullptr);
     {
-        tTVPIStreamAdapter *s = new tTVPIStreamAdapter(src);
-        CComPtr<tTVPIStreamAdapter> stream(s);
+        krkr::io::IStreamAdapter *s = new krkr::io::IStreamAdapter(src);
+        CComPtr<krkr::io::IStreamAdapter> stream(s);
         s->Release();
         {
             CComPtr<IWICBitmapDecoder> decoder;
@@ -161,8 +161,8 @@ void TVPSaveAsJXR(void *formatdata, tTJSBinaryStream *dst,
                   class iTJSDispatch2 *meta) {
     CoInitialize(nullptr);
     {
-        tTVPIStreamAdapter *s = new tTVPIStreamAdapter(dst);
-        CComPtr<tTVPIStreamAdapter> stream(s);
+        krkr::io::IStreamAdapter *s = new krkr::io::IStreamAdapter(dst);
+        CComPtr<krkr::io::IStreamAdapter> stream(s);
         s->Release();
         {
             CComPtr<IWICBitmapEncoder> encoder;
@@ -308,8 +308,8 @@ void TVPLoadHeaderJXR(void *formatdata, tTJSBinaryStream *src,
                       iTJSDispatch2 **dic) {
     CoInitialize(nullptr);
     {
-        tTVPIStreamAdapter *s = new tTVPIStreamAdapter(src);
-        CComPtr<tTVPIStreamAdapter> stream(s);
+        krkr::io::IStreamAdapter *s = new krkr::io::IStreamAdapter(src);
+        CComPtr<krkr::io::IStreamAdapter> stream(s);
         s->Release();
         CComPtr<IWICBitmapDecoder> decoder;
         HRESULT hr = decoder.CoCreateInstance(CLSID_WICWmpDecoder);

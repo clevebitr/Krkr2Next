@@ -530,7 +530,7 @@ namespace motion {
                     if(w <= 0 || h <= 0)
                         continue;
 
-                    if(!TVPIsExistentStorage(path))
+                    if(!krkr::io::IsExistentStorage(path))
                         continue;
 
                     float cw, ch;
@@ -628,7 +628,7 @@ namespace motion {
                     img.height = e.info.height;
                     img.opacity = e.info.opacity;
                     img.isBackground = (k.find("/bg/") != std::string::npos);
-                    if(TVPIsExistentStorage(img.path)) {
+                    if(krkr::io::IsExistentStorage(img.path)) {
                         _psbImages.push_back(std::move(img));
                     }
                 }
@@ -3031,7 +3031,7 @@ namespace motion {
                 const std::string res = MotionSrcToResource(af->src);
                 const ttstr path = TJS_W("psb://") +
                     ttstr((storageStr + "/" + res + "/pixel.png").c_str());
-                if(!TVPIsExistentStorage(path)) {
+                if(!krkr::io::IsExistentStorage(path)) {
                     if(auto l = logger) {
                         l->warn("drawAnimatedTree: skip node '{}' src='{}' -> "
                                 "missing '{}'",
@@ -3401,7 +3401,7 @@ namespace motion {
                 const std::string res = MotionSrcToResource(active->src);
                 const ttstr path = TJS_W("psb://") +
                     ttstr((storageStr + "/" + res + "/pixel.png").c_str());
-                if(!TVPIsExistentStorage(path)) {
+                if(!krkr::io::IsExistentStorage(path)) {
                     if(auto l = logger) {
                         l->warn("drawAnimatedFlat: skip track '{}' src='{}' -> "
                                 "missing '{}'",
@@ -4839,7 +4839,7 @@ namespace motion {
         }
 
         static bool tryLoadImage(iTJSDispatch2 *target, const ttstr &path) {
-            if(!TVPIsExistentStorage(path))
+            if(!krkr::io::IsExistentStorage(path))
                 return false;
             tTJSVariant arg(path);
             tTJSVariant *argv[] = { &arg };

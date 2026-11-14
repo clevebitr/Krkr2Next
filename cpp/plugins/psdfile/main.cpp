@@ -105,7 +105,7 @@ public:
                 if(stream) {
 
                     tTJSBinaryStream *ret =
-                        TVPCreateBinaryStreamAdapter(stream);
+                        krkr::io::CreateBinaryStreamAdapter(stream);
                     stream->Release();
                     return ret;
                 }
@@ -242,7 +242,7 @@ void PSD::clearStorageCache() {
 void initStorage() {
     if(psdStorage == nullptr) {
         psdStorage = new PSDStorage();
-        TVPRegisterStorageMedia(psdStorage);
+        krkr::io::RegisterStorageMedia(psdStorage);
         TVPAddCompactEventHook((tTVPCompactEventCallbackIntf *)psdStorage);
     }
 }
@@ -250,7 +250,7 @@ void initStorage() {
 void doneStorage() {
     if(psdStorage != nullptr) {
         TVPRemoveCompactEventHook((tTVPCompactEventCallbackIntf *)psdStorage);
-        TVPUnregisterStorageMedia(psdStorage);
+        krkr::io::UnregisterStorageMedia(psdStorage);
         psdStorage->Release();
         psdStorage = nullptr;
     }

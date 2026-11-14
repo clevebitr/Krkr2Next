@@ -26,7 +26,7 @@ public:
     tTVPStreamHolder() { Stream = nullptr; }
 
     tTVPStreamHolder(const ttstr &name, tjs_uint32 mode = 0) :
-        Stream{ TVPCreateStream(name, mode) } {}
+        Stream{ krkr::io::CreateStream(name, mode) } {}
 
     ~tTVPStreamHolder() { delete Stream; }
 
@@ -46,7 +46,7 @@ public:
     void Open(const ttstr &name, tjs_uint32 flag = 0) {
         if(Stream)
             delete Stream, Stream = nullptr;
-        Stream = TVPCreateStream(name, flag);
+        Stream = krkr::io::CreateStream(name, flag);
     }
 };
 //---------------------------------------------------------------------------
@@ -74,13 +74,13 @@ public:
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPMemoryStream
+// krkr::io::MemoryStream
 //---------------------------------------------------------------------------
 /*
         this class provides a tTJSBinaryStream based access method for
    a memory block.
 */
-class tTVPMemoryStream : public tTJSBinaryStream {
+class krkr::io::MemoryStream : public tTJSBinaryStream {
 protected:
     void *Block;
     bool Reference;
@@ -90,11 +90,11 @@ protected:
     bool UseMmap = false;
 
 public:
-    tTVPMemoryStream();
+    krkr::io::MemoryStream();
 
-    tTVPMemoryStream(const void *block, tjs_uint size);
+    krkr::io::MemoryStream(const void *block, tjs_uint size);
 
-    ~tTVPMemoryStream() override;
+    ~krkr::io::MemoryStream() override;
 
     tjs_uint64 Seek(tjs_int64 offset, tjs_int whence) override;
 
@@ -251,7 +251,7 @@ private:
 // TODO: 过渡兼容，调用点迁移完成后删除
 using krkr::base::tTVPStreamHolder;
 using krkr::base::tTVPLocalTempStorageHolder;
-using krkr::base::tTVPMemoryStream;
+using krkr::base::krkr::io::MemoryStream;
 using krkr::base::tTVPPartialStream;
 using krkr::base::tTVPUnpackArchiveCallbacks;
 using krkr::base::iTVPUnpackArchiveImpl;

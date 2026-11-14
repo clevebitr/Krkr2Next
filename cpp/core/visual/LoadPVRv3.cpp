@@ -116,7 +116,7 @@ iTVPTexture2D *TVPLoadPVRv3(
     PVRv3Header hdr;
     src->ReadBuffer(&hdr, sizeof(hdr));
     if(hdr.metadataLength > 8) {
-        tTVPMemoryStream metadata;
+        krkr::io::MemoryStream metadata;
         metadata.SetSize(hdr.metadataLength);
         src->ReadBuffer(metadata.GetInternalBuffer(), hdr.metadataLength);
         TVPUnserializePVRv3Metadata(&metadata, cb);
@@ -143,7 +143,7 @@ void TVPLoadPVRv3(void *formatdata, void *callbackdata,
     tjs_uint64 dataoff = src->GetPosition() + hdr.metadataLength;
 
     if(hdr.metadataLength > 8) {
-        tTVPMemoryStream metadata;
+        krkr::io::MemoryStream metadata;
         metadata.SetSize(hdr.metadataLength);
         src->ReadBuffer(metadata.GetInternalBuffer(), hdr.metadataLength);
         TVPUnserializePVRv3Metadata(&metadata,
@@ -329,7 +329,7 @@ void TVPLoadHeaderPVRv3(void *formatdata, tTJSBinaryStream *src,
                 ttstr((tjs_int)hdr.pixelFormat));
     }
     if(hdr.metadataLength > 8) {
-        tTVPMemoryStream metadata;
+        krkr::io::MemoryStream metadata;
         metadata.SetSize(hdr.metadataLength);
         src->ReadBuffer(metadata.GetInternalBuffer(), hdr.metadataLength);
         TVPUnserializePVRv3Metadata(
@@ -377,7 +377,7 @@ void TVPSavePVRv3(void *formatdata, tTJSBinaryStream *dst,
         tTJSVariantClosure clo(&callback, nullptr);
         meta->EnumMembers(TJS_IGNOREPROP, &clo, meta);
     }
-    tTVPMemoryStream memstr;
+    krkr::io::MemoryStream memstr;
     const void *pixeldata = image->GetScanLine(0);
     int w = image->GetWidth(), h = image->GetHeight(),
         pitch = image->GetPitchBytes();

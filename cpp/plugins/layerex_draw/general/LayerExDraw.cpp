@@ -39,9 +39,9 @@ void deInitGdiPlus() { GdiplusShutdown(gdiplusToken); }
  */
 ImageClass *loadImage(const tjs_char *name) {
     ImageClass *image = nullptr;
-    ttstr filename = TVPGetPlacedPath(name);
+    ttstr filename = krkr::io::GetPlacedPath(name);
     if(filename.length()) {
-        ttstr localname(TVPGetLocallyAccessibleName(filename));
+        ttstr localname(krkr::io::GetLocallyAccessiblePath(filename));
         if(localname.length()) {
             // 実ファイルが存在
             const auto *n = reinterpret_cast<const WCHAR *>(localname.c_str());
@@ -2326,8 +2326,8 @@ tjs_error LayerExDraw::saveImage(tTJSVariant *result, tjs_int numparams,
 
     if(numparams < 1)
         return TJS_E_BADPARAMCOUNT;
-    ttstr filename = TVPNormalizeStorageName(param[0]->AsStringNoAddRef());
-    TVPGetLocalName(filename);
+    ttstr filename = krkr::io::NormalizeStorageName(param[0]->AsStringNoAddRef());
+    krkr::io::GetLocalPath(filename);
     ttstr type;
     if(numparams > 1) {
         type = *param[1];

@@ -31,7 +31,7 @@ void tTVPGraphicHandlerType::Load(void *formatdata, void *callbackdata,
 #if 0
 	if( IsPlugin )
 	{
-		tTVPIStreamAdapter *istream = new tTVPIStreamAdapter(src);
+		krkr::io::IStreamAdapter *istream = new krkr::io::IStreamAdapter(src);
 		try {
 			LoadHandlerPlugin( formatdata, callbackdata, sizecallback, scanlinecallback, metainfopushcallback,
 				istream, keyidx, mode);
@@ -57,11 +57,11 @@ void tTVPGraphicHandlerType::Save(const ttstr &storagename, const ttstr &mode,
         TVPThrowExceptionMessage(TVPUnknownGraphicFormat, mode);
 
     tTJSBinaryStream *stream =
-        TVPCreateStream(TVPNormalizeStorageName(storagename), TJS_BS_WRITE);
+        krkr::io::CreateStream(krkr::io::NormalizeStorageName(storagename), TJS_BS_WRITE);
 #if 0
 	if (IsPlugin)
 	{
-		tTVPIStreamAdapter *istream = new tTVPIStreamAdapter(stream);
+		krkr::io::IStreamAdapter *istream = new krkr::io::IStreamAdapter(stream);
 		try {
 			tjs_uint h = image->GetHeight();
 			tjs_uint w = image->GetWidth();
@@ -91,7 +91,7 @@ void tTVPGraphicHandlerType::Header(tTJSBinaryStream *src,
 #if 0
 	if( IsPlugin )
 	{
-		tTVPIStreamAdapter *istream = new tTVPIStreamAdapter(src);
+		krkr::io::IStreamAdapter *istream = new krkr::io::IStreamAdapter(src);
 		try {
 			HeaderHandlerPlugin( FormatData, istream, dic );
 		} catch(...) {
@@ -299,7 +299,7 @@ void tTVPSusiePicturePlugin::Load(void *callbackdata,
 		}
 
 		// create reference memory stream for bitmap pixel data
-		tTVPMemoryStream memstream(data, datasize);
+		krkr::io::MemoryStream memstream(data, datasize);
 
 		if(bi.biClrUsed == 0 && bi.biBitCount <= 8)
 			bi.biClrUsed = 1 << bi.biBitCount;

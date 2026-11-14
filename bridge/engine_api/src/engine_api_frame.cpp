@@ -406,12 +406,12 @@ engine_result_t engine_get_memory_stats(engine_handle_t handle,
     out_stats->system_total_mb = static_cast<uint32_t>(meminfo.MemTotal / 1024);
     out_stats->graphic_cache_bytes = TVPGetGraphicCacheTotalBytes();
     out_stats->graphic_cache_limit_bytes = TVPGetGraphicCacheLimit();
-    out_stats->xp3_segment_cache_bytes = TVPGetXP3SegmentCacheTotalBytes();
-    out_stats->archive_cache_entries = TVPGetArchiveCacheCount();
-    out_stats->archive_cache_limit = TVPGetArchiveCacheLimit();
-    out_stats->autopath_cache_entries = TVPGetAutoPathCacheCount();
-    out_stats->autopath_cache_limit = TVPGetAutoPathCacheLimit();
-    out_stats->autopath_table_entries = TVPGetAutoPathTableCount();
+    out_stats->xp3_segment_cache_bytes = krkr::io::GetXP3SegmentCacheTotalBytes();
+    out_stats->archive_cache_entries = krkr::io::GetArchiveCacheCount();
+    out_stats->archive_cache_limit = krkr::io::GetArchiveCacheLimit();
+    out_stats->autopath_cache_entries = krkr::io::GetAutoPathCacheCount();
+    out_stats->autopath_cache_limit = krkr::io::GetAutoPathCacheLimit();
+    out_stats->autopath_table_entries = krkr::io::GetAutoPathTableCount();
 
     PSB::PSBMediaCacheStats psb_stats{};
     if (PSB::GetPSBMediaCacheStats(psb_stats)) {

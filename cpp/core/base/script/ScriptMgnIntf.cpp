@@ -862,8 +862,8 @@ void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
         TVPThrowInternalError;
 
     { // for bytecode
-        ttstr place(TVPSearchPlacedPath(name));
-        ttstr shortname(TVPExtractStorageName(place));
+        ttstr place(krkr::io::SearchPlacedPath(name));
+        ttstr shortname(krkr::io::ExtractStorageName(place));
         std::unique_ptr<tTJSBinaryStream> stream{ TVPCreateBinaryStreamForRead(
             place, modestr) };
         if(stream) {
@@ -902,7 +902,7 @@ void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
                 //                std::filesystem::create_directories(
                 //                    absoluteScriptPath.parent_path());
                 //                auto memoryStream =
-                //                std::make_unique<tTVPMemoryStream>();
+                //                std::make_unique<krkr::io::MemoryStream>();
                 //                blk->Dump(memoryStream.get());
                 //
                 //                std::vector<char16_t>
@@ -925,8 +925,8 @@ void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
         }
     }
 
-    ttstr place(TVPSearchPlacedPath(name));
-    ttstr shortname(TVPExtractStorageName(place));
+    ttstr place(krkr::io::SearchPlacedPath(name));
+    ttstr shortname(krkr::io::ExtractStorageName(place));
     std::unique_ptr<iTJSTextReadStream> stream{ TVPCreateTextStreamForRead(
         place, modestr) };
     ttstr buffer;
@@ -968,8 +968,8 @@ void TVPCompileStorage(const ttstr &name, bool isrequestresult,
     if(!TVPScriptEngine)
         TVPThrowInternalError;
 
-    ttstr place(TVPSearchPlacedPath(name));
-    ttstr shortname(TVPExtractStorageName(place));
+    ttstr place(krkr::io::SearchPlacedPath(name));
+    ttstr shortname(krkr::io::ExtractStorageName(place));
     iTJSTextReadStream *stream = TVPCreateTextStreamForRead(place, TJS_W(""));
 
     ttstr buffer;
@@ -981,7 +981,7 @@ void TVPCompileStorage(const ttstr &name, bool isrequestresult,
     }
     stream->Destruct();
 
-    tTJSBinaryStream *outputstream = TVPCreateStream(outputpath, TJS_BS_WRITE);
+    tTJSBinaryStream *outputstream = krkr::io::CreateStream(outputpath, TJS_BS_WRITE);
     if(TVPScriptEngine) {
         try {
             TVPScriptEngine->CompileScript(buffer.c_str(), outputstream,
@@ -1196,8 +1196,8 @@ void TVPExecuteStartupScript() {
 
     ttstr strPatchError;
     try {
-        ttstr patch = TVPGetAppPath() + "patch.tjs";
-        if(TVPIsExistentStorageNoSearch(patch))
+        ttstr patch = krkr::io::GetAppPath() + "patch.tjs";
+        if(krkr::io::IsExistentStorageNoSearch(patch))
             TVPExecuteStorage(patch);
     } catch(const TJS::eTJSScriptError &e) {
         ttstr &msg = strPatchError;
@@ -1242,7 +1242,7 @@ void TVPExecuteStartupScript() {
     // execute "startup.tjs"
     try {
 
-        ttstr place(TVPSearchPlacedPath(TVPStartupScriptName));
+        ttstr place(krkr::io::SearchPlacedPath(TVPStartupScriptName));
         spdlog::info("Loading startup script: {}", place.AsStdString());
 #if defined(__ANDROID__)
         __android_log_print(ANDROID_LOG_INFO, "krkr2",
@@ -1262,7 +1262,7 @@ void TVPExecuteStartupScript() {
             TVPStartupSuccess = true;
         }
         catch(...) {
-            if(!TVPIsExistentStorage(TJS_W("system/Initialize.tjs"))) {
+            if(!krkr::io::IsExistentStorage(TJS_W("system/Initialize.tjs"))) {
                 throw;
             }
         }
@@ -1289,8 +1289,8 @@ void TVPExecuteStartupScript() {
                             "Startup script ended successfully");
 #endif
         try {
-            ttstr patch = TVPGetAppPath() + "AfterStartup.tjs";
-            if(TVPIsExistentStorageNoSearch(patch))
+            ttstr patch = krkr::io::GetAppPath() + "AfterStartup.tjs";
+            if(krkr::io::IsExistentStorageNoSearch(patch))
                 TVPExecuteStorage(patch);
         } catch(...) {
         }
@@ -1553,13 +1553,13 @@ void TVPShowScriptException(eTJSScriptError &e) {
         if(scriptName != nullptr && scriptName[0] != 0) {
             ttstr path(scriptName);
             try {
-                ttstr newpath = TVPGetPlacedPath(path);
+                ttstr newpath = krkr::io::GetPlacedPath(path);
                 if(newpath.IsEmpty()) {
-                    path = TVPNormalizeStorageName(path);
+                    path = krkr::io::NormalizeStorageName(path);
                 } else {
                     path = newpath;
                 }
-                TVPGetLocalName(path);
+                krkr::io::GetLocalPath(path);
                 std::wstring scriptPath(path.AsStdString());
                 tjs_int lineno = 1 +
                     e.GetBlockNoAddRef()->SrcPosToLine(e.GetPosition()) -

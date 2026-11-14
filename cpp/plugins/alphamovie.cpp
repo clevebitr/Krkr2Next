@@ -1536,7 +1536,7 @@ void tTJSNI_AlphaMovie::startAmvOpenAsync(tTJSString fileName)
         bool succeeded = false;
         try
         {
-            stream = TVPCreateStream(ttstr(fileName), TJS_BS_READ);
+            stream = krkr::io::CreateStream(ttstr(fileName), TJS_BS_READ);
             if (stream != nullptr && stream->GetSize() >= 40)
             {
                 char magic[4] = {};
@@ -1869,7 +1869,7 @@ void tTJSNI_AlphaMovie::open(tTJSString fileName)
         // storage/header work on the loader thread and keep the input tick
         // responsive.  The main thread adopts the completed stream before it
         // presents the first decoded frame.
-        ttstr extension = TVPExtractStorageExt(fileName);
+        ttstr extension = krkr::io::ExtractStorageExt(fileName);
         extension.ToLowerCase();
         if (extension == TJS_W(".amv"))
         {
@@ -1890,7 +1890,7 @@ void tTJSNI_AlphaMovie::open(tTJSString fileName)
     tTJSBinaryStream* stream =
         (decodeOnly && filePtr != nullptr)
             ? filePtr
-            : TVPCreateStream(ttstr(fileName), TJS_BS_READ);
+            : krkr::io::CreateStream(ttstr(fileName), TJS_BS_READ);
     if (!stream)
         return;
 
@@ -2610,12 +2610,12 @@ void tTJSNI_AlphaMovie::openFfmpeg(tTJSString fileName, tTJSBinaryStream* stream
     ffmpegStream_ = stream;
 
     ttstr filename(fileName);
-    ttstr ext = TVPExtractStorageExt(filename);
+    ttstr ext = krkr::io::ExtractStorageExt(filename);
     ext.ToLowerCase();
 
     auto* movie = new AlphaMovieLayer(
         [this](KRMovieEvent msg, void* payload) { queueFfmpegEvent(msg, payload); });
-    movie->BuildGraph(TVPCreateIStream(ffmpegStream_), filename.c_str(),
+    movie->BuildGraph(krkr::io::CreateIStream(ffmpegStream_), filename.c_str(),
                       ext.c_str(), ffmpegStream_->GetSize());
     movie->GetVideoSize(&ffmpegSourceWidth_, &ffmpegSourceHeight_);
 

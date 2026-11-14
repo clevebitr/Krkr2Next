@@ -234,14 +234,14 @@ void tTJSNI_VideoOverlay::Open(const ttstr &_name) {
 
     IStream *istream = nullptr;
     long size;
-    ttstr ext = TVPExtractStorageExt(name).c_str();
+    ttstr ext = krkr::io::ExtractStorageExt(name).c_str();
     ext.ToLowerCase();
 
     {
         // prepate IStream
         tTJSBinaryStream *stream0 = nullptr;
         try {
-            stream0 = TVPCreateStream(name);
+            stream0 = krkr::io::CreateStream(name);
             size = (long)stream0->GetSize();
         } catch(...) {
 
@@ -249,7 +249,7 @@ void tTJSNI_VideoOverlay::Open(const ttstr &_name) {
             throw;
         }
 
-        istream = TVPCreateIStream(stream0);
+        istream = krkr::io::CreateIStream(stream0);
     }
 
     // 'istream' is an IStream instance at this point
@@ -368,7 +368,7 @@ void tTJSNI_VideoOverlay::Close() {
     krkr::stall::MarkStage("movie: Close→清理临时存储/消息");
     if(LocalTempStorageHolder) {
         // **绝不在渲染线程上删临时文件**：tTVPLocalTempStorageHolder 的析构会调
-        // TVPRemoveFile/TVPRemoveFolder —— 真正的文件系统删除。真机日志定位到的
+        // krkr::io::RemoveFile/krkr::io::RemoveFolder —— 真正的文件系统删除。真机日志定位到的
         // 卡死点正是这里：2026-09-18 15:50:51 播完 CG 视频后最后阶段＝
         // "movie: Close→清理临时存储/消息"，之后 engine.log 一行都不再增长
         // （连卡死看门狗都打不出日志），只能杀进程；此前同一阶段还有过

@@ -137,7 +137,7 @@ void TVPInitializeBaseSystems() {
 
     // set default current directory
     {
-        TVPSetCurrentDirectory(
+        krkr::io::SetCurrentStorageDirectory(
             IncludeTrailingBackslash(ExtractFileDir(ExePath())));
     }
 
@@ -146,7 +146,7 @@ void TVPInitializeBaseSystems() {
 
     if(load_msgmap) {
         const tjs_char name_msgmap[] = TJS_W("msgmap.tjs");
-        if(TVPIsExistentStorage(name_msgmap))
+        if(krkr::io::IsExistentStorage(name_msgmap))
             TVPExecuteStorage(name_msgmap, nullptr, false, TJS_W(""));
     }
 }
@@ -166,12 +166,12 @@ void krkr::base::TVPBeforeSystemInit() {
     if(TVPGetCommandLine(TJS_W("-arcdelim"), &v))
         TVPArchiveDelimiter = ttstr(v)[0];
 
-    if(TVPIsExistentStorageNoSearchNoNormalize(TVPProjectDir)) {
+    if(krkr::io::IsExistentStorageNoSearchNoNormalize(TVPProjectDir)) {
         TVPProjectDir += TVPArchiveDelimiter;
     } else {
         TVPProjectDir += TJS_W("/");
     }
-    TVPSetCurrentDirectory(TVPProjectDir);
+    krkr::io::SetCurrentStorageDirectory(TVPProjectDir);
     // randomize
     TVPInitRandomGenerator();
 
@@ -600,7 +600,7 @@ void TVPEnsureDataPathDirectory() {
     if(!TVPDataPathDirectoryEnsured) {
         TVPDataPathDirectoryEnsured = true;
         // ensure data path existence
-        if(!TVPCheckExistentLocalFolder(TVPNativeDataPath.c_str())) {
+        if(!krkr::io::CheckExistentLocalFolder(TVPNativeDataPath.c_str())) {
             if(TVPCreateFolders(TVPNativeDataPath.c_str()))
                 TVPAddImportantLog(
                     TVPFormatMessage(TVPInfoDataPathDoesNotExistTryingToMakeIt,
@@ -688,7 +688,7 @@ static void TVPInitProgramArgumentsAndDataPath(bool stop_after_datapath_got) {
                 delete option;
 
         // set data path
-        TVPDataPath = TVPNormalizeStorageName(TVPNativeDataPath);
+        TVPDataPath = krkr::io::NormalizeStorageName(TVPNativeDataPath);
         TVPAddImportantLog(TVPFormatMessage(TVPInfoDataPath, TVPDataPath));
 
         // set log output directory

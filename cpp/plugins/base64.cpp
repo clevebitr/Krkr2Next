@@ -141,13 +141,13 @@ public:
         if(!result)
             return TJS_S_OK;
 
-        ttstr filename = TVPGetPlacedPath(*param[0]);
+        ttstr filename = krkr::io::GetPlacedPath(*param[0]);
         if(filename.IsEmpty()) {
             result->Clear();
             return TJS_S_OK;
         }
 
-        tTJSBinaryStream *input = TVPCreateStream(filename, TJS_BS_READ);
+        tTJSBinaryStream *input = krkr::io::CreateStream(filename, TJS_BS_READ);
         if(!input) {
             result->Clear();
             return TJS_S_OK;
@@ -179,7 +179,7 @@ public:
         std::vector<tjs_uint8> decoded =
             decodeString(source.c_str(), static_cast<tjs_int>(source.length()));
 
-        tTJSBinaryStream *output = TVPCreateStream(filename, TJS_BS_WRITE);
+        tTJSBinaryStream *output = krkr::io::CreateStream(filename, TJS_BS_WRITE);
         if(!output)
             TVPThrowExceptionMessage((ttstr(TJS_W("can't open writefile: ")) +
                                       filename)

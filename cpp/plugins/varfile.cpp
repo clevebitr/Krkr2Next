@@ -46,7 +46,7 @@ public:
         }
 
         // 書き込みが必要な場合
-        stream = new tTVPMemoryStream();
+        stream = new krkr::io::MemoryStream();
 
         // オブジェクトの内容を複製
         if(flags == TJS_BS_UPDATE || flags == TJS_BS_APPEND) {
@@ -373,7 +373,7 @@ VarStorage *var = nullptr;
 static void PreRegistCallback() {
     if(var == nullptr) {
         var = new VarStorage();
-        TVPRegisterStorageMedia(var);
+        krkr::io::RegisterStorageMedia(var);
 
         iTJSDispatch2 *global = TVPGetScriptDispatch();
         if(global) {
@@ -390,7 +390,7 @@ static void PreRegistCallback() {
  */
 static void PostUnregistCallback() {
     if(var != nullptr) {
-        TVPUnregisterStorageMedia(var);
+        krkr::io::UnregisterStorageMedia(var);
         var->Release();
         var = nullptr;
     }

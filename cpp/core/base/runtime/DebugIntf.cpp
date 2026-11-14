@@ -540,9 +540,9 @@ void TVPOnError() {
 // TVPSetLogLocation
 //---------------------------------------------------------------------------
 void TVPSetLogLocation(const ttstr &loc) {
-    TVPLogLocation = TVPNormalizeStorageName(loc);
+    TVPLogLocation = krkr::io::NormalizeStorageName(loc);
 
-    ttstr native = TVPGetLocallyAccessibleName(TVPLogLocation);
+    ttstr native = krkr::io::GetLocallyAccessiblePath(TVPLogLocation);
     if(native.IsEmpty()) {
         TVPNativeLogLocation.Clear();
         TVPLogLocation.Clear();

@@ -21,6 +21,7 @@
 | N4 | 类型 | 类/结构体 UpperCamelCase，**不带 `t`/`tTVP` 前缀**；接口 `I` + UpperCamelCase | `tTVPArchive` → `Archive`<br>`iTVPLayerManager` → `ILayerManager` |
 | N5 | 宏 | `KRKR_` + UPPER_SNAKE | `TVP_MSG_DEFINE` → `KRKR_MSG_DEFINE`<br>`TVP_WL_MAX_FLAGS` → `KRKR_WL_MAX_FLAGS` |
 | N6 | 成员/局部变量 | lowerCamelCase（只要是**动的**代码） | `Flags` → `flags`（只在改到该函数时做，不单独一轮） |
+| N7 | namespace 作用域变量 | lowerCamelCase，**不加 `TVP` 前缀**；常量用 UpperCamelCase | `TVPAutoPathList` → `autoPathList`<br>`TVPCurrentMedia` → `currentMedia`<br>`TVPArchiveDelimiter` → `ArchiveDelimiter`（`const`） |
 
 ### N3 的动词表
 
@@ -108,7 +109,7 @@
 | 1 | `extension` | 4 | ✅ **已完成**（`TVPAddClassHandler`→`AddClassHandler`、`TVPCauseAtInstallExtensionClass`→`InstallRegisteredClasses`、`TVPResetExtensionClassInstallStateForRestart`→`ResetInstallStateForRestart`、`tTVPAtInstallClass`→`AtInstallClass`；4 条过渡 `using` 同 commit 删除） |
 | 2 | `plugin` | 16（draft） | 🟡 map 已起草未审阅；与 NCB 宏改造错开 |
 | 3 | `utils` | 14（draft） | 🟡 map 已起草；4 个新名冲突待人工处理（`TVPTimer`→`Timer` 撞名） |
-| 4 | `io` | 68（draft） | 🟡 map 已起草；含文件改名（`7zArchive.cpp` → `SevenZipArchive.cpp`） |
+| 4 | `io` | 123（已应用） | ✅ **函数/类型/宏已完成**（1023 处替换 / 83 文件，`7zArchive.cpp` → `SevenZipArchive.cpp`）；遗留 176→70，余下是**跨模块符号**（base/utils 的，各轮处理）与 **N7 全局变量**（`io-globals.tsv` 待做） |
 | 5 | `compat` | 0 | ✅ 自有符号已是新风格（`--draft` 扫出 0 个），无需改名 |
 | 6 | `sound` | 112（draft） | 🟡 map 已起草 |
 | 7 | `environ` | 101（draft） | 🟡 map 已起草 |

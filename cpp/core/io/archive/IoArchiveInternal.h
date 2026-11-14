@@ -11,32 +11,25 @@
 // 定义始终在同一个 namespace。
 namespace krkr::io {
 
-tTVPArchive *TVPOpenZIPArchive(const ttstr &name, tTJSBinaryStream *st,
+tTVPArchive *OpenZIPArchive(const ttstr &name, tTJSBinaryStream *st,
                                bool normalizeFileName);
 
-tTVPArchive *TVPOpen7ZArchive(const ttstr &name, tTJSBinaryStream *st,
+tTVPArchive *Open7ZArchive(const ttstr &name, tTJSBinaryStream *st,
                               bool normalizeFileName);
 
-tTVPArchive *TVPOpenTARArchive(const ttstr &name, tTJSBinaryStream *st,
+tTVPArchive *OpenTARArchive(const ttstr &name, tTJSBinaryStream *st,
                                bool normalizeFileName);
 
-void TVPFreeArchiveHandlePoolByPointer(void *pointer);
+void FreeArchiveHandlePoolByPointer(void *pointer);
 
-void TVPReleaseCachedArchiveHandle(void *pointer, tTJSBinaryStream *stream);
+void ReleaseCachedArchiveHandle(void *pointer, tTJSBinaryStream *stream);
 
-tTJSBinaryStream *TVPGetCachedArchiveHandle(void *pointer, const ttstr &name);
+tTJSBinaryStream *GetCachedArchiveHandle(void *pointer, const ttstr &name);
 
 void storeFilename(ttstr &name, const char *narrowName, const ttstr &filename);
 
 } // namespace krkr::io
 
 // TODO: 过渡兼容，IoStorageLocal.cpp 整体迁移完成后删除
-using krkr::io::TVPOpenZIPArchive;
-using krkr::io::TVPOpen7ZArchive;
-using krkr::io::TVPOpenTARArchive;
-using krkr::io::TVPFreeArchiveHandlePoolByPointer;
-using krkr::io::TVPReleaseCachedArchiveHandle;
-using krkr::io::TVPGetCachedArchiveHandle;
-using krkr::io::storeFilename;
 
 #endif // KRKR_IO_ARCHIVE_INTERNAL_H

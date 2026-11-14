@@ -7,7 +7,7 @@
 #include <mutex>
 #include <vector>
 
-#include "UtilStreams.h" // tTVPMemoryStream（io 侧负责把内容包成流）
+#include "UtilStreams.h" // MemoryStream（io 侧负责把内容包成流）
 
 namespace krkr::io {
     namespace {
@@ -123,7 +123,7 @@ namespace krkr::io {
                 continue;
 
             // io 负责包流：provider 不认识流类型，也不依赖 base 的流实现。
-            auto *stream = new tTVPMemoryStream();
+            auto *stream = new MemoryStream();
             try {
                 if(!content.empty())
                     stream->Write(content.data(),

@@ -103,7 +103,7 @@ io_add_layer(core_io_archive
     ${IO_PATH}/archive/XP3Archive.cpp
     ${IO_PATH}/archive/XP3ArchiveCxDecoder.cpp
     ${IO_PATH}/archive/ZIPArchive.cpp
-    ${IO_PATH}/archive/7zArchive.cpp
+    ${IO_PATH}/archive/SevenZipArchive.cpp
     ${IO_PATH}/archive/TARArchive.cpp
 )
 

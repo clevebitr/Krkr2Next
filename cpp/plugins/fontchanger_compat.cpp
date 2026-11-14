@@ -113,7 +113,7 @@ namespace {
 
     /** 读整个文件（只用于 ini/字体这种小文件；上限 1MiB 防止误读大文件）。 */
     std::string ReadAllBytes(const ttstr &path) {
-        tTJSBinaryStream *stream = TVPCreateStream(path, TJS_BS_READ);
+        tTJSBinaryStream *stream = krkr::io::CreateStream(path, TJS_BS_READ);
         if(!stream)
             return {};
         const tjs_uint64 size = stream->GetSize();
@@ -128,10 +128,10 @@ namespace {
 
     /** 先按存储解析（散装文件 / auto-path / 档案内条目），失败再按应用目录拼一次。 */
     ttstr LocateFile(const ttstr &name) {
-        ttstr placed = TVPGetPlacedPath(name);
+        ttstr placed = krkr::io::GetPlacedPath(name);
         if(!placed.IsEmpty())
             return placed;
-        return TVPGetPlacedPath(TVPGetAppPath() + name);
+        return krkr::io::GetPlacedPath(krkr::io::GetAppPath() + name);
     }
 
     void FontChangerInit() {

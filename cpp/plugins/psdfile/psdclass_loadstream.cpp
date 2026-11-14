@@ -155,7 +155,7 @@ bool PSD::loadStream(const ttstr &filename) {
 
     // ストリームのまま
     isLoaded = false;
-    pStream = TVPCreateIStream(filename, TJS_BS_READ);
+    pStream = krkr::io::CreateIStream(filename, TJS_BS_READ);
     if(pStream) {
 
         STATSTG stat;

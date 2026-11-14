@@ -327,7 +327,7 @@ TVPGuessGraphicLoadHandler(ttstr &name) { // with name has no extension
     tTJSHashTable<ttstr, tTVPGraphicHandlerType>::tIterator i;
     for(i = TVPGraphicType.Hash.GetFirst(); !i.IsNull(); /*i++*/) {
         ttstr newname = name + i.GetKey();
-        if(TVPIsExistentStorage(newname)) {
+        if(krkr::io::IsExistentStorage(newname)) {
             // file found
             name = newname;
             break;
@@ -358,7 +358,7 @@ void TVPLoadImageHeader(const ttstr &storagename, iTJSDispatch2 **dic) {
     if(dic == nullptr)
         return;
 
-    ttstr ext = TVPExtractStorageExt(storagename);
+    ttstr ext = krkr::io::ExtractStorageExt(storagename);
     if(ext == TJS_W(""))
         TVPThrowExceptionMessage(TVPUnknownGraphicFormat, storagename);
     tTVPGraphicHandlerType *handler = TVPGraphicType.Hash.Find(ext);
@@ -901,7 +901,7 @@ void TVPSaveTextureAsBMP(tTJSBinaryStream *dst, iTVPTexture2D *bmp,
 
 void TVPSaveTextureAsBMP(const ttstr &path, iTVPTexture2D *tex,
                          const ttstr &mode, iTJSDispatch2 *meta) {
-    tTJSBinaryStream *dst = TVPCreateStream(path, TJS_BS_WRITE);
+    tTJSBinaryStream *dst = krkr::io::CreateStream(path, TJS_BS_WRITE);
     TVPSaveTextureAsBMP(dst, tex, mode, meta);
     delete dst;
 }
@@ -1607,7 +1607,7 @@ tTVPGraphicHandlerType *TVPFindGraphicLoadHandler(ttstr &_name, ttstr *maskname,
     tjs_int namelen = _name.GetLen();
     ttstr name(_name);
 
-    ttstr ext = TVPExtractStorageExt(name);
+    ttstr ext = krkr::io::ExtractStorageExt(name);
     int extlen = ext.GetLen();
     tTVPGraphicHandlerType *handler;
 
@@ -1618,7 +1618,7 @@ tTVPGraphicHandlerType *TVPFindGraphicLoadHandler(ttstr &_name, ttstr *maskname,
         for(i = TVPGraphicType.Hash.GetFirst(); !i.IsNull();
             /*i++*/) {
             ttstr newname = name + i.GetKey();
-            if(TVPIsExistentStorage(newname)) {
+            if(krkr::io::IsExistentStorage(newname)) {
                 // file found
                 name = newname;
                 break;
@@ -1657,7 +1657,7 @@ tTVPGraphicHandlerType *TVPFindGraphicLoadHandler(ttstr &_name, ttstr *maskname,
                     /*i++*/) {
                     ttstr newname = name;
                     newname += i.GetKey();
-                    if(TVPIsExistentStorage(newname)) {
+                    if(krkr::io::IsExistentStorage(newname)) {
                         // file found
                         name = newname;
                         break;
@@ -1672,7 +1672,7 @@ tTVPGraphicHandlerType *TVPFindGraphicLoadHandler(ttstr &_name, ttstr *maskname,
                 *maskname = name;
                 break;
             } else {
-                if(!TVPIsExistentStorage(name)) {
+                if(!krkr::io::IsExistentStorage(name)) {
                     // not found
                     ext.Clear();
                     continue; // retry searching
@@ -1691,7 +1691,7 @@ tTVPGraphicHandlerType *TVPFindGraphicLoadHandler(ttstr &_name, ttstr *maskname,
         for(i = TVPGraphicType.Hash.GetFirst(); !i.IsNull();
             /*i++*/) {
             ttstr newname = *provincename + i.GetKey();
-            if(TVPIsExistentStorage(newname)) {
+            if(krkr::io::IsExistentStorage(newname)) {
                 // file found
                 *provincename = newname;
                 break;
@@ -1831,7 +1831,7 @@ TVPInternalLoadTexture(const ttstr &_name,
 void TVPLoadGraphicProvince(tTVPBaseBitmap *dest, const ttstr &name,
                             tjs_int keyidx, tjs_uint desw, tjs_uint desh) {
     tjs_uint32 hash;
-    ttstr nname = TVPNormalizeStorageName(name);
+    ttstr nname = krkr::io::NormalizeStorageName(name);
     tTVPGraphicsSearchData searchdata;
     if(TVPGraphicCacheEnabled) {
         searchdata.Name = nname;
@@ -1902,7 +1902,7 @@ int TVPLoadGraphic(iTVPBaseBitmap *dest, const ttstr &name, tjs_int32 keyidx,
                    tjs_uint desw, tjs_uint desh, tTVPGraphicLoadMode mode,
                    ttstr *provincename, iTJSDispatch2 **metainfo) {
     // loading with cache management
-    ttstr nname = TVPNormalizeStorageName(name);
+    ttstr nname = krkr::io::NormalizeStorageName(name);
     tjs_uint32 hash;
     tTVPGraphicsSearchData searchdata;
 
@@ -1956,7 +1956,7 @@ int TVPLoadGraphic(iTVPBaseBitmap *dest, const ttstr &name, tjs_int32 keyidx,
 
         // Skip XP3 decompression for known unsupported video formats
         // (but NOT .amv which is now handled by the AMV decoder).
-        ttstr ext = TVPExtractStorageExt(nname);
+        ttstr ext = krkr::io::ExtractStorageExt(nname);
         ext.ToLowerCase();
         bool unsupportedVideo = ext == TJS_W(".avi") || ext == TJS_W(".wmv") ||
             ext == TJS_W(".mp4") || ext == TJS_W(".mpg") ||
@@ -2063,7 +2063,7 @@ public:
     };
 
     struct tParam {
-        std::vector<tItem> items; // must be TVPNormalizeStorageName(name);
+        std::vector<tItem> items; // must be krkr::io::NormalizeStorageName(name);
         tjs_int limit;
     };
 
@@ -2288,7 +2288,7 @@ void TVPTouchImages(const std::vector<ttstr> &storages, tjs_int64 limit,
     if(/*!timeout &&*/ storages.size() /* > 1*/) { // using async touching for
                                                    // multi images
         for(const ttstr &name : storages) {
-            ttstr nname = TVPNormalizeStorageName(name);
+            ttstr nname = krkr::io::NormalizeStorageName(name);
             tjs_uint32 hash;
             tTVPGraphicsSearchData searchdata;
             if(TVPGraphicCacheEnabled) {
@@ -2319,20 +2319,20 @@ void TVPTouchImages(const std::vector<ttstr> &storages, tjs_int64 limit,
     for(auto it = storages.begin(); it != storages.end(); ++it) {
         TVPGraphicPreload::tItem item;
 		item.main.handler = nullptr;
-		ttstr name = TVPNormalizeStorageName(*it);
+		ttstr name = krkr::io::NormalizeStorageName(*it);
 		tTVPGraphicsSearchData &searchdata = item.searchdata;
 		searchdata.Name = name;
 		searchdata.KeyIdx = TVP_clNone;
 		searchdata.Mode = glmNormal;
 		searchdata.DesW = 0;
 		searchdata.DesH = 0;
-		ttstr ext = TVPExtractStorageExt(name);
+		ttstr ext = krkr::io::ExtractStorageExt(name);
         if(ext.IsEmpty()) { // to avoid handler searching
             tTJSHashTable<ttstr, tTVPGraphicHandlerType>::tIterator i;
             for(i = TVPGraphicType.Hash.GetFirst(); !i.IsNull(); /*i++*/)
             {
                 ttstr newname = name + i.GetKey();
-                if(TVPIsExistentStorage(newname))
+                if(krkr::io::IsExistentStorage(newname))
                 {
                     // file found
 					item.main.filename = newname;
@@ -2359,7 +2359,7 @@ void TVPTouchImages(const std::vector<ttstr> &storages, tjs_int64 limit,
         for(i = TVPGraphicType.Hash.GetFirst(); !i.IsNull(); /*i++*/)
         {
             ttstr newname = provincename + i.GetKey();
-            if(TVPIsExistentStorage(newname))
+            if(krkr::io::IsExistentStorage(newname))
             {
                 // file found
                 item.provincename = newname;
@@ -2380,7 +2380,7 @@ void TVPTouchImages(const std::vector<ttstr> &storages, tjs_int64 limit,
                 {
                     ttstr newname = name;
                     newname += i.GetKey();
-                    if(TVPIsExistentStorage(newname))
+                    if(krkr::io::IsExistentStorage(newname))
                     {
                         // file found
                         item.mask.filename = newname;
@@ -2393,7 +2393,7 @@ void TVPTouchImages(const std::vector<ttstr> &storages, tjs_int64 limit,
             }
             else
             {
-                if(!TVPIsExistentStorage(name))
+                if(!krkr::io::IsExistentStorage(name))
                 {
                     // not found
                     ext.Clear();
@@ -2404,9 +2404,9 @@ void TVPTouchImages(const std::vector<ttstr> &storages, tjs_int64 limit,
             }
         }
 
-		item.main.Stream = TVPCreateStream(item.main.filename, 0);
+		item.main.Stream = krkr::io::CreateStream(item.main.filename, 0);
 		if (item.main.Stream) {
-			if (item.mask.handler) item.mask.Stream = TVPCreateStream(item.mask.filename, 0);
+			if (item.mask.handler) item.mask.Stream = krkr::io::CreateStream(item.mask.filename, 0);
 			param->items.emplace_back(item);
 		}
     }
@@ -2453,7 +2453,7 @@ void TVPTouchImages(const std::vector<ttstr> &storages, tjs_int64 limit,
     count--;
     for(; count >= 0; count--) {
         tTVPGraphicsSearchData searchdata;
-        searchdata.Name = TVPNormalizeStorageName(storages[count]);
+        searchdata.Name = krkr::io::NormalizeStorageName(storages[count]);
         searchdata.KeyIdx = TVP_clNone;
         searchdata.Mode = glmNormal;
         searchdata.DesW = 0;

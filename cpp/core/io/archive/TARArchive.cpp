@@ -47,7 +47,7 @@ class TARArchive : public tTVPArchive {
 public:
     TARArchive(const ttstr &arcname) : tTVPArchive(arcname) {}
 
-    ~TARArchive() override { TVPFreeArchiveHandlePoolByPointer(this); }
+    ~TARArchive() override { FreeArchiveHandlePoolByPointer(this); }
 
     bool init(tTJSBinaryStream *_instr, bool normalizeFileName) {
         if(_instr) {
@@ -114,7 +114,7 @@ public:
                               return a.filename < b.filename;
                           });
             }
-            TVPReleaseCachedArchiveHandle(this, _instr);
+            ReleaseCachedArchiveHandle(this, _instr);
             return true;
         }
         return false;
@@ -132,7 +132,7 @@ tTJSBinaryStream *TARArchive::CreateStreamByIndex(tjs_uint idx) {
     return new TArchiveStream(this, info.offset, info.size);
 }
 
-tTVPArchive *TVPOpenTARArchive(const ttstr &name, tTJSBinaryStream *st,
+tTVPArchive *OpenTARArchive(const ttstr &name, tTJSBinaryStream *st,
                                bool normalizeFileName) {
     auto *arc = new TARArchive(name);
     if(!arc->init(st, normalizeFileName)) {

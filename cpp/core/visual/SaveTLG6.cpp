@@ -1043,10 +1043,10 @@ void SaveTLG6(tTJSBinaryStream *stream, const iTVPBaseBitmap *bmp, bool is24) {
     for(int i = 0; i < MAX_COLOR_COMPONENTS; i++)
         block_buf[i] = nullptr;
     unsigned char *filtertypes = nullptr;
-    tTVPMemoryStream *memstream = nullptr;
+    krkr::io::MemoryStream *memstream = nullptr;
 
     try {
-        memstream = new tTVPMemoryStream();
+        memstream = new krkr::io::MemoryStream();
 
         TLG6BitStream bs(memstream);
 

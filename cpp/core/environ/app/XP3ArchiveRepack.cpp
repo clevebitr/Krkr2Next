@@ -42,10 +42,10 @@ void TVPSavePVRv3(void *formatdata, tTJSBinaryStream *dst,
 
 namespace krkr::environ {
 
-class tTVPXP3ArchiveEx : public tTVPXP3Archive {
+class tTVPXP3ArchiveEx : public krkr::io::XP3Archive {
 public:
     tTVPXP3ArchiveEx(const ttstr &name, tTJSBinaryStream *st) :
-        tTVPXP3Archive(name, 0) {
+        krkr::io::XP3Archive(name, 0) {
         Init(st, -1, false);
     }
 
@@ -101,7 +101,7 @@ public:
     }
 };
 
-class OutStreamMemory : public IOutStream, public tTVPMemoryStream {
+class OutStreamMemory : public IOutStream, public krkr::io::MemoryStream {
     unsigned int RefCount = 1;
 
 public:
@@ -125,16 +125,16 @@ public:
 
     HRESULT STDMETHODCALLTYPE Write(const void *data, UInt32 size,
                                     UInt32 *processedSize) noexcept override {
-        *processedSize = tTVPMemoryStream::Write(data, size);
+        *processedSize = krkr::io::MemoryStream::Write(data, size);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE Seek(Int64 offset, UInt32 seekOrigin,
                                    UInt64 *newPosition) noexcept override {
-        *newPosition = tTVPMemoryStream::Seek(offset, seekOrigin);
+        *newPosition = krkr::io::MemoryStream::Seek(offset, seekOrigin);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE SetSize(UInt64 newSize) noexcept override {
-        tTVPMemoryStream::SetSize(newSize);
+        krkr::io::MemoryStream::SetSize(newSize);
         return S_OK;
     }
 };
@@ -313,9 +313,9 @@ XP3ArchiveRepackAsyncImpl::~XP3ArchiveRepackAsyncImpl() {
 uint64_t XP3ArchiveRepackAsyncImpl::AddTask(
     const std::string &src /*, const std::string &dst*/) {
     ttstr path(src);
-    tTVPLocalFileStream *str = new tTVPLocalFileStream(path, path, TJS_BS_READ);
+    krkr::io::LocalFileStream *str = new krkr::io::LocalFileStream(path, path, TJS_BS_READ);
     tTVPXP3ArchiveEx *xp3arc = new tTVPXP3ArchiveEx(path, str);
-    for(const tTVPXP3Archive::tArchiveItem &item : xp3arc->ItemVector) {
+    for(const krkr::io::XP3Archive::tArchiveItem &item : xp3arc->ItemVector) {
         xp3arc->TotalSize += item.OrgSize;
     }
     ConvFileList.emplace_back(xp3arc, src);
@@ -520,13 +520,13 @@ void XP3ArchiveRepackAsyncImpl::DoConv() {
         std::map<tjs_uint, tjs_uint> imglist{};
         std::vector<tjs_uint> filelist; // normal files
         {
-            std::unordered_multimap<ttstr, const tTVPXP3Archive::tArchiveItem *,
+            std::unordered_multimap<ttstr, const krkr::io::XP3Archive::tArchiveItem *,
                                     ttstr_hasher>
                 allFileName;
             std::vector<tjs_uint> allfilelist;
             std::set<tjs_uint> masklist;
             for(tjs_uint idx = 0; idx < xp3arc->ItemVector.size(); ++idx) {
-                const tTVPXP3Archive::tArchiveItem &item =
+                const krkr::io::XP3Archive::tArchiveItem &item =
                     xp3arc->ItemVector[idx];
                 if(!item.OrgSize) {
                     // add empty files first
@@ -541,15 +541,15 @@ void XP3ArchiveRepackAsyncImpl::DoConv() {
                 if(item.Name.length() > 256 &&
                    item.Name.StartsWith(TJS_W("$$$")))
                     continue;
-                ttstr name = TVPChopStorageExt(item.Name);
+                ttstr name = krkr::io::ChopStorageExt(item.Name);
                 allFileName.emplace(name, &item);
                 allfilelist.emplace_back(idx);
             }
             if(OptionMergeMaskImg)
                 for(tjs_uint idx : allfilelist) {
-                    const tTVPXP3Archive::tArchiveItem &item =
+                    const krkr::io::XP3Archive::tArchiveItem &item =
                         xp3arc->ItemVector[idx];
-                    ttstr name = TVPChopStorageExt(item.Name);
+                    ttstr name = krkr::io::ChopStorageExt(item.Name);
                     tjs_int pos = name.length() - 2;
                     if(pos > 0 && name.SubString(pos, 2) == TJS_W("_m")) {
                         ttstr prefix = name.SubString(0, pos);
@@ -560,7 +560,7 @@ void XP3ArchiveRepackAsyncImpl::DoConv() {
                         }
                         if(count == 1) { // assume that one mask
                                          // associate to one image
-                            const tTVPXP3Archive::tArchiveItem *imgItem =
+                            const krkr::io::XP3Archive::tArchiveItem *imgItem =
                                 itpair.first->second;
                             allFileName.erase(itpair.first);
                             allFileName.erase(name);
@@ -586,9 +586,9 @@ void XP3ArchiveRepackAsyncImpl::DoConv() {
         for(const auto &it : imglist) {
             if(bStopRequired)
                 break;
-            const tTVPXP3Archive::tArchiveItem &imgItem =
+            const krkr::io::XP3Archive::tArchiveItem &imgItem =
                 xp3arc->ItemVector[it.first];
-            const tTVPXP3Archive::tArchiveItem &maskItem =
+            const krkr::io::XP3Archive::tArchiveItem &maskItem =
                 xp3arc->ItemVector[it.second];
             std::unique_ptr<tTJSBinaryStream> strImg(
                 xp3arc->CreateStreamByIndex(&imgItem -
@@ -699,7 +699,7 @@ void XP3ArchiveRepackAsyncImpl::DoConv() {
                 meta->PropSet(TJS_MEMBERENSURE, k.c_str(), nullptr, &var,
                               meta.get());
             }
-            tTVPMemoryStream memstr;
+            krkr::io::MemoryStream memstr;
             auto *bmp =
                 new tTVPBaseBitmap(data.bmp->GetWidth(), data.bmp->GetHeight());
             bmp->AssignBitmap(data.bmp);
@@ -729,7 +729,7 @@ void XP3ArchiveRepackAsyncImpl::DoConv() {
             }
         }
         for(tjs_uint idx : filelist) {
-            const tTVPXP3Archive::tArchiveItem &item = xp3arc->ItemVector[idx];
+            const krkr::io::XP3Archive::tArchiveItem &item = xp3arc->ItemVector[idx];
 
             if(bStopRequired)
                 break;

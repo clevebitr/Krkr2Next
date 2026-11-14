@@ -207,7 +207,7 @@ void tTVPAsyncImageLoader::LoadRequest(iTJSDispatch2 *owner, tTJSNI_Bitmap *bmp,
     // tTVPBaseBitmap* dest = new tTVPBaseBitmap( 32, 32, 32 );
     tTVPBaseBitmap dest(TVPGetInitialBitmap());
     iTJSDispatch2 *metainfo = nullptr;
-    ttstr nname = TVPNormalizeStorageName(name);
+    ttstr nname = krkr::io::NormalizeStorageName(name);
     if(TVPCheckImageCache(nname, &dest, glmNormal, 0, 0, TVP_clNone,
                           &metainfo)) {
         // キャッシュ内に発見、即座に読込みを完了する
@@ -228,10 +228,10 @@ void tTVPAsyncImageLoader::LoadRequest(iTJSDispatch2 *owner, tTJSNI_Bitmap *bmp,
         TVPPostEvent(owner, owner, eventname, 0, TVP_EPT_IMMEDIATE, 4, param);
         return;
     }
-    if(TVPIsExistentStorage(name) == false) {
+    if(krkr::io::IsExistentStorage(name) == false) {
         TVPThrowExceptionMessage(TVPCannotFindStorage, name);
     }
-    ttstr ext = TVPExtractStorageExt(name);
+    ttstr ext = krkr::io::ExtractStorageExt(name);
     if(ext == TJS_W("")) {
         TVPThrowExceptionMessage(TJS_W("Filename extension not found/%1"),
                                  name);
@@ -241,8 +241,8 @@ void tTVPAsyncImageLoader::LoadRequest(iTJSDispatch2 *owner, tTJSNI_Bitmap *bmp,
 }
 
 // tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
-//	tTJSBinaryStream* stream = TVPCreateStream(nname, TJS_BS_READ);
-// TVPCreateStream はロックされているので、非同期で実行可能
+//	tTJSBinaryStream* stream = krkr::io::CreateStream(nname, TJS_BS_READ);
+// krkr::io::CreateStream はロックされているので、非同期で実行可能
 
 void tTVPAsyncImageLoader::PushLoadQueue(iTJSDispatch2 *owner,
                                          tTJSNI_Bitmap *bmp,
@@ -296,7 +296,7 @@ void tTVPAsyncImageLoader::LoadingThread() {
 }
 tTVPGraphicHandlerType *TVPGuessGraphicLoadHandler(ttstr &name);
 void tTVPAsyncImageLoader::LoadImageFromCommand(tTVPImageLoadCommand *cmd) {
-    ttstr ext = TVPExtractStorageExt(cmd->path_);
+    ttstr ext = krkr::io::ExtractStorageExt(cmd->path_);
     tTVPGraphicHandlerType *handler = nullptr;
     ttstr name(cmd->path_);
     if(ext.IsEmpty()) {

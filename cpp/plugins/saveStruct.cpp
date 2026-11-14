@@ -230,7 +230,7 @@ public:
         if(numparams < 1)
             return TJS_E_BADPARAMCOUNT;
         tTJSBinaryStream *stream =
-            TVPCreateStream(param[0]->AsString(), TJS_BS_WRITE);
+            krkr::io::CreateStream(param[0]->AsString(), TJS_BS_WRITE);
         try {
             tTVPStringStream writer(stream, numparams > 2 ? (int)*param[2] : 0);
             tjs_int count = 0;
@@ -269,7 +269,7 @@ public:
         if(numparams < 1)
             return TJS_E_BADPARAMCOUNT;
         tTJSBinaryStream *stream =
-            TVPCreateStream(param[0]->AsString(), TJS_BS_WRITE);
+            krkr::io::CreateStream(param[0]->AsString(), TJS_BS_WRITE);
         try {
             tTVPStringStream writer(stream, numparams > 2 ? (int)*param[2] : 0);
             getArrayString(objthis, &writer);
@@ -290,7 +290,7 @@ public:
                                     tTJSVariant **param,
                                     iTJSDispatch2 *objthis) {
         if(result) {
-            tTVPMemoryStream ms;
+            krkr::io::MemoryStream ms;
             tTVPStringStream writer(&ms, numparams > 0 ? (int)*param[0] : 0);
             getArrayString(objthis, &writer);
             *result = (const tjs_char *)ms.GetInternalBuffer();
@@ -325,7 +325,7 @@ public:
         if(numparams < 1)
             return TJS_E_BADPARAMCOUNT;
         tTJSBinaryStream *stream =
-            TVPCreateStream(param[0]->AsString(), TJS_BS_WRITE);
+            krkr::io::CreateStream(param[0]->AsString(), TJS_BS_WRITE);
         try {
             tTVPStringStream writer(stream, numparams > 2 ? (int)*param[2] : 0);
             getDictString(objthis, &writer);
@@ -346,7 +346,7 @@ public:
                                     tTJSVariant **param,
                                     iTJSDispatch2 *objthis) {
         if(result) {
-            tTVPMemoryStream ms;
+            krkr::io::MemoryStream ms;
             tTVPStringStream writer(&ms, numparams > 0 ? (int)*param[0] : 0);
             getDictString(objthis, &writer);
             writer.write((tjs_char)0);

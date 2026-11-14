@@ -102,12 +102,12 @@ engine_result_t engine_set_option(engine_handle_t handle, const engine_option_t 
     if (key == ENGINE_OPTION_ARCHIVE_CACHE_COUNT) {
         const int count = std::atoi(option->value_utf8);
         if (g_engine_bootstrapped && count > 0) {
-            TVPSetArchiveCacheCount(static_cast<tjs_uint>(count));
+            krkr::io::SetArchiveCacheCount(static_cast<tjs_uint>(count));
         }
     } else if (key == ENGINE_OPTION_AUTOPATH_CACHE_COUNT) {
         const int count = std::atoi(option->value_utf8);
         if (g_engine_bootstrapped && count > 0) {
-            TVPSetAutoPathCacheMaxCount(static_cast<tjs_uint>(count));
+            krkr::io::SetAutoPathCacheMaxCount(static_cast<tjs_uint>(count));
         }
     } else if (key == ENGINE_OPTION_PSB_CACHE_MB) {
         const int cache_mb = std::atoi(option->value_utf8);

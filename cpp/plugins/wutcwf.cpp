@@ -188,7 +188,7 @@ bool TCWFDecoder::SetPosition(tjs_uint64 samplepos) {
 //---------------------------------------------------------------------------
 bool TCWFDecoder::Open(const ttstr &url) {
     // url で指定された URL を開きます
-    InputStream = TVPCreateStream(url, TJS_BS_READ);
+    InputStream = krkr::io::CreateStream(url, TJS_BS_READ);
     if(!InputStream) {
         return false;
     }

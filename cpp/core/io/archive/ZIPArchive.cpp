@@ -2086,7 +2086,7 @@ static long zip_seek64file(voidpf, voidpf s, ZPOS64_T offset, int origin) {
     return 0;
 }
 
-tTVPArchive *TVPOpenZIPArchive(const ttstr &name, tTJSBinaryStream *st,
+tTVPArchive *OpenZIPArchive(const ttstr &name, tTJSBinaryStream *st,
                                bool normalizeFileName) {
     tjs_uint64 pos = st->GetPosition();
     bool checkZIP = st->ReadI16LE() == 0x4B50; // 'PK'
@@ -2124,7 +2124,7 @@ tTJSBinaryStream *ZipArchive::CreateStreamByIndex(tjs_uint idx) {
     } else {
         if(unzOpenCurrentFile(uf) != UNZ_OK)
             return nullptr;
-        tTVPMemoryStream *mem = new tTVPMemoryStream();
+        MemoryStream *mem = new MemoryStream();
         mem->SetSize(file_info.uncompressed_size);
         // 必须按实际解出的字节数校验。unzReadCurrentFile 在数据损坏 / CRC
         // 不匹配 时返回负数、提前 EOF 时返回更小的值；忽略返回值就会把 SetSize
@@ -2166,7 +2166,7 @@ ZipArchive::~ZipArchive() {
 ZipArchive::ZipArchive(const ttstr &name, tTJSBinaryStream *st,
                        bool normalizeFileName) : tTVPArchive(name) {
     if(!st)
-        st = TVPCreateStream(name);
+        st = CreateStream(name);
     _st = st;
     if((uf = unzOpenInternal(this, &zipfunc, 1)) != nullptr) {
         // unzGoToFirstFile64(uf, nullptr, nullptr, 0);

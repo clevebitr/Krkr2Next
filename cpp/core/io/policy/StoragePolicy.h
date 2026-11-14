@@ -53,7 +53,7 @@ namespace krkr::io {
         // 缺尾部分隔符的路径：false = 抛异常（旧层），true = 自动补齐并打日志。
         bool autoRepairMissingDelimiter = false;
 
-        // TVPGetAppPath() 是否去掉档案分隔符 '>'：旧层不去（档案工程返回 ".../data.xp3>"），
+        // GetAppPath() 是否去掉档案分隔符 '>'：旧层不去（档案工程返回 ".../data.xp3>"），
         // AetherKiri 去（返回档案所在目录）。影响 patch.tjs / AfterStartup.tjs 的定位与
         // 临时文件落点。
         bool stripArchiveDelimiterInAppPath = false;

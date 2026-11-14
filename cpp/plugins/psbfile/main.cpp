@@ -143,7 +143,7 @@ namespace {
         ttstr path = storage;
         if(path.IsEmpty())
             return nullptr;
-        if(TVPExtractStorageExt(path).AsLowerCase() != TJS_W(".scn"))
+        if(krkr::io::ExtractStorageExt(path).AsLowerCase() != TJS_W(".scn"))
             path += TJS_W(".scn");
 
         const std::string key = path.AsStdString();
@@ -175,7 +175,7 @@ namespace {
 
 void initPsbFile() {
     psbMedia = new PSBMedia();
-    TVPRegisterStorageMedia(psbMedia);
+    krkr::io::RegisterStorageMedia(psbMedia);
     psbMedia->Release();
     TVPRegisterPSBCacheInfoCallback(psbCacheInfoCallback);
     // 让解析器能问"编译场景里有没有这个标签"（见上面 CollectScenarioLabels 一节）。
@@ -188,7 +188,7 @@ void deInitPsbFile() {
     TVPRegisterPSBCacheInfoCallback(nullptr);
     if(psbMedia != nullptr) {
         psbMedia->clear();
-        TVPUnregisterStorageMedia(psbMedia);
+        krkr::io::UnregisterStorageMedia(psbMedia);
         psbMedia = nullptr;
     }
     LOGGER->info("deInitPsbFile");

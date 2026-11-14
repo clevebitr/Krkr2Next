@@ -19,7 +19,7 @@ struct FontEx {
         if(numparams < 1)
             return TJS_E_BADPARAMCOUNT;
 
-        ttstr filename = TVPGetPlacedPath(*param[0]);
+        ttstr filename = krkr::io::GetPlacedPath(*param[0]);
         if(filename.length()) {
             int ret = TVPEnumFontsProc(filename);
             if(result) {

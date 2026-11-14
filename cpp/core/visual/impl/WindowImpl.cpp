@@ -73,7 +73,7 @@ tjs_uint32 TVP_TShiftState_From_uint32(tjs_uint32 state) {
 static tTJSHashTable<ttstr, tjs_int> TVPCursorTable;
 tjs_int TVPGetCursor(const ttstr &name) {
     // get placed path
-    ttstr place(TVPSearchPlacedPath(name));
+    ttstr place(krkr::io::SearchPlacedPath(name));
 
     // search in cache
     tjs_int *in_hash = TVPCursorTable.Find(place);

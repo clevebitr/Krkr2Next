@@ -251,12 +251,12 @@ public:
     bool CheckExistentStorage(const ttstr &name) override {
         ttstr resolved = ResolveProxy(name);
         if(resolved.IsEmpty()) return false;
-        return TVPIsExistentStorage(resolved);
+        return krkr::io::IsExistentStorage(resolved);
     }
     tTJSBinaryStream *Open(const ttstr &name, tjs_uint32 flags) override {
         ttstr resolved = ResolveProxy(name);
         if(resolved.IsEmpty()) return nullptr;
-        return TVPCreateStream(resolved, flags);
+        return krkr::io::CreateStream(resolved, flags);
     }
     void GetListAt(const ttstr &, iTVPStorageLister *) override {}
     void GetLocallyAccessibleName(ttstr &name) override { name.Clear(); }
@@ -271,7 +271,7 @@ static void TVPRegisterProxyFsStub() {
     dict->Release();
 
     auto *media = new tTVPProxyStorageMedia();
-    TVPRegisterStorageMedia(media);
+    krkr::io::RegisterStorageMedia(media);
     media->Release();
     spdlog::info("Registered proxy storage media stub for missing proxyfs.dll");
 }
@@ -307,7 +307,7 @@ static void TVPRegisterGamepadStub() {
 void TVPLoadPlugin(const ttstr &name) {
     // name 可能是完整路径(自动加载)或纯文件名(Plugins.link)，统一先取 storage 名，
     // 否则下面的名字映射对照纯文件名会因路径前缀而永远不命中。
-    auto pluginName = TVPExtractStorageName(name);
+    auto pluginName = krkr::io::ExtractStorageName(name);
     if(pluginName == TJS_W("emoteplayer.dll"))
         pluginName = "motionplayer.dll";
     if(pluginName == TJS_W("motionplayer_nod3d.dll")) // 千恋万花等 Z 游戏
@@ -346,7 +346,7 @@ static tjs_int TVPAutoLoadPluginCount = 0;
 
 static void TVPSearchPluginsAt(std::vector<tTVPFoundPlugin> &list,
                                std::string folder) {
-    TVPListDir(folder, [&](const std::string &filename, int mask) {
+    krkr::io::ListDir(folder, [&](const std::string &filename, int mask) {
         if(mask & S_IFREG) {
             if(filename.length() >= 4) {
                 const char *ext = filename.c_str() + filename.length() - 4;
@@ -362,7 +362,7 @@ static void TVPSearchPluginsAt(std::vector<tTVPFoundPlugin> &list,
 }
 
 void TVPLoadInternalPlugins() {
-    // 把"内置插件表查询"注入给 IO 组件（`TVPIsExistentStorage("xxx.dll")` 用它回答）。
+    // 把"内置插件表查询"注入给 IO 组件（`krkr::io::IsExistentStorage("xxx.dll")` 用它回答）。
     // 注入点必须在 AllRegist() 之前：注册表填充前后 HasModule 的返回值不同，而注入前
     // io 侧返回 false —— 正好与"注册表还没填充"一致，所以行为不变（见 IoModuleLocator.h）。
     krkr::io::SetModuleLocator(&ncbAutoRegister::HasModule);
@@ -439,9 +439,9 @@ bool TVPLoadInternalPlugin(const ttstr &_name) {
         ttstr fixed(buf);
         delete[] buf;
 
-        return ncbAutoRegister::LoadModule(TVPExtractStorageName(fixed));
+        return ncbAutoRegister::LoadModule(krkr::io::ExtractStorageName(fixed));
     }
-    return ncbAutoRegister::LoadModule(TVPExtractStorageName(_name));
+    return ncbAutoRegister::LoadModule(krkr::io::ExtractStorageName(_name));
 }
 
 void tvpLoadPlugins() {
@@ -685,7 +685,7 @@ tTJSNativeClass *TVPCreateNativeClass_Plugins() {
             name = ttstr(path);
         }
 
-        const ttstr normalized = TVPExtractStorageName(name);
+        const ttstr normalized = krkr::io::ExtractStorageName(name);
         const ttstr lower = normalized.AsLowerCase();
         const tjs_char *raw = lower.c_str();
         const tjs_int len = lower.length();

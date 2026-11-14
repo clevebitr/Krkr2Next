@@ -22,9 +22,9 @@ namespace krkr::io {
 //---------------------------------------------------------------------------
 #pragma pack(push, 4)
 
-struct tTVPXP3ExtractionFilterInfo {
+struct XP3ExtractionFilterInfo {
     const tjs_uint SizeOfSelf; // structure size of
-                               // tTVPXP3ExtractionFilterInfo itself
+                               // XP3ExtractionFilterInfo itself
     const tjs_uint64 Offset; // offset of the buffer data in
                              // uncompressed stream position
     void *Buffer; // target data buffer
@@ -32,60 +32,60 @@ struct tTVPXP3ExtractionFilterInfo {
     const tjs_uint32 FileHash; // hash value of the file (since inteface v2)
     const ttstr &FileName;
 
-    tTVPXP3ExtractionFilterInfo(tjs_uint64 offset, void *buffer,
+    XP3ExtractionFilterInfo(tjs_uint64 offset, void *buffer,
                                 tjs_uint buffersize, tjs_uint32 filehash,
                                 const ttstr &filename) :
         Offset(offset), Buffer(buffer), BufferSize(buffersize),
         FileHash(filehash), FileName(filename),
-        SizeOfSelf(sizeof(tTVPXP3ExtractionFilterInfo)) {
+        SizeOfSelf(sizeof(XP3ExtractionFilterInfo)) {
         ;
     }
 };
 
 #pragma pack(pop)
 
-#define TVP_tTVPXP3ArchiveExtractionFilter_CONVENTION
+#define KRKR_XP3_EXTRACTION_FILTER_CONVENTION
 // TVP_tTVPXP3ArchiveExtractionFilter_CONV is _stdcall on win32
 // platforms, for backward application compatibility.
 
-typedef void(TVP_tTVPXP3ArchiveExtractionFilter_CONVENTION
+typedef void(KRKR_XP3_EXTRACTION_FILTER_CONVENTION
                  *tTVPXP3ArchiveExtractionFilter)(
-    tTVPXP3ExtractionFilterInfo *info, tTJSVariant *ctx);
+    XP3ExtractionFilterInfo *info, tTJSVariant *ctx);
 
 typedef tjs_int(
-    TVP_tTVPXP3ArchiveExtractionFilter_CONVENTION *tTVPXP3ArchiveContentFilter)(
+    KRKR_XP3_EXTRACTION_FILTER_CONVENTION *tTVPXP3ArchiveContentFilter)(
     const ttstr &filepath, const ttstr &archivename, tjs_uint64 filesize,
     tTJSVariant *ctx);
 
 /*]*/
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(void, TVPSetXP3ArchiveExtractionFilter,
+TJS_EXP_FUNC_DEF(void, SetXP3ArchiveExtractionFilter,
                  (tTVPXP3ArchiveExtractionFilter filter));
 
-TJS_EXP_FUNC_DEF(void, TVPSetXP3ArchiveContentFilter,
+TJS_EXP_FUNC_DEF(void, SetXP3ArchiveContentFilter,
                  (tTVPXP3ArchiveContentFilter filter));
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPXP3Archive  : XP3 ( TVP's native archive format ) Implmentation
+// XP3Archive  : XP3 ( TVP's native archive format ) Implmentation
 //---------------------------------------------------------------------------
-#define TVP_XP3_INDEX_ENCODE_METHOD_MASK 0x07
-#define TVP_XP3_INDEX_ENCODE_RAW 0
-#define TVP_XP3_INDEX_ENCODE_ZLIB 1
+#define KRKR_XP3_INDEX_ENCODE_METHOD_MASK 0x07
+#define KRKR_XP3_INDEX_ENCODE_RAW 0
+#define KRKR_XP3_INDEX_ENCODE_ZLIB 1
 
-#define TVP_XP3_INDEX_CONTINUE 0x80
+#define KRKR_XP3_INDEX_CONTINUE 0x80
 
-#define TVP_XP3_FILE_PROTECTED (1 << 31)
+#define KRKR_XP3_FILE_PROTECTED (1 << 31)
 
-#define TVP_XP3_SEGM_ENCODE_METHOD_MASK 0x07
-#define TVP_XP3_SEGM_ENCODE_RAW 0
-#define TVP_XP3_SEGM_ENCODE_ZLIB 1
+#define KRKR_XP3_SEGM_ENCODE_METHOD_MASK 0x07
+#define KRKR_XP3_SEGM_ENCODE_RAW 0
+#define KRKR_XP3_SEGM_ENCODE_ZLIB 1
 
 //---------------------------------------------------------------------------
-extern bool TVPIsXP3Archive(const ttstr &name); // check XP3 archive
-extern void TVPClearXP3SegmentCache(); // clear XP3 segment cache
+extern bool IsXP3Archive(const ttstr &name); // check XP3 archive
+extern void ClearXP3SegmentCache(); // clear XP3 segment cache
 //---------------------------------------------------------------------------
-struct tTVPXP3ArchiveSegment {
+struct XP3ArchiveSegment {
     tjs_uint64 Start; // start position in archive storage
     tjs_uint64 Offset; // offset in in-archive storage (in
                        // uncompressed offset)
@@ -95,7 +95,7 @@ struct tTVPXP3ArchiveSegment {
 };
 
 //---------------------------------------------------------------------------
-class tTVPXP3Archive : public tTVPArchive {
+class XP3Archive : public tTVPArchive {
 public:
     struct tArchiveItem {
         ttstr Name;
@@ -103,7 +103,7 @@ public:
         tjs_uint32 Flags{};
         tjs_uint64 OrgSize{}; // original ( uncompressed ) size
         tjs_uint64 ArcSize{}; // in-archive size
-        std::vector<tTVPXP3ArchiveSegment> Segments;
+        std::vector<XP3ArchiveSegment> Segments;
 
         bool operator<(const tArchiveItem &rhs) const {
             return this->Name < rhs.Name;
@@ -121,12 +121,12 @@ public:
               bool normalizeName = true);
 
 public:
-    tTVPXP3Archive(const ttstr &name, int) : tTVPArchive(name) {}
+    XP3Archive(const ttstr &name, int) : tTVPArchive(name) {}
 
-    tTVPXP3Archive(const ttstr &name, tTJSBinaryStream *st = nullptr,
+    XP3Archive(const ttstr &name, tTJSBinaryStream *st = nullptr,
                    tjs_int64 offset = -1, bool normalizeFileName = true);
 
-    ~tTVPXP3Archive() override;
+    ~XP3Archive() override;
 
     static tTVPArchive *Create(const ttstr &name,
                                tTJSBinaryStream *st = nullptr,
@@ -144,7 +144,7 @@ public:
 
     // 该条目在索引里是否被标记为受保护（Cx 加壳的载荷）
     [[nodiscard]] bool IsFileProtected(tjs_uint idx) const {
-        return (ItemVector[idx].Flags & TVP_XP3_FILE_PROTECTED) != 0;
+        return (ItemVector[idx].Flags & KRKR_XP3_FILE_PROTECTED) != 0;
     }
 
     [[nodiscard]] bool UsesBuiltinCxDecoder() const {
@@ -170,21 +170,21 @@ private:
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPXP3ArchiveStream  : XP3 In-Archive Stream Implmentation
+// XP3ArchiveStream  : XP3 In-Archive Stream Implmentation
 //---------------------------------------------------------------------------
-class tTVPSegmentData;
+class SegmentData;
 
-class tTVPXP3ArchiveStream : public tTJSBinaryStream {
-    tTVPXP3Archive *Owner;
+class XP3ArchiveStream : public tTJSBinaryStream {
+    XP3Archive *Owner;
 
     tjs_int StorageIndex; // index in archive
 
-    std::vector<tTVPXP3ArchiveSegment> *Segments;
+    std::vector<XP3ArchiveSegment> *Segments;
     tTJSBinaryStream *Stream;
     tjs_uint64 OrgSize; // original storage size
 
     tjs_int CurSegmentNum;
-    tTVPXP3ArchiveSegment *CurSegment;
+    XP3ArchiveSegment *CurSegment;
     // currently opened segment ( nullptr for not opened )
 
     tjs_int LastOpenedSegmentNum;
@@ -194,17 +194,17 @@ class tTVPXP3ArchiveStream : public tTJSBinaryStream {
     tjs_uint64 SegmentRemain; // remain bytes in current segment
     tjs_uint64 SegmentPos; // offset from current segment's start
 
-    tTVPSegmentData *SegmentData; // uncompressed segment data
+    SegmentData *SegmentData; // uncompressed segment data
 
     bool SegmentOpened;
     tTJSVariant FilterContext;
 
 public:
-    tTVPXP3ArchiveStream(tTVPXP3Archive *owner, tjs_int storageindex,
-                         std::vector<tTVPXP3ArchiveSegment> *segments,
+    XP3ArchiveStream(XP3Archive *owner, tjs_int storageindex,
+                         std::vector<XP3ArchiveSegment> *segments,
                          tTJSBinaryStream *stream, tjs_uint64 orgsize);
 
-    ~tTVPXP3ArchiveStream() override;
+    ~XP3ArchiveStream() override;
 
     tTJSVariant &GetFilterContext() { return FilterContext; }
 
@@ -227,15 +227,5 @@ public:
 } // namespace krkr::io
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::io::tTVPXP3ExtractionFilterInfo;
-using krkr::io::tTVPXP3ArchiveExtractionFilter;
-using krkr::io::tTVPXP3ArchiveContentFilter;
-using krkr::io::TVPSetXP3ArchiveExtractionFilter;
-using krkr::io::TVPSetXP3ArchiveContentFilter;
-using krkr::io::TVPIsXP3Archive;
-using krkr::io::TVPClearXP3SegmentCache;
-using krkr::io::tTVPXP3ArchiveSegment;
-using krkr::io::tTVPXP3Archive;
-using krkr::io::tTVPXP3ArchiveStream;
 
 #endif

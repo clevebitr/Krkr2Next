@@ -122,7 +122,7 @@ tTJSVariant PSD::getSelf() { return tTJSVariant(objthis, objthis); }
  * @return ロードに成功したら true
  */
 bool PSD::load(const tjs_char *filename) {
-    ttstr file = TVPGetPlacedPath(filename);
+    ttstr file = krkr::io::GetPlacedPath(filename);
     if(!file.length()) {
         // 見つからなかったのでローカルパスとみなして読み込む
         psd::PSDFile::load(NarrowString(filename));
@@ -130,7 +130,7 @@ bool PSD::load(const tjs_char *filename) {
 #ifdef LOAD_MEMORY
         if(!wcschr(file.c_str(), '>')) {
             // ローカルファイルなので直接読み込む
-            TVPGetLocalName(file);
+            krkr::io::GetLocalPath(file);
             psd::PSDFile::load(NarrowString(file));
         } else {
             // メモリに読み込んでロード

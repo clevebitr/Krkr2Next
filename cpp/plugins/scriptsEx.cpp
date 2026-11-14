@@ -922,7 +922,7 @@ tjs_error ScriptsAdd::safeEvalStorage(tTJSVariant *result, tjs_int numparams,
         ? param[2]->AsObjectNoAddRef()
         : nullptr;
 
-    ttstr shortname(TVPExtractStorageName(name));
+    ttstr shortname(krkr::io::ExtractStorageName(name));
 
     iTJSTextReadStream *stream = TVPCreateTextStreamForRead(name, modestr);
     ttstr buffer;

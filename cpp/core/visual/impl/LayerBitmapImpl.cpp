@@ -133,7 +133,7 @@ static std::vector<tTVPPrerenderedFontMap> TVPPrerenderedFontMapVector;
 //---------------------------------------------------------------------------
 void TVPMapPrerenderedFont(const tTVPFont &font, const ttstr &storage) {
     // map specified font to specified prerendered font
-    ttstr fn = TVPSearchPlacedPath(storage);
+    ttstr fn = krkr::io::SearchPlacedPath(storage);
 
 
     // search or retrieve specified storage

@@ -1,7 +1,7 @@
 //
 // 模块存在性查询的注入点（把插件注册表从 io 的依赖里摘出去）。
 //
-// 背景：`TVPIsExistentStorage("xxx.dll")` 要回答"引擎是否内置了这个插件模块" —— 这是
+// 背景：`IsExistentStorage("xxx.dll")` 要回答"引擎是否内置了这个插件模块" —— 这是
 // **插件系统**的知识，不是 IO 的知识。历史上 io 直接调 `ncbAutoRegister::HasModule`，
 // 于是 IO 组件硬依赖 core_plugin_module；两套兼容层要各自决定"哪些模块存在"时，这个
 // 直接依赖就成了障碍（见 compat/README.md §2 与 IO 搬迁顺序第 6 步）。

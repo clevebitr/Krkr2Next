@@ -352,7 +352,7 @@ namespace PSB {
     bool PSBFile::loadPSBFile(const ttstr &filePath) {
         LOGGER->debug("load psb file: {}", filePath.AsStdString());
         resetState();
-        auto *s = TVPCreateStream(filePath);
+        auto *s = krkr::io::CreateStream(filePath);
         if(!s)
             return false;
 
@@ -408,7 +408,7 @@ namespace PSB {
             psbSize = readSize;
         }
 
-        tTVPMemoryStream stream{ nullptr, static_cast<tjs_uint>(psbSize) };
+        krkr::io::MemoryStream stream{ nullptr, static_cast<tjs_uint>(psbSize) };
 
         if(isMdf) {
             uLongf destLen = static_cast<uLongf>(psbSize);

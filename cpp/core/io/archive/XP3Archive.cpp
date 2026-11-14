@@ -37,39 +37,39 @@ bool TVPAllowExtractProtectedStorage = true;
 //---------------------------------------------------------------------------
 tTVPXP3ArchiveExtractionFilter TVPXP3ArchiveExtractionFilter = nullptr;
 
-void TVPSetXP3ArchiveExtractionFilter(tTVPXP3ArchiveExtractionFilter filter) {
+void SetXP3ArchiveExtractionFilter(tTVPXP3ArchiveExtractionFilter filter) {
     TVPXP3ArchiveExtractionFilter = filter;
 }
 //---------------------------------------------------------------------------
 
 static tTVPXP3ArchiveContentFilter TVPXP3ArchiveContentFilter = nullptr;
 
-void TVPSetXP3ArchiveContentFilter(tTVPXP3ArchiveContentFilter filter) {
+void SetXP3ArchiveContentFilter(tTVPXP3ArchiveContentFilter filter) {
     TVPXP3ArchiveContentFilter = filter;
 }
 
 //---------------------------------------------------------------------------
 // tTVPXP3ArchiveHandleCache
 //---------------------------------------------------------------------------
-#define TVP_MAX_ARCHIVE_HANDLE_CACHE 8
+#define KRKR_MAX_ARCHIVE_HANDLE_CACHE 8
 static tjs_uint TVPArchiveHandleCacheAge = 0;
-struct tTVPArchiveHandleCacheItem {
+struct ArchiveHandleCacheItem {
     void *Pointer;
     tTJSBinaryStream *Stream;
     tjs_uint Age;
 };
 //---------------------------------------------------------------------------
-static tTVPArchiveHandleCacheItem *TVPArchiveHandleCachePool = nullptr;
+static ArchiveHandleCacheItem *TVPArchiveHandleCachePool = nullptr;
 static bool TVPArchiveHandleCacheInit = false;
 static bool TVPArchiveHandleCacheShutdown = false;
 static tTJSCriticalSection TVPArchiveHandleCacheCS;
 
 //---------------------------------------------------------------------------
-tTJSBinaryStream *TVPGetCachedArchiveHandle(void *pointer, const ttstr &name) {
+tTJSBinaryStream *GetCachedArchiveHandle(void *pointer, const ttstr &name) {
     // get cached archive file handle from the pool
     if(TVPArchiveHandleCacheShutdown) {
         // the pool has shutdown
-        return TVPCreateStream(name);
+        return CreateStream(name);
     }
 
     tTJSCriticalSectionHolder cs_holder(TVPArchiveHandleCacheCS);
@@ -77,8 +77,8 @@ tTJSBinaryStream *TVPGetCachedArchiveHandle(void *pointer, const ttstr &name) {
     if(!TVPArchiveHandleCacheInit) {
         // initialize the pool
         TVPArchiveHandleCachePool =
-            new tTVPArchiveHandleCacheItem[TVP_MAX_ARCHIVE_HANDLE_CACHE];
-        for(tjs_int i = 0; i < TVP_MAX_ARCHIVE_HANDLE_CACHE; i++) {
+            new ArchiveHandleCacheItem[KRKR_MAX_ARCHIVE_HANDLE_CACHE];
+        for(tjs_int i = 0; i < KRKR_MAX_ARCHIVE_HANDLE_CACHE; i++) {
             TVPArchiveHandleCachePool[i].Pointer = nullptr;
             TVPArchiveHandleCachePool[i].Stream = nullptr;
             TVPArchiveHandleCachePool[i].Age = 0;
@@ -87,9 +87,9 @@ tTJSBinaryStream *TVPGetCachedArchiveHandle(void *pointer, const ttstr &name) {
     }
 
     // linear search wiil be enough here because the
-    // TVP_MAX_ARCHIVE_HANDLE_CACHE is relatively small
-    for(tjs_int i = 0; i < TVP_MAX_ARCHIVE_HANDLE_CACHE; i++) {
-        tTVPArchiveHandleCacheItem *item = TVPArchiveHandleCachePool + i;
+    // KRKR_MAX_ARCHIVE_HANDLE_CACHE is relatively small
+    for(tjs_int i = 0; i < KRKR_MAX_ARCHIVE_HANDLE_CACHE; i++) {
+        ArchiveHandleCacheItem *item = TVPArchiveHandleCachePool + i;
         if(item->Stream && item->Pointer == pointer) {
             // found in the pool
             tTJSBinaryStream *stream = item->Stream;
@@ -100,10 +100,10 @@ tTJSBinaryStream *TVPGetCachedArchiveHandle(void *pointer, const ttstr &name) {
 
     // not found in the pool
     // simply create a stream and return it
-    return TVPCreateStream(name);
+    return CreateStream(name);
 }
 //---------------------------------------------------------------------------
-/*static*/ void TVPReleaseCachedArchiveHandle(void *pointer,
+/*static*/ void ReleaseCachedArchiveHandle(void *pointer,
                                               tTJSBinaryStream *stream) {
     // release archive file handle
     if(TVPArchiveHandleCacheShutdown)
@@ -116,8 +116,8 @@ tTJSBinaryStream *TVPGetCachedArchiveHandle(void *pointer, const ttstr &name) {
     // search empty cell in the pool
     tjs_uint oldest_age = 0;
     tjs_int oldest = 0;
-    for(tjs_int i = 0; i < TVP_MAX_ARCHIVE_HANDLE_CACHE; i++) {
-        tTVPArchiveHandleCacheItem *item = TVPArchiveHandleCachePool + i;
+    for(tjs_int i = 0; i < KRKR_MAX_ARCHIVE_HANDLE_CACHE; i++) {
+        ArchiveHandleCacheItem *item = TVPArchiveHandleCachePool + i;
         if(item->Stream == nullptr) {
             // found the empty cell; fill it
             item->Pointer = pointer;
@@ -139,7 +139,7 @@ tTJSBinaryStream *TVPGetCachedArchiveHandle(void *pointer, const ttstr &name) {
 
     // empty cell not found
     // free oldest cell and fill it
-    tTVPArchiveHandleCacheItem *oldest_item =
+    ArchiveHandleCacheItem *oldest_item =
         TVPArchiveHandleCachePool + oldest;
     delete oldest_item->Stream, oldest_item->Stream = nullptr;
     oldest_item->Pointer = pointer;
@@ -147,7 +147,7 @@ tTJSBinaryStream *TVPGetCachedArchiveHandle(void *pointer, const ttstr &name) {
     oldest_item->Age = ++TVPArchiveHandleCacheAge;
 }
 //---------------------------------------------------------------------------
-/*static*/ void TVPFreeArchiveHandlePoolByPointer(void *pointer) {
+/*static*/ void FreeArchiveHandlePoolByPointer(void *pointer) {
     // free all streams which have specified pointer
     if(TVPArchiveHandleCacheShutdown)
         return;
@@ -156,8 +156,8 @@ tTJSBinaryStream *TVPGetCachedArchiveHandle(void *pointer, const ttstr &name) {
 
     tTJSCriticalSectionHolder cs_holder(TVPArchiveHandleCacheCS);
 
-    for(tjs_int i = 0; i < TVP_MAX_ARCHIVE_HANDLE_CACHE; i++) {
-        tTVPArchiveHandleCacheItem *item = TVPArchiveHandleCachePool + i;
+    for(tjs_int i = 0; i < KRKR_MAX_ARCHIVE_HANDLE_CACHE; i++) {
+        ArchiveHandleCacheItem *item = TVPArchiveHandleCachePool + i;
         if(item->Stream && item->Pointer == pointer) {
             delete item->Stream, item->Stream = nullptr;
             item->Pointer = nullptr;
@@ -167,7 +167,7 @@ tTJSBinaryStream *TVPGetCachedArchiveHandle(void *pointer, const ttstr &name) {
 }
 
 //---------------------------------------------------------------------------
-static void TVPFreeArchiveHandlePool() {
+static void FreeArchiveHandlePool() {
     // free all streams
     if(TVPArchiveHandleCacheShutdown)
         return;
@@ -176,8 +176,8 @@ static void TVPFreeArchiveHandlePool() {
 
     tTJSCriticalSectionHolder cs_holder(TVPArchiveHandleCacheCS);
 
-    for(tjs_int i = 0; i < TVP_MAX_ARCHIVE_HANDLE_CACHE; i++) {
-        tTVPArchiveHandleCacheItem *item = TVPArchiveHandleCachePool + i;
+    for(tjs_int i = 0; i < KRKR_MAX_ARCHIVE_HANDLE_CACHE; i++) {
+        ArchiveHandleCacheItem *item = TVPArchiveHandleCachePool + i;
         if(item->Stream) {
             delete item->Stream, item->Stream = nullptr;
             item->Pointer = nullptr;
@@ -187,7 +187,7 @@ static void TVPFreeArchiveHandlePool() {
 }
 
 //---------------------------------------------------------------------------
-static void TVPShutdownArchiveHandleCache() {
+static void ShutdownArchiveHandleCache() {
     // free all stream and shutdown the pool
     tTJSCriticalSectionHolder cs_holder(TVPArchiveHandleCacheCS);
 
@@ -195,7 +195,7 @@ static void TVPShutdownArchiveHandleCache() {
     if(!TVPArchiveHandleCacheInit)
         return;
 
-    for(tjs_int i = 0; i < TVP_MAX_ARCHIVE_HANDLE_CACHE; i++) {
+    for(tjs_int i = 0; i < KRKR_MAX_ARCHIVE_HANDLE_CACHE; i++) {
         if(TVPArchiveHandleCachePool[i].Stream)
             delete TVPArchiveHandleCachePool[i].Stream;
     }
@@ -203,12 +203,12 @@ static void TVPShutdownArchiveHandleCache() {
 }
 
 //---------------------------------------------------------------------------
-static tTVPAtExit TVPShutdownArchiveCacheAtExit(TVP_ATEXIT_PRI_CLEANUP,
-                                                TVPShutdownArchiveHandleCache);
+static tTVPAtExit ShutdownArchiveCacheAtExit(TVP_ATEXIT_PRI_CLEANUP,
+                                                ShutdownArchiveHandleCache);
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPXP3Archive
+// XP3Archive
 //---------------------------------------------------------------------------
 /*
         TVP XPK3 virtual file system support. (in short : XP3)
@@ -223,7 +223,7 @@ static tTVPAtExit TVPShutdownArchiveCacheAtExit(TVP_ATEXIT_PRI_CLEANUP,
 //
 // 有些重打包/加壳工具会在真实归档前面塞一个 19 字节的"空 XP3 头"：
 // mark(11) + index_ofs(8) = 0。index_ofs=0 指向 mark 自身，而 mark 首字节
-// 'X'(0x58) 当索引标志用时低 3 位为 0（TVP_XP3_INDEX_ENCODE_RAW），紧随其后的
+// 'X'(0x58) 当索引标志用时低 3 位为 0（KRKR_XP3_INDEX_ENCODE_RAW），紧随其后的
 // 8 字节于是被当成索引长度，Init 必然抛 TVPReadError。实测 nainiuniu5krkr.xp3
 // （nainiuniu5krkr 的中文补丁）正是这个形态：真实归档从偏移 19 开始，其
 // index_ofs 指向一个合法索引（882 条目，根目录含 startup.tjs），诱饵头却让它连
@@ -236,7 +236,7 @@ static tTVPAtExit TVPShutdownArchiveCacheAtExit(TVP_ATEXIT_PRI_CLEANUP,
 // 索引标志（RAW/ZLIB）。归档数据里随时可能撞出 mark 字节序列，只有后面真的跟着
 // 一个索引时才能当基点。
 //---------------------------------------------------------------------------
-static bool TVPFindXP3ArchiveBase(tTJSBinaryStream *st, const tjs_uint8 *mark,
+static bool FindXP3ArchiveBase(tTJSBinaryStream *st, const tjs_uint8 *mark,
                                   tjs_uint64 &out) {
     const tjs_uint one_read_size = 256 * 1024;
     const tjs_uint64 file_size = st->GetSize();
@@ -265,8 +265,8 @@ static bool TVPFindXP3ArchiveBase(tTJSBinaryStream *st, const tjs_uint8 *mark,
 
             st->SetPosition(candidate + index_ofs);
             const tjs_uint8 index_flag = st->ReadI8LE();
-            if((index_flag & TVP_XP3_INDEX_ENCODE_METHOD_MASK) >
-               TVP_XP3_INDEX_ENCODE_ZLIB)
+            if((index_flag & KRKR_XP3_INDEX_ENCODE_METHOD_MASK) >
+               KRKR_XP3_INDEX_ENCODE_ZLIB)
                 continue;
 
             out = candidate;
@@ -281,7 +281,7 @@ static bool TVPFindXP3ArchiveBase(tTJSBinaryStream *st, const tjs_uint8 *mark,
 }
 
 //---------------------------------------------------------------------------
-bool TVPGetXP3ArchiveOffset(tTJSBinaryStream *st, const ttstr name,
+bool GetXP3ArchiveOffset(tTJSBinaryStream *st, const ttstr name,
                             tjs_uint64 &offset, bool raise) {
     st->SetPosition(0);
     tjs_uint8 mark[11 + 1];
@@ -365,11 +365,11 @@ bool TVPGetXP3ArchiveOffset(tTJSBinaryStream *st, const ttstr name,
         // XP3 mark found
         offset = 0;
 
-        // 诱饵头：index_ofs==0 时基点肯定不对，见 TVPFindXP3ArchiveBase。
+        // 诱饵头：index_ofs==0 时基点肯定不对，见 FindXP3ArchiveBase。
         st->SetPosition(11);
         if(st->ReadI64LE() == 0) {
             tjs_uint64 real = 0;
-            if(TVPFindXP3ArchiveBase(st, XP3Mark, real)) {
+            if(FindXP3ArchiveBase(st, XP3Mark, real)) {
                 offset = real;
                 ttstr msg;
                 msg.printf("(info) Decoy XP3 header detected; archive base "
@@ -391,11 +391,11 @@ bool TVPGetXP3ArchiveOffset(tTJSBinaryStream *st, const ttstr name,
 }
 
 //---------------------------------------------------------------------------
-bool TVPIsXP3Archive(const ttstr &name) {
+bool IsXP3Archive(const ttstr &name) {
     tTVPStreamHolder holder(name);
     try {
         tjs_uint64 offset;
-        return TVPGetXP3ArchiveOffset(holder.Get(), name, offset, false);
+        return GetXP3ArchiveOffset(holder.Get(), name, offset, false);
     } catch(...) {
         return false;
     }
@@ -406,8 +406,8 @@ bool TVPIsXP3Archive(const ttstr &name) {
 // 移植自 AetherKiri 的同名实现：解压路径用 zlib 还原出原始前 8 字节，
 // 未压缩路径直接读。读不到就返回 false，由调用方决定怎么处理。
 //---------------------------------------------------------------------------
-static bool TVPReadXP3ItemHeader(tTJSBinaryStream *stream,
-                                 const tTVPXP3Archive::tArchiveItem &item,
+static bool ReadXP3ItemHeader(tTJSBinaryStream *stream,
+                                 const XP3Archive::tArchiveItem &item,
                                  std::array<tjs_uint8, 8> &header) {
     if(item.Segments.empty())
         return false;
@@ -453,7 +453,7 @@ static bool TVPReadXP3ItemHeader(tTJSBinaryStream *stream,
 }
 
 //---------------------------------------------------------------------------
-void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
+void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                           bool normalizeName) {
     tjs_uint64 offset = off;
 
@@ -475,7 +475,7 @@ void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
     try {
         // retrieve archive offset
         if(off < 0)
-            TVPGetXP3ArchiveOffset(st, ArchiveName, offset, true);
+            GetXP3ArchiveOffset(st, ArchiveName, offset, true);
 
         // read index position and seek
         st->SetPosition(11 + offset);
@@ -493,8 +493,8 @@ void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
             st->ReadBuffer(&index_flag, 1);
             tjs_uint index_size;
 
-            if((index_flag & TVP_XP3_INDEX_ENCODE_METHOD_MASK) ==
-               TVP_XP3_INDEX_ENCODE_ZLIB) {
+            if((index_flag & KRKR_XP3_INDEX_ENCODE_METHOD_MASK) ==
+               KRKR_XP3_INDEX_ENCODE_ZLIB) {
                 // compressed index
                 tjs_uint64 compressed_size = st->ReadI64LE();
                 tjs_uint64 r_index_size = st->ReadI64LE();
@@ -524,8 +524,8 @@ void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                     throw;
                 }
                 delete[] compressed;
-            } else if((index_flag & TVP_XP3_INDEX_ENCODE_METHOD_MASK) ==
-                      TVP_XP3_INDEX_ENCODE_RAW) {
+            } else if((index_flag & KRKR_XP3_INDEX_ENCODE_METHOD_MASK) ==
+                      KRKR_XP3_INDEX_ENCODE_RAW) {
                 // uncompressed index
                 tjs_uint64 r_index_size = st->ReadI64LE();
                 if((tjs_uint)r_index_size != r_index_size)
@@ -567,7 +567,7 @@ void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                     ReadI32FromMem(indexdata + ch_info_start + 0);
                 item.Flags = flags;
                 if(!TVPAllowExtractProtectedStorage &&
-                   (flags & TVP_XP3_FILE_PROTECTED))
+                   (flags & KRKR_XP3_FILE_PROTECTED))
                     TVPThrowExceptionMessage(
                         TVPSpecifiedStorageHadBeenProtected);
                 item.OrgSize = ReadI64FromMem(indexdata + ch_info_start + 4);
@@ -577,7 +577,7 @@ void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                 // len 是有符号 16 位，负值同样非法
                 if(len < 0 || ch_info_size < 22 + (tjs_uint)len * 2)
                     TVPThrowExceptionMessage(TVPReadError);
-                ttstr name = TVPStringFromBMPUnicode(
+                ttstr name = StringFromBMPUnicode(
                     (const tjs_uint16 *)(indexdata + ch_info_start + 22), len);
                 item.Name = name;
                 if(normalizeName)
@@ -599,14 +599,14 @@ void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                 tjs_uint64 offset_in_archive = 0;
                 for(tjs_int i = 0; i < segment_count; i++) {
                     tjs_uint pos_base = i * 28 + ch_segm_start;
-                    tTVPXP3ArchiveSegment seg;
+                    XP3ArchiveSegment seg;
                     tjs_uint32 flags = ReadI32FromMem(indexdata + pos_base);
 
-                    if((flags & TVP_XP3_SEGM_ENCODE_METHOD_MASK) ==
-                       TVP_XP3_SEGM_ENCODE_RAW)
+                    if((flags & KRKR_XP3_SEGM_ENCODE_METHOD_MASK) ==
+                       KRKR_XP3_SEGM_ENCODE_RAW)
                         seg.IsCompressed = false;
-                    else if((flags & TVP_XP3_SEGM_ENCODE_METHOD_MASK) ==
-                            TVP_XP3_SEGM_ENCODE_ZLIB)
+                    else if((flags & KRKR_XP3_SEGM_ENCODE_METHOD_MASK) ==
+                            KRKR_XP3_SEGM_ENCODE_ZLIB)
                         seg.IsCompressed = true;
                     else
                         TVPThrowExceptionMessage(
@@ -655,7 +655,7 @@ void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                 Count++;
             }
 
-            if(!(index_flag & TVP_XP3_INDEX_CONTINUE))
+            if(!(index_flag & KRKR_XP3_INDEX_CONTINUE))
                 break; // continue reading index when the bit sets
         }
 
@@ -667,16 +667,16 @@ void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
         // 移植自 AetherKiri 的同名逻辑。
         for(const auto &item : ItemVector) {
             if(item.Name != TJS_W("startup.tjs") ||
-               !TVPIsBuiltinXP3CxScheme(item.FileHash))
+               !IsBuiltinXP3CxScheme(item.FileHash))
                 continue;
 
             std::array<tjs_uint8, 8> header{};
-            const bool headerRead = TVPReadXP3ItemHeader(st, item, header);
-            if(TVPShouldUseBuiltinXP3CxDecoder(
+            const bool headerRead = ReadXP3ItemHeader(st, item, header);
+            if(ShouldUseBuiltinXP3CxDecoder(
                    item.FileHash, headerRead ? header.data() : nullptr,
                    headerRead ? header.size() : 0)) {
                 UseBuiltinCxDecoder =
-                    TVPActivateBuiltinXP3CxDecoder(item.FileHash);
+                    ActivateBuiltinXP3CxDecoder(item.FileHash);
                 if(UseBuiltinCxDecoder)
                     TVPAddImportantLog(
                         TJS_W("(info) Activated built-in XP3 Cx decoder"));
@@ -708,57 +708,57 @@ void tTVPXP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
 }
 
 //---------------------------------------------------------------------------
-tTVPXP3Archive::tTVPXP3Archive(const ttstr &name, tTJSBinaryStream *st,
+XP3Archive::XP3Archive(const ttstr &name, tTJSBinaryStream *st,
                                tjs_int64 offset, bool normalizeFileName) :
     tTVPArchive(name) {
     if(!st)
-        st = TVPCreateStream(name);
+        st = CreateStream(name);
     Init(st, offset, normalizeFileName);
 }
 
 //---------------------------------------------------------------------------
-tTVPXP3Archive::~tTVPXP3Archive() { TVPFreeArchiveHandlePoolByPointer(this); }
+XP3Archive::~XP3Archive() { FreeArchiveHandlePoolByPointer(this); }
 
-tTVPArchive *tTVPXP3Archive::Create(const ttstr &name, tTJSBinaryStream *st,
+tTVPArchive *XP3Archive::Create(const ttstr &name, tTJSBinaryStream *st,
                                     bool normalizeFileName) {
     bool refStream = st;
     if(!st) {
-        st = TVPCreateStream(name);
+        st = CreateStream(name);
     }
     tjs_uint64 offset;
-    if(!TVPGetXP3ArchiveOffset(st, name, offset, false)) {
+    if(!GetXP3ArchiveOffset(st, name, offset, false)) {
         if(!refStream)
             delete st;
         return nullptr;
     }
-    return new tTVPXP3Archive(name, st, offset, normalizeFileName);
+    return new XP3Archive(name, st, offset, normalizeFileName);
 }
 
 //---------------------------------------------------------------------------
-tTJSBinaryStream *tTVPXP3Archive::CreateStreamByIndex(tjs_uint idx) {
+tTJSBinaryStream *XP3Archive::CreateStreamByIndex(tjs_uint idx) {
     if(idx >= ItemVector.size())
         TVPThrowExceptionMessage(TVPReadError);
 
     tArchiveItem &item = ItemVector[idx];
 
-    // 段表为空时不能构造 tTVPXP3ArchiveStream：它的构造函数会直接取
+    // 段表为空时不能构造 XP3ArchiveStream：它的构造函数会直接取
     // Segments[0]，对空 vector 就是越界读。'segm' 子块不足 28 字节（一个段都
     // 装不下）的条目会走到这里，等价的语义就是 0 字节存储。
     if(item.Segments.empty())
-        return new tTVPMemoryStream();
+        return new MemoryStream();
 
-    tTJSBinaryStream *stream = TVPGetCachedArchiveHandle(this, ArchiveName);
+    tTJSBinaryStream *stream = GetCachedArchiveHandle(this, ArchiveName);
 
-    tTVPXP3ArchiveStream *out;
+    XP3ArchiveStream *out;
     try {
-        out = new tTVPXP3ArchiveStream(this, idx, &(item.Segments), stream,
+        out = new XP3ArchiveStream(this, idx, &(item.Segments), stream,
                                        item.OrgSize);
         if(TVPXP3ArchiveContentFilter) {
             tjs_int result = TVPXP3ArchiveContentFilter(
                 item.Name, ArchiveName, item.OrgSize, &out->GetFilterContext());
 #define XP3_CONTENT_FILTER_FETCH_FULLDATA 1
             if(result == XP3_CONTENT_FILTER_FETCH_FULLDATA) {
-                tTVPMemoryStream *memstr = new tTVPMemoryStream();
+                MemoryStream *memstr = new MemoryStream();
                 memstr->SetSize(item.OrgSize);
                 out->ReadBuffer(memstr->GetInternalBuffer(), item.OrgSize);
                 delete out;
@@ -766,7 +766,7 @@ tTJSBinaryStream *tTVPXP3Archive::CreateStreamByIndex(tjs_uint idx) {
             }
         }
     } catch(...) {
-        TVPReleaseCachedArchiveHandle(this, stream);
+        ReleaseCachedArchiveHandle(this, stream);
         throw;
     }
 
@@ -774,7 +774,7 @@ tTJSBinaryStream *tTVPXP3Archive::CreateStreamByIndex(tjs_uint idx) {
 }
 
 //---------------------------------------------------------------------------
-bool tTVPXP3Archive::FindChunk(const tjs_uint8 *data, const tjs_uint8 *name,
+bool XP3Archive::FindChunk(const tjs_uint8 *data, const tjs_uint8 *name,
                                tjs_uint &start, tjs_uint &size) {
     tjs_uint start_save = start;
     tjs_uint size_save = size;
@@ -815,20 +815,20 @@ bool tTVPXP3Archive::FindChunk(const tjs_uint8 *data, const tjs_uint8 *name,
 }
 
 //---------------------------------------------------------------------------
-tjs_int16 tTVPXP3Archive::ReadI16FromMem(const tjs_uint8 *mem) {
+tjs_int16 XP3Archive::ReadI16FromMem(const tjs_uint8 *mem) {
     tjs_uint16 ret = (tjs_uint16)mem[0] | ((tjs_uint16)mem[1] << 8);
     return (tjs_int16)ret;
 }
 
 //---------------------------------------------------------------------------
-tjs_int32 tTVPXP3Archive::ReadI32FromMem(const tjs_uint8 *mem) {
+tjs_int32 XP3Archive::ReadI32FromMem(const tjs_uint8 *mem) {
     tjs_uint32 ret = (tjs_uint32)mem[0] | ((tjs_uint32)mem[1] << 8) |
         ((tjs_uint32)mem[2] << 16) | ((tjs_uint32)mem[3] << 24);
     return (tjs_int32)ret;
 }
 
 //---------------------------------------------------------------------------
-tjs_int64 tTVPXP3Archive::ReadI64FromMem(const tjs_uint8 *mem) {
+tjs_int64 XP3Archive::ReadI64FromMem(const tjs_uint8 *mem) {
     tjs_uint64 ret = (tjs_uint64)mem[0] | ((tjs_uint64)mem[1] << 8) |
         ((tjs_uint64)mem[2] << 16) | ((tjs_uint64)mem[3] << 24) |
         ((tjs_uint64)mem[4] << 32) | ((tjs_uint64)mem[5] << 40) |
@@ -840,29 +840,29 @@ tjs_int64 tTVPXP3Archive::ReadI64FromMem(const tjs_uint8 *mem) {
 //---------------------------------------------------------------------------
 // Compressed segment cache related
 //---------------------------------------------------------------------------
-#define TVP_SEGCACHE_ONE_LIMIT (1024 * 1024) // max size limit for each segment
-#define TVP_SEGCACHE_TOTAL_LIMIT (1024 * 1024) // total segment cache size（缺省 = 旧层口径）
+#define KRKR_SEGCACHE_ONE_LIMIT (1024 * 1024) // max size limit for each segment
+#define KRKR_SEGCACHE_TOTAL_LIMIT (1024 * 1024) // total segment cache size（缺省 = 旧层口径）
 // 注意：**淘汰判定已不读这个全局**（改读 io::EffectiveSegmentCacheLimitBytes()，见
-// TVPCheckSegmentCacheLimit）。这里保留它只为兼容既有声明/赋值点；显式覆盖要通过
+// CheckSegmentCacheLimit）。这里保留它只为兼容既有声明/赋值点；显式覆盖要通过
 // io::SetSegmentCacheLimitOverride() 才生效。
-tjs_uint TVPSegmentCacheLimit = TVP_SEGCACHE_TOTAL_LIMIT;
+tjs_uint TVPSegmentCacheLimit = KRKR_SEGCACHE_TOTAL_LIMIT;
 
 //---------------------------------------------------------------------------
-struct tTVPSegmentCacheSearchData {
+struct SegmentCacheSearchData {
     ttstr Name; // archive name
     tjs_int StorageIndex; // storage index in archive
     tjs_int SegmentIndex; // segment index in storage
 
-    bool operator==(const tTVPSegmentCacheSearchData &rhs) const {
+    bool operator==(const SegmentCacheSearchData &rhs) const {
         return Name == rhs.Name && StorageIndex == rhs.StorageIndex &&
             SegmentIndex == rhs.SegmentIndex;
     }
 };
 
 //---------------------------------------------------------------------------
-class tTVPSegmentCacheSearchHashFunc {
+class SegmentCacheSearchHashFunc {
 public:
-    static tjs_uint32 Make(const tTVPSegmentCacheSearchData &val) {
+    static tjs_uint32 Make(const SegmentCacheSearchData &val) {
         tjs_uint32 v = tTJSHashFunc<ttstr>::Make(val.Name);
 
         v ^= val.StorageIndex;
@@ -872,19 +872,19 @@ public:
 };
 
 //---------------------------------------------------------------------------
-class tTVPSegmentData {
+class SegmentData {
     tjs_int RefCount;
     tjs_uint Size;
     tjs_uint8 *Data;
 
 public:
-    tTVPSegmentData() {
+    SegmentData() {
         RefCount = 1;
         Size = 0;
         Data = nullptr;
     }
 
-    ~tTVPSegmentData() {
+    ~SegmentData() {
         if(Data) {
 #ifdef TVP_USE_MMAP_TEMP
             TVPMmapFree(Data);
@@ -946,10 +946,10 @@ public:
 };
 
 //---------------------------------------------------------------------------
-typedef tTJSRefHolder<tTVPSegmentData> tTVPSegmentDataHolder;
+typedef tTJSRefHolder<SegmentData> SegmentDataHolder;
 
-typedef tTJSHashTable<tTVPSegmentCacheSearchData, tTVPSegmentDataHolder,
-                      tTVPSegmentCacheSearchHashFunc>
+typedef tTJSHashTable<SegmentCacheSearchData, SegmentDataHolder,
+                      SegmentCacheSearchHashFunc>
     tTVPSegmentCache;
 static tTVPSegmentCache TVPSegmentCache;
 static tjs_uint TVPSegmentCacheTotalBytes = 0;
@@ -957,7 +957,7 @@ static tjs_uint TVPSegmentCacheTotalBytes = 0;
 static tTJSCriticalSection TVPSegmentCacheCS;
 
 //---------------------------------------------------------------------------
-static void TVPCheckSegmentCacheLimit() {
+static void CheckSegmentCacheLimit() {
     tTJSCriticalSectionHolder cs_holder(TVPSegmentCacheCS);
 
     // 生效预算 = 显式覆盖（低内存路径/脚本）> 激活层策略（旧层 1 MiB / AetherKiri 层 256 MiB）。
@@ -979,26 +979,26 @@ static void TVPCheckSegmentCacheLimit() {
 }
 
 //---------------------------------------------------------------------------
-void TVPClearXP3SegmentCache() {
+void ClearXP3SegmentCache() {
     tTJSCriticalSectionHolder cs_holder(TVPSegmentCacheCS);
 
     TVPSegmentCache.Clear();
     TVPSegmentCacheTotalBytes = 0;
 }
 
-tjs_uint TVPGetXP3SegmentCacheTotalBytes() {
+tjs_uint GetXP3SegmentCacheTotalBytes() {
     tTJSCriticalSectionHolder cs_holder(TVPSegmentCacheCS);
     return TVPSegmentCacheTotalBytes;
 }
 
 //---------------------------------------------------------------------------
-struct tTVPClearSegmentCacheCallback : public tTVPCompactEventCallbackIntf {
+struct ClearSegmentCacheCallback : public tTVPCompactEventCallbackIntf {
     void OnCompact(tjs_int level) override {
         if(level >= TVP_COMPACT_LEVEL_DEACTIVATE) {
             // clear the segment cache on application deactivate
-            TVPClearXP3SegmentCache();
+            ClearXP3SegmentCache();
             // also free archive handle pool
-            TVPFreeArchiveHandlePool();
+            FreeArchiveHandlePool();
         }
     }
 } static TVPClearSegmentCacheCallback;
@@ -1006,12 +1006,12 @@ struct tTVPClearSegmentCacheCallback : public tTVPCompactEventCallbackIntf {
 static bool TVPClearSegmentCacheCallbackInit = false;
 
 //---------------------------------------------------------------------------
-static tTVPSegmentData *
-TVPSearchFromSegmentCache(const tTVPSegmentCacheSearchData &sdata,
+static SegmentData *
+TVPSearchFromSegmentCache(const SegmentCacheSearchData &sdata,
                           tjs_uint32 hash) {
     tTJSCriticalSectionHolder cs_holder(TVPSegmentCacheCS);
 
-    tTVPSegmentDataHolder *ptr =
+    SegmentDataHolder *ptr =
         TVPSegmentCache.FindAndTouchWithHash(sdata, hash);
     if(ptr) {
         // found in cache
@@ -1022,8 +1022,8 @@ TVPSearchFromSegmentCache(const tTVPSegmentCacheSearchData &sdata,
 }
 
 //---------------------------------------------------------------------------
-static void TVPPushToSegmentCache(const tTVPSegmentCacheSearchData &sdata,
-                                  tjs_uint32 hash, tTVPSegmentData *data) {
+static void PushToSegmentCache(const SegmentCacheSearchData &sdata,
+                                  tjs_uint32 hash, SegmentData *data) {
     if(!TVPClearSegmentCacheCallbackInit) {
         TVPAddCompactEventHook(&TVPClearSegmentCacheCallback);
         TVPClearSegmentCacheCallbackInit = true;
@@ -1031,20 +1031,20 @@ static void TVPPushToSegmentCache(const tTVPSegmentCacheSearchData &sdata,
 
     tTJSCriticalSectionHolder cs_holder(TVPSegmentCacheCS);
 
-    tTVPSegmentDataHolder holder(data);
+    SegmentDataHolder holder(data);
     TVPSegmentCache.AddWithHash(sdata, hash, holder);
     TVPSegmentCacheTotalBytes += data->GetSize();
 
-    TVPCheckSegmentCacheLimit();
+    CheckSegmentCacheLimit();
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPXP3ArchiveStream : stream class for in-archive storage
+// XP3ArchiveStream : stream class for in-archive storage
 //---------------------------------------------------------------------------
-tTVPXP3ArchiveStream::tTVPXP3ArchiveStream(
-    tTVPXP3Archive *owner, tjs_int storageindex,
-    std::vector<tTVPXP3ArchiveSegment> *segments, tTJSBinaryStream *stream,
+XP3ArchiveStream::XP3ArchiveStream(
+    XP3Archive *owner, tjs_int storageindex,
+    std::vector<XP3ArchiveSegment> *segments, tTJSBinaryStream *stream,
     tjs_uint64 orgsize) {
     StorageIndex = storageindex;
     Segments = segments;
@@ -1065,15 +1065,15 @@ tTVPXP3ArchiveStream::tTVPXP3ArchiveStream(
 }
 
 //---------------------------------------------------------------------------
-tTVPXP3ArchiveStream::~tTVPXP3ArchiveStream() {
-    TVPReleaseCachedArchiveHandle(Owner, Stream);
+XP3ArchiveStream::~XP3ArchiveStream() {
+    ReleaseCachedArchiveHandle(Owner, Stream);
     Owner->Release(); // unhook
     if(SegmentData)
         SegmentData->Release();
 }
 
 //---------------------------------------------------------------------------
-void tTVPXP3ArchiveStream::EnsureSegment() {
+void XP3ArchiveStream::EnsureSegment() {
     // ensure accessing to current segment
     if(SegmentOpened)
         return;
@@ -1092,32 +1092,32 @@ void tTVPXP3ArchiveStream::EnsureSegment() {
     if(CurSegment->IsCompressed) {
         // a compressed segment
 
-        if(CurSegment->OrgSize >= TVP_SEGCACHE_ONE_LIMIT) {
+        if(CurSegment->OrgSize >= KRKR_SEGCACHE_ONE_LIMIT) {
             // too large to cache
             Stream->SetPosition(CurSegment->Start);
-            SegmentData = new tTVPSegmentData;
+            SegmentData = new SegmentData;
             SegmentData->SetData((tjs_uint)CurSegment->OrgSize, Stream,
                                  (tjs_uint)CurSegment->ArcSize);
         } else {
             // search thru segment cache
-            tTVPSegmentCacheSearchData sdata;
+            SegmentCacheSearchData sdata;
             sdata.Name = Owner->GetName();
             sdata.StorageIndex = StorageIndex;
             sdata.SegmentIndex = CurSegmentNum;
 
             tjs_uint32 hash;
-            hash = tTVPSegmentCacheSearchHashFunc::Make(sdata);
+            hash = SegmentCacheSearchHashFunc::Make(sdata);
 
             SegmentData = TVPSearchFromSegmentCache(sdata, hash);
             if(!SegmentData) {
                 // not found in cache
                 Stream->SetPosition(CurSegment->Start);
-                SegmentData = new tTVPSegmentData;
+                SegmentData = new SegmentData;
                 SegmentData->SetData((tjs_uint)CurSegment->OrgSize, Stream,
                                      (tjs_uint)CurSegment->ArcSize);
 
                 // add to cache
-                TVPPushToSegmentCache(sdata, hash, SegmentData);
+                PushToSegmentCache(sdata, hash, SegmentData);
             }
         }
     } else {
@@ -1131,7 +1131,7 @@ void tTVPXP3ArchiveStream::EnsureSegment() {
 }
 
 //---------------------------------------------------------------------------
-void tTVPXP3ArchiveStream::SeekToPosition(tjs_uint64 pos) {
+void XP3ArchiveStream::SeekToPosition(tjs_uint64 pos) {
     // open segment at 'pos' and seek
     // pos must between zero thru OrgSize
     if(CurPos == pos)
@@ -1175,7 +1175,7 @@ void tTVPXP3ArchiveStream::SeekToPosition(tjs_uint64 pos) {
 }
 
 //---------------------------------------------------------------------------
-bool tTVPXP3ArchiveStream::OpenNextSegment() {
+bool XP3ArchiveStream::OpenNextSegment() {
     // open next segment
     if(CurSegmentNum == (tjs_int)(Segments->size() - 1))
         return false; // no more segments
@@ -1190,7 +1190,7 @@ bool tTVPXP3ArchiveStream::OpenNextSegment() {
 }
 
 //---------------------------------------------------------------------------
-tjs_uint64 tTVPXP3ArchiveStream::Seek(tjs_int64 offset, tjs_int whence) {
+tjs_uint64 XP3ArchiveStream::Seek(tjs_int64 offset, tjs_int whence) {
     tjs_int64 newpos;
     switch(whence) {
         case TJS_BS_SEEK_SET:
@@ -1218,7 +1218,7 @@ tjs_uint64 tTVPXP3ArchiveStream::Seek(tjs_int64 offset, tjs_int whence) {
 }
 
 //---------------------------------------------------------------------------
-tjs_uint tTVPXP3ArchiveStream::Read(void *buffer, tjs_uint read_size) {
+tjs_uint XP3ArchiveStream::Read(void *buffer, tjs_uint read_size) {
     EnsureSegment();
 
     tjs_uint write_size = 0;
@@ -1244,18 +1244,18 @@ tjs_uint tTVPXP3ArchiveStream::Read(void *buffer, tjs_uint read_size) {
 
         // execute filter (for encryption method)
         if(TVPXP3ArchiveExtractionFilter) {
-            tTVPXP3ExtractionFilterInfo info(
+            XP3ExtractionFilterInfo info(
                 CurPos, (tjs_uint8 *)buffer + write_size, one_size,
                 Owner->GetFileHash(StorageIndex), Owner->GetName(StorageIndex));
-            TVPXP3ArchiveExtractionFilter((tTVPXP3ExtractionFilterInfo *)&info,
+            TVPXP3ArchiveExtractionFilter((XP3ExtractionFilterInfo *)&info,
                                           &FilterContext);
         } else if(Owner->IsFileProtected(StorageIndex) &&
-                  TVPIsBuiltinXP3CxDecoderActive()) {
+                  IsBuiltinXP3CxDecoderActive()) {
             // Cx 方案由工程包里受保护的 startup 条目选定，但加密载荷可能分散在
             // 同级的兄弟包里。这个选择是**进程内全局**的，正是为了让那些兄弟包
             // 里的受保护条目也走同一个解码器。
             // 移植自 AetherKiri 的同名逻辑。
-            TVPDecodeBuiltinXP3Cx(Owner->GetFileHash(StorageIndex), CurPos,
+            DecodeBuiltinXP3Cx(Owner->GetFileHash(StorageIndex), CurPos,
                                   static_cast<tjs_uint8 *>(buffer) + write_size,
                                   one_size);
         }
@@ -1272,12 +1272,12 @@ tjs_uint tTVPXP3ArchiveStream::Read(void *buffer, tjs_uint read_size) {
 }
 
 //---------------------------------------------------------------------------
-tjs_uint tTVPXP3ArchiveStream::Write(const void *buffer, tjs_uint write_size) {
+tjs_uint XP3ArchiveStream::Write(const void *buffer, tjs_uint write_size) {
     return 0;
 }
 
 //---------------------------------------------------------------------------
-tjs_uint64 tTVPXP3ArchiveStream::GetSize() { return OrgSize; }
+tjs_uint64 XP3ArchiveStream::GetSize() { return OrgSize; }
 //---------------------------------------------------------------------------
 
 } // namespace krkr::io

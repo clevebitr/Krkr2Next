@@ -8,7 +8,7 @@
  * 链接失败 （undefined reference）。
  *
  * 本文件为 Linux 提供这些平台函数的实现：
- *  - 文件操作（TVP_stat/TVP_utime/TVPCreateFolders/TVPWriteDataToFile）
+ *  - 文件操作（TVP_stat/TVP_utime/TVPCreateFolders/krkr::io::WriteDataToFile）
  *  - 时钟（TVPGetRoughTickCount32）
  *  - 内存信息（用 /proc 解析）
  *  - 应用生命周期（TVPExitApplication 等）
@@ -55,7 +55,7 @@ static bool _TVPCreateFolders(const ttstr &folder) {
     if(folder.IsEmpty())
         return true;
 
-    if(TVPCheckExistentLocalFolder(folder))
+    if(krkr::io::CheckExistentLocalFolder(folder))
         return true; // already created
 
     const tjs_char *p = folder.c_str();
@@ -98,7 +98,7 @@ bool TVPCreateFolders(const ttstr &folder) {
     return _TVPCreateFolders(ttstr(p, i + 1));
 }
 
-bool TVPWriteDataToFile(const ttstr &filepath, const void *data,
+bool krkr::io::WriteDataToFile(const ttstr &filepath, const void *data,
                         unsigned int len) {
     FILE *handle = fopen(filepath.AsStdString().c_str(), "wb");
     if(handle) {

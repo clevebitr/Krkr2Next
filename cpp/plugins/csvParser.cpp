@@ -270,7 +270,7 @@ public:
         clear();
         ttstr text;
         if(utf8) {
-            tTJSBinaryStream *pStream = TVPCreateStream(filename, TJS_BS_READ);
+            tTJSBinaryStream *pStream = krkr::io::CreateStream(filename, TJS_BS_READ);
             tjs_uint streamsize = pStream->GetSize();
             char *buff = new char[streamsize + 1];
             buff[streamsize] = 0;

@@ -490,10 +490,10 @@ tjs_int TVPXP3ArchiveContentFilterWrapper(const ttstr &filepath,
     return ret;
 }
 
-void TVP_tTVPXP3ArchiveExtractionFilter_CONVENTION
-TVPXP3ArchiveExtractionFilterWrapper(tTVPXP3ExtractionFilterInfo *info,
+void KRKR_XP3_EXTRACTION_FILTER_CONVENTION
+TVPXP3ArchiveExtractionFilterWrapper(krkr::io::XP3ExtractionFilterInfo *info,
                                      tTJSVariant *ctx) {
-    if(info->SizeOfSelf != sizeof(tTVPXP3ExtractionFilterInfo))
+    if(info->SizeOfSelf != sizeof(krkr::io::XP3ExtractionFilterInfo))
         TVPThrowExceptionMessage(
             TJS_W("Incompatible tTVPXP3ExtractionFilterInfo size"));
     XP3FilterDecoder *decoder = FetchXP3Decoder();
@@ -538,18 +538,18 @@ void TVPSetXP3FilterScript(ttstr content) {
         _thread_decoders.clear();
     }
     if(content.IsEmpty()) {
-        TVPSetXP3ArchiveExtractionFilter(nullptr);
-        TVPSetXP3ArchiveContentFilter(nullptr);
+        krkr::io::SetXP3ArchiveExtractionFilter(nullptr);
+        krkr::io::SetXP3ArchiveContentFilter(nullptr);
     } else {
-        TVPSetXP3ArchiveExtractionFilter(TVPXP3ArchiveExtractionFilterWrapper);
-        TVPSetXP3ArchiveContentFilter(TVPXP3ArchiveContentFilterWrapper);
+        krkr::io::SetXP3ArchiveExtractionFilter(TVPXP3ArchiveExtractionFilterWrapper);
+        krkr::io::SetXP3ArchiveContentFilter(TVPXP3ArchiveContentFilterWrapper);
     }
     sXP3FilterScript = content;
 }
 
 static void PostRegistCallback() {
-    ttstr path = TVPGetAppPath() + TJS_W("xp3filter.tjs");
-    if(TVPIsExistentStorageNoSearch(path)) {
+    ttstr path = krkr::io::GetAppPath() + TJS_W("xp3filter.tjs");
+    if(krkr::io::IsExistentStorageNoSearch(path)) {
         iTJSTextReadStream *stream = TVPCreateTextStreamForRead(path, "");
         try {
             stream->Read(sXP3FilterScript, 0);
@@ -559,10 +559,10 @@ static void PostRegistCallback() {
         }
         stream->Destruct();
         //    AddXP3Decoder();
-        TVPSetXP3ArchiveExtractionFilter(TVPXP3ArchiveExtractionFilterWrapper);
-        TVPSetXP3ArchiveContentFilter(TVPXP3ArchiveContentFilterWrapper);
+        krkr::io::SetXP3ArchiveExtractionFilter(TVPXP3ArchiveExtractionFilterWrapper);
+        krkr::io::SetXP3ArchiveContentFilter(TVPXP3ArchiveContentFilterWrapper);
     }
-    // TVPSetXP3ArchiveExtractionFilter(TVPXP3ArchiveExtractionFilter);
+    // krkr::io::SetXP3ArchiveExtractionFilter(TVPXP3ArchiveExtractionFilter);
 }
 
 NCB_POST_REGIST_CALLBACK(PostRegistCallback);

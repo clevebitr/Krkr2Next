@@ -38,7 +38,7 @@ tTVPLocalTempStorageHolder::tTVPLocalTempStorageHolder(const ttstr &name) {
 
     FileMustBeDeleted = false;
     FolderMustBeDeleted = false;
-    LocalName = TVPGetLocallyAccessibleName(name);
+    LocalName = krkr::io::GetLocallyAccessiblePath(name);
     if(LocalName.IsEmpty()) {
         // file must be copied to local filesystem
 
@@ -46,8 +46,8 @@ tTVPLocalTempStorageHolder::tTVPLocalTempStorageHolder(const ttstr &name) {
         // directory which the file is to be in, so we create a
         // temporary folder and store the file in it.
 
-        LocalFolder = TVPGetTemporaryName();
-        LocalName = LocalFolder + TJS_W("/") + TVPExtractStorageName(name);
+        LocalFolder = krkr::io::GetTemporaryName();
+        LocalName = LocalFolder + TJS_W("/") + krkr::io::ExtractStorageName(name);
         TVPCreateFolders(LocalFolder); // create temporary folder
         FolderMustBeDeleted = true;
         FileMustBeDeleted = true;
@@ -73,9 +73,9 @@ tTVPLocalTempStorageHolder::tTVPLocalTempStorageHolder(const ttstr &name) {
             delete[] buffer;
         } catch(...) {
             if(FileMustBeDeleted)
-                TVPRemoveFile(LocalName);
+                krkr::io::RemoveFile(LocalName);
             if(FolderMustBeDeleted)
-                TVPRemoveFolder(LocalFolder);
+                krkr::io::RemoveFolder(LocalFolder);
             throw;
         }
     }
@@ -84,19 +84,19 @@ tTVPLocalTempStorageHolder::tTVPLocalTempStorageHolder(const ttstr &name) {
 //---------------------------------------------------------------------------
 tTVPLocalTempStorageHolder::~tTVPLocalTempStorageHolder() {
     if(FileMustBeDeleted)
-        TVPRemoveFile(LocalName);
+        krkr::io::RemoveFile(LocalName);
     if(FolderMustBeDeleted)
-        TVPRemoveFolder(LocalFolder);
+        krkr::io::RemoveFolder(LocalFolder);
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPMemoryStream
+// krkr::io::MemoryStream
 //---------------------------------------------------------------------------
-tTVPMemoryStream::tTVPMemoryStream() { Init(); }
+krkr::io::MemoryStream::krkr::io::MemoryStream() { Init(); }
 
 //---------------------------------------------------------------------------
-tTVPMemoryStream::tTVPMemoryStream(const void *block, tjs_uint size) {
+krkr::io::MemoryStream::krkr::io::MemoryStream(const void *block, tjs_uint size) {
     Init();
     Block = (void *)block;
     if(!Block) {
@@ -112,13 +112,13 @@ tTVPMemoryStream::tTVPMemoryStream(const void *block, tjs_uint size) {
 }
 
 //---------------------------------------------------------------------------
-tTVPMemoryStream::~tTVPMemoryStream() {
+krkr::io::MemoryStream::~krkr::io::MemoryStream() {
     if(Block && !Reference)
         Free(Block);
 }
 
 //---------------------------------------------------------------------------
-tjs_uint64 tTVPMemoryStream::Seek(tjs_int64 offset, tjs_int whence) {
+tjs_uint64 krkr::io::MemoryStream::Seek(tjs_int64 offset, tjs_int whence) {
     tjs_int64 newpos;
     switch(whence) {
         case TJS_BS_SEEK_SET:
@@ -148,7 +148,7 @@ tjs_uint64 tTVPMemoryStream::Seek(tjs_int64 offset, tjs_int whence) {
 }
 
 //---------------------------------------------------------------------------
-tjs_uint tTVPMemoryStream::Read(void *buffer, tjs_uint read_size) {
+tjs_uint krkr::io::MemoryStream::Read(void *buffer, tjs_uint read_size) {
     if(CurrentPos + read_size >= Size) {
         read_size = Size - CurrentPos;
     }
@@ -161,7 +161,7 @@ tjs_uint tTVPMemoryStream::Read(void *buffer, tjs_uint read_size) {
 }
 
 //---------------------------------------------------------------------------
-tjs_uint tTVPMemoryStream::Write(const void *buffer, tjs_uint write_size) {
+tjs_uint krkr::io::MemoryStream::Write(const void *buffer, tjs_uint write_size) {
     // writing may increase the internal buffer size.
     if(Reference)
         TVPThrowExceptionMessage(TVPWriteError);
@@ -203,7 +203,7 @@ tjs_uint tTVPMemoryStream::Write(const void *buffer, tjs_uint write_size) {
 }
 
 //---------------------------------------------------------------------------
-void tTVPMemoryStream::SetEndOfStorage() {
+void krkr::io::MemoryStream::SetEndOfStorage() {
     if(Reference)
         TVPThrowExceptionMessage(TVPWriteError);
 
@@ -215,14 +215,14 @@ void tTVPMemoryStream::SetEndOfStorage() {
 }
 
 //---------------------------------------------------------------------------
-void tTVPMemoryStream::Clear() {
+void krkr::io::MemoryStream::Clear() {
     if(Block && !Reference)
         Free(Block);
     Init();
 }
 
 //---------------------------------------------------------------------------
-void tTVPMemoryStream::SetSize(tjs_uint size) {
+void krkr::io::MemoryStream::SetSize(tjs_uint size) {
     if(Reference)
         TVPThrowExceptionMessage(TVPWriteError);
 
@@ -246,7 +246,7 @@ void tTVPMemoryStream::SetSize(tjs_uint size) {
 }
 
 //---------------------------------------------------------------------------
-void tTVPMemoryStream::Init() {
+void krkr::io::MemoryStream::Init() {
     Block = nullptr;
     Reference = false;
     Size = 0;
@@ -256,7 +256,7 @@ void tTVPMemoryStream::Init() {
 }
 
 //---------------------------------------------------------------------------
-void *tTVPMemoryStream::Alloc(size_t size) {
+void *krkr::io::MemoryStream::Alloc(size_t size) {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
     if(size >= kStreamMmapThreshold) {
         void *p = TVPMmapAlloc(size);
@@ -271,7 +271,7 @@ void *tTVPMemoryStream::Alloc(size_t size) {
 }
 
 //---------------------------------------------------------------------------
-void *tTVPMemoryStream::Realloc(void *orgblock, size_t size) {
+void *krkr::io::MemoryStream::Realloc(void *orgblock, size_t size) {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
     if(UseMmap) {
         void *newblock = TVPMmapAlloc(size);
@@ -296,7 +296,7 @@ void *tTVPMemoryStream::Realloc(void *orgblock, size_t size) {
 }
 
 //---------------------------------------------------------------------------
-void tTVPMemoryStream::Free(void *block) {
+void krkr::io::MemoryStream::Free(void *block) {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
     if(UseMmap) {
         TVPMmapFree(block);
@@ -429,7 +429,7 @@ public:
     virtual tTJSBinaryStream * CreateStreamByIndex(tjs_uint idx) {
         struct archive_entry * entry = _filelist[idx].second;
         tjs_uint64 fileSize = archive_entry_size(entry);
-        if (fileSize <= 0) return new tTVPMemoryStream();
+        if (fileSize <= 0) return new krkr::io::MemoryStream();
         return nullptr;
     }
 
@@ -492,7 +492,7 @@ static FILE *_fileopen(ttstr path) {
     std::string strpath = path.AsStdString();
     FILE *fp = fopen(strpath.c_str(), "wb");
     if(!fp) { // make dirs
-        path = TVPExtractStoragePath(path);
+        path = krkr::io::ExtractStoragePath(path);
         TVPCreateFolders(path);
         fp = fopen(strpath.c_str(), "wb");
     }
@@ -571,7 +571,7 @@ public:
             archive_read_free(ArcObj);
             ArcObj = nullptr;
             // try TVPArchive
-            pTVPArc = TVPOpenArchive(path, false);
+            pTVPArc = krkr::io::OpenArchive(path, false);
             if(pTVPArc) {
                 file_count = pTVPArc->GetCount();
                 _totalSize = 0;

@@ -332,14 +332,14 @@ static ttstr TVPGetCompiledScenarioStorageName(const ttstr &name) {
         return ttstr();
 
     ttstr path = name;
-    if(TVPExtractStorageExt(path).AsLowerCase() != TJS_W(".scn"))
+    if(krkr::io::ExtractStorageExt(path).AsLowerCase() != TJS_W(".scn"))
         path += TJS_W(".scn");
     return path;
 }
 
 static bool TVPHasCompiledScenarioStorage(const ttstr &name) {
     const ttstr path = TVPGetCompiledScenarioStorageName(name);
-    return !path.IsEmpty() && TVPIsExistentStorage(path);
+    return !path.IsEmpty() && krkr::io::IsExistentStorage(path);
 }
 
 static bool TVPCompiledScenarioHasLabel(const ttstr &storage,
@@ -1039,7 +1039,7 @@ void tTJSNI_KAGParser::LoadScenario(const ttstr &name) {
         Rewind();
 
         StorageName = name;
-        StorageShortName = TVPExtractStorageName(name);
+        StorageShortName = krkr::io::ExtractStorageName(name);
 
         if(DebugLevel >= tkdlSimple) {
             static ttstr hr(

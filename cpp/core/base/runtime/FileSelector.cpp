@@ -199,8 +199,8 @@ bool TVPSelectFile(iTJSDispatch2 *params) {
             ttstr lname(val);
             if(!lname.IsEmpty())
             {
-                lname = TVPNormalizeStorageName(lname);
-                TVPGetLocalName(lname);
+                lname = krkr::io::NormalizeStorageName(lname);
+                krkr::io::GetLocalPath(lname);
                 std::wstring name = lname.AsStdString();
                 TJS_strncpy(filename, name.c_str(), MAX_PATH);
                 filename[MAX_PATH] = 0;
@@ -219,8 +219,8 @@ bool TVPSelectFile(iTJSDispatch2 *params) {
             ttstr lname(val);
             if(!lname.IsEmpty())
             {
-                lname = TVPNormalizeStorageName(lname);
-                TVPGetLocalName(lname);
+                lname = krkr::io::NormalizeStorageName(lname);
+                krkr::io::GetLocalPath(lname);
                 initialdir = lname.AsStdString();
                 ofn.lpstrInitialDir = initialdir.c_str();
             }
@@ -292,7 +292,7 @@ bool TVPSelectFile(iTJSDispatch2 *params) {
             params->PropSet(TJS_MEMBERENSURE, TJS_W("filterIndex"), 0, &val, params);
 
             // file name
-            val = TVPNormalizeStorageName(ttstr(filename));
+            val = krkr::io::NormalizeStorageName(ttstr(filename));
             params->PropSet(TJS_MEMBERENSURE, TJS_W("name"), 0, &val, params);
         }
 
@@ -328,7 +328,7 @@ bool TVPSelectFile(iTJSDispatch2 *params) {
                                      nullptr, &val, params))) {
         ttstr lname(val);
         if(!lname.IsEmpty()) {
-            TVPGetLocalName(lname);
+            krkr::io::GetLocalPath(lname);
             initialdir = tTJSNarrowStringHolder(lname.c_str());
         }
     }
@@ -346,16 +346,16 @@ bool TVPSelectFile(iTJSDispatch2 *params) {
         ttstr lname(val);
         if(!lname.IsEmpty()) {
             if(lname.IndexOf('/') >= 0) {
-                lname = TVPNormalizeStorageName(lname);
-                TVPGetLocalName(lname);
-                ttstr path = TVPExtractStoragePath(lname);
-                ttstr name = TVPExtractStorageName(lname);
+                lname = krkr::io::NormalizeStorageName(lname);
+                krkr::io::GetLocalPath(lname);
+                ttstr path = krkr::io::ExtractStoragePath(lname);
+                ttstr name = krkr::io::ExtractStorageName(lname);
                 lname = name;
                 initialdir = path.AsStdString();
             } else {
             }
 
-            if(!defaultext.empty() && TVPExtractStorageExt(lname).IsEmpty()) {
+            if(!defaultext.empty() && krkr::io::ExtractStorageExt(lname).IsEmpty()) {
                 if(defaultext[0] != '.')
                     lname += TJS_W(".");
                 lname += defaultext.c_str();
@@ -389,7 +389,7 @@ bool TVPSelectFile(iTJSDispatch2 *params) {
                         params);
 
         // file name
-        ttstr tresult = TVPNormalizeStorageName(ttstr(result.c_str()));
+        ttstr tresult = krkr::io::NormalizeStorageName(ttstr(result.c_str()));
         val = tresult;
         params->PropSet(TJS_MEMBERENSURE, TJS_W("name"), nullptr, &val, params);
         return true;

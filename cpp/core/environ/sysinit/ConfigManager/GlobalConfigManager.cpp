@@ -6,13 +6,13 @@
 #include <cstdarg>
 #include <cstdio>
 
-bool TVPWriteDataToFile(const ttstr &filepath, const void *data,
+bool krkr::io::WriteDataToFile(const ttstr &filepath, const void *data,
                         unsigned int len);
 
 namespace krkr::base {
 
 class XMLMemPrinter : public tinyxml2::XMLPrinter {
-    tTVPMemoryStream _stream;
+    krkr::io::MemoryStream _stream;
     char _buffer[4096];
 
 public:
@@ -24,7 +24,7 @@ public:
         _stream.Write(_buffer, n);
     }
     void SaveFile(const std::string &path) {
-        if(!TVPWriteDataToFile(path, _stream.GetInternalBuffer(),
+        if(!krkr::io::WriteDataToFile(path, _stream.GetInternalBuffer(),
                                _stream.GetSize())) {
             TVPShowSimpleMessageBox(LocaleConfigManager::GetInstance()->GetText(
                                         "cannot_create_preference"),

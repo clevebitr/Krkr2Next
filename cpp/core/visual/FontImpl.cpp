@@ -165,11 +165,11 @@ static int TVPInternalEnumFonts(
  * @return load failed return 0, otherwise > 0
  */
 int TVPEnumFontsProc(const ttstr &FontPath) {
-    if(!TVPIsExistentStorageNoSearch(FontPath)) {
+    if(!krkr::io::IsExistentStorageNoSearch(FontPath)) {
         return 0;
     }
 
-    tTJSBinaryStream *Stream = TVPCreateStream(FontPath, TJS_BS_READ);
+    tTJSBinaryStream *Stream = krkr::io::CreateStream(FontPath, TJS_BS_READ);
     if(!Stream) {
         return 0;
     }
@@ -215,13 +215,13 @@ void TVPInitFontNames() {
         if(!userFont.IsEmpty() && TVPEnumFontsProc(userFont))
             break;
 
-        if(TVPEnumFontsProc(TVPGetAppPath() + "default.ttf"))
+        if(TVPEnumFontsProc(krkr::io::GetAppPath() + "default.ttf"))
             break;
-        if(TVPEnumFontsProc(TVPGetAppPath() + "default.ttc"))
+        if(TVPEnumFontsProc(krkr::io::GetAppPath() + "default.ttc"))
             break;
-        if(TVPEnumFontsProc(TVPGetAppPath() + "default.otf"))
+        if(TVPEnumFontsProc(krkr::io::GetAppPath() + "default.otf"))
             break;
-        if(TVPEnumFontsProc(TVPGetAppPath() + "default.otc"))
+        if(TVPEnumFontsProc(krkr::io::GetAppPath() + "default.otc"))
             break;
 #if defined(__ANDROID__)
         int fontCount = 0;
@@ -292,7 +292,7 @@ void TVPInitFontNames() {
                                auto d = tryReadFont(info->Path.AsStdString());
                                if(d.empty())
                                    return nullptr;
-                               auto *ret = new tTVPMemoryStream();
+                               auto *ret = new krkr::io::MemoryStream();
                                ret->WriteBuffer(d.data(), d.size());
                                ret->SetPosition(0);
                                return ret;
@@ -379,7 +379,7 @@ void TVPInitFontNames() {
                                   tryReadFont(info->Path.AsStdString());
                               if(fdata.empty())
                                   return nullptr;
-                              auto *ret = new tTVPMemoryStream();
+                              auto *ret = new krkr::io::MemoryStream();
                               ret->WriteBuffer(fdata.data(), fdata.size());
                               ret->SetPosition(0);
                               return ret;
@@ -401,13 +401,13 @@ void TVPInitFontNames() {
             }
         };
 #ifdef __ANDROID__
-        TVPGetLocalFileListAt(Android_GetInternalStoragePath() + "/fonts",
+        krkr::io::GetLocalFileListAt(Android_GetInternalStoragePath() + "/fonts",
                               lister);
         for(const ttstr &path : pathlist) {
-            TVPGetLocalFileListAt(path + "/fonts", lister);
+            krkr::io::GetLocalFileListAt(path + "/fonts", lister);
         }
 #endif
-        TVPGetLocalFileListAt(TVPGetAppPath() + "/fonts", lister);
+        krkr::io::GetLocalFileListAt(krkr::io::GetAppPath() + "/fonts", lister);
         auto itend = list.end();
         for(auto it = list.begin(); it != itend; ++it) {
             TVPEnumFontsProc(*it);

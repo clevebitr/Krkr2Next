@@ -166,19 +166,19 @@ void layerExMovie::openMovie(const tjs_char *filename, bool alpha) {
     movieHeight = 0;
 
     // ファイルをテンポラリにコピーして対応
-    if((in = TVPCreateStream(filename, TJS_BS_READ)) == nullptr) {
+    if((in = krkr::io::CreateStream(filename, TJS_BS_READ)) == nullptr) {
         ttstr error = filename;
         error += TJS_W(":ファイルが開けません");
         TVPAddLog(error);
         return;
     }
-    ttstr ext = TVPExtractStorageExt(filename);
+    ttstr ext = krkr::io::ExtractStorageExt(filename);
     ext.ToLowerCase();
     VideoLayer *pOverlay = new VideoLayer([this](KRMovieEvent msg, void *p) {
         std::lock_guard<std::mutex> lk(mtxEvent);
         PostEvents.push_back(msg);
     });
-    pOverlay->BuildGraph(TVPCreateIStream(in), filename, ext.c_str(),
+    pOverlay->BuildGraph(krkr::io::CreateIStream(in), filename, ext.c_str(),
                          in->GetSize());
     VideoOverlay = pOverlay;
     VideoOverlay->GetVideoSize(&movieWidth, &movieHeight);

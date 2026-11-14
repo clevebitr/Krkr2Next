@@ -922,3 +922,52 @@ include 集合里不再有 `base/core/StorageIntf.h` 与 `io/storage/IoVirtualFi
   应该和 `DECISIONS #9` 的反转一起做。
 - `visual` / `movie` 结构不动，但 1–8 轮会顺带更新它们对这些名字的**调用点**。
 - 仍然**未编译验证**。
+
+## 2026-11-15 — 命名统一第 2 轮：io（123 符号 / 1023 处）
+
+\## 结果
+
+`io` 的遗留符号 **176 → 70**，过渡 `using` **23 → 0**，替换 1023 处 / 83 个文件，
+另把 `archive/7zArchive.cpp` 改为 `SevenZipArchive.cpp`（与类名一致，N2）。
+
+余下的 70 个分两类：
+- **跨模块符号**（`TVPThrowExceptionMessage` 46、`tTVPArchive` 41 等）—— 属于 base/utils，
+  在各自那一轮改；
+- **io 自己的全局变量**（`TVPAutoPathList` / `TVPCurrentMedia` / `TVPProjectDir` …），
+  需要新规则 N7（见下），draft 已生成 `maps/io-globals.tsv`（28 条）。
+
+\## 决策：新增 N7「namespace 作用域变量」
+
+前六条规则只覆盖了 namespace / 文件 / 函数 / 类型 / 宏 / 成员变量，漏了
+**命名空间作用域变量**（`std::vector<ttstr> TVPAutoPathList;`）。补 N7：
+lowerCamelCase、去 `TVP` 前缀，常量用 UpperCamelCase（`TVPArchiveDelimiter` →
+`ArchiveDelimiter`）。
+
+这类改名比函数更危险：`projectDir` 这种名字很容易和函数内局部变量同名，
+而**局部变量不是声明**，工具的冲突检测看不到它 → 会静默产生遮蔽。
+所以 N7 单独一轮，且要求 dry-run 时人工扫一遍 `var` 类条目。
+
+\## 工具的四处修正（都是这一轮踩出来的）
+
+1. **冲突判据从"出现过这个词"改成"有同名声明"**。第一版把注释里出现的
+   `Archive`、基类列表里的 `public tTVPArchive` 全算成冲突，8 个假冲突里只有 3 个是真的。
+2. **冲突条目在 owner 内也用全限定名**。真实案例：`TVPNormalizeStorageName`
+   展开成 `NormalizeStorageName` 后会与 `tTVPStorageMediaManager::NormalizeStorageName`
+   **成员函数**同名；在成员函数体内，非限定调用会静默解析到成员 → 语义改变。
+   工具现在对这类条目全仓写 `krkr::io::NormalizeStorageName`（在
+   `namespace krkr::io` 内用限定名定义是合法的）。
+3. **`--draft` 的函数识别判据错了**：原来把"行首是 `TVPFoo(`"当函数定义，但缩进被
+   strip 之后，**调用**也长这样，于是 `TVPAddLog(` / `TVPPushEnvironNoise(` 这类
+   别的模块的函数被塞进了 io 的 map。现在要求"返回类型 + 名字("。
+4. **`--draft` 现在也收命名空间作用域变量**（N7）。
+
+\## 数据（用于估计剩余工作量）
+
+| 轮次 | 模块 | 符号 | 替换处 | 文件 | 备注 |
+|---|---|---:|---:|---:|---|
+| 1 | extension | 7 | 21 | 4 | 试点 |
+| 2 | io | 123 | 1023 | 83 | 含 1 个文件改名 |
+
+`check_naming.py` 合计遗留：1297 → **1101**（base 411 / environ 285 / sound 224 /
+io 70 / utils 58 / plugin 49 / compat 3 / extension 1）。
+"合计"会随任何一轮一次下降几十，因为跨模块引用也一起被改了。

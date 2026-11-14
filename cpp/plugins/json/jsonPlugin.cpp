@@ -401,7 +401,7 @@ private:
 
 ttstr loadJsonText(const ttstr &filename, bool utf8) {
     std::unique_ptr<iTJSTextReadStream> stream(
-        TVPCreateTextStreamForRead(TVPGetPlacedPath(filename),
+        TVPCreateTextStreamForRead(krkr::io::GetPlacedPath(filename),
                                    utf8 ? TJS_W("utf-8") : TJS_W("")));
     ttstr text;
     stream->Read(text, 0);
@@ -410,7 +410,7 @@ ttstr loadJsonText(const ttstr &filename, bool utf8) {
 
 void saveJsonText(const ttstr &filename, const ttstr &text, bool utf8) {
     std::unique_ptr<iTJSTextWriteStream> stream(
-        TVPCreateTextStreamForWrite(TVPGetPlacedPath(filename),
+        TVPCreateTextStreamForWrite(krkr::io::GetPlacedPath(filename),
                                     utf8 ? TJS_W("utf-8") : TJS_W("")));
     stream->Write(text);
 }

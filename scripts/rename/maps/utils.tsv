@@ -4,17 +4,40 @@
 #
 # 由 rename_symbols.py --draft 生成：只做前缀剥离，未做语义审阅。
 # 第 4 列是提示（冲突/无变化），apply 时忽略；人工确认后请删掉或改掉。
-TVPClipboardSetText	ClipboardSetText	fn	
+TVPAddOnThreadExitEvent	AddOnThreadExitEvent	fn	
+TVPClearLoggingHandlers	ClearLoggingHandlers	fn	
+TVPCreateNativeClass_Clipboard	CreateNativeClass_Clipboard	fn	
+TVPCreateNativeClass_Debug	CreateNativeClass_Debug	fn	
+TVPCreateNativeClass_Pad	CreateNativeClass_Pad	fn	
+TVPCreateNativeClass_Timer	CreateNativeClass_Timer	fn	
+TVPEncodeUTF8ToUTF16	EncodeUTF8ToUTF16	fn	
+TVPGetConsoleClass	GetConsoleClass	fn	
+TVPGetControllerClass	GetControllerClass	fn	
+TVPGetImportantLog	GetImportantLog	fn	
+TVPGetLastLog	GetLastLog	fn	
+TVPGetRandomBits128	GetRandomBits128	fn	
+TVPGetRoughTickCount32	GetRoughTickCount32	fn	
+TVPGetTJS2ConsoleOutputGateway	GetTJS2ConsoleOutputGateway	fn	
+TVPGetTJS2DumpOutputGateway	GetTJS2DumpOutputGateway	fn	
+TVPOnError	OnError	fn	
+TVPOnErrorHook	OnErrorHook	fn	
+TVPOnThreadExited	OnThreadExited	fn	
 TVPPushEnvironNoise	PushEnvironNoise	fn	
-TVPTimer	Timer	type	冲突:cpp/core/base/core/EventIntf.h,cpp/core/base/runtime/TimerImpl.cpp,cpp/core/base/runtime/TimerIntf.cpp
+TVPSetLogLocation	SetLogLocation	fn	
+TVPSetOnLog	SetOnLog	fn	
+TVPStartLogToFile	StartLogToFile	fn	
+TVPStartTickCount	StartTickCount	fn	
+TVPTJS2EndDump	TJS2EndDump	fn	
+TVPTJS2StartDump	TJS2StartDump	fn	
+TVPTimer	Timer	type	冲突:cpp/core/base/runtime/TimerIntf.cpp,cpp/core/movie/ffmpeg/Timer.h
 TVPTimerEvent	TimerEvent	type	
 TVPTimerEventIntarface	TimerEventIntarface	type	
 TVP_SUBMILLI_FRAC_BITS	KRKR_SUBMILLI_FRAC_BITS	macro	
 TVP_THREAD_TASK_FUNC	KRKR_THREAD_TASK_FUNC	macro	
-tTVPAsyncTriggerMode	AsyncTriggerMode	type	冲突:cpp/core/base/core/EventIntf.h,cpp/core/utils/intf/TimerIntf.h
+tTVPAsyncTriggerMode	AsyncTriggerMode	type	
 tTVPClipboardFormat	ClipboardFormat	type	
-tTVPThread	Thread	type	冲突:bridge/engine_api/src/engine_api_android_jni.cpp,cpp/core/environ/app/XP3ArchiveRepack.cpp,cpp/core/movie/ffmpeg/AudioDevice.h
+tTVPThread	Thread	type	
 tTVPThreadEvent	ThreadEvent	type	
 tTVPThreadPriority	ThreadPriority	type	
-tTVPTimerImpl	TimerImpl	type	冲突:cpp/core/base/runtime/TimerImpl.cpp,cpp/core/utils/intf/TimerIntf.h
+tTVPTimerImpl	TimerImpl	type	
 tTVPTimerThread	TimerThread	type	

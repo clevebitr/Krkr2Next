@@ -122,7 +122,7 @@ bool TVPCheckIsVideoFile(const char *uri) {
     TVPInitLibAVCodec();
     std::unique_ptr<tTJSBinaryStream> stream{};
     try {
-        tTJSBinaryStream *rawStream = TVPCreateStream(uri, TJS_BS_READ);
+        tTJSBinaryStream *rawStream = krkr::io::CreateStream(uri, TJS_BS_READ);
         if(!rawStream) {
             spdlog::error("TVPCreateStream returned nullptr for {}", uri);
             return false;

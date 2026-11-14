@@ -226,6 +226,19 @@ def run_map(map_path: Path, roots: list[str], apply: bool, in_strings: bool,
                 else:
                     hits_ext[e.old] += old_n
 
+    # 新名冲突的判据：仓库里**已经有声明**（class/struct/enum/typedef/#define/函数定义）。
+    # 只看"出现过这个词"会把 `class XP3Archive` 与注释里的 Archive 混为一谈，
+    # 噪声大到没法用（第一版就是这么错的）。
+    def declared_re(name: str) -> re.Pattern:
+        n = re.escape(name)
+        return re.compile(
+            r"(?:\b(?:class|struct|enum(?:\s+class)?|typedef|#\s*define)\b[^;\n]*?\b%s\b)"
+            r"|(?:^[ \t]*(?:[A-Za-z_][\w:<>,*&]*[\s*&])%s\s*\()" % (n, n),
+            re.MULTILINE,
+        )
+
+    declared = {e.new: [t for t in texts.values() if declared_re(e.new).search(t)] for e in entries}
+
     conflicts: dict[str, list[str]] = {}
     done: set[str] = set()
     stale: list[str] = []
@@ -241,11 +254,9 @@ def run_map(map_path: Path, roots: list[str], apply: bool, in_strings: bool,
             continue
         # 旧名还在，但某些文件里已经出现了新名、且该文件里没有旧名 →
         # 那个新名可能是别的符号（真冲突），也可能是手工先改过一半（需人看）。
-        for (old, path), (old_n, new_n) in per_file.items():
-            if old == e.old and new_n and not old_n:
-                conflicts.setdefault(e.new, []).append(
-                    str(path.relative_to(REPO_ROOT)).replace("\\", "/")
-                )
+        existing_decls = declared.get(e.new) or []
+        if existing_decls:
+            conflicts[e.new] = existing_decls
 
     print(f"{'旧名':<52}{'新名':<40}{'owner':>7}{'外部':>7}  状态")
     print("-" * 118)
@@ -256,17 +267,20 @@ def run_map(map_path: Path, roots: list[str], apply: bool, in_strings: bool,
         if e.old in stale:
             status.append("✗ 零命中且新名不存在（map 过期）")
         if e.new in conflicts:
-            status.append(f"⚠ 新名已被别的符号占用({len(set(conflicts[e.new]))} 文件)")
+            status.append("⚠ 新名已存在 → 全仓（含 owner）用全限定名，建议改 map 换个名字")
         print(
             f"{e.old:<52}{e.new:<40}{hits_owner[e.old]:>7}{hits_ext[e.old]:>7}  "
             + " ".join(status)
         )
 
     if conflicts:
-        print("\n⚠ 新名冲突明细（apply 前请人工确认/改名）：")
-        for new, where in sorted(conflicts.items()):
-            examples = ", ".join(sorted(set(where))[:3])
-            print(f"   {new}: {examples}{' …' if len(set(where)) > 3 else ''}")
+        print("\n⚠ 新名在仓库里已有同名声明（apply 前请人工确认/改名）：")
+        for new in sorted(conflicts):
+            where = sorted(
+                str(p.relative_to(REPO_ROOT)).replace("\\", "/")
+                for p, t in texts.items() if declared_re(new).search(t)
+            )
+            print(f"   {new}: " + ", ".join(where[:3]) + (" …" if len(where) > 3 else ""))
 
     if stale:
         print(
@@ -311,9 +325,15 @@ def run_map(map_path: Path, roots: list[str], apply: bool, in_strings: bool,
                 continue
             new_chunk = chunk
             for e in entries:
-                repl = e.new if e.kind == "macro" else (
-                    e.new if in_owner else f"{qualify}::{e.new}"
-                )
+                # macro 没有 namespace；冲突条目（新名与已有声明同名，例如与某个类的
+                # 成员函数同名）在 owner 内也必须全限定，否则会被成员函数遮蔽 ——
+                # 这类遮蔽在 C++ 里是静默改语义，比编译错误更危险。
+                if e.kind == "macro":
+                    repl = e.new
+                elif in_owner and e.new not in conflicts:
+                    repl = e.new
+                else:
+                    repl = f"{qualify}::{e.new}"
                 new_chunk, n = old_re[e.old].subn(repl, new_chunk)
                 if n:
                     file_hits += n
@@ -408,7 +428,21 @@ def run_draft(module: str, out_path: Path, roots: list[str]) -> int:
             if m:
                 candidates.setdefault(m.group(1), "macro")
                 continue
-            m = re.match(r"((?:i|t)?TVP[A-Za-z0-9_]*)\s*\(", stripped)
+            # 命名空间作用域变量（契约 N7）：`extern TYPE TVPFoo;` /
+            # `TYPE TVPFoo = ...;` —— 行首没有 class/struct/typedef/define。
+            m = re.match(
+                r"(?:extern\s+)?(?:[A-Za-z_][\w:<>,\*&]*[\s\*&]+)+((?:i|t)?TVP[A-Za-z0-9_]*)\s*(?:=|;|\[)",
+                stripped,
+            )
+            if m:
+                candidates.setdefault(m.group(1), "var")
+                continue
+
+            # 函数定义：行首必须是"返回类型 + 名字("，不能是"名字(" ——
+            # 后者是**调用**（缩进被 strip 掉了，光看行首分不出定义与调用）。
+            m = re.match(
+                r"(?:[A-Za-z_][\w:<>,*&]*[\s*&]+)+((?:i|t)?TVP[A-Za-z0-9_]*)\s*\(", stripped
+            )
             if m:
                 candidates.setdefault(m.group(1), "fn")
 
@@ -416,14 +450,20 @@ def run_draft(module: str, out_path: Path, roots: list[str]) -> int:
     for msg in messages:
         candidates.pop(msg, None)
 
-    # 2) 全仓已有标识符（用于冲突检测）
+    # 2) 全仓的**声明**（用于冲突检测）。判据与 run_map 一致：
+    #    class/struct/enum/typedef/#define 或函数定义行首的名字。
     existing: dict[str, list[str]] = {}
+    decl_re = re.compile(
+        r"(?:\b(?:class|struct|enum(?:\s+class)?|typedef|#\s*define)\b[^;\n]*?\b([A-Z]\w*)\b)"
+        r"|(?:^[ \t]*(?:[A-Za-z_][\w:<>,*&]*[\s*&])([A-Z]\w*)\s*\()",
+        re.MULTILINE,
+    )
     for p in iter_sources(DEFAULT_ROOTS):
         text = p.read_text(encoding="utf-8", errors="replace")
-        for ident in set(LEGACY_SYMBOL_RE.findall(text)) | set(
-            re.findall(r"\b[A-Z][A-Za-z0-9_]*\b", text)
-        ):
-            existing.setdefault(ident, []).append(str(p.relative_to(REPO_ROOT)))
+        for groups in decl_re.findall(text):
+            for ident in groups:
+                if ident:
+                    existing.setdefault(ident, []).append(str(p.relative_to(REPO_ROOT)))
 
     rows = []
     for old, kind_hint in sorted(candidates.items()):

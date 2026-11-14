@@ -99,7 +99,7 @@ public:
         tjs_uint fileIndex = filelist[idx].second;
         UInt64 fileSize = SzArEx_GetFileSize(&db, fileIndex);
         if(fileSize <= 0)
-            return new tTVPMemoryStream();
+            return new MemoryStream();
 
         UInt32 folderIndex = db.FileToFolder[fileIndex];
         if(folderIndex == (UInt32)-1)
@@ -151,15 +151,15 @@ public:
             offset <= outBufferSize &&
             outSizeProcessed <= outBufferSize - offset;
 
-        tTVPMemoryStream *mem = nullptr;
+        MemoryStream *mem = nullptr;
         if(ok) {
-            // 一律拷贝，不把 outBuffer 直接交给 tTVPMemoryStream(const void*,
+            // 一律拷贝，不把 outBuffer 直接交给 MemoryStream(const void*,
             // size)：那个构造函数是"引用"语义（Reference =
             // true，不接管所有权）， 而 outBuffer
             // 马上就要在这里释放，挂上去等于交出一个悬垂指针。 同理不能 new
             // Byte[] 再交给它——那会漏掉这块内存。走 SetSize + GetInternalBuffer
             // 让流自己持有，与 XP3Archive 里一致。
-            mem = new tTVPMemoryStream();
+            mem = new MemoryStream();
             mem->SetSize((tjs_uint)fileSize);
             memcpy(mem->GetInternalBuffer(), outBuffer + offset,
                    (size_t)fileSize);
@@ -201,7 +201,7 @@ public:
     }
 };
 
-tTVPArchive *TVPOpen7ZArchive(const ttstr &name, tTJSBinaryStream *st,
+tTVPArchive *Open7ZArchive(const ttstr &name, tTJSBinaryStream *st,
                               bool normalizeFileName) {
     tjs_uint64 pos = st->GetPosition();
     bool checkZIP = st->ReadI16LE() == 0x7A37; // '7z'
@@ -217,7 +217,7 @@ tTVPArchive *TVPOpen7ZArchive(const ttstr &name, tTJSBinaryStream *st,
 }
 
 #if 0
-void TVPUnpack7ZArchive(tTJSBinaryStream *st, ttstr outpath) {
+void Unpack7ZArchive(tTJSBinaryStream *st, ttstr outpath) {
     tjs_uint64 origpos = st->GetPosition();
     SevenZipStreamWrap szsw(st);
     CSzArEx &db = szsw.db;
@@ -237,7 +237,7 @@ void TVPUnpack7ZArchive(tTJSBinaryStream *st, ttstr outpath) {
         bool isDir = SzArEx_IsDir(&db, i);
         ttstr fullpath = outpath + filename;
         if (isDir) {
-            if (!TVPCheckExistentLocalFolder(fullpath))
+            if (!CheckExistentLocalFolder(fullpath))
                 TVPCreateFolders(fullpath);
         } else {
             tjs_uint fileIndex = i;
@@ -275,13 +275,13 @@ void TVPUnpack7ZArchive(tTJSBinaryStream *st, ttstr outpath) {
             size_t offset, outSizeProcessed;
             SRes res = SzArEx_Extract(&db, &szsw.lookStream.s, fileIndex, &blockIndex, &outBuffer, &outBufferSize,
                 &offset, &outSizeProcessed, &allocImp, &allocImp);
-            tTVPMemoryStream *mem;
+            MemoryStream *mem;
             if (offset == 0 && fileSize <= outBufferSize) {
-                mem = new tTVPMemoryStream(outBuffer, outBufferSize);
+                mem = new MemoryStream(outBuffer, outBufferSize);
             } else {
                 Byte *buf = new Byte[fileSize];
                 memcpy(buf, outBuffer, fileSize);
-                mem = new tTVPMemoryStream(buf, fileSize);
+                mem = new MemoryStream(buf, fileSize);
                 delete outBuffer;
             }
             return mem;

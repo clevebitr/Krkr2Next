@@ -76,7 +76,7 @@ namespace krkr::compat {
 
         // 取 basename 并转小写（与上游 TVPIsGpuCompanionScript 同款）。
         std::string ExtractLowerName(const ttstr &name) {
-            std::string storage = TVPExtractStorageName(name).AsStdString();
+            std::string storage = krkr::io::ExtractStorageName(name).AsStdString();
             if(storage.empty()) {
                 storage = name.AsStdString();
                 const auto slash = storage.find_last_of("/\\");
@@ -173,7 +173,7 @@ namespace krkr::compat {
         //
         // 与上游 `cpp/core/base/StorageIntf.cpp` 的 `TVPIsD3DEmoteCompanionScript` /
         // `TVPOpenD3DEmoteCompanionScript` 同名同语义：**只在游戏自己没有这个脚本时**
-        // 才提供。上游的两个判定点都带 `!TVPIsRealStorageNoSearchNoNormalize(name)`，
+        // 才提供。上游的两个判定点都带 `!krkr::io::IsRealStorageNoSearchNoNormalize(name)`，
         // 即物理/auto-path 命中时虚拟脚本永远不参与 —— 本文件注册成普通（兑底）
         // provider，由 io 保证同样的优先级。
         //
@@ -221,7 +221,7 @@ namespace krkr::compat {
                 return true;
             ttstr source;
             if(GetMotionParameterSource(name, source))
-                return !TVPGetPlacedPath(source).IsEmpty();
+                return !krkr::io::GetPlacedPath(source).IsEmpty();
             return false;
         }
 

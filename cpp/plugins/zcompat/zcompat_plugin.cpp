@@ -173,7 +173,7 @@ public:
     void NormalizePathName(ttstr &) override {}
 
     bool CheckExistentStorage(const ttstr &name) override {
-        return !TVPGetPlacedPath(LzfsInnerPath(name)).IsEmpty();
+        return !krkr::io::GetPlacedPath(LzfsInnerPath(name)).IsEmpty();
     }
 
     tTJSBinaryStream *Open(const ttstr &name, tjs_uint32 flags) override {
@@ -181,13 +181,13 @@ public:
         if(auto lg = spdlog::get("plugin"))
             lg->info("lzfs: 打开 {} -> {}", name.AsStdString(),
                      inner.AsStdString());
-        return TVPCreateStream(inner, flags);
+        return krkr::io::CreateStream(inner, flags);
     }
 
     void GetListAt(const ttstr &, iTVPStorageLister *) override {}
 
     void GetLocallyAccessibleName(ttstr &name) override {
-        name = TVPGetLocallyAccessibleName(LzfsInnerPath(name));
+        name = krkr::io::GetLocallyAccessiblePath(LzfsInnerPath(name));
     }
 
 private:
@@ -200,7 +200,7 @@ void ZCompatRegisterLzfs() {
     static LzfsStorageMedia *media = nullptr;
     if(media == nullptr)
         media = new LzfsStorageMedia(); // 进程级存活：存储管理器持引用
-    TVPRegisterStorageMedia(media);
+    krkr::io::RegisterStorageMedia(media);
     if(auto lg = spdlog::get("plugin"))
         lg->info("lzfs: 已注册 lzfs:// 存储协议（E-mote 立绘等靠它取 PSB）");
 }

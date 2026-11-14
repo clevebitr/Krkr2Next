@@ -202,7 +202,7 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
         archive_limit = std::max<tjs_uint>(20, archive_limit / 2);
     else if(pressure >= 3)
         archive_limit = 12;
-    TVPSetArchiveCacheCount(archive_limit);
+    krkr::io::SetArchiveCacheCount(archive_limit);
 
     tjs_uint auto_path_limit = 256;
     if(pressure == 1)
@@ -211,7 +211,7 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
         auto_path_limit = 128;
     else if(pressure >= 3)
         auto_path_limit = 96;
-    TVPSetAutoPathCacheMaxCount(auto_path_limit);
+    krkr::io::SetAutoPathCacheMaxCount(auto_path_limit);
 
     TVPFreeUnusedLayerCache = (MemoryProfile == 1 || pressure >= 1);
 
@@ -259,7 +259,7 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
         // 真机上 1.0–3.7s 的长帧并不都落在压力 3（压力 1/2 的样本同样存在）。
         const auto aggressiveStart = std::chrono::steady_clock::now();
         krkr::stall::MarkStage("内存清理: XP3 段缓存（压力 2 激进清理）");
-        TVPClearXP3SegmentCache();
+        krkr::io::ClearXP3SegmentCache();
         krkr::stall::MarkStage("内存清理: MINIMIZE（压力 2 激进清理）");
         TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MINIMIZE);
         const auto aggressiveMs =
@@ -290,7 +290,7 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
         // 这里只做**计时**，不改任何清理策略与阈值。
         const auto compactStart = std::chrono::steady_clock::now();
         krkr::stall::MarkStage("内存清理: XP3 段缓存（压力 3，渲染线程内同步）");
-        TVPClearXP3SegmentCache();
+        krkr::io::ClearXP3SegmentCache();
         const auto afterSeg = std::chrono::steady_clock::now();
         krkr::stall::MarkStage(
             "内存清理: COMPACT_MAX + TJS GC（压力 3，渲染线程内同步）");
@@ -329,7 +329,7 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
             spdlog::warn("Heap ceiling triggered: {}MB > {}MB ceiling, "
                          "forcing full cleanup",
                          heap_in_use_mb, heap_ceiling_mb);
-            TVPClearXP3SegmentCache();
+            krkr::io::ClearXP3SegmentCache();
             TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
             malloc_zone_pressure_relief(nullptr, 0);
         }
@@ -347,7 +347,7 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
         const tjs_int graphic_limit_mb = static_cast<tjs_int>(
             TVPGetGraphicCacheLimit() / (1024ULL * 1024ULL));
         const tjs_int xp3_seg_mb = static_cast<tjs_int>(
-            TVPGetXP3SegmentCacheTotalBytes() / (1024ULL * 1024ULL));
+            krkr::io::GetXP3SegmentCacheTotalBytes() / (1024ULL * 1024ULL));
 
         tjs_int psb_used_mb = 0, psb_limit_mb = 0;
         if(g_GetPSBCacheInfo) {

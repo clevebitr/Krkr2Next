@@ -11,7 +11,7 @@ namespace fs = std::filesystem;
 static constexpr size_t TVP_LOCAL_TEMP_COPY_BLOCK_SIZE = 65536 * 2;
 
 void extractArchive(const std::string &file, const std::string &destDir) {
-    const std::unique_ptr<tTVPArchive> arc{ TVPOpenArchive(ttstr{ file },
+    const std::unique_ptr<tTVPArchive> arc{ krkr::io::OpenArchive(ttstr{ file },
                                                            false) };
     const tjs_uint count = arc->GetCount();
     for(tjs_int i = 0; i < count; i++) {

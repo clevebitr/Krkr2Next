@@ -93,8 +93,8 @@ inline std::wstring ExtractFilePath(const std::wstring& path) {
     return std::wstring(drive) + std::wstring(dir);
 }
 
-#define DirectoryExists TVPCheckExistentLocalFolder
-#define FileExists TVPCheckExistentLocalFile
+#define DirectoryExists krkr::io::CheckExistentLocalFolder
+#define FileExists krkr::io::CheckExistentLocalFile
 inline std::wstring ChangeFileExt( const std::wstring& path, const std::wstring& ext ) {
     wchar_t drive[_MAX_DRIVE];
     wchar_t dir[_MAX_DIR];

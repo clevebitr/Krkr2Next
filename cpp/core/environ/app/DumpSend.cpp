@@ -19,30 +19,30 @@ static void ClearDumps(const std::string &dumpdir,
     // allDumps.clear();
 }
 
-static std::map<std::string, tTVPMemoryStream *> _inmemFiles;
+static std::map<std::string, krkr::io::MemoryStream *> _inmemFiles;
 
 struct zlib_inmem_func64 : public zlib_filefunc64_def {
     static voidpf ZCALLBACK fopen64_file_func(voidpf opaque,
                                               const void *filename, int mode) {
-        tTVPMemoryStream *str = new tTVPMemoryStream;
+        krkr::io::MemoryStream *str = new krkr::io::MemoryStream;
         _inmemFiles[(const char *)filename] = str;
         return str;
     }
 
     static uLong ZCALLBACK fread_file_func(voidpf opaque, voidpf stream,
                                            void *buf, uLong size) {
-        tTVPMemoryStream *str = (tTVPMemoryStream *)stream;
+        krkr::io::MemoryStream *str = (krkr::io::MemoryStream *)stream;
         return str->Read(buf, size);
     }
 
     static uLong ZCALLBACK fwrite_file_func(voidpf opaque, voidpf stream,
                                             const void *buf, uLong size) {
-        tTVPMemoryStream *str = (tTVPMemoryStream *)stream;
+        krkr::io::MemoryStream *str = (krkr::io::MemoryStream *)stream;
         return str->Write(buf, size);
     }
 
     static ZPOS64_T ZCALLBACK ftell64_file_func(voidpf opaque, voidpf stream) {
-        tTVPMemoryStream *str = (tTVPMemoryStream *)stream;
+        krkr::io::MemoryStream *str = (krkr::io::MemoryStream *)stream;
         return str->GetPosition();
     }
 
@@ -62,7 +62,7 @@ struct zlib_inmem_func64 : public zlib_filefunc64_def {
             default:
                 return -1;
         }
-        tTVPMemoryStream *str = (tTVPMemoryStream *)stream;
+        krkr::io::MemoryStream *str = (krkr::io::MemoryStream *)stream;
         str->Seek(offset, fseek_origin);
         return 0;
     }
@@ -149,7 +149,7 @@ void TVPCheckAndSendDumps(const std::string &dumpdir,
                           const std::string &packageName,
                           const std::string &versionStr) {
     std::vector<std::string> allDumps;
-    TVPListDir(dumpdir, [&](const std::string &name, int mask) {
+    krkr::io::ListDir(dumpdir, [&](const std::string &name, int mask) {
         if(mask & (S_IFREG | S_IFDIR)) {
             if(name.size() <= 4)
                 return;

@@ -121,7 +121,7 @@ class tTVPTextReadStream : public iTJSTextReadStream {
 
 public:
     tTVPTextReadStream(const ttstr &name, const ttstr &mode) {
-        _stream.reset(TVPCreateStream(name, TJS_BS_READ));
+        _stream.reset(krkr::io::CreateStream(name, TJS_BS_READ));
         size_t ofs = parseModeNumber(mode.c_str(), TJS_W('o'), 255, 0).value();
         _stream->SetPosition(ofs);
 
@@ -316,10 +316,10 @@ public:
         // check o mode
         int ofs = parseModeNumber(mode.c_str(), TJS_W('o'), 255, 0).value();
         if(ofs != 0) {
-            _stream.reset(TVPCreateStream(name, TJS_BS_UPDATE));
+            _stream.reset(krkr::io::CreateStream(name, TJS_BS_UPDATE));
             _stream->SetPosition(ofs);
         } else {
-            _stream.reset(TVPCreateStream(name, TJS_BS_WRITE));
+            _stream.reset(krkr::io::CreateStream(name, TJS_BS_WRITE));
         }
 
         if(_cryptMode == 1 || _cryptMode == 2) {

@@ -3093,7 +3093,7 @@ void tTJSNI_WaveSoundBuffer::Open(const ttstr &storagename) {
 
     // open loop information file
     ttstr sliname = storagename + TJS_W(".sli");
-    if(TVPIsExistentStorage(sliname)) {
+    if(krkr::io::IsExistentStorage(sliname)) {
         tTVPStreamHolder slistream(sliname);
         char *buffer;
         tjs_uint size;

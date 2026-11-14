@@ -729,14 +729,14 @@ namespace {
 
 } // namespace
 
-bool TVPIsBuiltinXP3CxScheme(std::uint32_t fingerprint) {
+bool IsBuiltinXP3CxScheme(std::uint32_t fingerprint) {
     return fingerprint == kWagamamaHighSpecOcScheme.Fingerprint;
 }
 
-bool TVPShouldUseBuiltinXP3CxDecoder(std::uint32_t fingerprint,
+bool ShouldUseBuiltinXP3CxDecoder(std::uint32_t fingerprint,
                                      const void *header,
                                      std::size_t headerSize) {
-    if(!TVPIsBuiltinXP3CxScheme(fingerprint))
+    if(!IsBuiltinXP3CxScheme(fingerprint))
         return false;
 
     // Some translated/repacked XP3s retain the protected flag and original
@@ -752,23 +752,23 @@ bool TVPShouldUseBuiltinXP3CxDecoder(std::uint32_t fingerprint,
         0;
 }
 
-bool TVPActivateBuiltinXP3CxDecoder(std::uint32_t fingerprint) {
-    if(!TVPIsBuiltinXP3CxScheme(fingerprint))
+bool ActivateBuiltinXP3CxDecoder(std::uint32_t fingerprint) {
+    if(!IsBuiltinXP3CxScheme(fingerprint))
         return false;
     const CxDecoder *decoder = &GetWagamamaHighSpecOcDecoder();
     gActiveDecoder.store(decoder, std::memory_order_release);
     return true;
 }
 
-void TVPResetBuiltinXP3CxDecoder() {
+void ResetBuiltinXP3CxDecoder() {
     gActiveDecoder.store(nullptr, std::memory_order_release);
 }
 
-bool TVPIsBuiltinXP3CxDecoderActive() {
+bool IsBuiltinXP3CxDecoderActive() {
     return gActiveDecoder.load(std::memory_order_acquire) != nullptr;
 }
 
-bool TVPDecodeBuiltinXP3Cx(std::uint32_t hash, std::uint64_t offset,
+bool DecodeBuiltinXP3Cx(std::uint32_t hash, std::uint64_t offset,
                            void *buffer, std::uint32_t size) {
     const CxDecoder *decoder = gActiveDecoder.load(std::memory_order_acquire);
     if(!decoder)

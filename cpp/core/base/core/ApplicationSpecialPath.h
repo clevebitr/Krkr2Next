@@ -57,8 +57,8 @@ public:
 #endif
     static ttstr GetDataPathDirectory(const ttstr &datapath,
                                       const ttstr &exename) {
-        ttstr nativeDataPath = TVPGetAppPath();
-        TVPGetLocalName(nativeDataPath);
+        ttstr nativeDataPath = krkr::io::GetAppPath();
+        krkr::io::GetLocalPath(nativeDataPath);
         nativeDataPath += "/savedata/";
         return nativeDataPath;
 #if 0

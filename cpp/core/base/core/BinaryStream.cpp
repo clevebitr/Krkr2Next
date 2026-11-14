@@ -29,7 +29,7 @@ namespace krkr::base {
 tTJSBinaryStream *TVPCreateBinaryStreamForRead(const ttstr &name,
                                                const ttstr &modestr) {
     // check o mode
-    tTJSBinaryStream *stream = TVPCreateStream(name, TJS_BS_READ);
+    tTJSBinaryStream *stream = krkr::io::CreateStream(name, TJS_BS_READ);
 
     const tjs_char *o_ofs = TJS_strchr(modestr.c_str(), TJS_W('o'));
     if(o_ofs != nullptr) {
@@ -70,10 +70,10 @@ tTJSBinaryStream *TVPCreateBinaryStreamForWrite(const ttstr &name,
         }
         buf[i] = 0;
         tjs_uint64 ofs = ttstr(buf).AsInteger();
-        stream = TVPCreateStream(name, TJS_BS_UPDATE);
+        stream = krkr::io::CreateStream(name, TJS_BS_UPDATE);
         stream->SetPosition(ofs);
     } else {
-        stream = TVPCreateStream(name, TJS_BS_WRITE);
+        stream = krkr::io::CreateStream(name, TJS_BS_WRITE);
     }
     return stream;
 }

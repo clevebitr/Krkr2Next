@@ -470,7 +470,7 @@ namespace {
     // ---------------------------------------------------------------------------
     static bool LoadFromStorage(const ttstr &path, std::vector<uint8_t> &out) {
         try {
-            tTJSBinaryStream *stream = TVPCreateStream(path, TJS_BS_READ);
+            tTJSBinaryStream *stream = krkr::io::CreateStream(path, TJS_BS_READ);
             if(!stream)
                 return false;
             tjs_uint64 size = stream->GetSize();

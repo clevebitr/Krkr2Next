@@ -6,12 +6,9 @@
 # 第 4 列是提示（冲突/无变化），apply 时忽略；人工确认后请删掉或改掉。
 TVPALSoundWrap	ALSoundWrap	type	
 TVPAL_BUFFER_COUNT	AL_BUFFER_COUNT	macro	
-TVPAddImportantLog	AddImportantLog	fn	
-TVPAddLog	AddLog	fn	
 TVPAddMIDIBuffer	AddMIDIBuffer	fn	
 TVPAddSoundBuffer	AddSoundBuffer	fn	
 TVPAddWaveSoundBuffer	AddWaveSoundBuffer	fn	
-TVPCancelSourceEvents	CancelSourceEvents	fn	
 TVPCheckMIDIDelay	CheckMIDIDelay	fn	
 TVPCheckSoundBufferAllSleep	CheckSoundBufferAllSleep	fn	
 TVPConvertFloatPCMTo16bits	ConvertFloatPCMTo16bits	fn	
@@ -21,48 +18,72 @@ TVPConvertIntegerPCMToFloat	ConvertIntegerPCMToFloat	fn
 TVPConvertPCMTo16bits	ConvertPCMTo16bits	fn	
 TVPConvertPCMToFloat	ConvertPCMToFloat	fn	
 TVPConvertWaveFormatToDestinationFormat	ConvertWaveFormatToDestinationFormat	fn	
+TVPCreateNativeClass_CDDASoundBuffer	CreateNativeClass_CDDASoundBuffer	fn	
+TVPCreateNativeClass_MIDISoundBuffer	CreateNativeClass_MIDISoundBuffer	fn	
+TVPCreateNativeClass_WaveSoundBuffer	CreateNativeClass_WaveSoundBuffer	fn	
+TVPCreateSoundBuffer	CreateSoundBuffer	fn	冲突:cpp/core/sound/impl/WaveImpl.h
+TVPCreateWaveDecoder	CreateWaveDecoder	fn	
+TVPCreateWaveFlagsObject	CreateWaveFlagsObject	fn	
+TVPCrossFadeIntegerBlend	CrossFadeIntegerBlend	fn	
+TVPDSAttenuateToPan	DSAttenuateToPan	fn	
+TVPDSAttenuateToVolume	DSAttenuateToVolume	fn	
 TVPDeleteMIDIThread	DeleteMIDIThread	fn	
+TVPDeleteMIDIThreadAtExit	DeleteMIDIThreadAtExit	fn	
 TVPEnsurePrimaryBufferPlay	EnsurePrimaryBufferPlay	fn	
 TVPEnsureWaveSoundBufferWorking	EnsureWaveSoundBufferWorking	fn	
+TVPFindRIFFChunk	FindRIFFChunk	fn	
+TVPGetDirectSound	GetDirectSound	fn	
+TVPGetMCIErrorString	GetMCIErrorString	fn	
 TVPGetMixerControls	GetMixerControls	fn	
+TVPGetSMFInt16	GetSMFInt16	fn	
+TVPGetSMFInt32	GetSMFInt32	fn	
+TVPGetSMFValue	GetSMFValue	fn	
+TVPGetSoundBufferFormatString	GetSoundBufferFormatString	fn	
+TVPGetWaveSoundBufferUse3DMode	GetWaveSoundBufferUse3DMode	fn	
 TVPInitCDDAVolumeControlType	InitCDDAVolumeControlType	fn	
 TVPInitDirectSound	InitDirectSound	fn	
 TVPInitLibAVCodec	InitLibAVCodec	fn	
 TVPInitLogTable	InitLogTable	fn	
 TVPInitMIDIOut	InitMIDIOut	fn	
 TVPInitSoundOptions	InitSoundOptions	fn	
+TVPLockSoundMixer	LockSoundMixer	fn	
 TVPMIDIOut	MIDIOut	fn	
 TVPMIDIOutData	MIDIOutData	fn	
 TVPMakeSilentWave	MakeSilentWave	fn	
 TVPMakeSilentWaveBytes	MakeSilentWaveBytes	fn	
-TVPPostEvent	PostEvent	fn	冲突:cpp/core/base/runtime/EventImpl.cpp,cpp/core/base/runtime/NativeEventQueue.cpp,cpp/core/base/runtime/NativeEventQueue.h
-TVPPushEnvironNoise	PushEnvironNoise	fn	
+TVPPanToDSAttenuate	PanToDSAttenuate	fn	
 TVPRegisterKMPWaveDecoderCreator	RegisterKMPWaveDecoderCreator	fn	
+TVPRegisterTSSWaveDecoderCreator	RegisterTSSWaveDecoderCreator	fn	
 TVPRegisterWaveDecoderCreator	RegisterWaveDecoderCreator	fn	
 TVPRegisterWaveUnpackerCreator	RegisterWaveUnpackerCreator	fn	
 TVPReleaseDirectSound	ReleaseDirectSound	fn	
 TVPReleaseSoundBuffers	ReleaseSoundBuffers	fn	
-TVPRelinquishCPU	RelinquishCPU	fn	
 TVPRemoveMIDIBuffer	RemoveMIDIBuffer	fn	
 TVPRemoveSoundBuffer	RemoveSoundBuffer	fn	
 TVPRemoveWaveSoundBuffer	RemoveWaveSoundBuffer	fn	
 TVPReschedulePendingLabelEvent	ReschedulePendingLabelEvent	fn	冲突:cpp/core/sound/impl/WaveImpl.cpp
 TVPResetVolumeToAllSoundBuffer	ResetVolumeToAllSoundBuffer	fn	
+TVPRestoreCDVolume	RestoreCDVolume	fn	
+TVPRestoreCDVolumeAtExit	RestoreCDVolumeAtExit	fn	
 TVPSetCDVolume	SetCDVolume	fn	
 TVPSetMIDIDelay	SetMIDIDelay	fn	
-TVPShutdownWaveSoundBuffersAtExit	ShutdownWaveSoundBuffersAtExit	fn	
+TVPSetWaveSoundBufferUse3DMode	SetWaveSoundBufferUse3DMode	fn	
+TVPShutdownWaveSoundBuffers	ShutdownWaveSoundBuffers	fn	
+TVPStopAllWaveSoundsForRestart	StopAllWaveSoundsForRestart	fn	
 TVPStopPrimaryBuffer	StopPrimaryBuffer	fn	
-TVPThrowExceptionMessage	ThrowExceptionMessage	fn	
 TVPThrowMCIErrorString	ThrowMCIErrorString	fn	
 TVPUninitDirectSound	UninitDirectSound	fn	
+TVPUninitDirectSoundAtExitProc	UninitDirectSoundAtExitProc	fn	
 TVPUninitMIDIOut	UninitMIDIOut	fn	
-TVPUtf8ToWideCharString	Utf8ToWideCharString	fn	
+TVPUninitMIDIOutAtExit	UninitMIDIOutAtExit	fn	
+TVPUnlockSoundMixer	UnlockSoundMixer	fn	
+TVPUnregisterWaveDecoderCreator	UnregisterWaveDecoderCreator	fn	
+TVPVolumeToDSAttenuate	VolumeToDSAttenuate	fn	
 TVPWaveFormatToWAVEFORMATEXTENSIBLE	WaveFormatToWAVEFORMATEXTENSIBLE	fn	
+TVPWaveFormatToWAVEFORMATEXTENSIBLE16bits	WaveFormatToWAVEFORMATEXTENSIBLE16bits	fn	
+TVPWaveFormatToWAVEFORMATEXTENSIBLE16bitsMono	WaveFormatToWAVEFORMATEXTENSIBLE16bitsMono	fn	
+TVPWaveFormatToWAVEFORMATEXTENSIBLE2	WaveFormatToWAVEFORMATEXTENSIBLE2	fn	
 TVPWaveSoundBufferCommitSettings	WaveSoundBufferCommitSettings	fn	
-TVPWideCharToUtf8String	WideCharToUtf8String	fn	
-TVP_ACTION_INVOKE_BEGIN	KRKR_ACTION_INVOKE_BEGIN	macro	
-TVP_ACTION_INVOKE_END	KRKR_ACTION_INVOKE_END	macro	
-TVP_ACTION_INVOKE_MEMBER	KRKR_ACTION_INVOKE_MEMBER	macro	
 TVP_DEFINE_FLAG_PROP	KRKR_DEFINE_FLAG_PROP	macro	
 TVP_MATHALGOLITHMS_H	KRKR_MATHALGOLITHMS_H	macro	
 TVP_SB_BEAT_INTERVAL	KRKR_SB_BEAT_INTERVAL	macro	
@@ -92,14 +113,13 @@ tTVPPCM8	PCM8	type
 tTVPPrimaryDelayedStopper	PrimaryDelayedStopper	type	
 tTVPSMFTrack	SMFTrack	type	
 tTVPSampleAndLabelSource	SampleAndLabelSource	type	
-tTVPSoundBuffer	SoundBuffer	type	冲突:cpp/core/sound/impl/WaveImpl.cpp,cpp/core/sound/impl/WaveImpl.h
+tTVPSoundBuffer	SoundBuffer	type	
 tTVPSoundBufferAL	SoundBufferAL	type	
 tTVPSoundBufferTimerDispatcher	SoundBufferTimerDispatcher	type	
 tTVPSoundGlobalFocusMode	SoundGlobalFocusMode	type	
 tTVPSoundStatus	SoundStatus	type	
 tTVPTSSWaveDecoder	TSSWaveDecoder	type	
 tTVPTSSWaveDecoderCreator	TSSWaveDecoderCreator	type	
-tTVPThread	Thread	fn	冲突:bridge/engine_api/src/engine_api_android_jni.cpp,cpp/core/environ/app/XP3ArchiveRepack.cpp,cpp/core/movie/ffmpeg/AudioDevice.h
 tTVPWDC_RIFFWave	WDC_RIFFWave	type	
 tTVPWD_RIFFWave	WD_RIFFWave	type	
 tTVPWaveDecoder	WaveDecoder	type	
@@ -109,10 +129,10 @@ tTVPWaveFormat	WaveFormat	type
 tTVPWaveLabel	WaveLabel	type	
 tTVPWaveLoopLink	WaveLoopLink	type	
 tTVPWaveLoopLinkCondition	WaveLoopLinkCondition	type	
-tTVPWaveLoopManager	WaveLoopManager	type	冲突:cpp/core/sound/codec/PhaseVocoderFilter.h,cpp/core/sound/impl/WaveImpl.h,cpp/core/sound/intf/WaveIntf.cpp
-tTVPWaveSegment	WaveSegment	fn	
-tTVPWaveSegmentQueue	WaveSegmentQueue	type	冲突:cpp/core/sound/common/WaveLoopManager.h,cpp/core/sound/common/WaveSegmentQueue.cpp
+tTVPWaveLoopManager	WaveLoopManager	type	
+tTVPWaveSegment	WaveSegment	type	
+tTVPWaveSegmentQueue	WaveSegmentQueue	type	
 tTVPWaveSoundBufferDecodeThread	WaveSoundBufferDecodeThread	type	
 tTVPWaveSoundBufferThread	WaveSoundBufferThread	type	
-tTVPWaveUnpacker	WaveUnpacker	type	冲突:cpp/core/plugin/loader/PluginImpl.h,cpp/core/sound/impl/WaveImpl.cpp,cpp/core/sound/impl/oldwaveunpacker.h
+tTVPWaveUnpacker	WaveUnpacker	type	
 tTVPWaveUnpackerCreator	WaveUnpackerCreator	type	

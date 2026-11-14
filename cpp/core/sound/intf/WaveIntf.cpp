@@ -754,7 +754,7 @@ tTVPWaveDecoder *TVPCreateWaveDecoder(const ttstr &storagename) {
     if(!TVPWaveDecoderManagerAvail)
         return nullptr;
 
-    ttstr ext(TVPExtractStorageExt(storagename));
+    ttstr ext(krkr::io::ExtractStorageExt(storagename));
     ext.ToLowerCase();
 
     tjs_int i = (tjs_int)(TVPWaveDecoderManager.Creators.size() - 1);

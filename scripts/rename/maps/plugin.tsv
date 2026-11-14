@@ -4,18 +4,31 @@
 #
 # 由 rename_symbols.py --draft 生成：只做前缀剥离，未做语义审阅。
 # 第 4 列是提示（冲突/无变化），apply 时忽略；人工确认后请删掉或改掉。
-TVPAddImportantLog	AddImportantLog	fn	
-TVPExecuteStorage	ExecuteStorage	fn	
-TVPListDir	ListDir	fn	
+TVPAddExportFunction	AddExportFunction	fn	
+TVPCreateNativeClass_Plugins	CreateNativeClass_Plugins	fn	
+TVPCreateStream	CreateStream	fn	
+TVPDoTryBlock	DoTryBlock	fn	
+TVPGetAutoLoadPluginCount	GetAutoLoadPluginCount	fn	
+TVPGetFunctionExporter	GetFunctionExporter	fn	
+TVPIsExistentStorage	IsExistentStorage	fn	
+TVPLoadInternalPlugin	LoadInternalPlugin	fn	
 TVPLoadInternalPlugins	LoadInternalPlugins	fn	
 TVPLoadPlugin	LoadPlugin	fn	
 TVPRegisterGamepadStub	RegisterGamepadStub	fn	
 TVPRegisterGlobalObject	RegisterGlobalObject	fn	
 TVPRegisterProxyFsStub	RegisterProxyFsStub	fn	
-TVPRegisterStorageMedia	RegisterStorageMedia	fn	
+TVPRemoveGlobalObject	RemoveGlobalObject	fn	
 TVPResetPluginFallbackStubsForRestart	ResetPluginFallbackStubsForRestart	fn	
+TVPResetPluginSystemForRestart	ResetPluginSystemForRestart	fn	
+TVPSearchAvailKMPWaveDecoder	SearchAvailKMPWaveDecoder	fn	
+TVPSearchAvailTSSWaveDecoder	SearchAvailTSSWaveDecoder	fn	
+TVPSearchAvailWaveUnpacker	SearchAvailWaveUnpacker	fn	
 TVPSearchPluginsAt	SearchPluginsAt	fn	
-TVPThrowExceptionMessage	ThrowExceptionMessage	fn	
+TVPUnloadPlugin	UnloadPlugin	fn	
+TVPUnregisterInternalPluginsForRestart	UnregisterInternalPluginsForRestart	fn	
+TVP_md5_append	KRKR_md5_append	macro	
+TVP_md5_finish	KRKR_md5_finish	macro	
+TVP_md5_init	KRKR_md5_init	macro	
 iTVPFunctionExporter	IFunctionExporter	type	
 tTVPExceptionDesc	ExceptionDesc	type	
 tTVPFoundPlugin	FoundPlugin	type	

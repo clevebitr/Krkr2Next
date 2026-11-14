@@ -151,7 +151,7 @@ class StoragesFstat {
      * @param path パス名
      */
     static void getLocalName(ttstr &path) {
-        TVPGetLocalName(path);
+        krkr::io::GetLocalPath(path);
         if(path.GetLastChar() == TJS_W('\\')) {
             tjs_int i, len = path.length();
             auto *tmp = new tjs_char[len];
@@ -170,7 +170,7 @@ class StoragesFstat {
      * @return ローカルパスがある場合はtrue
      */
     static bool getLocallyAccessibleName(const ttstr &path) {
-        const ttstr &local(TVPGetLocallyAccessibleName(path));
+        const ttstr &local(krkr::io::GetLocallyAccessiblePath(path));
         return !local.IsEmpty();
     }
 
@@ -222,7 +222,7 @@ class StoragesFstat {
     static tjs_error _getTime(tTJSVariant *result, tTJSVariant const *param,
                               bool chksize) {
         // 実ファイルでチェック
-        ttstr filename = TVPNormalizeStorageName(param->AsStringNoAddRef());
+        ttstr filename = krkr::io::NormalizeStorageName(param->AsStringNoAddRef());
         getLocalName(filename);
         tTJSVariant size, ctime, atime, mtime;
         const int sel = getFileTime(filename, ctime, atime, mtime,
@@ -249,7 +249,7 @@ class StoragesFstat {
 public:
     StoragesFstat() = default;
 
-    static void clearStorageCaches() { TVPClearStorageCaches(); }
+    static void clearStorageCaches() { krkr::io::ClearStorageCaches(); }
 
     /**
      * 指定されたファイルの情報を取得する
@@ -262,10 +262,10 @@ public:
         if(numparams < 1)
             return TJS_E_BADPARAMCOUNT;
 
-        if(ttstr filename = TVPGetPlacedPath(*param[0]);
+        if(ttstr filename = krkr::io::GetPlacedPath(*param[0]);
            filename.length() > 0 && !getLocallyAccessibleName(filename)) {
             // アーカイブ内ファイル
-            if(IStream *in = TVPCreateIStream(filename, TJS_BS_READ)) {
+            if(IStream *in = krkr::io::CreateIStream(filename, TJS_BS_READ)) {
                 STATSTG stat;
                 in->Stat(&stat, STATFLAG_NONAME);
                 tTJSVariant size((tjs_int64)stat.cbSize.QuadPart);
@@ -307,7 +307,7 @@ public:
         if(numparams < 2)
             return TJS_E_BADPARAMCOUNT;
 
-        ttstr filename = TVPNormalizeStorageName(param[0]->AsStringNoAddRef());
+        ttstr filename = krkr::io::NormalizeStorageName(param[0]->AsStringNoAddRef());
         getLocalName(filename);
         tTJSVariant size, ctime, atime, mtime;
         iTJSDispatch2 *dict = param[1]->AsObjectNoAddRef();
@@ -329,7 +329,7 @@ public:
      * @param time 時間（64bit FILETIME数）
      */
     static tjs_int64 getLastModifiedFileTime(ttstr target) {
-        ttstr filename = TVPNormalizeStorageName(target);
+        ttstr filename = krkr::io::NormalizeStorageName(target);
         getLocalName(filename);
         tTVP_stat stat{};
         if(TVP_stat(filename.c_str(), stat)) {
@@ -338,7 +338,7 @@ public:
         return static_cast<tjs_int64>(stat.st_mtime);
     }
     static bool setLastModifiedFileTime(ttstr target, tjs_int64 time) {
-        ttstr filename = TVPNormalizeStorageName(target);
+        ttstr filename = krkr::io::NormalizeStorageName(target);
         getLocalName(filename);
         return TVP_utime(filename.AsNarrowStdString().c_str(), time);
     }
@@ -349,9 +349,9 @@ public:
      * @param dest 保存先ファイル
      */
     static void exportFile(ttstr filename, ttstr storename) {
-        IStream *in = TVPCreateIStream(filename, TJS_BS_READ);
+        IStream *in = krkr::io::CreateIStream(filename, TJS_BS_READ);
         if(in) {
-            IStream *out = TVPCreateIStream(storename, TJS_BS_WRITE);
+            IStream *out = krkr::io::CreateIStream(storename, TJS_BS_WRITE);
             if(out) {
                 BYTE buffer[1024 * 16];
                 DWORD size;
@@ -381,14 +381,14 @@ public:
      */
     static bool deleteFile(const tjs_char *file) {
         bool r = false;
-        ttstr placedPath(TVPGetPlacedPath(file));
+        ttstr placedPath(krkr::io::GetPlacedPath(file));
         if(placedPath.IsEmpty()) {
             // Safe-save flows may try to delete temporary files that do not
             // exist yet. Treat this as a no-op instead of throwing from
-            // TVPGetLocallyAccessibleName on empty input.
+            // krkr::io::GetLocallyAccessiblePath on empty input.
             return false;
         }
-        if(ttstr filename(TVPGetLocallyAccessibleName(placedPath));
+        if(ttstr filename(krkr::io::GetLocallyAccessiblePath(placedPath));
            filename.length()) {
             r = TVPDeleteFile(filename.AsNarrowStdString());
             if(!r) {
@@ -396,7 +396,7 @@ public:
                           TJS_W("Failed"));
             } else {
                 // 削除に成功した場合はストレージキャッシュをクリア
-                TVPClearStorageCaches();
+                krkr::io::ClearStorageCaches();
             }
         }
         return r;
@@ -423,13 +423,13 @@ public:
      */
     static bool moveFile(const tjs_char *from, const tjs_char *to) {
         bool r = false;
-        ttstr fromPlaced = TVPGetPlacedPath(from);
+        ttstr fromPlaced = krkr::io::GetPlacedPath(from);
         if(fromPlaced.IsEmpty())
             return false;
 
-        const ttstr &fromFile(TVPGetLocallyAccessibleName(fromPlaced));
+        const ttstr &fromFile(krkr::io::GetLocallyAccessiblePath(fromPlaced));
         const ttstr &toFile(
-            TVPGetLocallyAccessibleName(TVPNormalizeStorageName(to)));
+            krkr::io::GetLocallyAccessiblePath(krkr::io::NormalizeStorageName(to)));
         if(fromFile.length() && toFile.length()) {
             const std::string &ff = fromFile.AsNarrowStdString();
             r = TVPCopyFile(ff, toFile.AsNarrowStdString());
@@ -439,7 +439,7 @@ public:
                 TVPAddLog(ttstr(TJS_W("moveFile : ")) + fromFile + ", " +
                           toFile + TJS_W("Failed"));
             } else {
-                TVPClearStorageCaches();
+                krkr::io::ClearStorageCaches();
             }
         }
         return r;
@@ -451,8 +451,8 @@ public:
             return TJS_E_BADPARAMCOUNT;
         bool dironly = numparams > 1 ? param[1]->operator bool() : false;
 
-        ttstr path(TVPNormalizeStorageName(ttstr(*param[0]) + TJS_W("/")));
-        TVPGetLocalName(path);
+        ttstr path(krkr::io::NormalizeStorageName(ttstr(*param[0]) + TJS_W("/")));
+        krkr::io::GetLocalPath(path);
 
         iTJSDispatch2 *array = TJSCreateArrayObject();
         tTJSVariant ret(array, array);
@@ -516,13 +516,13 @@ public:
 
 private:
     static tTJSVariant _dirlist(ttstr dir, DirListCallback cb) {
-        dir = TVPNormalizeStorageName(dir);
+        dir = krkr::io::NormalizeStorageName(dir);
 
         if(dir.GetLastChar() != TJS_W('/')) {
             TVPThrowExceptionMessage(TJS_W(
                 "'/' must be specified at the end of given directory name."));
         }
-        TVPGetLocalName(dir);
+        krkr::io::GetLocalPath(dir);
 
         iTJSDispatch2 *array = TJSCreateArrayObject();
         tTJSVariant result;
@@ -637,8 +637,8 @@ public:
         }
 
         // OSネイティブな表現に変換
-        dir = TVPNormalizeStorageName(dir);
-        TVPGetLocalName(dir);
+        dir = krkr::io::NormalizeStorageName(dir);
+        krkr::io::GetLocalPath(dir);
 
         const bool r = TVPDeleteFile(dir.AsNarrowStdString());
         if(!r) {
@@ -658,8 +658,8 @@ public:
             TVPThrowExceptionMessage(TJS_W(
                 "'/' must be specified at the end of given directory name."));
         }
-        dir = TVPNormalizeStorageName(dir);
-        TVPGetLocalName(dir);
+        dir = krkr::io::NormalizeStorageName(dir);
+        krkr::io::GetLocalPath(dir);
         const bool r = fs::create_directories(dir.AsNarrowStdString());
         if(!r) {
             TVPAddLog(ttstr(TJS_W("createDirectory : ")) + dir +
@@ -678,7 +678,7 @@ public:
             TVPThrowExceptionMessage(TJS_W(
                 "'/' must be specified at the end of given directory name."));
         }
-        TVPGetLocalName(dir);
+        krkr::io::GetLocalPath(dir);
         const bool r = fs::create_directories(dir.AsNarrowStdString());
         if(!r) {
             TVPAddLog(ttstr(TJS_W("createDirectory : ")) + dir +
@@ -697,8 +697,8 @@ public:
             TVPThrowExceptionMessage(TJS_W(
                 "'/' must be specified at the end of given directory name."));
         }
-        dir = TVPNormalizeStorageName(dir);
-        TVPGetLocalName(dir);
+        dir = krkr::io::NormalizeStorageName(dir);
+        krkr::io::GetLocalPath(dir);
         LOGGER->warn("changeDirectory not impl!! but ret true");
         return true;
     }
@@ -710,8 +710,8 @@ public:
      * @return 実際に変更できたら true
      */
     static bool setFileAttributes(ttstr filename, DWORD attr) {
-        filename = TVPNormalizeStorageName(filename);
-        TVPGetLocalName(filename);
+        filename = krkr::io::NormalizeStorageName(filename);
+        krkr::io::GetLocalPath(filename);
         LOGGER->warn("setFileAttributes not impl!! but ret true");
         return true;
     }
@@ -723,8 +723,8 @@ public:
      * @return 実際に変更できたら true
      */
     static bool resetFileAttributes(ttstr filename, DWORD attr) {
-        filename = TVPNormalizeStorageName(filename);
-        TVPGetLocalName(filename);
+        filename = krkr::io::NormalizeStorageName(filename);
+        krkr::io::GetLocalPath(filename);
 
         LOGGER->warn("resetFileAttributes not impl!! but ret true");
         return true;
@@ -736,8 +736,8 @@ public:
      * @return 取得した属性
      */
     static DWORD getFileAttributes(ttstr filename) {
-        filename = TVPNormalizeStorageName(filename);
-        TVPGetLocalName(filename);
+        filename = krkr::io::NormalizeStorageName(filename);
+        krkr::io::GetLocalPath(filename);
 
         LOGGER->warn("getFileAttributes not impl!! ret 0");
 
@@ -771,8 +771,8 @@ public:
             TVPThrowExceptionMessage(TJS_W(
                 "'/' must be specified at the end of given directory name."));
         }
-        dir = TVPNormalizeStorageName(dir);
-        TVPGetLocalName(dir);
+        dir = krkr::io::NormalizeStorageName(dir);
+        krkr::io::GetLocalPath(dir);
         const std::string &p = dir.AsNarrowStdString();
         return fs::exists(p) && fs::is_directory(p);
     }
@@ -784,8 +784,8 @@ public:
      * @return 実際に移動できたら true
      */
     static bool copyFile(const tjs_char *from, const tjs_char *to) {
-        ttstr fromFile(TVPGetLocallyAccessibleName(TVPGetPlacedPath(from)));
-        ttstr toFile(TVPGetLocallyAccessibleName(TVPNormalizeStorageName(to)));
+        ttstr fromFile(krkr::io::GetLocallyAccessiblePath(krkr::io::GetPlacedPath(from)));
+        ttstr toFile(krkr::io::GetLocallyAccessiblePath(krkr::io::NormalizeStorageName(to)));
         return _copyFile(fromFile, toFile);
     }
 
@@ -793,7 +793,7 @@ private:
     static bool _copyFile(const ttstr &from, const ttstr &to) {
         if(from.length() && to.length()) {
             if(TVPCopyFile(from.AsNarrowStdString(), to.AsNarrowStdString())) {
-                TVPClearStorageCaches();
+                krkr::io::ClearStorageCaches();
                 return true;
             }
         }
@@ -811,11 +811,11 @@ public:
      */
     static bool copyFileNoNormalize(const tjs_char *from, const tjs_char *to,
                                     bool failIfExist) {
-        ttstr fromFile(TVPGetLocallyAccessibleName(TVPGetPlacedPath(from)));
+        ttstr fromFile(krkr::io::GetLocallyAccessiblePath(krkr::io::GetPlacedPath(from)));
         ttstr toFile(to);
         if(toFile.length()) {
             // ※指定次第で例外を発生させるためTVPGetLocallyAccessibleNameは使わない
-            TVPGetLocalName(toFile);
+            krkr::io::GetLocalPath(toFile);
             return _copyFile(fromFile, toFile);
         }
         return false;
@@ -828,7 +828,7 @@ public:
      * @return ファイルが存在したらtrue
      */
     static bool isExistentStorageNoSearchNoNormalize(ttstr filename) {
-        return TVPIsExistentStorageNoSearchNoNormalize(filename);
+        return krkr::io::IsExistentStorageNoSearchNoNormalize(filename);
     }
 
     /**
@@ -836,8 +836,8 @@ public:
      * @param fileame ファイルパス
      */
     static ttstr getDisplayName(ttstr filename) {
-        filename = TVPNormalizeStorageName(filename);
-        TVPGetLocalName(filename);
+        filename = krkr::io::NormalizeStorageName(filename);
+        krkr::io::GetLocalPath(filename);
         fs::path p = filename.AsNarrowStdString();
         if(!fs::exists(p))
             return ""; // 文件不存在返回空
@@ -854,8 +854,8 @@ public:
         if(numparams < 1)
             return TJS_E_BADPARAMCOUNT;
 
-        const ttstr &filename = TVPGetPlacedPath(*param[0]);
-        IStream *in = TVPCreateIStream(filename, TJS_BS_READ);
+        const ttstr &filename = krkr::io::GetPlacedPath(*param[0]);
+        IStream *in = krkr::io::CreateIStream(filename, TJS_BS_READ);
         if(!in)
             TVPThrowExceptionMessage(
                 (ttstr(TJS_W("cannot open : ")) + param[0]->GetString())
@@ -906,7 +906,7 @@ public:
                searchpath.length() ? searchpath.AsNarrowStdString() : "");
            tmp.length() > 0) {
             if(result)
-                *result = TVPNormalizeStorageName(tmp);
+                *result = krkr::io::NormalizeStorageName(tmp);
         } else {
             // not found
             if(result)
@@ -921,7 +921,7 @@ public:
     static ttstr getCurrentPath() {
         const std::string crDir = TVPGetAppStoragePath().front();
         const ttstr result(crDir);
-        return TVPNormalizeStorageName(result + TJS_W("\\"));
+        return krkr::io::NormalizeStorageName(result + TJS_W("\\"));
     }
 
     static void setCurrentPath(ttstr path) { changeDirectory(path); }
@@ -957,7 +957,7 @@ NCB_ATTACH_CLASS(StoragesFstat, Storages) {
     RawCallback("getMD5HashString", &Class::getMD5HashString, TJS_STATICMEMBER);
     RawCallback("searchPath", &Class::searchPath, TJS_STATICMEMBER);
     Property("currentPath", &Class::getCurrentPath, &Class::setCurrentPath);
-    Method(TJS_W("getTemporaryName"), &TVPGetTemporaryName);
+    Method(TJS_W("getTemporaryName"), &krkr::io::GetTemporaryName);
 };
 
 // テンポラリファイル処理用クラス
@@ -969,8 +969,8 @@ public:
 
 private:
     static bool _entry(const ttstr &name, const bool folder = false) {
-        ttstr filename = TVPNormalizeStorageName(name);
-        TVPGetLocalName(filename);
+        ttstr filename = krkr::io::NormalizeStorageName(name);
+        krkr::io::GetLocalPath(filename);
         if(!filename.length())
             return false;
 
