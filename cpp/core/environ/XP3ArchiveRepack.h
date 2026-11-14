@@ -4,6 +4,8 @@
 #include <functional>
 #include <cstdint>
 
+namespace krkr::environ {
+
 class XP3ArchiveRepackAsyncImpl;
 class XP3ArchiveRepackAsync {
 public:
@@ -27,3 +29,8 @@ public:
 private:
     XP3ArchiveRepackAsyncImpl *_impl;
 };
+
+} // namespace krkr::environ
+
+// TODO: 过渡兼容，调用点迁移完成后删除
+using krkr::environ::XP3ArchiveRepackAsync;

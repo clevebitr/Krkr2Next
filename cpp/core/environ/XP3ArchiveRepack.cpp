@@ -40,6 +40,8 @@ void TVPSavePVRv3(void *formatdata, tTJSBinaryStream *dst,
                   const iTVPBaseBitmap *image, const ttstr &mode,
                   iTJSDispatch2 *meta);
 
+namespace krkr::environ {
+
 class tTVPXP3ArchiveEx : public tTVPXP3Archive {
 public:
     tTVPXP3ArchiveEx(const ttstr &name, tTJSBinaryStream *st) :
@@ -813,3 +815,5 @@ void XP3ArchiveRepackAsyncImpl::DoConv() {
     if(OnEnded)
         OnEnded();
 }
+
+} // namespace krkr::environ
