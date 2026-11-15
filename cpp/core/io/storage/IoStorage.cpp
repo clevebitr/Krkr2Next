@@ -583,7 +583,7 @@ void UnregisterStorageMedia(iTVPStorageMedia *media) {
 //---------------------------------------------------------------------------
 // NormalizeStorageName : storage name normalization
 //---------------------------------------------------------------------------
-ttstr krkr::io::NormalizeStorageName(const ttstr &_name)
+ttstr NormalizeStorageName(const ttstr &_name)
 // TODO: check what is done in krkr::io::NormalizeStorageName
 {
     return storageMediaManager.NormalizeStorageName(_name);

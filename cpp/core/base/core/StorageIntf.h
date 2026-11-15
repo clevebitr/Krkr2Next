@@ -28,7 +28,7 @@ namespace krkr::io
 //---------------------------------------------------------------------------
 namespace krkr::io {
 
-ttstr krkr::io::StringFromBMPUnicode(const tjs_uint16 *src, tjs_int maxlen = -1);
+ttstr StringFromBMPUnicode(const tjs_uint16 *src, tjs_int maxlen = -1);
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -179,28 +179,28 @@ using krkr::io::iTVPStorageMedia;
 //---------------------------------------------------------------------------
 namespace krkr::io {
 
-extern tTVPArchive *krkr::io::OpenArchive(const ttstr &name, bool normalizeFileName);
+extern tTVPArchive *OpenArchive(const ttstr &name, bool normalizeFileName);
 // open archive and return tTVPArchive instance.
 
-TJS_EXP_FUNC_DEF(ttstr, krkr::io::GetTemporaryName, ());
+TJS_EXP_FUNC_DEF(ttstr, GetTemporaryName, ());
 // retrieve file name to store temporary data ( must be unique, local
 // name )
 
-TJS_EXP_FUNC_DEF(ttstr, krkr::io::GetAppPath, ());
+TJS_EXP_FUNC_DEF(ttstr, GetAppPath, ());
 // retrieve program path, in normalized storage name
 
-void krkr::io::PreNormalizeStorageName(ttstr &name);
+void PreNormalizeStorageName(ttstr &name);
 // called by krkr::io::NormalizeStorageName before it process the storage
 // name. user may pass the OS's native filename to the TVP storage
 // system, so that this function must convert it to the TVP storage
 // name rules.
 
-iTVPStorageMedia *krkr::io::CreateFileMedia();
+iTVPStorageMedia *CreateFileMedia();
 // create basic default "file:" storage media
 // /*
 // extern void krkr::io::PreNormalizeStorageName(ttstr &name);
 //
-tTJSBinaryStream *krkr::io::OpenStream(const ttstr &name, tjs_uint32 flags);
+tTJSBinaryStream *OpenStream(const ttstr &name, tjs_uint32 flags);
 //         // open a storage and return a tTJSBinaryStream instance.
 //         // name does not contain in-archive storage name but
 //         // is normalized.
@@ -224,11 +224,11 @@ tTJSBinaryStream *krkr::io::OpenStream(const ttstr &name, tjs_uint32 flags);
 // empty string.
 //
 // */
-extern bool krkr::io::RemoveFile(const ttstr &name);
+extern bool RemoveFile(const ttstr &name);
 
 // remove local file ( "name" is a local *native* name )
 // this must not throw an exception ( return false if error )
-extern bool krkr::io::RemoveFolder(const ttstr &name);
+extern bool RemoveFolder(const ttstr &name);
 
 // remove local directory ( "name" is a local *native* name )
 // this must not throw an exception ( return false if error )
@@ -256,34 +256,34 @@ using krkr::io::TVPCreateFolders;
 //---------------------------------------------------------------------------
 namespace krkr::io {
 
-TJS_EXP_FUNC_DEF(void, krkr::io::RegisterStorageMedia, (iTVPStorageMedia * media));
+TJS_EXP_FUNC_DEF(void, RegisterStorageMedia, (iTVPStorageMedia * media));
 // register storage media
-TJS_EXP_FUNC_DEF(void, krkr::io::UnregisterStorageMedia, (iTVPStorageMedia * media));
+TJS_EXP_FUNC_DEF(void, UnregisterStorageMedia, (iTVPStorageMedia * media));
 // remove storage media
 
-extern tTJSBinaryStream *krkr::io::CreateStream(const ttstr &name,
+extern tTJSBinaryStream *CreateStream(const ttstr &name,
                                          tjs_uint32 flags = 0);
 // open "name" and return tTJSBinaryStream instance.
 // name will be local storage, network storage, in-archive storage,
 // etc...
 
-TJS_EXP_FUNC_DEF(bool, krkr::io::IsExistentStorageNoSearch, (const ttstr &name));
+TJS_EXP_FUNC_DEF(bool, IsExistentStorageNoSearch, (const ttstr &name));
 // if "name" is exists, return true. otherwise return false.
 // this does not search any auto search path.
 
-TJS_EXP_FUNC_DEF(bool, krkr::io::IsExistentStorageNoSearchNoNormalize,
+TJS_EXP_FUNC_DEF(bool, IsExistentStorageNoSearchNoNormalize,
                  (const ttstr &name));
 
-TJS_EXP_FUNC_DEF(ttstr, krkr::io::NormalizeStorageName, (const ttstr &name));
+TJS_EXP_FUNC_DEF(ttstr, NormalizeStorageName, (const ttstr &name));
 
-TJS_EXP_FUNC_DEF(void, krkr::io::SetCurrentStorageDirectory, (const ttstr &name));
+TJS_EXP_FUNC_DEF(void, SetCurrentStorageDirectory, (const ttstr &name));
 // set system current directory.
 // directory must end with path delimiter '/',
 // or archive delimiter '>'.
 
-TJS_EXP_FUNC_DEF(void, krkr::io::GetLocalPath, (ttstr & name));
+TJS_EXP_FUNC_DEF(void, GetLocalPath, (ttstr & name));
 
-ttstr krkr::io::GetLocallyAccessiblePath(const ttstr &name);
+ttstr GetLocallyAccessiblePath(const ttstr &name);
 
 } // namespace krkr::io
 
@@ -300,16 +300,16 @@ using krkr::io::GetLocallyAccessiblePath;
 
 namespace krkr::io {
 
-TJS_EXP_FUNC_DEF(ttstr, krkr::io::ExtractStorageExt, (const ttstr &name));
+TJS_EXP_FUNC_DEF(ttstr, ExtractStorageExt, (const ttstr &name));
 // extract "name"'s extension and return it.
 
-TJS_EXP_FUNC_DEF(ttstr, krkr::io::ExtractStorageName, (const ttstr &name));
+TJS_EXP_FUNC_DEF(ttstr, ExtractStorageName, (const ttstr &name));
 // extract "name"'s storage name ( excluding path ) and return it.
 
-TJS_EXP_FUNC_DEF(ttstr, krkr::io::ExtractStoragePath, (const ttstr &name));
+TJS_EXP_FUNC_DEF(ttstr, ExtractStoragePath, (const ttstr &name));
 // extract "name"'s path ( including last delimiter ) and return it.
 
-TJS_EXP_FUNC_DEF(ttstr, krkr::io::ChopStorageExt, (const ttstr &name));
+TJS_EXP_FUNC_DEF(ttstr, ChopStorageExt, (const ttstr &name));
 // chop storage's extension and return it.
 // extensition delimiter '.' will not be held.
 
@@ -323,39 +323,39 @@ using krkr::io::ChopStorageExt;
 
 namespace krkr::io {
 
-TJS_EXP_FUNC_DEF(void, krkr::io::AddAutoPath, (const ttstr &name));
+TJS_EXP_FUNC_DEF(void, AddAutoPath, (const ttstr &name));
 // add given path to auto search path
 
-TJS_EXP_FUNC_DEF(void, krkr::io::RemoveAutoPath, (const ttstr &name));
+TJS_EXP_FUNC_DEF(void, RemoveAutoPath, (const ttstr &name));
 // remove given path from auto search path
 
-extern void krkr::io::ClearAutoPathListForRestart();
+extern void ClearAutoPathListForRestart();
 // runtime-restart 时清空累积的 auto-path（上一游戏归档路径），供 reset 链调用
 
-TJS_EXP_FUNC_DEF(ttstr, krkr::io::GetPlacedPath, (const ttstr &name));
+TJS_EXP_FUNC_DEF(ttstr, GetPlacedPath, (const ttstr &name));
 // search path and return the path which the "name" is placed.
 
-extern ttstr krkr::io::SearchPlacedPath(const ttstr &name);
+extern ttstr SearchPlacedPath(const ttstr &name);
 // the same as krkr::io::GetPlacedPath, except for rising exception when the
 // storage is not found.
 
-TJS_EXP_FUNC_DEF(bool, krkr::io::IsExistentStorage, (const ttstr &name));
+TJS_EXP_FUNC_DEF(bool, IsExistentStorage, (const ttstr &name));
 // if "name" is exists, return true. otherwise return false.
 // this searches auto search path.
 
-TJS_EXP_FUNC_DEF(void, krkr::io::ClearStorageCaches, ());
+TJS_EXP_FUNC_DEF(void, ClearStorageCaches, ());
 
 // clear all internal storage related caches.
-void krkr::io::RemoveFromStorageCache(const ttstr &name);
-void krkr::io::ClearArchiveCache();
-void krkr::io::SetArchiveCacheCount(tjs_uint max_count);
-tjs_uint krkr::io::GetArchiveCacheCount();
-tjs_uint krkr::io::GetArchiveCacheLimit();
+void RemoveFromStorageCache(const ttstr &name);
+void ClearArchiveCache();
+void SetArchiveCacheCount(tjs_uint max_count);
+tjs_uint GetArchiveCacheCount();
+tjs_uint GetArchiveCacheLimit();
 
-void krkr::io::SetAutoPathCacheMaxCount(tjs_uint max_count);
-tjs_uint krkr::io::GetAutoPathCacheCount();
-tjs_uint krkr::io::GetAutoPathCacheLimit();
-tjs_uint krkr::io::GetAutoPathTableCount();
+void SetAutoPathCacheMaxCount(tjs_uint max_count);
+tjs_uint GetAutoPathCacheCount();
+tjs_uint GetAutoPathCacheLimit();
+tjs_uint GetAutoPathTableCount();
 
 } // namespace krkr::io
 
@@ -380,7 +380,7 @@ using krkr::io::GetAutoPathTableCount;
 namespace krkr::io {
 
 extern tjs_uint segmentCacheLimit; // XP3 segment cache limit, in bytes.
-tjs_uint krkr::io::GetXP3SegmentCacheTotalBytes();
+tjs_uint GetXP3SegmentCacheTotalBytes();
 
 // XP3 段缓存预算的显式覆盖（低内存路径用）。
 //
@@ -399,9 +399,9 @@ using krkr::io::GetXP3SegmentCacheTotalBytes;
 
 namespace krkr::io {
 
-void krkr::io::AutoMountSiblingXP3Archives();
-void krkr::io::AutoMountProjectXP3Archives();
-void krkr::io::BoostAutoMountPaths();
+void AutoMountSiblingXP3Archives();
+void AutoMountProjectXP3Archives();
+void BoostAutoMountPaths();
 
 } // namespace krkr::io
 

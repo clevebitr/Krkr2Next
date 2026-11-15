@@ -34,14 +34,14 @@ struct tTVPLocalFileInfo {
     time_t CreationTime;
 };
 
-void krkr::io::GetLocalFileListAt(
+void GetLocalFileListAt(
     const ttstr &name,
     const std::function<void(const ttstr &, tTVPLocalFileInfo *)> &cb);
 
 //---------------------------------------------------------------------------
 // krkr::io::LocalFileStream
 //---------------------------------------------------------------------------
-class krkr::io::LocalFileStream : public tTJSBinaryStream {
+class LocalFileStream : public tTJSBinaryStream {
     int Handle;
     krkr::io::MemoryStream *MemBuffer = nullptr;
     ttstr FileName;
@@ -67,10 +67,10 @@ public:
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(bool, krkr::io::CheckExistentLocalFolder, (const ttstr &name));
+TJS_EXP_FUNC_DEF(bool, CheckExistentLocalFolder, (const ttstr &name));
 /* name must be an OS's NATIVE folder name */
 
-TJS_EXP_FUNC_DEF(bool, krkr::io::CheckExistentLocalFile, (const ttstr &name));
+TJS_EXP_FUNC_DEF(bool, CheckExistentLocalFile, (const ttstr &name));
 /* name must be an OS's NATIVE file name */
 
 TJS_EXP_FUNC_DEF(bool, TVPCreateFolders, (const ttstr &folder));
@@ -111,15 +111,15 @@ public:
 //---------------------------------------------------------------------------
 #endif
 
-class krkr::io::IStreamAdapter;
+class IStreamAdapter;
 
 //---------------------------------------------------------------------------
 // IStream creator
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(IStream *, krkr::io::CreateIStream,
+TJS_EXP_FUNC_DEF(IStream *, CreateIStream,
                  (const ttstr &name, tjs_uint32 flags));
 
-TJS_EXP_FUNC_DEF(IStream *, krkr::io::CreateIStream, (tTJSBinaryStream *));
+TJS_EXP_FUNC_DEF(IStream *, CreateIStream, (tTJSBinaryStream *));
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ TJS_EXP_FUNC_DEF(IStream *, krkr::io::CreateIStream, (tTJSBinaryStream *));
 /*
         this class provides tTJSBinaryStream adapter for IStream
 */
-class krkr::io::BinaryStreamAdapter : public tTJSBinaryStream {
+class BinaryStreamAdapter : public tTJSBinaryStream {
     typedef tTJSBinaryStream inherited;
 
 private:
@@ -159,7 +159,7 @@ public:
 //---------------------------------------------------------------------------
 // krkr::io::BinaryStreamAdapter creator
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(tTJSBinaryStream *, krkr::io::CreateBinaryStreamAdapter,
+TJS_EXP_FUNC_DEF(tTJSBinaryStream *, CreateBinaryStreamAdapter,
                  (IStream * refstream));
 //---------------------------------------------------------------------------
 
@@ -185,14 +185,14 @@ public:
 };
 //---------------------------------------------------------------------------
 
-void krkr::io::ListDir(const std::string &folder,
+void ListDir(const std::string &folder,
                 std::function<void(const std::string &, int)> cb);
 
-bool krkr::io::SaveStreamToFile(tTJSBinaryStream *st, tjs_uint64 offset,
+bool SaveStreamToFile(tTJSBinaryStream *st, tjs_uint64 offset,
                          tjs_uint64 size, const ttstr &outpath);
 
 // 复位 Storage 层缓存，使 engine_destroy 后可干净二次启动（runtime-restart）。
-void krkr::io::ResetStorageImplForRestart();
+void ResetStorageImplForRestart();
 
 } // namespace krkr::io
 

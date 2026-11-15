@@ -50,7 +50,11 @@ run "移植溯源清单" python3 "$SCRIPT_DIR/check_port_drift.py"
 #    无编译器时脚本自行跳过（退出码 2）。
 run "本地语法检查" bash "$SCRIPT_DIR/check_syntax.sh"
 
-# 4. 命名契约存量 ratchet（docs/NAMING.md）。
+# 4. "在自己 namespace 里还写全限定名"的检查（rename_symbols.py 的已知坑）。
+#    GCC 会直接报 explicit qualification；renames 之后必须跑。
+run "重复命名空间限定" python3 "$SCRIPT_DIR/check_qualification.py"
+
+# 5. 命名契约存量 ratchet（docs/NAMING.md）。
 #    三个指标（遗留 TVP 符号 / 不合规文件名 / 过渡 using）只能降不能升，
 #    基线在 scripts/naming/baseline.tsv。纯 python，不需要编译器。
 run "命名契约存量" python3 "$SCRIPT_DIR/check_naming.py"
