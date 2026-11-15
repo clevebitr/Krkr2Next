@@ -290,7 +290,7 @@ public:
                                     tTJSVariant **param,
                                     iTJSDispatch2 *objthis) {
         if(result) {
-            krkr::io::MemoryStream ms;
+            krkr::base::MemoryStream ms;
             tTVPStringStream writer(&ms, numparams > 0 ? (int)*param[0] : 0);
             getArrayString(objthis, &writer);
             *result = (const tjs_char *)ms.GetInternalBuffer();
@@ -346,7 +346,7 @@ public:
                                     tTJSVariant **param,
                                     iTJSDispatch2 *objthis) {
         if(result) {
-            krkr::io::MemoryStream ms;
+            krkr::base::MemoryStream ms;
             tTVPStringStream writer(&ms, numparams > 0 ? (int)*param[0] : 0);
             getDictString(objthis, &writer);
             writer.write((tjs_char)0);

@@ -299,7 +299,7 @@ void tTVPSusiePicturePlugin::Load(void *callbackdata,
 		}
 
 		// create reference memory stream for bitmap pixel data
-		krkr::io::MemoryStream memstream(data, datasize);
+		krkr::base::MemoryStream memstream(data, datasize);
 
 		if(bi.biClrUsed == 0 && bi.biBitCount <= 8)
 			bi.biClrUsed = 1 << bi.biBitCount;

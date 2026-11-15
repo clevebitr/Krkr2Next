@@ -101,7 +101,7 @@ public:
     }
 };
 
-class OutStreamMemory : public IOutStream, public krkr::io::MemoryStream {
+class OutStreamMemory : public IOutStream, public krkr::base::MemoryStream {
     unsigned int RefCount = 1;
 
 public:
@@ -125,16 +125,16 @@ public:
 
     HRESULT STDMETHODCALLTYPE Write(const void *data, UInt32 size,
                                     UInt32 *processedSize) noexcept override {
-        *processedSize = krkr::io::MemoryStream::Write(data, size);
+        *processedSize = krkr::base::MemoryStream::Write(data, size);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE Seek(Int64 offset, UInt32 seekOrigin,
                                    UInt64 *newPosition) noexcept override {
-        *newPosition = krkr::io::MemoryStream::Seek(offset, seekOrigin);
+        *newPosition = krkr::base::MemoryStream::Seek(offset, seekOrigin);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE SetSize(UInt64 newSize) noexcept override {
-        krkr::io::MemoryStream::SetSize(newSize);
+        krkr::base::MemoryStream::SetSize(newSize);
         return S_OK;
     }
 };
@@ -699,7 +699,7 @@ void XP3ArchiveRepackAsyncImpl::DoConv() {
                 meta->PropSet(TJS_MEMBERENSURE, k.c_str(), nullptr, &var,
                               meta.get());
             }
-            krkr::io::MemoryStream memstr;
+            krkr::base::MemoryStream memstr;
             auto *bmp =
                 new tTVPBaseBitmap(data.bmp->GetWidth(), data.bmp->GetHeight());
             bmp->AssignBitmap(data.bmp);

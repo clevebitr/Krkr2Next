@@ -2221,7 +2221,7 @@ namespace PSB {
             LOGGER->info("psb open: return key={} size={} header=0x{:08x}",
                          resolvedKey, streamBytes.size(), outHeader);
         }
-        auto *memoryStream = new krkr::io::MemoryStream();
+        auto *memoryStream = new krkr::base::MemoryStream();
         memoryStream->WriteBuffer(streamBytes.data(), streamBytes.size());
         memoryStream->Seek(0, TJS_BS_SEEK_SET);
         return memoryStream;

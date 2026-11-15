@@ -43,7 +43,7 @@ void GetLocalFileListAt(
 //---------------------------------------------------------------------------
 class LocalFileStream : public tTJSBinaryStream {
     int Handle;
-    krkr::io::MemoryStream *MemBuffer = nullptr;
+    krkr::base::MemoryStream *MemBuffer = nullptr;
     ttstr FileName;
 
 public:

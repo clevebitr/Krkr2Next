@@ -19,30 +19,30 @@ static void ClearDumps(const std::string &dumpdir,
     // allDumps.clear();
 }
 
-static std::map<std::string, krkr::io::MemoryStream *> _inmemFiles;
+static std::map<std::string, krkr::base::MemoryStream *> _inmemFiles;
 
 struct zlib_inmem_func64 : public zlib_filefunc64_def {
     static voidpf ZCALLBACK fopen64_file_func(voidpf opaque,
                                               const void *filename, int mode) {
-        krkr::io::MemoryStream *str = new krkr::io::MemoryStream;
+        krkr::base::MemoryStream *str = new krkr::base::MemoryStream;
         _inmemFiles[(const char *)filename] = str;
         return str;
     }
 
     static uLong ZCALLBACK fread_file_func(voidpf opaque, voidpf stream,
                                            void *buf, uLong size) {
-        krkr::io::MemoryStream *str = (krkr::io::MemoryStream *)stream;
+        krkr::base::MemoryStream *str = (krkr::base::MemoryStream *)stream;
         return str->Read(buf, size);
     }
 
     static uLong ZCALLBACK fwrite_file_func(voidpf opaque, voidpf stream,
                                             const void *buf, uLong size) {
-        krkr::io::MemoryStream *str = (krkr::io::MemoryStream *)stream;
+        krkr::base::MemoryStream *str = (krkr::base::MemoryStream *)stream;
         return str->Write(buf, size);
     }
 
     static ZPOS64_T ZCALLBACK ftell64_file_func(voidpf opaque, voidpf stream) {
-        krkr::io::MemoryStream *str = (krkr::io::MemoryStream *)stream;
+        krkr::base::MemoryStream *str = (krkr::base::MemoryStream *)stream;
         return str->GetPosition();
     }
 
@@ -62,7 +62,7 @@ struct zlib_inmem_func64 : public zlib_filefunc64_def {
             default:
                 return -1;
         }
-        krkr::io::MemoryStream *str = (krkr::io::MemoryStream *)stream;
+        krkr::base::MemoryStream *str = (krkr::base::MemoryStream *)stream;
         str->Seek(offset, fseek_origin);
         return 0;
     }

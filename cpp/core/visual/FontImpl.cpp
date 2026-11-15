@@ -292,7 +292,7 @@ void TVPInitFontNames() {
                                auto d = tryReadFont(info->Path.AsStdString());
                                if(d.empty())
                                    return nullptr;
-                               auto *ret = new krkr::io::MemoryStream();
+                               auto *ret = new krkr::base::MemoryStream();
                                ret->WriteBuffer(d.data(), d.size());
                                ret->SetPosition(0);
                                return ret;
@@ -379,7 +379,7 @@ void TVPInitFontNames() {
                                   tryReadFont(info->Path.AsStdString());
                               if(fdata.empty())
                                   return nullptr;
-                              auto *ret = new krkr::io::MemoryStream();
+                              auto *ret = new krkr::base::MemoryStream();
                               ret->WriteBuffer(fdata.data(), fdata.size());
                               ret->SetPosition(0);
                               return ret;

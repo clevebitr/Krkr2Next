@@ -408,7 +408,7 @@ namespace PSB {
             psbSize = readSize;
         }
 
-        krkr::io::MemoryStream stream{ nullptr, static_cast<tjs_uint>(psbSize) };
+        krkr::base::MemoryStream stream{ nullptr, static_cast<tjs_uint>(psbSize) };
 
         if(isMdf) {
             uLongf destLen = static_cast<uLongf>(psbSize);

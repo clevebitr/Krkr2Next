@@ -12,7 +12,7 @@ bool krkr::io::WriteDataToFile(const ttstr &filepath, const void *data,
 namespace krkr::base {
 
 class XMLMemPrinter : public tinyxml2::XMLPrinter {
-    krkr::io::MemoryStream _stream;
+    krkr::base::MemoryStream _stream;
     char _buffer[4096];
 
 public:

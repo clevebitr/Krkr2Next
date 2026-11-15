@@ -46,7 +46,7 @@ public:
         }
 
         // 書き込みが必要な場合
-        stream = new krkr::io::MemoryStream();
+        stream = new krkr::base::MemoryStream();
 
         // オブジェクトの内容を複製
         if(flags == TJS_BS_UPDATE || flags == TJS_BS_APPEND) {

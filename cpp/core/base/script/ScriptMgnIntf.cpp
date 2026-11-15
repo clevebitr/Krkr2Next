@@ -902,7 +902,7 @@ void ExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
                 //                std::filesystem::create_directories(
                 //                    absoluteScriptPath.parent_path());
                 //                auto memoryStream =
-                //                std::make_unique<krkr::io::MemoryStream>();
+                //                std::make_unique<krkr::base::MemoryStream>();
                 //                blk->Dump(memoryStream.get());
                 //
                 //                std::vector<char16_t>

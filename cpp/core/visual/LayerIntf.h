@@ -538,7 +538,7 @@ public:
     //---------------------------------- input event / hit test
     // management --
 private:
-    HitType HitType;
+    HitType hitType;
     tjs_int HitThreshold;
     bool OnHitTest_Work;
     bool Enabled; // is layer enabled for input?
@@ -625,8 +625,8 @@ public:
                                           bool exclude_self = false,
                                           bool get_disabled = false);
 
-    HitType GetHitType() const { return HitType; }
-    void SetHitType(HitType type) { HitType = type; }
+    HitType GetHitType() const { return hitType; }
+    void SetHitType(HitType type) { hitType = type; }
 
     tjs_int GetHitThreshold() const { return HitThreshold; }
     void SetHitThreshold(tjs_int t) { HitThreshold = t; }
@@ -756,7 +756,7 @@ public:
     //--------------------------------------------- drawing function
     // stuff --
 protected:
-    DrawFace DrawFace; // (actual) current drawing layer face
+    DrawFace drawFace; // (actual) current drawing layer face
     DrawFace Face; // (outward) current drawing layer face
 
     bool HoldAlpha; // whether the layer alpha channel is to be kept

@@ -74,13 +74,13 @@ public:
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// krkr::io::MemoryStream
+// MemoryStream
 //---------------------------------------------------------------------------
 /*
         this class provides a tTJSBinaryStream based access method for
    a memory block.
 */
-class krkr::io::MemoryStream : public tTJSBinaryStream {
+class MemoryStream : public tTJSBinaryStream {
 protected:
     void *Block;
     bool Reference;
@@ -90,11 +90,11 @@ protected:
     bool UseMmap = false;
 
 public:
-    krkr::io::MemoryStream();
+    MemoryStream();
 
-    krkr::io::MemoryStream(const void *block, tjs_uint size);
+    MemoryStream(const void *block, tjs_uint size);
 
-    ~krkr::io::MemoryStream() override;
+    ~MemoryStream() override;
 
     tjs_uint64 Seek(tjs_int64 offset, tjs_int whence) override;
 
@@ -249,6 +249,6 @@ private:
 } // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::base::krkr::io::MemoryStream;
+using krkr::base::MemoryStream;
 
 #endif

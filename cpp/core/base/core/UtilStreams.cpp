@@ -91,12 +91,12 @@ LocalTempStorageHolder::~LocalTempStorageHolder() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// krkr::io::MemoryStream
+// MemoryStream
 //---------------------------------------------------------------------------
-krkr::io::MemoryStream::krkr::io::MemoryStream() { Init(); }
+MemoryStream::MemoryStream() { Init(); }
 
 //---------------------------------------------------------------------------
-krkr::io::MemoryStream::krkr::io::MemoryStream(const void *block, tjs_uint size) {
+MemoryStream::MemoryStream(const void *block, tjs_uint size) {
     Init();
     Block = (void *)block;
     if(!Block) {
@@ -112,13 +112,13 @@ krkr::io::MemoryStream::krkr::io::MemoryStream(const void *block, tjs_uint size)
 }
 
 //---------------------------------------------------------------------------
-krkr::io::MemoryStream::~krkr::io::MemoryStream() {
+MemoryStream::~MemoryStream() {
     if(Block && !Reference)
         Free(Block);
 }
 
 //---------------------------------------------------------------------------
-tjs_uint64 krkr::io::MemoryStream::Seek(tjs_int64 offset, tjs_int whence) {
+tjs_uint64 MemoryStream::Seek(tjs_int64 offset, tjs_int whence) {
     tjs_int64 newpos;
     switch(whence) {
         case TJS_BS_SEEK_SET:
@@ -148,7 +148,7 @@ tjs_uint64 krkr::io::MemoryStream::Seek(tjs_int64 offset, tjs_int whence) {
 }
 
 //---------------------------------------------------------------------------
-tjs_uint krkr::io::MemoryStream::Read(void *buffer, tjs_uint read_size) {
+tjs_uint MemoryStream::Read(void *buffer, tjs_uint read_size) {
     if(CurrentPos + read_size >= Size) {
         read_size = Size - CurrentPos;
     }
@@ -161,7 +161,7 @@ tjs_uint krkr::io::MemoryStream::Read(void *buffer, tjs_uint read_size) {
 }
 
 //---------------------------------------------------------------------------
-tjs_uint krkr::io::MemoryStream::Write(const void *buffer, tjs_uint write_size) {
+tjs_uint MemoryStream::Write(const void *buffer, tjs_uint write_size) {
     // writing may increase the internal buffer size.
     if(Reference)
         ThrowExceptionMessage(TVPWriteError);
@@ -203,7 +203,7 @@ tjs_uint krkr::io::MemoryStream::Write(const void *buffer, tjs_uint write_size) 
 }
 
 //---------------------------------------------------------------------------
-void krkr::io::MemoryStream::SetEndOfStorage() {
+void MemoryStream::SetEndOfStorage() {
     if(Reference)
         ThrowExceptionMessage(TVPWriteError);
 
@@ -215,14 +215,14 @@ void krkr::io::MemoryStream::SetEndOfStorage() {
 }
 
 //---------------------------------------------------------------------------
-void krkr::io::MemoryStream::Clear() {
+void MemoryStream::Clear() {
     if(Block && !Reference)
         Free(Block);
     Init();
 }
 
 //---------------------------------------------------------------------------
-void krkr::io::MemoryStream::SetSize(tjs_uint size) {
+void MemoryStream::SetSize(tjs_uint size) {
     if(Reference)
         ThrowExceptionMessage(TVPWriteError);
 
@@ -246,7 +246,7 @@ void krkr::io::MemoryStream::SetSize(tjs_uint size) {
 }
 
 //---------------------------------------------------------------------------
-void krkr::io::MemoryStream::Init() {
+void MemoryStream::Init() {
     Block = nullptr;
     Reference = false;
     Size = 0;
@@ -256,7 +256,7 @@ void krkr::io::MemoryStream::Init() {
 }
 
 //---------------------------------------------------------------------------
-void *krkr::io::MemoryStream::Alloc(size_t size) {
+void *MemoryStream::Alloc(size_t size) {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
     if(size >= kStreamMmapThreshold) {
         void *p = MmapAlloc(size);
@@ -271,7 +271,7 @@ void *krkr::io::MemoryStream::Alloc(size_t size) {
 }
 
 //---------------------------------------------------------------------------
-void *krkr::io::MemoryStream::Realloc(void *orgblock, size_t size) {
+void *MemoryStream::Realloc(void *orgblock, size_t size) {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
     if(UseMmap) {
         void *newblock = MmapAlloc(size);
@@ -296,7 +296,7 @@ void *krkr::io::MemoryStream::Realloc(void *orgblock, size_t size) {
 }
 
 //---------------------------------------------------------------------------
-void krkr::io::MemoryStream::Free(void *block) {
+void MemoryStream::Free(void *block) {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
     if(UseMmap) {
         MmapFree(block);
@@ -429,7 +429,7 @@ public:
     virtual tTJSBinaryStream * CreateStreamByIndex(tjs_uint idx) {
         struct archive_entry * entry = _filelist[idx].second;
         tjs_uint64 fileSize = archive_entry_size(entry);
-        if (fileSize <= 0) return new krkr::io::MemoryStream();
+        if (fileSize <= 0) return new MemoryStream();
         return nullptr;
     }
 
