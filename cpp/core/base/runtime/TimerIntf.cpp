@@ -21,7 +21,7 @@ namespace krkr::utils {
 //---------------------------------------------------------------------------
 // global variables
 //---------------------------------------------------------------------------
-bool TVPLimitTimerCapacity = false;
+bool limitTimerCapacity = false;
 // limit timer capacity to one
 //---------------------------------------------------------------------------
 
@@ -76,7 +76,7 @@ void tTJSNI_BaseTimer::Fire(tjs_uint n) {
     tjs_int count = TVPCountEventsInQueue(Owner, Owner, eventname, 0);
 
     tjs_int cap =
-        TVPLimitTimerCapacity ? 1 : (Capacity == 0 ? 65535 : Capacity);
+        krkr::utils::limitTimerCapacity ? 1 : (Capacity == 0 ? 65535 : Capacity);
     // 65536 should be considered as to be no-limit.
 
     tjs_int more = cap - count;
@@ -186,7 +186,7 @@ tTJSNC_Timer::tTJSNC_Timer() : inherited(TJS_W("Timer")) {
        NG : *result = (tjs_int64)interval;
     */
     double interval =
-        _this->GetInterval() * (1.0 / (1 << TVP_SUBMILLI_FRAC_BITS));
+        _this->GetInterval() * (1.0 / (1 << KRKR_SUBMILLI_FRAC_BITS));
     *result = interval;
     return TJS_S_OK;
 }
@@ -195,7 +195,7 @@ TJS_END_NATIVE_PROP_GETTER
 TJS_BEGIN_NATIVE_PROP_SETTER {
     TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
                             /*var. type*/ tTJSNI_Timer);
-    double interval = (double)*param * (1 << TVP_SUBMILLI_FRAC_BITS);
+    double interval = (double)*param * (1 << KRKR_SUBMILLI_FRAC_BITS);
     _this->SetInterval((tjs_int64)(interval + 0.5));
     return TJS_S_OK;
 }
@@ -250,7 +250,7 @@ TJS_END_NATIVE_PROP_GETTER
 TJS_BEGIN_NATIVE_PROP_SETTER {
     TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
                             /*var. type*/ tTJSNI_Timer);
-    _this->SetMode((tTVPAsyncTriggerMode)(tjs_int)*param);
+    _this->SetMode((krkr::utils::AsyncTriggerMode)(tjs_int)*param);
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER
@@ -264,7 +264,7 @@ tTJSVariant val;
 if(TVPGetCommandLine(TJS_W("-laxtimer"), &val)) {
     ttstr str(val);
     if(str == TJS_W("yes"))
-        TVPLimitTimerCapacity = true;
+        krkr::utils::limitTimerCapacity = true;
 }
 }
 //---------------------------------------------------------------------------

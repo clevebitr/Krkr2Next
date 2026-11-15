@@ -342,7 +342,7 @@ void tTJSNI_VideoOverlay::Open(const ttstr &_name) {
                 mn = TJS_W("mfeVR");
                 break;
         }
-        TVPAddLog(TJS_W("(info) VideoOverlay.Open: mode=") + ttstr(mn) +
+        krkr::utils::AddLog(TJS_W("(info) VideoOverlay.Open: mode=") + ttstr(mn) +
                   TJS_W(" file=") + _name);
     }
 }
@@ -500,11 +500,11 @@ void tTJSNI_VideoOverlay::SetRectangleToVideoOverlay() {
         tjs_int t = Rect.top;
         tjs_int r = Rect.right;
         tjs_int b = Rect.bottom;
-        TVPAddLog(TJS_W("Video zoom: (") + ttstr(l) + TJS_W(",") + ttstr(t) +
+        krkr::utils::AddLog(TJS_W("Video zoom: (") + ttstr(l) + TJS_W(",") + ttstr(t) +
                   TJS_W(")-(") + ttstr(r) + TJS_W(",") + ttstr(b) +
                   TJS_W(") ->"));
         Window->ZoomRectangle(l, t, r, b);
-        TVPAddLog(TJS_W("(") + ttstr(l) + TJS_W(",") + ttstr(t) + TJS_W(")-(") +
+        krkr::utils::AddLog(TJS_W("(") + ttstr(l) + TJS_W(",") + ttstr(t) + TJS_W(")-(") +
                   ttstr(r) + TJS_W(",") + ttstr(b) + TJS_W(")"));
         //	RECT rect = {l + ofsx, t + ofsy, r + ofsx, b + ofsy};
         VideoOverlay->SetRect(l + ofsx, t + ofsy, r + ofsx, b + ofsy);
@@ -656,7 +656,7 @@ void tTJSNI_VideoOverlay::WndProc(NativeEvent &ev) {
                                         perLoop); // fire period event
                                                   // by loop rewind
                                 } else {
-                                    TVPAddLog(
+                                    krkr::utils::AddLog(
                                         TJS_W("(info) Video EC_COMPLETE: "
                                               "releasing video resources"));
                                     SetStatusAsync(ssStop);

@@ -96,7 +96,7 @@ ttstr ExePath() { return TVPNativeProjectDir; }
 
 bool TVPCheckAbout();
 bool TVPCheckPrintDataPath();
-void TVPOnError();
+void krkr::utils::OnError();
 void TVPLockSoundMixer();
 void TVPUnlockSoundMixer();
 
@@ -367,7 +367,7 @@ bool tTVPApplication::StartApplication(ttstr path) {
         TVPInitFontNames();
 
         // banner
-        TVPAddImportantLog(TVPFormatMessage(TVPProgramStartedOn, TVPGetOSName(),
+        krkr::utils::AddImportantLog(TVPFormatMessage(TVPProgramStartedOn, TVPGetOSName(),
                                             TVPGetPlatformName()));
 
         // TVPInitializeBaseSystems
@@ -462,11 +462,11 @@ bool tTVPApplication::StartApplication(ttstr path) {
     } catch(const EAbort &) {
         // nothing to do
     } catch(const Exception &exception) {
-        TVPOnError();
+        krkr::utils::OnError();
         if(!TVPSystemUninitCalled)
             ShowException(exception.what());
     } catch(const TJS::eTJSScriptError &e) {
-        TVPOnError();
+        krkr::utils::OnError();
         if(!TVPSystemUninitCalled) {
             ttstr msg;
             if(!title_.IsEmpty()) {
@@ -487,7 +487,7 @@ bool tTVPApplication::StartApplication(ttstr path) {
             ShowException(msg);
         }
     } catch(const TJS::eTJS &e) {
-        TVPOnError();
+        krkr::utils::OnError();
         if(!TVPSystemUninitCalled)
             ShowException(e.GetMessage());
     } catch(const std::exception &e) {
@@ -614,11 +614,11 @@ void tTVPApplication::Run() {
         // nothing to do
 #if !(defined(_MSC_VER) && defined(_DEBUG))
     } catch(const Exception &exception) {
-        TVPOnError();
+        krkr::utils::OnError();
         if(!TVPSystemUninitCalled)
             ShowException(exception.what());
     } catch(const TJS::eTJSScriptError &e) {
-        TVPOnError();
+        krkr::utils::OnError();
         if(!TVPSystemUninitCalled) {
             ttstr msg;
             if(!title_.IsEmpty()) {
@@ -639,7 +639,7 @@ void tTVPApplication::Run() {
             ShowException(msg);
         }
     } catch(const TJS::eTJS &e) {
-        TVPOnError();
+        krkr::utils::OnError();
         if(!TVPSystemUninitCalled)
             ShowException(e.GetMessage());
     } catch(const std::exception &e) {
@@ -664,7 +664,7 @@ void tTVPApplication::ProcessMessages() {
     for(std::tuple<void *, int, tMsg> &it : lstUserMsg) {
         std::get<2>(it)();
     }
-    TVPTimer::ProgressAllTimer();
+    krkr::utils::Timer::ProgressAllTimer();
     krkr::stall::MarkStage("ProcessMessages: 结束");
 }
 
@@ -812,24 +812,24 @@ void tTVPApplication::CheckDigitizer() {
 		int value = ::GetSystemMetrics(SM_DIGITIZER);
 		if( value == 0 ) return;
 
-		TVPAddLog( (const tjs_char*)TVPEnableDigitizer );
+		krkr::utils::AddLog( (const tjs_char*)TVPEnableDigitizer );
 		if( value & NID_INTEGRATED_TOUCH ) {
-			TVPAddLog( (const tjs_char*)TVPTouchIntegratedTouch );
+			krkr::utils::AddLog( (const tjs_char*)TVPTouchIntegratedTouch );
 		}
 		if( value & NID_EXTERNAL_TOUCH ) {
-			TVPAddLog( (const tjs_char*)TVPTouchExternalTouch );
+			krkr::utils::AddLog( (const tjs_char*)TVPTouchExternalTouch );
 		}
 		if( value & NID_INTEGRATED_PEN ) {
-			TVPAddLog( (const tjs_char*)TVPTouchIntegratedPen );
+			krkr::utils::AddLog( (const tjs_char*)TVPTouchIntegratedPen );
 		}
 		if( value & NID_EXTERNAL_PEN ) {
-			TVPAddLog( (const tjs_char*)TVPTouchExternalPen );
+			krkr::utils::AddLog( (const tjs_char*)TVPTouchExternalPen );
 		}
 		if( value & NID_MULTI_INPUT ) {
-			TVPAddLog( (const tjs_char*)TVPTouchMultiInput );
+			krkr::utils::AddLog( (const tjs_char*)TVPTouchMultiInput );
 		}
 		if( value & NID_READY ) {
-			TVPAddLog( (const tjs_char*)TVPTouchReady );
+			krkr::utils::AddLog( (const tjs_char*)TVPTouchReady );
 		}
 	}
 #endif
@@ -887,10 +887,10 @@ void tTVPApplication::OnDeactivate() {
 void tTVPApplication::OnExit() {
     // 必须在销毁脚本引擎前释放脚本注册的日志闭包（tTJSVariantClosure）。
     // 若拖到 TVPSystemUninit 的 at-exit
-    // handler（TVPDestroyLoggingHandlerVector） 才释放，此时脚本引擎已被下方
+    // handler（krkr::utils::DestroyLoggingHandlerVector） 才释放，此时脚本引擎已被下方
     // TVPUninitScriptEngine 销毁，闭包 finalizer 命中已失效的 TJS 全局态 →
     // 退出卡死（runtime-restart）。
-    TVPClearLoggingHandlers();
+    krkr::utils::ClearLoggingHandlers();
 
     TVPUninitScriptEngine();
 

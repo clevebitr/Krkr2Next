@@ -296,7 +296,7 @@ void TVPDumpDirect3DDriverInformation()
 		if(dumped) return;
 		dumped = true;
 
-		TVPAddImportantLog( (const tjs_char*)TVPInfoFoundDirect3DInterface );
+		krkr::utils::AddImportantLog( (const tjs_char*)TVPInfoFoundDirect3DInterface );
 
 		try
 		{
@@ -305,21 +305,21 @@ void TVPDumpDirect3DDriverInformation()
 			ttstr infostart(TJS_W("(info)  "));
 			ttstr log;
 			log = infostart + TJS_W("Found ") + ttstr((tjs_int)numofadapter) + TJS_W(" Devices.");
-			TVPAddImportantLog(log);
+			krkr::utils::AddImportantLog(log);
 
 			for( UINT adapter = 0; adapter < numofadapter; adapter++ )
 			{
 				log = infostart + TJS_W("Device Number : ") + ttstr((tjs_int)adapter);
-				TVPAddImportantLog(log);
+				krkr::utils::AddImportantLog(log);
 
 				D3DADAPTER_IDENTIFIER9 D3DID = {0};
 				if(SUCCEEDED(d3d9->GetAdapterIdentifier( adapter, 0, &D3DID)))
 				{
 					// driver string
 					log = infostart + ttstr(D3DID.Description) + TJS_W(" [") + ttstr(D3DID.Driver) + TJS_W("]");
-					TVPAddImportantLog(log);
+					krkr::utils::AddImportantLog(log);
 					log = infostart + TJS_W(" [") + ttstr(D3DID.DeviceName) + TJS_W("]");
-					TVPAddImportantLog(log);
+					krkr::utils::AddImportantLog(log);
 
 					// driver version(reported)
 					log = infostart + TJS_W("Driver version (reported) : ");
@@ -330,7 +330,7 @@ void TVPDumpDirect3DDriverInformation()
 							  HIWORD( D3DID.DriverVersion.LowPart  ),
 							  LOWORD( D3DID.DriverVersion.LowPart  ) );
 					log += tmp;
-					TVPAddImportantLog(log);
+					krkr::utils::AddImportantLog(log);
 
 					// driver version(actual)
 					std::wstring driverName = ttstr(D3DID.Driver).AsStdString();
@@ -381,13 +381,13 @@ void TVPDumpDirect3DDriverInformation()
 						log = infostart + TJS_W("Driver ") + ttstr(D3DID.Driver) +
 							TJS_W(" is not found in search path.");
 					}
-					TVPAddImportantLog(log);
+					krkr::utils::AddImportantLog(log);
 
 					// device id
 					TJS_snprintf(tmp, 256, L"VendorId:%08X  DeviceId:%08X  SubSysId:%08X  Revision:%08X",
 						D3DID.VendorId, D3DID.DeviceId, D3DID.SubSysId, D3DID.Revision);
 					log = infostart + TJS_W("Device ids : ") + tmp;
-					TVPAddImportantLog(log);
+					krkr::utils::AddImportantLog(log);
 
 					// Device GUID
 					GUID *pguid = &D3DID.DeviceIdentifier;
@@ -398,14 +398,14 @@ void TVPDumpDirect3DDriverInformation()
 							  pguid->Data4[0], pguid->Data4[1], pguid->Data4[2], pguid->Data4[3],
 							  pguid->Data4[4], pguid->Data4[5], pguid->Data4[6], pguid->Data4[7] );
 					log = infostart + TJS_W("Unique driver/device id : ") + tmp;
-					TVPAddImportantLog(log);
+					krkr::utils::AddImportantLog(log);
 
 					// WHQL level
 					TJS_snprintf(tmp, 256, L"%08x", D3DID.WHQLLevel);
 					log = infostart + TJS_W("WHQL level : ")  + tmp;
-					TVPAddImportantLog(log);
+					krkr::utils::AddImportantLog(log);
 				} else {
-					TVPAddImportantLog( (const tjs_char*)TVPInfoFaild );
+					krkr::utils::AddImportantLog( (const tjs_char*)TVPInfoFaild );
 				}
 			}
 		}
@@ -422,7 +422,7 @@ static void TVPInitDirect3D()
 	if(!TVPDirect3DDLLHandle)
 	{
 		// load d3d9.dll
-		TVPAddLog( (const tjs_char*)TVPInfoDirect3D );
+		krkr::utils::AddLog( (const tjs_char*)TVPInfoDirect3D );
 		TVPDirect3DDLLHandle = ::LoadLibrary( L"d3d9.dll" );
 		if(!TVPDirect3DDLLHandle)
 			TVPThrowExceptionMessage(TVPCannotInitDirect3D, (const tjs_char*)TVPCannotLoadD3DDLL );
@@ -604,7 +604,7 @@ void TVPEnumerateAllDisplayModes(std::vector<tTVPScreenMode> & modes)
 		} while(true);
 	}
 
-	TVPAddLog( TVPFormatMessage(TVPInfoEnvironmentUsing,
+	krkr::utils::AddLog( TVPFormatMessage(TVPInfoEnvironmentUsing,
 		(TVPUseChangeDisplaySettings?TJS_W("ChangeDisplaySettings API"):TJS_W("Direct3D"))) );
 }
 //---------------------------------------------------------------------------
@@ -621,10 +621,10 @@ static void TVPMakeFullScreenModeCandidates(
 		// fszmInner is ignored (as always be fszmInner) if mode == fsrAuto && zoom_mode == fszmNone
 
 	// print debug information
-	TVPAddLog((const tjs_char*)TVPInfoSearchBestFullscreenResolution);
-	TVPAddLog(TVPFormatMessage(TVPInfoConditionPreferredScreenMode, preferred.Dump()));
-	TVPAddLog(TVPFormatMessage(TVPInfoConditionMode, TVPGetGetFullScreenResolutionModeString(mode)));
-	TVPAddLog(TVPFormatMessage(TVPInfoConditionZoomMode, ttstr(
+	krkr::utils::AddLog((const tjs_char*)TVPInfoSearchBestFullscreenResolution);
+	krkr::utils::AddLog(TVPFormatMessage(TVPInfoConditionPreferredScreenMode, preferred.Dump()));
+	krkr::utils::AddLog(TVPFormatMessage(TVPInfoConditionMode, TVPGetGetFullScreenResolutionModeString(mode)));
+	krkr::utils::AddLog(TVPFormatMessage(TVPInfoConditionZoomMode, ttstr(
 		zoom_mode == fszmInner ? TJS_W("inner") :
 		zoom_mode == fszmOuter ? TJS_W("outer") :
 			TJS_W("none"))));
@@ -640,8 +640,8 @@ static void TVPMakeFullScreenModeCandidates(
 	tjs_int screen_aspect_numer = TVPDefaultScreenMode.Width;
 	tjs_int screen_aspect_denom = TVPDefaultScreenMode.Height;
 	TVPDoReductionNumerAndDenom(screen_aspect_numer, screen_aspect_denom); // do reduction
-	TVPAddLog(TVPFormatMessage(TVPInfoEnvironmentDefaultScreenMode, TVPDefaultScreenMode.Dump()));
-	TVPAddLog(TVPFormatMessage(TVPInfoEnvironmentDefaultScreenAspectRatio,
+	krkr::utils::AddLog(TVPFormatMessage(TVPInfoEnvironmentDefaultScreenMode, TVPDefaultScreenMode.Dump()));
+	krkr::utils::AddLog(TVPFormatMessage(TVPInfoEnvironmentDefaultScreenAspectRatio,
 		ttstr(screen_aspect_numer),ttstr(screen_aspect_denom)) );
 
 	// clear destination array
@@ -659,12 +659,12 @@ static void TVPMakeFullScreenModeCandidates(
 	{
 		tjs_int last_width = -1, last_height = -1;
 		ttstr last_line;
-		TVPAddLog( (const tjs_char*)TVPInfoEnvironmentAvailableDisplayModes );
+		krkr::utils::AddLog( (const tjs_char*)TVPInfoEnvironmentAvailableDisplayModes );
 		for(std::vector<tTVPScreenMode>::iterator i = modes.begin(); i != modes.end(); i++)
 		{
 			if(last_width != i->Width || last_height != i->Height)
 			{
-				if(!last_line.IsEmpty()) TVPAddLog(last_line);
+				if(!last_line.IsEmpty()) krkr::utils::AddLog(last_line);
 				tjs_int w = i->Width, h = i->Height;
 				TVPDoReductionNumerAndDenom(w, h);
 				last_line = TJS_W("(info)  ") + i->DumpHeightAndWidth() +
@@ -677,7 +677,7 @@ static void TVPMakeFullScreenModeCandidates(
 			}
 			last_width = i->Width; last_height = i->Height;
 		}
-		if(!last_line.IsEmpty()) TVPAddLog(last_line);
+		if(!last_line.IsEmpty()) krkr::utils::AddLog(last_line);
 	}
 
 	if(mode != fsrNoChange && mode != fsrExpandWindow )
@@ -756,7 +756,7 @@ static void TVPMakeFullScreenModeCandidates(
 		// this could be if the driver does not provide the screen
 		// mode which is the same size as the default screen...
 		// push the default screen mode
-		TVPAddImportantLog( (const tjs_char*)TVPInfoNotFoundScreenModeFromDriver );
+		krkr::utils::AddImportantLog( (const tjs_char*)TVPInfoNotFoundScreenModeFromDriver );
 		tTVPScreenMode mode;
 		mode.Width  = TVPDefaultScreenMode.Width;
 		mode.Height = TVPDefaultScreenMode.Height;
@@ -854,11 +854,11 @@ static void TVPMakeFullScreenModeCandidates(
 	std::sort(candidates.begin(), candidates.end());
 
 	// dump all candidates to log
-	TVPAddLog( (const tjs_char*)TVPInfoResultCandidates );
+	krkr::utils::AddLog( (const tjs_char*)TVPInfoResultCandidates );
 	for(std::vector<tTVPScreenModeCandidate>::iterator i = candidates.begin();
 		i != candidates.end(); i++)
 	{
-		TVPAddLog(TJS_W("(info)  ") + i->Dump());
+		krkr::utils::AddLog(TJS_W("(info)  ") + i->Dump());
 	}
 }
 //---------------------------------------------------------------------------
@@ -895,7 +895,7 @@ void TVPSwitchToFullScreen(HWND window, tjs_int w, tjs_int h, iTVPDrawDevice* dr
 		}
 		catch(eTJS &e)
 		{
-			TVPAddLog(e.GetMessage());
+			krkr::utils::AddLog(e.GetMessage());
 			TVPUseChangeDisplaySettings = true;
 		}
 		catch(...)
@@ -921,7 +921,7 @@ void TVPSwitchToFullScreen(HWND window, tjs_int w, tjs_int h, iTVPDrawDevice* dr
 	for(std::vector<tTVPScreenModeCandidate>::iterator i = candidates.begin();
 		i != candidates.end(); i++)
 	{
-		TVPAddLog( TVPFormatMessage(TVPInfoTryScreenMode, i->Dump()) );
+		krkr::utils::AddLog( TVPFormatMessage(TVPInfoTryScreenMode, i->Dump()) );
 		success = drawdevice->SwitchToFullScreen( window, i->Width, i->Height, i->BitsPerPixel, TVPDisplayColorFormat, TVPPreferredFullScreenResolutionMode != fsrExpandWindow );
 		if( success )
 		{
@@ -935,7 +935,7 @@ void TVPSwitchToFullScreen(HWND window, tjs_int w, tjs_int h, iTVPDrawDevice* dr
 		TVPThrowExceptionMessage(TVPCannotSwitchToFullScreen, (const tjs_char*)TVPAllScreenModeError );
 	}
 
-	TVPAddLog( (const tjs_char*)TVPInfoChangeScreenModeSuccess );
+	krkr::utils::AddLog( (const tjs_char*)TVPInfoChangeScreenModeSuccess );
 
 	TVPInFullScreen = true;
 

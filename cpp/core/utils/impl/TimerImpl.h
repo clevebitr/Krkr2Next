@@ -18,12 +18,12 @@ namespace krkr::utils {
 //---------------------------------------------------------------------------
 // tTJSNI_Timer : Timer Native Instance
 //---------------------------------------------------------------------------
-class tTVPTimerThread;
+class TimerThread;
 
 class tTJSNI_Timer : public tTJSNI_BaseTimer {
     typedef tTJSNI_BaseTimer inherited;
 
-    friend class tTVPTimerThread;
+    friend class TimerThread;
 
     tjs_uint64 Interval;
     tjs_uint64 NextTick;

@@ -24,7 +24,7 @@ inline std::set<ttstr> TVPRegisteredPlugins;
 ////////////////////////////////////////
 // ログ出力用マクロ
 
-#define NCB_WARN(n)     TVPAddLog(ttstr(n))
+#define NCB_WARN(n)     krkr::utils::AddLog(ttstr(n))
 #define NCB_WARN_W(str) NCB_WARN(TJS_W(str))
 
 ////////////////////////////////////////
@@ -1882,7 +1882,7 @@ struct ncbRegistNativeClass : public ncbRegistNativeClassBase {
 
 	void RegistItem(NameT name, ItemT item) override {
 		if (name == _className) {
-			if (_hasCtor) TVPAddLog(tTJSString(TJS_W("Multiple constructors.(")) + _className + TJS_W(")"));
+			if (_hasCtor) krkr::utils::AddLog(tTJSString(TJS_W("Multiple constructors.(")) + _className + TJS_W(")"));
 			_hasCtor = true;
 		}
 		if (item) {
@@ -2326,28 +2326,28 @@ protected:
 			typedef ncbNativeClassMethod< IVT::InvokeCommand<void, MethodT, IVT::ivtNormal> > MethodObjectT;
 			iTJSDispatch2 *dsp = GetDispatch(attach);
 			if (!dsp) {
-				TVPAddLog(ttstr(TJS_W("FAILED: get dispatch for attach target: ")) + (attach ? attach : TJS_W("<null>")) + TJS_W(" when registering: ") + name);
+				krkr::utils::AddLog(ttstr(TJS_W("FAILED: get dispatch for attach target: ")) + (attach ? attach : TJS_W("<null>")) + TJS_W(" when registering: ") + name);
 				return;
 			}
 			RegistItem(dsp, name, new MethodObjectT(m));
 		} catch (const eTJS &e) {
-			TVPAddLog(ttstr(TJS_W("FAILED: RegistFunction threw for attach target: ")) + (attach ? attach : TJS_W("<null>")) + TJS_W(" name: ") + name + TJS_W(" message: ") + e.GetMessage());
+			krkr::utils::AddLog(ttstr(TJS_W("FAILED: RegistFunction threw for attach target: ")) + (attach ? attach : TJS_W("<null>")) + TJS_W(" name: ") + name + TJS_W(" message: ") + e.GetMessage());
 		} catch (...) {
-			TVPAddLog(ttstr(TJS_W("FAILED: RegistFunction threw unknown exception for attach target: ")) + (attach ? attach : TJS_W("<null>")) + TJS_W(" name: ") + name);
+			krkr::utils::AddLog(ttstr(TJS_W("FAILED: RegistFunction threw unknown exception for attach target: ")) + (attach ? attach : TJS_W("<null>")) + TJS_W(" name: ") + name);
 		}
 	}
 	static void RegistFunction(NameT name, NameT attach, ncbTypedefs::CallbackT m) {
 		try {
 			iTJSDispatch2 *dsp = GetDispatch(attach);
 			if (!dsp) {
-				TVPAddLog(ttstr(TJS_W("FAILED: get dispatch for attach target: ")) + (attach ? attach : TJS_W("<null>")) + TJS_W(" when registering: ") + name);
+				krkr::utils::AddLog(ttstr(TJS_W("FAILED: get dispatch for attach target: ")) + (attach ? attach : TJS_W("<null>")) + TJS_W(" when registering: ") + name);
 				return;
 			}
 			RegistItem(dsp, name, TJSCreateNativeClassMethod(m));
 		} catch (const eTJS &e) {
-			TVPAddLog(ttstr(TJS_W("FAILED: RegistFunction(raw) threw for attach target: ")) + (attach ? attach : TJS_W("<null>")) + TJS_W(" name: ") + name + TJS_W(" message: ") + e.GetMessage());
+			krkr::utils::AddLog(ttstr(TJS_W("FAILED: RegistFunction(raw) threw for attach target: ")) + (attach ? attach : TJS_W("<null>")) + TJS_W(" name: ") + name + TJS_W(" message: ") + e.GetMessage());
 		} catch (...) {
-			TVPAddLog(ttstr(TJS_W("FAILED: RegistFunction(raw) threw unknown exception for attach target: ")) + (attach ? attach : TJS_W("<null>")) + TJS_W(" name: ") + name);
+			krkr::utils::AddLog(ttstr(TJS_W("FAILED: RegistFunction(raw) threw unknown exception for attach target: ")) + (attach ? attach : TJS_W("<null>")) + TJS_W(" name: ") + name);
 		}
 	}
 	template <typename T>
@@ -2400,7 +2400,7 @@ private:
 
 				tTJSVariantType vt = val.Type();
 				if (vt != tvtObject) {
-					TVPAddLog(ttstr(TJS_W("FAILED: attach target is not object: ")) + attach + TJS_W(" type=") + ttstr((tjs_int)vt));
+					krkr::utils::AddLog(ttstr(TJS_W("FAILED: attach target is not object: ")) + attach + TJS_W(" type=") + ttstr((tjs_int)vt));
 					global->Release();
 					return nullptr;
 				}
@@ -2409,11 +2409,11 @@ private:
 			}
 			return ret;
 		} catch (const eTJS &e) {
-			TVPAddLog(ttstr(TJS_W("FAILED: GetDispatch threw for attach target: ")) + (attach ? attach : TJS_W("<null>")) + TJS_W(" message: ") + e.GetMessage());
+			krkr::utils::AddLog(ttstr(TJS_W("FAILED: GetDispatch threw for attach target: ")) + (attach ? attach : TJS_W("<null>")) + TJS_W(" message: ") + e.GetMessage());
 			global->Release();
 			return nullptr;
 		} catch (...) {
-			TVPAddLog(ttstr(TJS_W("FAILED: GetDispatch threw unknown exception for attach target: ")) + (attach ? attach : TJS_W("<null>")));
+			krkr::utils::AddLog(ttstr(TJS_W("FAILED: GetDispatch threw unknown exception for attach target: ")) + (attach ? attach : TJS_W("<null>")));
 			global->Release();
 			return nullptr;
 		}

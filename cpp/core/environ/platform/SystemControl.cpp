@@ -415,7 +415,7 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
         sPrevTjsMB = tjs_net_mb;
         sPrevUsedMB = self_used_mb;
 
-        TVPAddLog(ttstr(TJS_W("(mem) used=")) + ttstr(self_used_mb) +
+        krkr::utils::AddLog(ttstr(TJS_W("(mem) used=")) + ttstr(self_used_mb) +
                   TJS_W("MB free=") + ttstr(free_mb) + TJS_W("MB budget=") +
                   ttstr(budget_mb) + TJS_W("MB pressure=") + ttstr(pressure) +
                   TJS_W(" gcache=") + ttstr(graphic_used_mb) + TJS_W("/") +
@@ -431,7 +431,7 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
                   ttstr(icc_count) + TJS_W(" orphan=") + ttstr(orphan_icc) +
                   TJS_W(" untracked=") + ttstr(untracked_mb) + TJS_W("MB"));
 
-        TVPAddLog(ttstr(TJS_W("(mem_delta) d_used=")) + ttstr(d_used) +
+        krkr::utils::AddLog(ttstr(TJS_W("(mem_delta) d_used=")) + ttstr(d_used) +
                   TJS_W("MB d_heap=") + ttstr(d_heap) + TJS_W("MB d_tjs=") +
                   ttstr(d_tjs) + TJS_W("MB d_vs=") + ttstr(d_vs) +
                   TJS_W("MB d_obj=") + ttstr(d_obj) + TJS_W(" d_sb=") +
@@ -447,7 +447,7 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
         int64_t dict_c = 0, dict_d = 0, arr_c = 0, arr_d = 0;
         TJS_GetDictStats(&dict_c, &dict_d);
         TJS_GetArrayStats(&arr_c, &arr_d);
-        TVPAddLog(
+        krkr::utils::AddLog(
             ttstr(TJS_W("(obj_detail) h0=")) + ttstr((tjs_int)obh[0]) +
             TJS_W(" h1=") + ttstr((tjs_int)obh[1]) + TJS_W(" h2=") +
             ttstr((tjs_int)obh[2]) + TJS_W(" h3=") + ttstr((tjs_int)obh[3]) +
@@ -519,7 +519,7 @@ void tTVPSystemControl::EndContinuousEvent() {
 //---------------------------------------------------------------------------
 void tTVPSystemControl::NotifyCloseClicked() {
     // close Button is clicked
-    LastCloseClickedTick = TVPGetRoughTickCount32();
+    LastCloseClickedTick = krkr::utils::GetRoughTickCount32();
 }
 
 void tTVPSystemControl::NotifyEventDelivered() {
@@ -532,7 +532,7 @@ void tTVPSystemControl::NotifyEventDelivered() {
 bool tTVPSystemControl::ApplicationIdle() {
     DeliverEvents();
     bool cont = !ContinuousEventCalling;
-    MixedIdleTick += TVPGetRoughTickCount32();
+    MixedIdleTick += krkr::utils::GetRoughTickCount32();
     return cont;
 }
 
@@ -559,17 +559,17 @@ void tTVPSystemControl::SystemWatchTimerTimer() {
     }
 
     // call events
-    uint32_t tick = TVPGetRoughTickCount32();
+    uint32_t tick = krkr::utils::GetRoughTickCount32();
     // push environ noise
-    TVPPushEnvironNoise(&tick, sizeof(tick));
-    TVPPushEnvironNoise(&LastCompactedTick, sizeof(LastCompactedTick));
-    TVPPushEnvironNoise(&LastShowModalWindowSentTick,
+    krkr::utils::PushEnvironNoise(&tick, sizeof(tick));
+    krkr::utils::PushEnvironNoise(&LastCompactedTick, sizeof(LastCompactedTick));
+    krkr::utils::PushEnvironNoise(&LastShowModalWindowSentTick,
                         sizeof(LastShowModalWindowSentTick));
-    TVPPushEnvironNoise(&MixedIdleTick, sizeof(MixedIdleTick));
+    krkr::utils::PushEnvironNoise(&MixedIdleTick, sizeof(MixedIdleTick));
 #if 0
 	POINT pt;
 	::GetCursorPos(&pt);
-	TVPPushEnvironNoise(&pt, sizeof(pt));
+	krkr::utils::PushEnvironNoise(&pt, sizeof(pt));
 
 	// CPU clock monitoring
 	{
@@ -577,14 +577,14 @@ void tTVPSystemControl::SystemWatchTimerTimer() {
 		if( !clock_rough_printed && TVPCPUClockAccuracy == ccaRough ) {
 			tjs_char msg[80];
 			TJS_snprintf(msg, 80, TVPInfoCpuClockRoughly, (int)TVPCPUClock);
-			TVPAddImportantLog(msg);
+			krkr::utils::AddImportantLog(msg);
 			clock_rough_printed = true;
 		}
 		static bool clock_printed = false;
 		if( !clock_printed && TVPCPUClockAccuracy == ccaAccurate ) {
 			tjs_char msg[80];
 			TJS_snprintf(msg, 80, TVPInfoCpuClock, (float)TVPCPUClock);
-			TVPAddImportantLog(msg);
+			krkr::utils::AddImportantLog(msg);
 			clock_printed = true;
 		}
 	}

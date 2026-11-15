@@ -1905,14 +1905,14 @@ void tTJSNI_AlphaMovie::open(tTJSString fileName)
     if (memcmp(magic, "AJPM", 4) != 0)
     {
         if (!decodeOnly)
-            TVPAddLog(ttstr(TJS_W("AlphaMovie.open: backend=ffmpeg storage=")) + ttstr(fileName));
+            krkr::utils::AddLog(ttstr(TJS_W("AlphaMovie.open: backend=ffmpeg storage=")) + ttstr(fileName));
         openFfmpeg(fileName, stream);
         return;
     }
 
     backend_ = Backend::Amv;
     if (!decodeOnly)
-        TVPAddLog(ttstr(TJS_W("AlphaMovie.open: backend=amv storage=")) + ttstr(fileName));
+        krkr::utils::AddLog(ttstr(TJS_W("AlphaMovie.open: backend=amv storage=")) + ttstr(fileName));
     filePtr = stream;
     if (readSize < 40)
     {
@@ -2621,7 +2621,7 @@ void tTJSNI_AlphaMovie::openFfmpeg(tTJSString fileName, tTJSBinaryStream* stream
 
     if (ffmpegSourceWidth_ <= 0 || ffmpegSourceHeight_ <= 0)
     {
-        TVPAddLog(ttstr(TJS_W("AlphaMovie.open: invalid video size for ")) + filename);
+        krkr::utils::AddLog(ttstr(TJS_W("AlphaMovie.open: invalid video size for ")) + filename);
         movie->Release();
         ffmpegMovie_ = nullptr;
         closeFfmpeg();

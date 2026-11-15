@@ -74,7 +74,7 @@ namespace {
             method->Release();
         }
         global->Release();
-        TVPAddLog(TJS_W("compat plugin layeredwindow.dll: Layer 合成由宿主负责"));
+        krkr::utils::AddLog(TJS_W("compat plugin layeredwindow.dll: Layer 合成由宿主负责"));
     }
 
     void unregisterLayeredWindowCompat() {

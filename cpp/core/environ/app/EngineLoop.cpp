@@ -67,7 +67,7 @@ bool TVPGetJoyPadAsyncState(tjs_uint keycode, bool getcurrent) {
 }
 
 int TVPDrawSceneOnce(int interval) {
-    tjs_uint64 curTick = TVPGetRoughTickCount32();
+    tjs_uint64 curTick = krkr::utils::GetRoughTickCount32();
     // 进程级静态节拍，首帧惰性取基准。runtime-restart 时由
     // TVPResetDrawSceneOnceTimingForRestart() 置回未初始化，避免二次打开沿用
     // 上一游戏的 lastTick 算出巨大 remain 而反复跳过合成（黑屏）。

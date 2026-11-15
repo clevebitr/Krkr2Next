@@ -122,7 +122,7 @@ static ttstr TVPDumpCPUInfo(tjs_int cpu_num) {
     // TJSInt32ToHex(TVPCPUID1_EAX); 	features += TJS_W("
     // CPUID(1)/EBX=") + TJSInt32ToHex(TVPCPUID1_EBX);
 
-    TVPAddImportantLog(features);
+    krkr::utils::AddImportantLog(features);
 
     // 	if(((TVPCPUID1_EAX >> 8) & 0x0f) <= 4)
     // 		throw Exception("CPU check failure: CPU family 4 or lesser

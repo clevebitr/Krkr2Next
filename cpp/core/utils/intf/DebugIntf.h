@@ -19,49 +19,49 @@ namespace krkr::utils {
 //---------------------------------------------------------------------------
 // global definitions
 //---------------------------------------------------------------------------
-extern bool TVPAutoLogToFileOnError;
-extern bool TVPAutoClearLogOnError;
-extern bool TVPLoggingToFile;
+extern bool autoLogToFileOnError;
+extern bool autoClearLogOnError;
+extern bool loggingToFile;
 
-extern void TVPSetOnLog(void (*func)(const ttstr &line));
+extern void SetOnLog(void (*func)(const ttstr &line));
 
 // 释放脚本注册的全部日志闭包（tTJSVariantClosure）。
 // 必须在脚本引擎销毁（TVPUninitScriptEngine）之前调用，否则闭包 finalizer
 // 会命中已失效的 TJS 全局态导致退出卡死（runtime-restart）。由
-// tTVPApplication::OnExit 在销毁引擎前调用；TVPDestroyLoggingHandlerVector
+// tTVPApplication::OnExit 在销毁引擎前调用；DestroyLoggingHandlerVector
 // at-exit handler 仍保留作兜底（届时引擎已死，向量应为空/无闭包）。
-extern void TVPClearLoggingHandlers();
+extern void ClearLoggingHandlers();
 
-TJS_EXP_FUNC_DEF(void, TVPAddLog, (const ttstr &line));
+TJS_EXP_FUNC_DEF(void, AddLog, (const ttstr &line));
 
-TJS_EXP_FUNC_DEF(void, TVPAddImportantLog, (const ttstr &line));
+TJS_EXP_FUNC_DEF(void, AddImportantLog, (const ttstr &line));
 
-extern ttstr TVPGetLastLog(tjs_uint n);
+extern ttstr GetLastLog(tjs_uint n);
 
-extern iTJSConsoleOutput *TVPGetTJS2ConsoleOutputGateway();
+extern iTJSConsoleOutput *GetTJS2ConsoleOutputGateway();
 
-extern iTJSConsoleOutput *TVPGetTJS2DumpOutputGateway();
+extern iTJSConsoleOutput *GetTJS2DumpOutputGateway();
 
-extern void TVPTJS2StartDump();
+extern void StartTJS2Dump();
 
-extern void TVPTJS2EndDump();
+extern void EndTJS2Dump();
 
-extern void TVPOnError();
+extern void OnError();
 
-extern ttstr TVPGetImportantLog();
+extern ttstr GetImportantLog();
 
-extern void TVPSetLogLocation(const ttstr &loc);
+extern void SetLogLocation(const ttstr &loc);
 
-extern ttstr TVPNativeLogLocation;
+extern ttstr nativeLogLocation;
 
-extern void TVPStartLogToFile(bool clear);
+extern void StartLogToFile(bool clear);
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 // implement in each platform
 //---------------------------------------------------------------------------
-// extern void TVPOnErrorHook();
-// called from TVPOnError, on system error.
+// extern void OnErrorHook();
+// called from OnError, on system error.
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -84,23 +84,6 @@ extern tTJSNativeClass *TVPCreateNativeClass_Debug();
 } // namespace krkr::utils
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::utils::TVPAutoLogToFileOnError;
-using krkr::utils::TVPAutoClearLogOnError;
-using krkr::utils::TVPLoggingToFile;
-using krkr::utils::TVPSetOnLog;
-using krkr::utils::TVPClearLoggingHandlers;
-using krkr::utils::TVPAddLog;
-using krkr::utils::TVPAddImportantLog;
-using krkr::utils::TVPGetLastLog;
-using krkr::utils::TVPGetTJS2ConsoleOutputGateway;
-using krkr::utils::TVPGetTJS2DumpOutputGateway;
-using krkr::utils::TVPTJS2StartDump;
-using krkr::utils::TVPTJS2EndDump;
-using krkr::utils::TVPOnError;
-using krkr::utils::TVPGetImportantLog;
-using krkr::utils::TVPSetLogLocation;
-using krkr::utils::TVPNativeLogLocation;
-using krkr::utils::TVPStartLogToFile;
 using krkr::utils::tTJSNC_Debug;
 using krkr::utils::TVPCreateNativeClass_Debug;
 

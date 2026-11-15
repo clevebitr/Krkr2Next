@@ -543,7 +543,7 @@ static void TVPHeapDump()
     HANDLE heaps[100];
     DWORD c = ::GetProcessHeaps (100, heaps);
     TJS_sprintf( buff, 128, TJS_W("The process has %d heaps."), c );
-    TVPAddLog( buff );
+    krkr::utils::AddLog( buff );
 
     const HANDLE default_heap = ::GetProcessHeap();
     const HANDLE crt_heap = (HANDLE)_get_heap_handle();
@@ -602,13 +602,13 @@ static void TVPHeapDump()
             mes += ttstr((tjs_int)(i+1)) + TJS_W(" type: ") + type;
             if( isdefault ) mes += TJS_W(" [default]");
             if( isCRT ) mes += TJS_W(" [CRT]");
-            TVPAddLog( mes );
+            krkr::utils::AddLog( mes );
             TJS_sprintf( buff, 128, L"  Allocated: %d, size: %lld, overhead: %lld", use.count, use.total, use.overhead );
-            TVPAddLog( buff );
+            krkr::utils::AddLog( buff );
             TJS_sprintf( buff, 128, L"  Uncommitted: %d, size: %lld, overhead: %lld", uncommit.count, uncommit.total, uncommit.overhead );
-            TVPAddLog( buff );
+            krkr::utils::AddLog( buff );
             TJS_sprintf( buff, 128, L"  Unused: %d, size: %lld, overhead: %lld", unused.count, unused.total, unused.overhead );
-            TVPAddLog( buff );
+            krkr::utils::AddLog( buff );
         }
     }
 }
@@ -1012,9 +1012,9 @@ tTJSNativeClass *krkr::base::TVPCreateNativeClass_System() {
     //----------------------------------------------------------------------
     TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ getTickCount) {
         if(result) {
-            TVPStartTickCount();
+            krkr::utils::StartTickCount();
 
-            *result = (tjs_int64)TVPGetTickCount();
+            *result = (tjs_int64)krkr::utils::GetTickCount();
         }
         return TJS_S_OK;
     }

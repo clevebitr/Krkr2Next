@@ -14,19 +14,16 @@
 #include "tjsTypes.h"
 
 namespace krkr::utils {
-    TJS_EXP_FUNC_DEF(tjs_uint64, TVPGetTickCount, ());
+    TJS_EXP_FUNC_DEF(tjs_uint64, GetTickCount, ());
 
-    extern tjs_uint32 TVPGetRoughTickCount32();
+    extern tjs_uint32 GetRoughTickCount32();
 
-    extern void TVPStartTickCount();
-    // this must be called before TVPGetTickCount(), in main thread.
+    extern void StartTickCount();
+    // this must be called before GetTickCount(), in main thread.
     // this function can be called more than one time.
 
 } // namespace krkr::utils
 
 // TODO: 过渡兼容，迁移完成后删除
-using krkr::utils::TVPGetTickCount;
-using krkr::utils::TVPGetRoughTickCount32;
-using krkr::utils::TVPStartTickCount;
 
 #endif

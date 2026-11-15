@@ -1,23 +1,23 @@
 
 #include "tjsCommHead.h"
-#include "TVPTimer.h"
+#include "Timer.h"
 #include "TickCount.h"
 
 namespace krkr::utils {
 
-struct tTVPTimerImpl {
-    tTVPTimerImpl *Prev = nullptr, *Next = nullptr;
-    TVPTimer *pTimer = nullptr;
+struct TimerImpl {
+    TimerImpl *Prev = nullptr, *Next = nullptr;
+    Timer *pTimer = nullptr;
     uint32_t Index;
 
-    ~tTVPTimerImpl() {
+    ~TimerImpl() {
         if(Prev)
             Prev->Next = Next;
         if(Next)
             Next->Prev = Prev;
     }
 
-    void SetTimer(TVPTimer *p) { pTimer = p; }
+    void SetTimer(Timer *p) { pTimer = p; }
 
     void Kill() {
         if(Prev)
@@ -31,7 +31,7 @@ struct tTVPTimerImpl {
 
     void Set(int idx);
 
-    void Add(tTVPTimerImpl *p) {
+    void Add(TimerImpl *p) {
         p->Next = Next;
         Next = p;
         p->Prev = this;
@@ -40,7 +40,7 @@ struct tTVPTimerImpl {
     void FireNext();
 };
 
-static tTVPTimerImpl _timer_v1[256], _timer_v2[64], _timer_v3[64],
+static TimerImpl _timer_v1[256], _timer_v2[64], _timer_v3[64],
     _timer_v4[64], _timer_v5[64];
 
 static struct t_timer_idx {
@@ -56,14 +56,14 @@ static struct t_timer_idx {
     };
 
     t_timer_idx(uint32_t idx) : _idx(idx) {}
-} _timer_idx(TVPGetRoughTickCount32());
+} _timer_idx(GetRoughTickCount32());
 
-void tTVPTimerImpl::Set() {
+void TimerImpl::Set() {
     int interval = pTimer->GetInterval();
     Set(interval);
 }
 
-void tTVPTimerImpl::Set(int idx) {
+void TimerImpl::Set(int idx) {
     idx += _timer_idx._idx_v1;
     Index = idx;
     if(idx < 256) {
@@ -93,10 +93,10 @@ void tTVPTimerImpl::Set(int idx) {
     _timer_v5[idx].Add(this);
 }
 
-static tTVPTimerImpl _processedTimer;
+static TimerImpl _processedTimer;
 
-void tTVPTimerImpl::FireNext() {
-    tTVPTimerImpl *p = Next;
+void TimerImpl::FireNext() {
+    TimerImpl *p = Next;
     if(!p)
         return;
     Next = nullptr;
@@ -108,18 +108,18 @@ void tTVPTimerImpl::FireNext() {
     // 	p->Set(interval);
 }
 
-void TVPTimer::ProgressAllTimer() {
-    uint32_t curTick = TVPGetRoughTickCount32();
+void Timer::ProgressAllTimer() {
+    uint32_t curTick = GetRoughTickCount32();
     int past = curTick - _timer_idx._idx;
     for(int i = 0; i < past; ++i) {
         _timer_v1[_timer_idx._idx_v1].FireNext();
         ++_timer_idx._idx;
         if(_timer_idx._idx_v1 == 0) { // v2 step
-            tTVPTimerImpl *root = &_timer_v2[_timer_idx._idx_v2];
-            tTVPTimerImpl *p = root->Next;
+            TimerImpl *root = &_timer_v2[_timer_idx._idx_v2];
+            TimerImpl *p = root->Next;
             root->Next = nullptr;
             while(p) {
-                tTVPTimerImpl *next = p->Next;
+                TimerImpl *next = p->Next;
                 p->Next = nullptr;
                 p->Index &= 255;
                 _timer_v1[p->Index].Add(p);
@@ -127,11 +127,11 @@ void TVPTimer::ProgressAllTimer() {
             }
         }
         if(_timer_idx._idx_v2 == 0) { // v3 step
-            tTVPTimerImpl *root = &_timer_v3[_timer_idx._idx_v3];
-            tTVPTimerImpl *p = root->Next;
+            TimerImpl *root = &_timer_v3[_timer_idx._idx_v3];
+            TimerImpl *p = root->Next;
             root->Next = nullptr;
             while(p) {
-                tTVPTimerImpl *next = p->Next;
+                TimerImpl *next = p->Next;
                 p->Next = nullptr;
                 int idx = p->Index >> 8;
                 p->Index &= 255 | (63 << 8);
@@ -140,11 +140,11 @@ void TVPTimer::ProgressAllTimer() {
             }
         }
         if(_timer_idx._idx_v3 == 0) { // v4 step
-            tTVPTimerImpl *root = &_timer_v4[_timer_idx._idx_v4];
-            tTVPTimerImpl *p = root->Next;
+            TimerImpl *root = &_timer_v4[_timer_idx._idx_v4];
+            TimerImpl *p = root->Next;
             root->Next = nullptr;
             while(p) {
-                tTVPTimerImpl *next = p->Next;
+                TimerImpl *next = p->Next;
                 p->Next = nullptr;
                 int idx = p->Index >> (8 + 6);
                 p->Index &= 255 | (63 << 8) | (63 << (8 + 6));
@@ -153,11 +153,11 @@ void TVPTimer::ProgressAllTimer() {
             }
         }
         if(_timer_idx._idx_v4 == 0) { // v5 step
-            tTVPTimerImpl *root = &_timer_v5[_timer_idx._idx_v5];
-            tTVPTimerImpl *p = root->Next;
+            TimerImpl *root = &_timer_v5[_timer_idx._idx_v5];
+            TimerImpl *p = root->Next;
             root->Next = nullptr;
             while(p) {
-                tTVPTimerImpl *next = p->Next;
+                TimerImpl *next = p->Next;
                 p->Next = nullptr;
                 int idx = p->Index >> (8 + 6 + 6);
                 p->Index &=
@@ -167,28 +167,28 @@ void TVPTimer::ProgressAllTimer() {
             }
         }
     }
-    tTVPTimerImpl *p = _processedTimer.Next;
+    TimerImpl *p = _processedTimer.Next;
     _processedTimer.Next = nullptr;
     while(p) {
-        tTVPTimerImpl *next = p->Next;
+        TimerImpl *next = p->Next;
         p->Next = nullptr;
         p->Set();
         p = next;
     }
 }
 
-TVPTimer::TVPTimer() : event_(nullptr), interval_(1000), enabled_(true) {
-    impl_ = new tTVPTimerImpl;
+Timer::Timer() : event_(nullptr), interval_(1000), enabled_(true) {
+    impl_ = new TimerImpl;
     impl_->pTimer = this;
 }
 
-TVPTimer::~TVPTimer() {
+Timer::~Timer() {
     delete impl_;
 
     delete event_;
 }
 
-void TVPTimer::UpdateTimer() {
+void Timer::UpdateTimer() {
     impl_->Kill();
     if(interval_ > 0 && enabled_ && event_ != nullptr) {
         impl_->Set();

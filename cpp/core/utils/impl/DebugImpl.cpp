@@ -18,7 +18,7 @@ namespace krkr::utils {
 //---------------------------------------------------------------------------
 // on-error hook
 //---------------------------------------------------------------------------
-void TVPOnErrorHook() {
+void OnErrorHook() {
     //	if(TVPMainForm) TVPMainForm->NotifySystemError();
 }
 //---------------------------------------------------------------------------
@@ -70,7 +70,7 @@ TJS_END_NATIVE_MEMBERS
 }
 
 //---------------------------------------------------------------------------
-static iTJSDispatch2 *TVPGetControllerClass() {
+static iTJSDispatch2 *GetControllerClass() {
     struct tClassHolder {
         iTJSDispatch2 *Object;
 
@@ -133,7 +133,7 @@ TJS_END_NATIVE_MEMBERS
 }
 
 //---------------------------------------------------------------------------
-static iTJSDispatch2 *TVPGetConsoleClass() {
+static iTJSDispatch2 *GetConsoleClass() {
     struct tClassHolder {
         iTJSDispatch2 *Object;
 
@@ -158,7 +158,7 @@ tTJSNativeClass *TVPCreateNativeClass_Debug() {
 
     //----------------------------------------------------------------------
     TJS_BEGIN_NATIVE_PROP_DECL(controller){ TJS_BEGIN_NATIVE_PROP_GETTER{
-        iTJSDispatch2 *dsp = TVPGetControllerClass();
+        iTJSDispatch2 *dsp = GetControllerClass();
     *result = tTJSVariant(dsp, dsp);
     dsp->Release();
     return TJS_S_OK;
@@ -170,7 +170,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, controller)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(console){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ iTJSDispatch2 *dsp = TVPGetConsoleClass();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ iTJSDispatch2 *dsp = GetConsoleClass();
 *result = tTJSVariant(dsp, dsp);
 dsp->Release();
 return TJS_S_OK;

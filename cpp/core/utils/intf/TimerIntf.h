@@ -12,17 +12,17 @@
 #define TimerIntfH
 
 #include "tjsNative.h"
-#include "AsyncTriggerMode.h" // tTVPAsyncTriggerMode（krkr::utils）
+#include "AsyncTriggerMode.h" // AsyncTriggerMode（krkr::utils）
 
 namespace krkr::utils {
 
 // the timer has sub-milliseconds precision by fixed-point real.
-#define TVP_SUBMILLI_FRAC_BITS 16
+#define KRKR_SUBMILLI_FRAC_BITS 16
 
 //---------------------------------------------------------------------------
 // global variables
 //---------------------------------------------------------------------------
-extern bool TVPLimitTimerCapacity;
+extern bool limitTimerCapacity;
 // limit timer capacity to one
 //---------------------------------------------------------------------------
 
@@ -38,7 +38,7 @@ protected:
     tjs_uint16 Counter; // serial number for event tag
     tjs_int Capacity; // max queue size for this timer object
     ttstr ActionName;
-    tTVPAsyncTriggerMode Mode; // trigger mode
+    AsyncTriggerMode Mode; // trigger mode
 
 public:
     tTJSNI_BaseTimer();
@@ -66,9 +66,9 @@ public:
 
     void SetCapacity(tjs_int c) { Capacity = c; }
 
-    [[nodiscard]] tTVPAsyncTriggerMode GetMode() const { return Mode; }
+    [[nodiscard]] AsyncTriggerMode GetMode() const { return Mode; }
 
-    void SetMode(tTVPAsyncTriggerMode mode) { Mode = mode; }
+    void SetMode(AsyncTriggerMode mode) { Mode = mode; }
 };
 //---------------------------------------------------------------------------
 
@@ -109,7 +109,6 @@ extern tTJSNativeClass *TVPCreateNativeClass_Timer();
 } // namespace krkr::utils
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::utils::TVPLimitTimerCapacity;
 using krkr::utils::tTJSNI_BaseTimer;
 // tTJSNI_Timer 由 TimerImpl.h 导出（TimerIntf.h 会 include 它）
 using krkr::utils::tTJSNC_Timer;

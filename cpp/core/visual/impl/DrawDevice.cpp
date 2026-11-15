@@ -765,25 +765,25 @@ bool tTVPDrawDevice::SwitchToFullScreen(int window, tjs_uint w, tjs_uint h,
 		success = true;
 		break;
 	case DISP_CHANGE_RESTART:
-		TVPAddLog( (const tjs_char*)TVPChangeDisplaySettingsFailedDispChangeRestart );
+		krkr::utils::AddLog( (const tjs_char*)TVPChangeDisplaySettingsFailedDispChangeRestart );
 		break;
 	case DISP_CHANGE_BADFLAGS:
-		TVPAddLog( (const tjs_char*)TVPChangeDisplaySettingsFailedDispChangeBadFlags );
+		krkr::utils::AddLog( (const tjs_char*)TVPChangeDisplaySettingsFailedDispChangeBadFlags );
 		break;
 	case DISP_CHANGE_BADPARAM:
-		TVPAddLog( (const tjs_char*)TVPChangeDisplaySettingsFailedDispChangeBadParam );
+		krkr::utils::AddLog( (const tjs_char*)TVPChangeDisplaySettingsFailedDispChangeBadParam );
 		break;
 	case DISP_CHANGE_FAILED:
-		TVPAddLog( (const tjs_char*)TVPChangeDisplaySettingsFailedDispChangeFailed );
+		krkr::utils::AddLog( (const tjs_char*)TVPChangeDisplaySettingsFailedDispChangeFailed );
 		break;
 	case DISP_CHANGE_BADMODE:
-		TVPAddLog( (const tjs_char*)TVPChangeDisplaySettingsFailedDispChangeBadMode );
+		krkr::utils::AddLog( (const tjs_char*)TVPChangeDisplaySettingsFailedDispChangeBadMode );
 		break;
 	case DISP_CHANGE_NOTUPDATED:
- 		TVPAddLog( (const tjs_char*)TVPChangeDisplaySettingsFailedDispChangeNotUpdated );
+ 		krkr::utils::AddLog( (const tjs_char*)TVPChangeDisplaySettingsFailedDispChangeNotUpdated );
 		break;
 	default:
-		TVPAddLog( TVPFormatMessage(TVPChangeDisplaySettingsFailedUnknownReason,ttstr((tjs_int)ret)) );
+		krkr::utils::AddLog( TVPFormatMessage(TVPChangeDisplaySettingsFailedUnknownReason,ttstr((tjs_int)ret)) );
 		break;
 	}
 	return success;

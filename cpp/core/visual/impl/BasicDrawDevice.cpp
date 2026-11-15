@@ -292,9 +292,9 @@ bool tTVPBasicDrawDevice::CreateTexture() {
 			TextureHeight = dwHeight;
 
 			if( dwWidth > d3dcaps.MaxTextureWidth || dwHeight > d3dcaps.MaxTextureHeight ) {
-				TVPAddLog( (const tjs_char*)TVPWarningImageSizeTooLargeMayBeCannotCreateTexture );
+				krkr::utils::AddLog( (const tjs_char*)TVPWarningImageSizeTooLargeMayBeCannotCreateTexture );
 			}
-			TVPAddLog( (const tjs_char*)TVPUsePowerOfTwoSurface );
+			krkr::utils::AddLog( (const tjs_char*)TVPUsePowerOfTwoSurface );
 		} else {
 			dwWidth = TextureWidth;
 			dwHeight = TextureHeight;
@@ -333,10 +333,10 @@ void tTVPBasicDrawDevice::EnsureDevice()
 				InvalidateAll();
 			}
 		} catch(const eTJS & e) {
-			TVPAddImportantLog( TVPFormatMessage(TVPBasicDrawDeviceFailedToCreateDirect3DDevice,e.GetMessage()) );
+			krkr::utils::AddImportantLog( TVPFormatMessage(TVPBasicDrawDeviceFailedToCreateDirect3DDevice,e.GetMessage()) );
 			DestroyD3DDevice();
 		} catch(...) {
-			TVPAddImportantLog( (const tjs_char*)TVPBasicDrawDeviceFailedToCreateDirect3DDeviceUnknownReason );
+			krkr::utils::AddImportantLog( (const tjs_char*)TVPBasicDrawDeviceFailedToCreateDirect3DDeviceUnknownReason );
 			DestroyD3DDevice();
 		}
 	}
@@ -369,108 +369,108 @@ void tTVPBasicDrawDevice::TryRecreateWhenDeviceLost()
 void tTVPBasicDrawDevice::ErrorToLog( HRESULT hr ) {
 	switch( hr ) {
 	case D3DERR_DEVICELOST:
-		TVPAddLog( (const tjs_char*)TVPD3dErrDeviceLost );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrDeviceLost );
 		break;
 	case D3DERR_DRIVERINTERNALERROR:
-		TVPAddLog( (const tjs_char*)TVPD3dErrDriverIinternalError );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrDriverIinternalError );
 		break;
 	case D3DERR_INVALIDCALL:
-		TVPAddLog( (const tjs_char*)TVPD3dErrInvalidCall );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrInvalidCall );
 		break;
 	case D3DERR_OUTOFVIDEOMEMORY:
-		TVPAddLog( (const tjs_char*)TVPD3dErrOutOfVideoMemory );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrOutOfVideoMemory );
 		break;
 	case E_OUTOFMEMORY:
-		TVPAddLog( (const tjs_char*)TVPD3dErrOutOfMemory );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrOutOfMemory );
 		break;
 	case D3DERR_WRONGTEXTUREFORMAT:
-		TVPAddLog( (const tjs_char*)TVPD3dErrWrongTextureFormat );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrWrongTextureFormat );
 		break;
 	case D3DERR_UNSUPPORTEDCOLOROPERATION:
-		TVPAddLog( (const tjs_char*)TVPD3dErrUnsuportedColorOperation );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrUnsuportedColorOperation );
 		break;
 	case D3DERR_UNSUPPORTEDCOLORARG:
-		TVPAddLog( (const tjs_char*)TVPD3dErrUnsuportedColorArg );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrUnsuportedColorArg );
 		break;
 	case D3DERR_UNSUPPORTEDALPHAOPERATION:
-		TVPAddLog( (const tjs_char*)TVPD3dErrUnsuportedAalphtOperation );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrUnsuportedAalphtOperation );
 		break;
 	case D3DERR_UNSUPPORTEDALPHAARG:
-		TVPAddLog( (const tjs_char*)TVPD3dErrUnsuportedAlphaArg );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrUnsuportedAlphaArg );
 		break;
 	case D3DERR_TOOMANYOPERATIONS:
-		TVPAddLog( (const tjs_char*)TVPD3dErrTooManyOperations );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrTooManyOperations );
 		break;
 	case D3DERR_CONFLICTINGTEXTUREFILTER:
-		TVPAddLog( (const tjs_char*)TVPD3dErrConflictioningTextureFilter );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrConflictioningTextureFilter );
 		break;
 	case D3DERR_UNSUPPORTEDFACTORVALUE:
-		TVPAddLog( (const tjs_char*)TVPD3dErrUnsuportedFactorValue );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrUnsuportedFactorValue );
 		break;
 	case D3DERR_CONFLICTINGRENDERSTATE:
-		TVPAddLog( (const tjs_char*)TVPD3dErrConflictioningRenderState );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrConflictioningRenderState );
 		break;
 	case D3DERR_UNSUPPORTEDTEXTUREFILTER:
-		TVPAddLog( (const tjs_char*)TVPD3dErrUnsupportedTextureFilter );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrUnsupportedTextureFilter );
 		break;
 	case D3DERR_CONFLICTINGTEXTUREPALETTE:
-		TVPAddLog( (const tjs_char*)TVPD3dErrConflictioningTexturePalette );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrConflictioningTexturePalette );
 		break;
 	case D3DERR_NOTFOUND:
-		TVPAddLog( (const tjs_char*)TVPD3dErrNotFound );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrNotFound );
 		break;
 	case D3DERR_MOREDATA:
-		TVPAddLog( (const tjs_char*)TVPD3dErrMoreData );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrMoreData );
 		break;
 	case D3DERR_DEVICENOTRESET:
-		TVPAddLog( (const tjs_char*)TVPD3dErrDeviceNotReset );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrDeviceNotReset );
 		break;
 	case D3DERR_NOTAVAILABLE:
-		TVPAddLog( (const tjs_char*)TVPD3dErrNotAvailable );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrNotAvailable );
 		break;
 	case D3DERR_INVALIDDEVICE:
-		TVPAddLog( (const tjs_char*)TVPD3dErrInvalidDevice );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrInvalidDevice );
 		break;
 	case D3DERR_DRIVERINVALIDCALL:
-		TVPAddLog( (const tjs_char*)TVPD3dErrDriverInvalidCall );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrDriverInvalidCall );
 		break;
 	case D3DERR_WASSTILLDRAWING:
-		TVPAddLog( (const tjs_char*)TVPD3dErrWasStillDrawing );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrWasStillDrawing );
 		break;
 	case D3DERR_DEVICEHUNG:
-		TVPAddLog( (const tjs_char*)TVPD3dErrDeviceHung );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrDeviceHung );
 		break;
 	case D3DERR_UNSUPPORTEDOVERLAY:
-		TVPAddLog( (const tjs_char*)TVPD3dErrUnsupportedOverlay );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrUnsupportedOverlay );
 		break;
 	case D3DERR_UNSUPPORTEDOVERLAYFORMAT:
-		TVPAddLog( (const tjs_char*)TVPD3dErrUnsupportedOverlayFormat );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrUnsupportedOverlayFormat );
 		break;
 	case D3DERR_CANNOTPROTECTCONTENT:
-		TVPAddLog( (const tjs_char*)TVPD3dErrCannotProtectContent );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrCannotProtectContent );
 		break;
 	case D3DERR_UNSUPPORTEDCRYPTO:
-		TVPAddLog( (const tjs_char*)TVPD3dErrUnsupportedCrypto );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrUnsupportedCrypto );
 		break;
 	case D3DERR_PRESENT_STATISTICS_DISJOINT:
-		TVPAddLog( (const tjs_char*)TVPD3dErrPresentStatisticsDisJoint );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrPresentStatisticsDisJoint );
 		break;
 	case D3DERR_DEVICEREMOVED:
-		TVPAddLog( (const tjs_char*)TVPD3dErrDeviceRemoved );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrDeviceRemoved );
 		break;
 	case D3D_OK:
 		break;
 	case D3DOK_NOAUTOGEN:
-		TVPAddLog( (const tjs_char*)TVPD3dOkNoAutoGen );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dOkNoAutoGen );
 		break;
 	case E_FAIL:
-		TVPAddLog( (const tjs_char*)TVPD3dErrFail );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrFail );
 		break;
 	case E_INVALIDARG:
-		TVPAddLog( (const tjs_char*)TVPD3dErrInvalidArg );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dErrInvalidArg );
 		break;
 	default:
-		TVPAddLog( (const tjs_char*)TVPD3dUnknownError );
+		krkr::utils::AddLog( (const tjs_char*)TVPD3dUnknownError );
 		break;
 	}
 }
@@ -516,10 +516,10 @@ void tTVPBasicDrawDevice::SetDestRectangle(const tTVPRect &rect) {
 		try {
 			EnsureDevice();
 		} catch(const eTJS & e) {
-			TVPAddImportantLog( TVPFormatMessage(TVPBasicDrawDeviceFailedToCreateDirect3DDevices,e.GetMessage() ) );
+			krkr::utils::AddImportantLog( TVPFormatMessage(TVPBasicDrawDeviceFailedToCreateDirect3DDevices,e.GetMessage() ) );
 			success = false;
 		} catch(...) {
-			TVPAddImportantLog( (const tjs_char*)TVPBasicDrawDeviceFailedToCreateDirect3DDevicesUnknownReason );
+			krkr::utils::AddImportantLog( (const tjs_char*)TVPBasicDrawDeviceFailedToCreateDirect3DDevicesUnknownReason );
 			success = false;
 		}
 		if( success == false ) {
@@ -576,7 +576,7 @@ void tTVPBasicDrawDevice::Show() {
 		TryRecreateWhenDeviceLost();
 	} else if(hr != D3D_OK) {
 		ErrorToLog( hr );
-		TVPAddImportantLog( TVPFormatMessage(TVPBasicDrawDeviceInfDirect3DDevicePresentFailed,TJSInt32ToHex(hr, 8)) );
+		krkr::utils::AddImportantLog( TVPFormatMessage(TVPBasicDrawDeviceInfDirect3DDevicePresentFailed,TJSInt32ToHex(hr, 8)) );
 	}
 #endif
 }
@@ -627,7 +627,7 @@ void tTVPBasicDrawDevice::StartBitmapCompletion(iTVPLayerManager *manager) {
 
 	if( Texture && TargetWindow ) {
 		if(TextureBuffer) {
-			TVPAddImportantLog( (const tjs_char*)TVPBasicDrawDeviceTextureHasAlreadyBeenLocked );
+			krkr::utils::AddImportantLog( (const tjs_char*)TVPBasicDrawDeviceTextureHasAlreadyBeenLocked );
 			Texture->UnlockRect(0), TextureBuffer = nullptr;
 		}
 
@@ -794,19 +794,19 @@ got_error:
 	} else if(hr == D3DERR_DEVICENOTRESET ) {
 		hr = Direct3DDevice->Reset(&D3dPP);
 		if( hr == D3DERR_DEVICELOST ) {
-			TVPAddLog( (const tjs_char*)TVPD3dErrDeviceLost );
+			krkr::utils::AddLog( (const tjs_char*)TVPD3dErrDeviceLost );
 			TryRecreateWhenDeviceLost();
 		} else if( hr == D3DERR_DRIVERINTERNALERROR ) {
-			TVPAddLog( (const tjs_char*)TVPD3dErrDriverIinternalError );
+			krkr::utils::AddLog( (const tjs_char*)TVPD3dErrDriverIinternalError );
 			TryRecreateWhenDeviceLost();
 		} else if( hr == D3DERR_INVALIDCALL ) {
-			TVPAddLog( (const tjs_char*)TVPD3dErrInvalidCall );
+			krkr::utils::AddLog( (const tjs_char*)TVPD3dErrInvalidCall );
 			TryRecreateWhenDeviceLost();
 		} else if( hr  == D3DERR_OUTOFVIDEOMEMORY ) {
-			TVPAddLog( (const tjs_char*)TVPD3dErrOutOfVideoMemory );
+			krkr::utils::AddLog( (const tjs_char*)TVPD3dErrOutOfVideoMemory );
 			TryRecreateWhenDeviceLost();
 		} else if( hr == E_OUTOFMEMORY  ) {
-			TVPAddLog( (const tjs_char*)TVPD3dErrOutOfMemory );
+			krkr::utils::AddLog( (const tjs_char*)TVPD3dErrOutOfMemory );
 			TryRecreateWhenDeviceLost();
 		} else if( hr == D3D_OK ) {
 			if( FAILED( hr = InitializeDirect3DState() ) ) {
@@ -820,7 +820,7 @@ got_error:
 		}
 	} else if(hr != D3D_OK) {
 		ErrorToLog( hr );
-		TVPAddImportantLog( TVPFormatMessage(TVPBasicDrawDeviceInfPolygonDrawingFailed,TJSInt32ToHex(hr, 8)) );
+		krkr::utils::AddImportantLog( TVPFormatMessage(TVPBasicDrawDeviceInfPolygonDrawingFailed,TJSInt32ToHex(hr, 8)) );
 	}
 #endif
 }

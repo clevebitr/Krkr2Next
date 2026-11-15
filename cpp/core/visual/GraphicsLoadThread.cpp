@@ -88,7 +88,7 @@ static void TVPLoadGraphicAsync_MetaInfoPushCallback(void *callbackdata,
 //---------------------------------------------------------------------------
 
 tTVPAsyncImageLoader::tTVPAsyncImageLoader() :
-    EventQueue(this, &tTVPAsyncImageLoader::Proc), tTVPThread(true) {
+    EventQueue(this, &tTVPAsyncImageLoader::Proc), krkr::utils::Thread(true) {
     EventQueue.Allocate();
 }
 tTVPAsyncImageLoader::~tTVPAsyncImageLoader() {

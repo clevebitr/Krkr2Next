@@ -10,7 +10,7 @@
 
 class BasicAllocator : public iTVPMemoryAllocator {
 public:
-    BasicAllocator() { TVPAddLog(TJS_W("(info) Use malloc for Bitmap")); }
+    BasicAllocator() { krkr::utils::AddLog(TJS_W("(info) Use malloc for Bitmap")); }
     void *allocate(size_t size) override { return malloc(size); }
     void free(void *mem) override { ::free(mem); }
 };
@@ -18,7 +18,7 @@ public:
 #ifdef TVP_USE_MMAP_TEMP
 class MmapAllocator : public iTVPMemoryAllocator {
 public:
-    MmapAllocator() { TVPAddLog(TJS_W("(info) Use mmap for Bitmap")); }
+    MmapAllocator() { krkr::utils::AddLog(TJS_W("(info) Use mmap for Bitmap")); }
     void *allocate(size_t size) override { return TVPMmapAlloc(size); }
     void free(void *mem) override { TVPMmapFree(mem); }
 };
@@ -28,7 +28,7 @@ class GlobalAllocAllocator : public iTVPMemoryAllocator
 {
 public:
 	GlobalAllocAllocator() {
-		TVPAddLog( TJS_W("(info) Use GlobalAlloc allocater for Bitmap") );
+		krkr::utils::AddLog( TJS_W("(info) Use GlobalAlloc allocater for Bitmap") );
 	}
 	void* allocate( size_t size ) { return GlobalAlloc(GMEM_FIXED,size); }
 	void free( void* mem ) { GlobalFree((HGLOBAL)mem ); }
@@ -84,7 +84,7 @@ public:
 			ULONG HeapInformation = 2;
 			BOOL lfhenable = ::HeapSetInformation( HeapHandle, HeapCompatibilityInformation, &HeapInformation, sizeof(HeapInformation) );
 		}
-		TVPAddLog( TJS_W("(info) Use separate heap allocater for Bitmap") );
+		krkr::utils::AddLog( TJS_W("(info) Use separate heap allocater for Bitmap") );
 	}
 	virtual ~HeapAllocAllocator() {
 		if( HeapHandle ) ::HeapDestroy(HeapHandle);

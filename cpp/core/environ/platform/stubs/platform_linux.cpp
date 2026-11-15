@@ -9,7 +9,7 @@
  *
  * 本文件为 Linux 提供这些平台函数的实现：
  *  - 文件操作（TVP_stat/TVP_utime/TVPCreateFolders/krkr::io::WriteDataToFile）
- *  - 时钟（TVPGetRoughTickCount32）
+ *  - 时钟（krkr::utils::GetRoughTickCount32）
  *  - 内存信息（用 /proc 解析）
  *  - 应用生命周期（TVPExitApplication 等）
  *  - UI 桩（无头环境，TVPShow* 仅打日志并返回默认值）
@@ -143,7 +143,7 @@ bool TVP_utime(const char *name, time_t modtime) {
 
 namespace krkr::utils
 {
-    tjs_uint32 TVPGetRoughTickCount32() {
+    tjs_uint32 krkr::utils::GetRoughTickCount32() {
     tjs_uint32 uptime = 0;
     timespec on{};
     if(clock_gettime(CLOCK_MONOTONIC, &on) == 0)

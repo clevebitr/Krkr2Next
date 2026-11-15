@@ -82,7 +82,7 @@ int CThread::entry() {
     Process();
     OnExit();
     m_bRunning = false;
-    TVPOnThreadExited();
+    krkr::utils::OnThreadExited();
     return 0;
 }
 

@@ -79,7 +79,7 @@ public:
         tjs_error r =
             objthis->PropSet(0, TJS_W("useVisBuffer"), nullptr, &val, objthis);
         if(r != TJS_S_OK)
-            TVPAddLog(ttstr(TJS_W("useVisBuffer=1 failed: ")) + ttstr(r));
+            krkr::utils::AddLog(ttstr(TJS_W("useVisBuffer=1 failed: ")) + ttstr(r));
 
         // getVisBuffer用の引数を作る
         vBuffer = (tTVInteger)buf;
@@ -107,7 +107,7 @@ public:
                                         &result, 4, params, objthis);
 
         if(r != TJS_S_OK)
-            TVPAddLog(ttstr(TJS_W("getVisBuffer failed: ")) + ttstr(r));
+            krkr::utils::AddLog(ttstr(TJS_W("getVisBuffer failed: ")) + ttstr(r));
 
         int cnt = (int)result.AsInteger();
         if(cnt > counts || cnt < 0)

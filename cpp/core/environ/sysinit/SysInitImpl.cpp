@@ -117,12 +117,12 @@ void TVPDumpHWException() {
 
 //---------------------------------------------------------------------------
 static void TVPInitRandomGenerator() {
-    tjs_uint32 tick = TVPGetRoughTickCount32();
-    TVPPushEnvironNoise(&tick, sizeof(tick));
+    tjs_uint32 tick = krkr::utils::GetRoughTickCount32();
+    krkr::utils::PushEnvironNoise(&tick, sizeof(tick));
     std::thread::id tid = std::this_thread::get_id();
-    TVPPushEnvironNoise(&tid, sizeof(tid));
+    krkr::utils::PushEnvironNoise(&tid, sizeof(tid));
     time_t curtime = time(nullptr);
-    TVPPushEnvironNoise(&curtime, sizeof(curtime));
+    krkr::utils::PushEnvironNoise(&curtime, sizeof(curtime));
 }
 //---------------------------------------------------------------------------
 
@@ -179,7 +179,7 @@ void krkr::base::TVPBeforeSystemInit() {
     {
         TVPMemoryInfo meminf;
         TVPGetMemoryInfo(meminf);
-        TVPPushEnvironNoise(&meminf, sizeof(meminf));
+        krkr::utils::PushEnvironNoise(&meminf, sizeof(meminf));
 
         TVPTotalPhysMemory = meminf.MemTotal * 1024;
         if(TVPTotalPhysMemory > 768 * 1024 * 1024) {
@@ -189,7 +189,7 @@ void krkr::base::TVPBeforeSystemInit() {
             TVPTotalPhysMemory /= 2; // use half memory in small memory devices
         }
 
-        TVPAddImportantLog(TVPFormatMessage(TVPInfoTotalPhysicalMemory,
+        krkr::utils::AddImportantLog(TVPFormatMessage(TVPInfoTotalPhysicalMemory,
                                             tjs_int64(TVPTotalPhysMemory)));
         if(TVPTotalPhysMemory > 256 * 1024 * 1024) {
             std::string str =
@@ -602,11 +602,11 @@ void TVPEnsureDataPathDirectory() {
         // ensure data path existence
         if(!krkr::io::CheckExistentLocalFolder(TVPNativeDataPath.c_str())) {
             if(TVPCreateFolders(TVPNativeDataPath.c_str()))
-                TVPAddImportantLog(
+                krkr::utils::AddImportantLog(
                     TVPFormatMessage(TVPInfoDataPathDoesNotExistTryingToMakeIt,
                                      (const tjs_char *)TVPOk));
             else
-                TVPAddImportantLog(
+                krkr::utils::AddImportantLog(
                     TVPFormatMessage(TVPInfoDataPathDoesNotExistTryingToMakeIt,
                                      (const tjs_char *)TVPFaild));
         }
@@ -689,10 +689,10 @@ static void TVPInitProgramArgumentsAndDataPath(bool stop_after_datapath_got) {
 
         // set data path
         TVPDataPath = krkr::io::NormalizeStorageName(TVPNativeDataPath);
-        TVPAddImportantLog(TVPFormatMessage(TVPInfoDataPath, TVPDataPath));
+        krkr::utils::AddImportantLog(TVPFormatMessage(TVPInfoDataPath, TVPDataPath));
 
         // set log output directory
-        TVPSetLogLocation(TVPNativeDataPath);
+        krkr::utils::SetLogLocation(TVPNativeDataPath);
 
         // merge early-set options (from engine_set_option before init)
         for(auto it = TVPEarlySetOptions.rbegin();
@@ -720,7 +720,7 @@ static void TVPDumpOptions() {
     } else {
         options += (const tjs_char *)TVPNone;
     }
-    TVPAddImportantLog(options);
+    krkr::utils::AddImportantLog(options);
 }
 
 //---------------------------------------------------------------------------

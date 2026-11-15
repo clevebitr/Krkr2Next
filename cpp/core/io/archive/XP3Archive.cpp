@@ -375,7 +375,7 @@ bool GetXP3ArchiveOffset(tTJSBinaryStream *st, const ttstr name,
                 msg.printf("(info) Decoy XP3 header detected; archive base "
                            "offset = %u",
                            (unsigned)real);
-                TVPAddLog(msg);
+                krkr::utils::AddLog(msg);
             }
         }
     } else {
@@ -468,7 +468,7 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
     static const tjs_uint8 cn_adlr[] = { 0x61 /*'a'*/, 0x64 /*'d'*/,
                                          0x6c /*'l'*/, 0x72 /*'r'*/ };
 
-    TVPAddLog(TVPFormatMessage(
+    krkr::utils::AddLog(TVPFormatMessage(
         TVPInfoTryingToReadXp3VirtualFileSystemInformationFrom, ArchiveName));
 
     int segmentcount = 0;
@@ -678,10 +678,10 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                 UseBuiltinCxDecoder =
                     ActivateBuiltinXP3CxDecoder(item.FileHash);
                 if(UseBuiltinCxDecoder)
-                    TVPAddImportantLog(
+                    krkr::utils::AddImportantLog(
                         TJS_W("(info) Activated built-in XP3 Cx decoder"));
             } else {
-                TVPAddImportantLog(
+                krkr::utils::AddImportantLog(
                     TJS_W("(info) Protected XP3 payload is already decoded; "
                           "skipped built-in Cx decoder"));
             }
@@ -696,14 +696,14 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
         if(indexdata)
             delete[] indexdata;
         delete st;
-        TVPAddLog((const tjs_char *)TVPInfoFailed);
+        krkr::utils::AddLog((const tjs_char *)TVPInfoFailed);
         throw;
     }
     if(indexdata)
         delete[] indexdata;
     delete st;
 
-    TVPAddLog(TVPFormatMessage(TVPInfoDoneWithContains, ttstr(Count),
+    krkr::utils::AddLog(TVPFormatMessage(TVPInfoDoneWithContains, ttstr(Count),
                                ttstr(segmentcount)));
 }
 

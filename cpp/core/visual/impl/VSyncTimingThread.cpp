@@ -12,7 +12,7 @@
 
 //---------------------------------------------------------------------------
 tTVPVSyncTimingThread::tTVPVSyncTimingThread(tTJSNI_Window *owner) :
-    tTVPThread(true), EventQueue(this, &tTVPVSyncTimingThread::Proc),
+    krkr::utils::Thread(true), EventQueue(this, &tTVPVSyncTimingThread::Proc),
     OwnerWindow(owner) {
     SleepTime = 1;
     LastVBlankTick = 0;
@@ -159,12 +159,12 @@ void tTVPVSyncTimingThread::MeasureVSyncInterval() {
     else
         vsync_interval = 0;
 
-    TVPAddLog(TVPFormatMessage(TVPRoughVsyncIntervalReadFromApi,
+    krkr::utils::AddLog(TVPFormatMessage(TVPRoughVsyncIntervalReadFromApi,
                                ttstr((int)vsync_interval)));
 
     // vsync 周期は適切っぽい？
     if(vsync_interval < 6 || vsync_interval > 66) {
-        TVPAddLog((const tjs_char *)TVPRoughVsyncIntervalStillSeemsWrong);
+        krkr::utils::AddLog((const tjs_char *)TVPRoughVsyncIntervalStillSeemsWrong);
         vsync_interval = 16;
     }
 

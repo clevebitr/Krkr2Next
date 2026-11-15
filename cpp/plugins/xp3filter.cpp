@@ -435,7 +435,7 @@ static XP3FilterDecoder *FetchXP3Decoder() {
     static bool Inited = false;
     if(!Inited) {
         Inited = true;
-        TVPAddOnThreadExitEvent([]() {
+        krkr::utils::AddOnThreadExitEvent([]() {
             std::lock_guard<std::mutex> lk(_decoders_mtx);
             auto it = _thread_decoders.find(std::this_thread::get_id());
             if(it != _thread_decoders.end()) {

@@ -1137,7 +1137,7 @@ void SaveTLG6(tTJSBinaryStream *stream, const iTVPBaseBitmap *bmp, bool is24) {
                     // left).
 
                     wp = 0;
-                    tjs_uint32 reorderstart = TVPGetRoughTickCount32();
+                    tjs_uint32 reorderstart = krkr::utils::GetRoughTickCount32();
                     for(int yy = y; yy < ylim; yy++) {
                         int ofs;
                         if(!(xp & 1))
@@ -1174,7 +1174,7 @@ void SaveTLG6(tTJSBinaryStream *stream, const iTVPBaseBitmap *bmp, bool is24) {
                             }
                         }
                     }
-                    reordertick += TVPGetRoughTickCount32() - reorderstart;
+                    reordertick += krkr::utils::GetRoughTickCount32() - reorderstart;
                 }
 
                 for(int p = 0; p < 2; p++) {

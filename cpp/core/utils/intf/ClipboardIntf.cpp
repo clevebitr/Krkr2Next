@@ -49,9 +49,9 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ hasFormat) {
     if(numparams < 1)
         return TJS_E_BADPARAMCOUNT;
 
-    auto format = (tTVPClipboardFormat)(tjs_int)*param[0];
+    auto format = (ClipboardFormat)(tjs_int)*param[0];
 
-    bool has = TVPClipboardHasFormat(format);
+    bool has = HasClipboardFormat(format);
 
     if(result)
         *result = has;
@@ -70,7 +70,7 @@ TJS_END_NATIVE_STATIC_METHOD_DECL(/*func. name*/ hasFormat)
 
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(asText){ TJS_BEGIN_NATIVE_PROP_GETTER{ ttstr text;
-bool got = TVPClipboardGetText(text);
+bool got = GetClipboardText(text);
 if(got)
     *result = text;
 else
@@ -81,7 +81,7 @@ return TJS_S_OK;
 TJS_END_NATIVE_PROP_GETTER
 
 TJS_BEGIN_NATIVE_PROP_SETTER {
-    TVPClipboardSetText(*param);
+    SetClipboardText(*param);
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER

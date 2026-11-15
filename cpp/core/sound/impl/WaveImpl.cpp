@@ -43,7 +43,7 @@
 #include "kmp_pi.h"
 #endif
 
-#include "TVPTimer.h"
+#include "krkr::utils::Timer.h"
 #include "Application.h"
 #include "UserEvent.h"
 #include "NativeEventQueue.h"
@@ -55,8 +55,8 @@ namespace krkr::sound {
 //---------------------------------------------------------------------------
 // Options management
 //---------------------------------------------------------------------------
-static tTVPThreadPriority TVPDecodeThreadHighPriority = ttpHigher;
-static tTVPThreadPriority TVPDecodeThreadLowPriority = ttpLowest;
+static krkr::utils::ThreadPriority TVPDecodeThreadHighPriority = ttpHigher;
+static krkr::utils::ThreadPriority TVPDecodeThreadLowPriority = ttpLowest;
 static bool TVPSoundOptionsInit = false;
 static bool TVPControlPrimaryBufferRun = true;
 static bool TVPUseSoftwareBuffer = true;
@@ -102,7 +102,7 @@ static void TVPInitSoundOptions() {
             v = 0;
         if(v > 5)
             v = 5; // tpTimeCritical is dangerous...
-        TVPDecodeThreadLowPriority = (tTVPThreadPriority)v;
+        TVPDecodeThreadLowPriority = (krkr::utils::ThreadPriority)v;
         if(TVPDecodeThreadHighPriority < TVPDecodeThreadLowPriority)
             TVPDecodeThreadHighPriority = TVPDecodeThreadLowPriority;
     }
@@ -579,7 +579,7 @@ static bool TVPPrimaryBufferPlayingByProgram = false;
 static HMODULE TVPDirectSoundDLL = nullptr;
 #endif
 static bool TVPPrimaryBufferPlayingByProgram = false;
-static TVPTimer *TVPPrimaryDelayedStopperTimer = nullptr;
+static krkr::utils::Timer *TVPPrimaryDelayedStopperTimer = nullptr;
 static bool TVPDirectSoundShutdown = false;
 static bool TVPDeferedSettingAvailable = false;
 
@@ -769,7 +769,7 @@ static BOOL CALLBACK DSoundEnumCallback( GUID* pGUID, const wchar_t * strDesc,
         log += TJS_W("]");
     }
 
-    TVPAddImportantLog(log);
+    krkr::utils::AddImportantLog(log);
 
     return TRUE;
 }
@@ -812,7 +812,7 @@ static void TVPInitDirectSound()
             if(!TVPPrimaryDelayedStopperTimer)
             {
                 // create timer to stop primary buffer playing at delayed timing
-                TVPPrimaryDelayedStopperTimer = new TVPTimer();
+                TVPPrimaryDelayedStopperTimer = new krkr::utils::Timer();
                 TVPPrimaryDelayedStopperTimer->SetInterval( 4000 );
                 TVPPrimaryDelayedStopperTimer->SetEnabled( false );
                 TVPPrimaryDelayedStopperTimer->SetOnTimerHandler( &TVPPrimaryDelayedStopper, &tTVPPrimaryDelayedStopper::OnTimer );
@@ -869,7 +869,7 @@ static void TVPInitDirectSound()
         {
             // cannot create DirectSound primary buffer.
             // try to not set 3D mode
-            TVPAddLog(TJS_W("Warning: Cannot create DirectSound primary buffer with 3D sound mode. ")
+            krkr::utils::AddLog(TJS_W("Warning: Cannot create DirectSound primary buffer with 3D sound mode. ")
                 TJS_W("Force not to use it."));
             dsbd.dwFlags &= ~DSBCAPS_CTRL3D;
             hr = TVPDirectSound->CreateSoundBuffer(&dsbd, &TVPPrimaryBuffer, nullptr);
@@ -891,7 +891,7 @@ static void TVPInitDirectSound()
                         TJS_W("(after creation of primary buffer failed)/HR="))+
                     TJSInt32ToHex((tjs_uint32)hr));
             }
-            TVPAddLog(TJS_W("Warning: Cannot create DirectSound primary buffer. ")
+            krkr::utils::AddLog(TJS_W("Warning: Cannot create DirectSound primary buffer. ")
                 TJS_W("Force not to use it."));
             pri_normal = true;
         }
@@ -1008,12 +1008,12 @@ static void TVPInitDirectSound()
             if(FAILED(hr))
             {
                 // specified parameter is denied
-                TVPAddImportantLog(ttstr(TJS_W("Warning: IDirectSoundBuffer::SetFormat failed. ")
+                krkr::utils::AddImportantLog(ttstr(TJS_W("Warning: IDirectSoundBuffer::SetFormat failed. ")
                         TJS_W("(") + ttstr(TVPPriamrySBFrequency) + TJS_W("Hz, ") +
                         ttstr(TVPPrimarySBBits) + TJS_W("bits, ") +
                         ttstr((tjs_int)wfx.Format.nChannels) + TJS_W("channels)/HR="))+
                         TJSInt32ToHex((tjs_uint32)hr));
-                TVPAddImportantLog(TJS_W("Retrying with 44100Hz, ")
+                krkr::utils::AddImportantLog(TJS_W("Retrying with 44100Hz, ")
                         TJS_W("16bits, 2channels"));
 
         level0:
@@ -1038,7 +1038,7 @@ static void TVPInitDirectSound()
             {
                 ttstr debuglog(TJS_W("(info) Accepted DirectSound primary buffer format : "));
                 debuglog += TVPGetSoundBufferFormatString(wfx);
-                TVPAddImportantLog(debuglog);
+                krkr::utils::AddImportantLog(debuglog);
             }
 
         }
@@ -1461,8 +1461,8 @@ tTJSCriticalSection TVPWaveSoundBufferVectorCS;
    buffer, and also manages timing for label events. The technique
    used in this algorithm is similar to Timer claass implementation.
 */
-class tTVPWaveSoundBufferThread : public tTVPThread {
-    tTVPThreadEvent Event;
+class tTVPWaveSoundBufferThread : public krkr::utils::Thread {
+    krkr::utils::ThreadEvent Event;
 
     // HWND UtilWindow; // utility window to notify the pending events
     // occur
@@ -1504,7 +1504,7 @@ void TVPUnlockSoundMixer() {
 
 //---------------------------------------------------------------------------
 tTVPWaveSoundBufferThread::tTVPWaveSoundBufferThread() :
-    tTVPThread(true),
+    krkr::utils::Thread(true),
     EventQueue(this, &tTVPWaveSoundBufferThread::UtilWndProc) {
     EventQueue.Allocate();
     PendingLabelEventExists = false;
@@ -1542,7 +1542,7 @@ void tTVPWaveSoundBufferThread::UtilWndProc(NativeEvent &ev) {
 
         WndProcToBeCalled = false;
 
-        tjs_int64 tick = TVPGetTickCount();
+        tjs_int64 tick = krkr::utils::GetTickCount();
 
         int nearest_next = TVP_TIMEOFS_INVALID_VALUE;
 
@@ -1560,7 +1560,7 @@ void tTVPWaveSoundBufferThread::UtilWndProc(NativeEvent &ev) {
 
         if(nearest_next != TVP_TIMEOFS_INVALID_VALUE) {
             PendingLabelEventExists = true;
-            NextLabelEventTick = TVPGetRoughTickCount32() + nearest_next;
+            NextLabelEventTick = krkr::utils::GetRoughTickCount32() + nearest_next;
         } else {
             PendingLabelEventExists = false;
         }
@@ -1573,7 +1573,7 @@ void tTVPWaveSoundBufferThread::UtilWndProc(NativeEvent &ev) {
 void tTVPWaveSoundBufferThread::ReschedulePendingLabelEvent(tjs_int tick) {
     if(tick == TVP_TIMEOFS_INVALID_VALUE)
         return; // no need to reschedule
-    DWORD eventtick = TVPGetRoughTickCount32() + tick;
+    DWORD eventtick = krkr::utils::GetRoughTickCount32() + tick;
 
     tTJSCriticalSectionHolder holder(TVPWaveSoundBufferVectorCS);
 
@@ -1591,8 +1591,8 @@ void tTVPWaveSoundBufferThread::ReschedulePendingLabelEvent(tjs_int tick) {
 void tTVPWaveSoundBufferThread::Execute() {
     while(!GetTerminated()) {
         // thread loop for playing thread
-        DWORD time = TVPGetRoughTickCount32();
-        TVPPushEnvironNoise(&time, sizeof(time));
+        DWORD time = krkr::utils::GetRoughTickCount32();
+        krkr::utils::PushEnvironNoise(&time, sizeof(time));
 
         { // thread-protected
             tTJSCriticalSectionHolder holder(TVPWaveSoundBufferVectorCS);
@@ -1639,7 +1639,7 @@ void tTVPWaveSoundBufferThread::Execute() {
         } // end-of-thread-protected
 
         DWORD time2;
-        time2 = TVPGetRoughTickCount32();
+        time2 = krkr::utils::GetRoughTickCount32();
         time = time2 - time;
 
         if(time < TVP_WSB_THREAD_SLEEP_TIME) {
@@ -1809,9 +1809,9 @@ bool TVPGetWaveSoundBufferUse3DMode() { return TVPDirectSoundUse3D; }
 //---------------------------------------------------------------------------
 // tTVPWaveSoundBufferDcodeThread : decoding thread
 //---------------------------------------------------------------------------
-class tTVPWaveSoundBufferDecodeThread : public tTVPThread {
+class tTVPWaveSoundBufferDecodeThread : public krkr::utils::Thread {
     tTJSNI_WaveSoundBuffer *Owner;
-    tTVPThreadEvent Event;
+    krkr::utils::ThreadEvent Event;
     tTJSCriticalSection OneLoopCS;
     volatile bool Running;
 
@@ -1831,7 +1831,7 @@ public:
 
 //---------------------------------------------------------------------------
 tTVPWaveSoundBufferDecodeThread::tTVPWaveSoundBufferDecodeThread(
-    tTJSNI_WaveSoundBuffer *owner) : tTVPThread(true) {
+    tTJSNI_WaveSoundBuffer *owner) : krkr::utils::Thread(true) {
     TVPInitSoundOptions();
 
     Owner = owner;
@@ -1855,7 +1855,7 @@ tTVPWaveSoundBufferDecodeThread::~tTVPWaveSoundBufferDecodeThread() {
 void tTVPWaveSoundBufferDecodeThread::Execute() {
     while(!GetTerminated()) {
         // decoder thread main loop
-        DWORD st = TVPGetTickCount();
+        DWORD st = krkr::utils::GetTickCount();
         while(Running) {
             bool wait;
             DWORD et;
@@ -1869,8 +1869,8 @@ void tTVPWaveSoundBufferDecodeThread::Execute() {
                 break;
 
             if(Running) {
-                et = TVPGetTickCount();
-                TVPPushEnvironNoise(&et, sizeof(et));
+                et = krkr::utils::GetTickCount();
+                krkr::utils::PushEnvironNoise(&et, sizeof(et));
                 if(wait) {
                     // buffer is full; sleep longer
                     DWORD elapsed = et - st;
@@ -2261,7 +2261,7 @@ void tTJSNI_WaveSoundBuffer::CreateSoundBuffer() {
                 }
 
                 if(firstfailed)
-                    TVPAddImportantLog(log);
+                    krkr::utils::AddImportantLog(log);
             }
 #endif
         } catch(ttstr &e) {
@@ -2437,7 +2437,7 @@ bool tTJSNI_WaveSoundBuffer::FillL2Buffer(bool firstwrite,
     }
 
     {
-        tTVPThreadPriority ttpbefore = TVPDecodeThreadHighPriority;
+        krkr::utils::ThreadPriority ttpbefore = TVPDecodeThreadHighPriority;
         bool retflag = false;
         if(Thread->GetRunning()) {
             ttpbefore = Thread->GetPriority();
@@ -2477,7 +2477,7 @@ bool tTJSNI_WaveSoundBuffer::FillL2Buffer(bool firstwrite,
         L2BufferWritePos = 0;
 
     {
-        tTVPThreadPriority ttpbefore = TVPDecodeThreadHighPriority;
+        krkr::utils::ThreadPriority ttpbefore = TVPDecodeThreadHighPriority;
         if(Thread->GetRunning()) {
             ttpbefore = Thread->GetPriority();
             Thread->SetPriority(TVPDecodeThreadHighPriority);
@@ -2649,8 +2649,8 @@ bool tTJSNI_WaveSoundBuffer::FillBuffer(bool firstwrite, bool allowpause) {
     DWORD pp = 0, wp = 0; // write pos and read pos
     if(FAILED(SoundBuffer->GetCurrentPosition(&pp, &wp))) return true;
 
-    TVPPushEnvironNoise(&pp, sizeof(pp));
-    TVPPushEnvironNoise(&wp, sizeof(wp));
+    krkr::utils::PushEnvironNoise(&pp, sizeof(pp));
+    krkr::utils::PushEnvironNoise(&wp, sizeof(wp));
         // drift between main clock and clocks which come from other sources
         // is a good environ noise.
 #endif
@@ -2812,7 +2812,7 @@ void tTJSNI_WaveSoundBuffer::ResetLastCheckedDecodePos(DWORD pp) {
     if(L1BufferDecodeSamplePos[ppb] != -1)
     {
         LastCheckedDecodePos = L1BufferDecodeSamplePos[ppb] + ppm / Format.Format.nBlockAlign;
-        LastCheckedTick = TVPGetTickCount();
+        LastCheckedTick = krkr::utils::GetTickCount();
     }
 #else
     if(!SoundBuffer)
@@ -2830,7 +2830,7 @@ void tTJSNI_WaveSoundBuffer::ResetLastCheckedDecodePos(DWORD pp) {
     }
     if(L1BufferDecodeSamplePos[rblock] != -1) {
         LastCheckedDecodePos = L1BufferDecodeSamplePos[rblock] + offset;
-        LastCheckedTick = TVPGetTickCount();
+        LastCheckedTick = krkr::utils::GetTickCount();
     }
 #endif
 }
@@ -2884,7 +2884,7 @@ tjs_int tTJSNI_WaveSoundBuffer::FireLabelEventsAndGetNearestLabelEventStep(
 //---------------------------------------------------------------------------
 tjs_int tTJSNI_WaveSoundBuffer::GetNearestEventStep() {
     // get nearest event stop from current tick
-    // (current tick is taken from TVPGetTickCount)
+    // (current tick is taken from krkr::utils::GetTickCount)
     tTJSCriticalSectionHolder holder(BufferCS);
 
     if(LabelEventQueue.size() == 0)
@@ -2895,7 +2895,7 @@ tjs_int tTJSNI_WaveSoundBuffer::GetNearestEventStep() {
     if(LastCheckedDecodePos == -1)
         ResetLastCheckedDecodePos();
     tjs_int64 decodepos =
-        (TVPGetTickCount() - LastCheckedTick) * Frequency / 1000 +
+        (krkr::utils::GetTickCount() - LastCheckedTick) * Frequency / 1000 +
         LastCheckedDecodePos;
 
     return (tjs_int)((LabelEventQueue[0].Offset - (tjs_int32)decodepos) * 1000 /

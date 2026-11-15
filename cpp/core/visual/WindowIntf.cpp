@@ -248,7 +248,7 @@ void tTJSNI_BaseWindow::Invalidate() {
             i->Invalidate(0, nullptr, nullptr, nullptr);
             i->Release();
         } catch(eTJSError &e) {
-            TVPAddLog(e.GetMessage()); // just in case, log the error
+            krkr::utils::AddLog(e.GetMessage()); // just in case, log the error
         }
     }
 

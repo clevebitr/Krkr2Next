@@ -9,7 +9,7 @@
 
 NS_KRMOVIE_BEGIN
 int64_t CurrentHostCounter() {
-    return TVPGetRoughTickCount32();
+    return krkr::utils::GetRoughTickCount32();
 #ifdef _MSC_VER
     LARGE_INTEGER PerformanceCount;
     QueryPerformanceCounter(&PerformanceCount);
@@ -43,7 +43,7 @@ int64_t CurrentHostFrequency() {
 unsigned int CTimeUtils::frameTime = 0;
 
 void CTimeUtils::UpdateFrameTime(bool flip) {
-    unsigned int currentTime = TVPGetRoughTickCount32();
+    unsigned int currentTime = krkr::utils::GetRoughTickCount32();
     unsigned int last = frameTime;
     while(frameTime < currentTime) {
         frameTime += (unsigned int)(1000 / 60 /*g_graphicsContext.GetFPS()*/);

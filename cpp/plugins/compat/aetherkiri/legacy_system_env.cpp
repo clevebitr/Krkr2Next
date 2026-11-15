@@ -44,7 +44,7 @@ namespace {
         if(emitted[key])
             return;
         emitted[key] = true;
-        TVPAddLog(ttstr(TJS_W("AetherKiri compat plugin ")) + module +
+        krkr::utils::AddLog(ttstr(TJS_W("AetherKiri compat plugin ")) + module +
                   TJS_W(": ") + message);
     }
 

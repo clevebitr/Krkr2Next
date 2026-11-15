@@ -1,0 +1,35 @@
+# module: utils
+# qualify: krkr::utils
+# owner: cpp/core/utils
+#
+# utils 第 5b 轮：`--draft` 漏收的 utils 自有符号（手写）。
+#
+# draft 这里是**宏形声明**漏收（第三种盲区）：
+#   `TJS_EXP_FUNC_DEF(void, TVPAddLog, (const ttstr &line));`
+# draft 的行首正则只认"类型 + 名字("，而这里名字前后是宏参数逗号。
+# 其余是文件内 static（Random.cpp 的种子池）与 const 常量（ThreadIntf.h 的
+# TVPMaxThreadNum = 8，按 N7 常量用 UpperCamelCase）。
+#
+# 注意：这些符号的**定义**在 base/runtime/*.cpp（那些文件本身就在
+# `namespace krkr::utils` 里），声明在 utils/intf/*.h。owner 取 utils 是为了让
+# header 里的 `TJS_EXP_FUNC_DEF(…, 名字, …)` 保持短名；base 侧被工具写成
+# `krkr::utils::X` 的定义点，同 commit 手工去限定（文件已经在 namespace 内）。
+TVPRandomSeedPoolPos	randomSeedPoolPos	var
+TVPRandomSeedPool	randomSeedPool	var
+TVPRandomSeedAtom	randomSeedAtom	var
+TVPMaxThreadNum	MaxThreadNum	var
+TVPLimitTimerCapacity	limitTimerCapacity	var
+TVPAutoClearLogOnError	autoClearLogOnError	var
+TVPAutoLogToFileOnError	autoLogToFileOnError	var
+TVPLoggingToFile	loggingToFile	var
+TVPNativeLogLocation	nativeLogLocation	var
+TVPClipboardGetText	GetClipboardText	fn
+TVPClipboardHasFormat	HasClipboardFormat	fn
+TVPClipboardSetText	SetClipboardText	fn
+TVPGetTickCount	GetTickCount	fn
+TVPExecThreadTask	ExecThreadTask	fn
+TVPGetProcessorNum	GetProcessorNum	fn
+TVPGetThreadNum	GetThreadNum	fn
+TVPAddLog	AddLog	fn
+TVPAddImportantLog	AddImportantLog	fn
+TVPDestroyLoggingHandlerVector	DestroyLoggingHandlerVector	fn

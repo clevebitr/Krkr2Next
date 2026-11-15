@@ -950,7 +950,7 @@ tjs_error ScriptsAdd::safeEvalStorage(tTJSVariant *result, tjs_int numparams,
     memcpy(top + 8 + length, TJS_W("]"),
            sizeof(tjs_char) * 1); // (const)[<buffer>]
     buffer.FixLen();
-    // TVPAddLog(buffer);
+    // krkr::utils::AddLog(buffer);
 
     tTJSVariant temp;
     TVPExecuteExpression(buffer, shortname, 0, context, &temp);

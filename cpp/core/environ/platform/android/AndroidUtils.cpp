@@ -93,7 +93,7 @@ static void readMemoryInfoFromProc() {
 }
 
 static void updateMemoryInfo() {
-    if(TVPGetRoughTickCount32() - _lastMemoryInfoQuery > 3000) { // freq in 3s
+    if(krkr::utils::GetRoughTickCount32() - _lastMemoryInfoQuery > 3000) { // freq in 3s
 
         if(_memInfoViaJni) {
             JniMethodInfo methodInfo;
@@ -139,7 +139,7 @@ static void updateMemoryInfo() {
         if(!_memInfoViaJni)
             readMemoryInfoFromProc();
 
-        _lastMemoryInfoQuery = TVPGetRoughTickCount32();
+        _lastMemoryInfoQuery = krkr::utils::GetRoughTickCount32();
     }
 }
 
@@ -1246,7 +1246,7 @@ bool TVPRenameFile(const std::string &from, const std::string &to) {
 }
 
 namespace krkr::utils { 
-    tjs_uint32 TVPGetRoughTickCount32() {
+    tjs_uint32 GetRoughTickCount32() {
         tjs_uint32 uptime = 0;
         struct timespec on;
         if(clock_gettime(CLOCK_MONOTONIC, &on) == 0)

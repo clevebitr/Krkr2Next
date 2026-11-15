@@ -134,7 +134,7 @@ tGenericFreeTypeFace::tGenericFreeTypeFace(const ttstr &fontname,
             } else {
                 const char *name = face->family_name;
                 ttstr wname;
-                TVPEncodeUTF8ToUTF16(wname, std::string(name));
+                krkr::utils::EncodeUTF8ToUTF16(wname, std::string(name));
                 FaceNames.push_back(wname);
                 face_num = face->num_faces;
             }

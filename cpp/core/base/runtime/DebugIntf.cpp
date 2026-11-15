@@ -45,13 +45,13 @@ struct tTVPLogItem {
 static std::deque<tTVPLogItem> *TVPLogDeque = nullptr;
 static tjs_uint TVPLogMaxLines = 2048;
 
-bool TVPAutoLogToFileOnError = true;
-bool TVPAutoClearLogOnError = false;
-bool TVPLoggingToFile = false;
+bool autoLogToFileOnError = true;
+bool autoClearLogOnError = false;
+bool loggingToFile = false;
 static tjs_uint TVPLogToFileRollBack = 100;
 static ttstr *TVPImportantLogs = nullptr;
 static ttstr TVPLogLocation;
-ttstr TVPNativeLogLocation;
+ttstr nativeLogLocation;
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -74,7 +74,7 @@ static void TVPDestroyLogObjects() {
         delete TVPImportantLogs, TVPImportantLogs = nullptr;
     // runtime-restart 时 TVPSystemUninit 会经 tTVPAtExit 再次调用本函数，
     // 必须复位初始化标志，否则 restart 后 TVPEnsureLogObjects 提前返回、
-    // TVPAddLog 静默丢弃全部 [TVP Console] 输出（含 KAG 场景/错误信息）。
+    // krkr::utils::AddLog 静默丢弃全部 [TVP Console] 输出（含 KAG 场景/错误信息）。
     TVPLogObjectsInitialized = false;
 }
 
@@ -89,9 +89,9 @@ void (*TVPOnLog)(const ttstr &line) = nullptr;
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPSetOnLog
+// krkr::utils::SetOnLog
 //---------------------------------------------------------------------------
-void TVPSetOnLog(void (*func)(const ttstr &line)) { TVPOnLog = func; }
+void SetOnLog(void (*func)(const ttstr &line)) { TVPOnLog = func; }
 
 //---------------------------------------------------------------------------
 static std::vector<tTJSVariantClosure> TVPLoggingHandlerVector;
@@ -110,10 +110,10 @@ static void TVPCleanupLoggingHandlerVector() {
     }
 }
 
-static void TVPDestroyLoggingHandlerVector() {
+static void DestroyLoggingHandlerVector() {
     spdlog::info("at-exit PREPARE LoggingHandler begin (count={})",
                  (int)TVPLoggingHandlerVector.size());
-    TVPSetOnLog(nullptr);
+    krkr::utils::SetOnLog(nullptr);
     std::vector<tTJSVariantClosure>::iterator i;
     tjs_int k = 0;
     for(i = TVPLoggingHandlerVector.begin(); i != TVPLoggingHandlerVector.end();
@@ -126,20 +126,20 @@ static void TVPDestroyLoggingHandlerVector() {
     spdlog::info("at-exit PREPARE LoggingHandler end");
 }
 
-void TVPClearLoggingHandlers() {
+void ClearLoggingHandlers() {
     // 供 tTVPApplication::OnExit 在脚本引擎销毁前提前释放日志闭包
-    // （TVPDestroyLoggingHandlerVector 此时再跑应为空/无闭包，作兜底）。
+    // （krkr::utils::DestroyLoggingHandlerVector 此时再跑应为空/无闭包，作兜底）。
     if(!TVPLoggingHandlerVector.empty()) {
         spdlog::info("TVPClearLoggingHandlers begin (count={})",
                      (int)TVPLoggingHandlerVector.size());
-        TVPDestroyLoggingHandlerVector();
+        krkr::utils::DestroyLoggingHandlerVector();
         spdlog::info("TVPClearLoggingHandlers end");
     }
 }
 
 static tTVPAtExit
     TVPDestroyLoggingHandlerAtExit(TVP_ATEXIT_PRI_PREPARE,
-                                   TVPDestroyLoggingHandlerVector);
+                                   DestroyLoggingHandlerVector);
 //---------------------------------------------------------------------------
 static bool TVPInDeliverLoggingEvent = false;
 
@@ -182,7 +182,7 @@ static void _TVPDeliverLoggingEvent(const ttstr &line) // internal
             }
 
             if(TVPLoggingHandlerVector.empty()) {
-                TVPSetOnLog(nullptr);
+                krkr::utils::SetOnLog(nullptr);
             }
         } catch(...) {
             TVPInDeliverLoggingEvent = false;
@@ -193,14 +193,14 @@ static void _TVPDeliverLoggingEvent(const ttstr &line) // internal
 }
 
 //---------------------------------------------------------------------------
-static void TVPAddLoggingHandler(tTJSVariantClosure clo) {
+static void AddLoggingHandler(tTJSVariantClosure clo) {
     std::vector<tTJSVariantClosure>::iterator i;
     i = std::find(TVPLoggingHandlerVector.begin(),
                   TVPLoggingHandlerVector.end(), clo);
     if(i == TVPLoggingHandlerVector.end()) {
         clo.AddRef();
         TVPLoggingHandlerVector.push_back(clo);
-        TVPSetOnLog(&_TVPDeliverLoggingEvent);
+        krkr::utils::SetOnLog(&_TVPDeliverLoggingEvent);
     }
 }
 
@@ -217,7 +217,7 @@ static void TVPRemoveLoggingHandler(tTJSVariantClosure clo) {
     if(!TVPInDeliverLoggingEvent) {
         TVPCleanupLoggingHandlerVector();
         if(TVPLoggingHandlerVector.empty()) {
-            TVPSetOnLog(nullptr);
+            krkr::utils::SetOnLog(nullptr);
         }
     }
 }
@@ -273,7 +273,7 @@ void tTVPLogStreamHolder::Open(const tjs_nchar *mode) {
             OpenFailed = true;
         } else {
             // no log location specified
-            filename = TVPNativeLogLocation + TJS_W("/krkr.console.log");
+            filename = krkr::utils::nativeLogLocation + TJS_W("/krkr.console.log");
             TVPEnsureDataPathDirectory();
             std::string _filename = filename.AsStdString();
             Stream = fopen(_filename.c_str(), mode);
@@ -359,9 +359,9 @@ void tTVPLogStreamHolder::Log(const ttstr &text) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPAddLog
+// krkr::utils::AddLog
 //---------------------------------------------------------------------------
-void TVPAddLog(const ttstr &line, bool appendtoimportant) {
+void AddLog(const ttstr &line, bool appendtoimportant) {
     // add a line to the log.
     // exceeded lines over TVPLogMaxLines are eliminated.
     // this function is not thread-safe ...
@@ -417,18 +417,18 @@ void TVPAddLog(const ttstr &line, bool appendtoimportant) {
 
     Application->PrintConsole(buf, appendtoimportant);
 
-    if(TVPLoggingToFile)
+    if(krkr::utils::loggingToFile)
         TVPLogStreamHolder.Log(buf);
 }
 
 //---------------------------------------------------------------------------
-void TVPAddLog(const ttstr &line) { TVPAddLog(line, false); }
+void AddLog(const ttstr &line) { krkr::utils::AddLog(line, false); }
 
 //---------------------------------------------------------------------------
-void TVPAddImportantLog(const ttstr &line) { TVPAddLog(line, true); }
+void AddImportantLog(const ttstr &line) { krkr::utils::AddLog(line, true); }
 
 //---------------------------------------------------------------------------
-ttstr TVPGetImportantLog() {
+ttstr GetImportantLog() {
     if(!TVPImportantLogs)
         return {};
     return *TVPImportantLogs;
@@ -436,11 +436,11 @@ ttstr TVPGetImportantLog() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPGetLastLog : get last n lines of the log ( each line is
+// krkr::utils::GetLastLog : get last n lines of the log ( each line is
 // spearated with
 // '\n'/'\r\n' )
 //---------------------------------------------------------------------------
-ttstr TVPGetLastLog(tjs_uint n) {
+ttstr GetLastLog(tjs_uint n) {
     TVPEnsureLogObjects();
     if(!TVPLogDeque)
         return TJS_W(""); // log system is shuttingdown
@@ -490,14 +490,14 @@ ttstr TVPGetLastLog(tjs_uint n) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPStartLogToFile
+// krkr::utils::StartLogToFile
 //---------------------------------------------------------------------------
-void TVPStartLogToFile(bool clear) {
+void StartLogToFile(bool clear) {
     TVPEnsureLogObjects();
     if(!TVPImportantLogs)
         return; // log system is shuttingdown
 
-    if(TVPLoggingToFile)
+    if(krkr::utils::loggingToFile)
         return; // already logging
     if(clear)
         TVPLogStreamHolder.Clear();
@@ -518,39 +518,39 @@ void TVPStartLogToFile(bool clear) {
 
     TVPLogStreamHolder.Log(separator);
 
-    ttstr content = TVPGetLastLog(TVPLogToFileRollBack);
+    ttstr content = krkr::utils::GetLastLog(TVPLogToFileRollBack);
     TVPLogStreamHolder.Log(content);
 
     //
-    TVPLoggingToFile = true;
+    krkr::utils::loggingToFile = true;
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPOnError
+// krkr::utils::OnError
 //---------------------------------------------------------------------------
-void TVPOnError() {
-    if(TVPAutoLogToFileOnError)
-        TVPStartLogToFile(TVPAutoClearLogOnError);
-    // TVPOnErrorHook();
+void OnError() {
+    if(krkr::utils::autoLogToFileOnError)
+        krkr::utils::StartLogToFile(krkr::utils::autoClearLogOnError);
+    // krkr::utils::OnErrorHook();
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPSetLogLocation
+// krkr::utils::SetLogLocation
 //---------------------------------------------------------------------------
-void TVPSetLogLocation(const ttstr &loc) {
+void SetLogLocation(const ttstr &loc) {
     TVPLogLocation = krkr::io::NormalizeStorageName(loc);
 
     ttstr native = krkr::io::GetLocallyAccessiblePath(TVPLogLocation);
     if(native.IsEmpty()) {
-        TVPNativeLogLocation.Clear();
+        krkr::utils::nativeLogLocation.Clear();
         TVPLogLocation.Clear();
     } else {
-        TVPNativeLogLocation = native;
-        if(TVPNativeLogLocation[TVPNativeLogLocation.length() - 1] !=
+        krkr::utils::nativeLogLocation = native;
+        if(krkr::utils::nativeLogLocation[krkr::utils::nativeLogLocation.length() - 1] !=
            TJS_W('/'))
-            TVPNativeLogLocation += TJS_W("/");
+            krkr::utils::nativeLogLocation += TJS_W("/");
     }
 
     TVPLogStreamHolder.Reopen();
@@ -560,21 +560,21 @@ void TVPSetLogLocation(const ttstr &loc) {
     if(TVPGetCommandLine(TJS_W("-forcelog"), &val)) {
         ttstr str(val);
         if(str == TJS_W("yes")) {
-            TVPLoggingToFile = false;
-            TVPStartLogToFile(false);
+            krkr::utils::loggingToFile = false;
+            krkr::utils::StartLogToFile(false);
         } else if(str == TJS_W("clear")) {
-            TVPLoggingToFile = false;
-            TVPStartLogToFile(true);
+            krkr::utils::loggingToFile = false;
+            krkr::utils::StartLogToFile(true);
         }
     }
     if(TVPGetCommandLine(TJS_W("-logerror"), &val)) {
         ttstr str(val);
         if(str == TJS_W("no")) {
-            TVPAutoClearLogOnError = false;
-            TVPAutoLogToFileOnError = false;
+            krkr::utils::autoClearLogOnError = false;
+            krkr::utils::autoLogToFileOnError = false;
         } else if(str == TJS_W("clear")) {
-            TVPAutoClearLogOnError = true;
-            TVPAutoLogToFileOnError = true;
+            krkr::utils::autoClearLogOnError = true;
+            krkr::utils::autoLogToFileOnError = true;
         }
     }
 }
@@ -604,7 +604,7 @@ tTJSNC_Debug::tTJSNC_Debug() : tTJSNativeClass(TJS_W("Debug")) {
             return TJS_E_BADPARAMCOUNT;
 
         if(numparams == 1) {
-            TVPAddLog(*param[0]);
+            krkr::utils::AddLog(*param[0]);
         } else {
             // display the arguments separated with ", "
             ttstr args;
@@ -613,7 +613,7 @@ tTJSNC_Debug::tTJSNC_Debug() : tTJSNativeClass(TJS_W("Debug")) {
                     args += TJS_W(", ");
                 args += ttstr(*param[i]);
             }
-            TVPAddLog(args);
+            krkr::utils::AddLog(args);
         }
 
         return TJS_S_OK;
@@ -625,7 +625,7 @@ tTJSNC_Debug::tTJSNC_Debug() : tTJSNativeClass(TJS_W("Debug")) {
             return TJS_E_BADPARAMCOUNT;
 
         if(numparams == 1) {
-            TVPAddImportantLog(*param[0]);
+            krkr::utils::AddImportantLog(*param[0]);
         } else {
             // display the arguments separated with ", "
             ttstr args;
@@ -634,7 +634,7 @@ tTJSNC_Debug::tTJSNC_Debug() : tTJSNativeClass(TJS_W("Debug")) {
                     args += TJS_W(", ");
                 args += ttstr(*param[i]);
             }
-            TVPAddImportantLog(args);
+            krkr::utils::AddImportantLog(args);
         }
 
         return TJS_S_OK;
@@ -647,14 +647,14 @@ tTJSNC_Debug::tTJSNC_Debug() : tTJSNativeClass(TJS_W("Debug")) {
         if(numparams >= 1)
             clear = param[0]->operator bool();
 
-        TVPStartLogToFile(clear);
+        krkr::utils::StartLogToFile(clear);
 
         return TJS_S_OK;
     }
     TJS_END_NATIVE_STATIC_METHOD_DECL(/*func. name*/ startLogToFile)
     //----------------------------------------------------------------------
     TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ logAsError) {
-        TVPOnError();
+        krkr::utils::OnError();
 
         return TJS_S_OK;
     }
@@ -668,7 +668,7 @@ tTJSNC_Debug::tTJSNC_Debug() : tTJSNativeClass(TJS_W("Debug")) {
 
         tTJSVariantClosure clo = param[0]->AsObjectClosureNoAddRef();
 
-        TVPAddLoggingHandler(clo);
+        AddLoggingHandler(clo);
 
         return TJS_S_OK;
     }
@@ -698,7 +698,7 @@ tTJSNC_Debug::tTJSNC_Debug() : tTJSNativeClass(TJS_W("Debug")) {
             lines = (tjs_uint)param[0]->AsInteger();
 
         if(result)
-            *result = TVPGetLastLog(lines);
+            *result = krkr::utils::GetLastLog(lines);
 
         return TJS_S_OK;
     }
@@ -715,7 +715,7 @@ tTJSNC_Debug::tTJSNC_Debug() : tTJSNativeClass(TJS_W("Debug")) {
 TJS_END_NATIVE_PROP_GETTER
 
 TJS_BEGIN_NATIVE_PROP_SETTER {
-    TVPSetLogLocation(*param);
+    krkr::utils::SetLogLocation(*param);
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER
@@ -723,13 +723,13 @@ TJS_END_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL(logLocation)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(logToFileOnError){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPAutoLogToFileOnError;
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = krkr::utils::autoLogToFileOnError;
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
 
 TJS_BEGIN_NATIVE_PROP_SETTER {
-    TVPAutoLogToFileOnError = param->operator bool();
+    krkr::utils::autoLogToFileOnError = param->operator bool();
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER
@@ -737,13 +737,13 @@ TJS_END_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL(logToFileOnError)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(clearLogFileOnError){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPAutoClearLogOnError;
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = krkr::utils::autoClearLogOnError;
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
 
 TJS_BEGIN_NATIVE_PROP_SETTER {
-    TVPAutoClearLogOnError = param->operator bool();
+    krkr::utils::autoClearLogOnError = param->operator bool();
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER
@@ -756,8 +756,8 @@ TJS_END_NATIVE_MEMBERS
 
 // put version information to DMS
 #if 0
-    TVPAddImportantLog(TVPGetVersionInformation());
-    TVPAddImportantLog(ttstr(TVPVersionInformation2));
+    krkr::utils::AddImportantLog(TVPGetVersionInformation());
+    krkr::utils::AddImportantLog(ttstr(TVPVersionInformation2));
 #endif
 } // end of tTJSNC_Debug::tTJSNC_Debug
 //---------------------------------------------------------------------------
@@ -766,9 +766,9 @@ TJS_END_NATIVE_MEMBERS
 // TJS2 Console Output Gateway
 //---------------------------------------------------------------------------
 class tTVPTJS2ConsoleOutputGateway : public iTJSConsoleOutput {
-    void ExceptionPrint(const tjs_char *msg) override { TVPAddLog(msg); }
+    void ExceptionPrint(const tjs_char *msg) override { krkr::utils::AddLog(msg); }
 
-    void Print(const tjs_char *msg) override { TVPAddLog(msg); }
+    void Print(const tjs_char *msg) override { krkr::utils::AddLog(msg); }
 } static TVPTJS2ConsoleOutputGateway;
 //---------------------------------------------------------------------------
 
@@ -794,7 +794,7 @@ class tTVPTJS2DumpOutputGateway : public iTJSConsoleOutput {
 } static TVPTJS2DumpOutputGateway;
 
 //---------------------------------------------------------------------------
-void TVPTJS2StartDump() {
+void StartTJS2Dump() {
 #if 0
     ttstr filename = ExePath() + TJS_W(".dump.txt");
     TVPDumpOutFileName = filename;
@@ -808,12 +808,12 @@ void TVPTJS2StartDump() {
 }
 
 //---------------------------------------------------------------------------
-void TVPTJS2EndDump() {
+void EndTJS2Dump() {
 #if 0
     if (TVPDumpOutFile)
     {
         fclose(TVPDumpOutFile), TVPDumpOutFile = nullptr;
-        TVPAddLog(ttstr(TJS_W("Dumped to ")) + TVPDumpOutFileName);
+        krkr::utils::AddLog(ttstr(TJS_W("Dumped to ")) + TVPDumpOutFileName);
     }
 #endif
 }
@@ -822,12 +822,12 @@ void TVPTJS2EndDump() {
 //---------------------------------------------------------------------------
 // console interface retrieving functions
 //---------------------------------------------------------------------------
-iTJSConsoleOutput *TVPGetTJS2ConsoleOutputGateway() {
+iTJSConsoleOutput *GetTJS2ConsoleOutputGateway() {
     return &TVPTJS2ConsoleOutputGateway;
 }
 
 //---------------------------------------------------------------------------
-iTJSConsoleOutput *TVPGetTJS2DumpOutputGateway() {
+iTJSConsoleOutput *GetTJS2DumpOutputGateway() {
     return &TVPTJS2DumpOutputGateway;
 }
 //---------------------------------------------------------------------------
@@ -836,7 +836,7 @@ iTJSConsoleOutput *TVPGetTJS2DumpOutputGateway() {
 //---------------------------------------------------------------------------
 // on-error hook
 //---------------------------------------------------------------------------
-void TVPOnErrorHook()
+void krkr::utils::OnErrorHook()
 {
         if(TVPMainForm) TVPMainForm->NotifySystemError();
 }

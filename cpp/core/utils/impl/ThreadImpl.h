@@ -17,7 +17,7 @@
 
 namespace krkr::utils {
 
-    class tTVPThread {
+    class Thread {
         bool Terminated;
         std::thread Handle;
         // DWORD ThreadId;
@@ -29,9 +29,9 @@ namespace krkr::utils {
         static void * /*__stdcall*/ StartProc(void *arg);
 
     public:
-        tTVPThread(bool suspended);
+        Thread(bool suspended);
 
-        virtual ~tTVPThread();
+        virtual ~Thread();
 
         [[nodiscard]] bool GetTerminated() const { return Terminated; }
 
@@ -45,9 +45,9 @@ namespace krkr::utils {
     public:
         void WaitFor();
 
-        tTVPThreadPriority GetPriority();
+        ThreadPriority GetPriority();
 
-        void SetPriority(tTVPThreadPriority pri);
+        void SetPriority(ThreadPriority pri);
 
         // void Suspend();
         void Resume();
@@ -57,7 +57,7 @@ namespace krkr::utils {
         // specific */
     };
 
-    class tTVPThreadEvent {
+    class ThreadEvent {
         std::condition_variable Handle;
         std::mutex Mutex;
 
@@ -67,14 +67,10 @@ namespace krkr::utils {
         void WaitFor(tjs_uint timeout);
     };
 
-    void TVPAddOnThreadExitEvent(const std::function<void()> &ev);
+    void AddOnThreadExitEvent(const std::function<void()> &ev);
 
-    void TVPOnThreadExited();
+    void OnThreadExited();
 } // namespace krkr::utils
 
-using krkr::utils::tTVPThread;
-using krkr::utils::tTVPThreadEvent;
-using krkr::utils::TVPAddOnThreadExitEvent;
-using krkr::utils::TVPOnThreadExited;
 
 #endif

@@ -791,8 +791,8 @@ void TVPRemoveContinuousEventHook(tTVPContinuousEventCallbackIntf *cb) {
 //---------------------------------------------------------------------------
 static void _TVPDeliverContinuousEvent() // internal
 {
-    TVPStartTickCount();
-    tjs_uint64 tick = TVPGetTickCount();
+    krkr::utils::StartTickCount();
+    tjs_uint64 tick = krkr::utils::GetTickCount();
 
     if(TVPContinuousEventVector.size()) {
         bool emptyflag = false;
@@ -1093,7 +1093,7 @@ void tTJSNI_AsyncTrigger::SetCached(bool b) {
 }
 
 //---------------------------------------------------------------------------
-void tTJSNI_AsyncTrigger::SetMode(tTVPAsyncTriggerMode m) {
+void tTJSNI_AsyncTrigger::SetMode(krkr::utils::AsyncTriggerMode m) {
     if(Mode != m) {
         Mode = m;
         Cancel();
@@ -1193,7 +1193,7 @@ TJS_END_NATIVE_PROP_GETTER
 TJS_BEGIN_NATIVE_PROP_SETTER {
     TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
                             /*var. type*/ tTJSNI_AsyncTrigger);
-    _this->SetMode((tTVPAsyncTriggerMode)(tjs_int)*param);
+    _this->SetMode((krkr::utils::AsyncTriggerMode)(tjs_int)*param);
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER

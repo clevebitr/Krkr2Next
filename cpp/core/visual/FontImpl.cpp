@@ -84,7 +84,7 @@ static int TVPInternalEnumFonts(
     FT_Error error =
         FT_New_Memory_Face(TVPGetFontLibrary(), pBuf, buflen, 0, &fontface);
     if(error) {
-        TVPAddLog(ttstr(TJS_W("Load Font \"") + FontPath + "\" failed (" +
+        krkr::utils::AddLog(ttstr(TJS_W("Load Font \"") + FontPath + "\" failed (" +
                         TJSIntegerToString((int)error) + ")"));
         return faceCount;
     }

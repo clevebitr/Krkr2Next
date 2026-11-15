@@ -84,6 +84,6 @@ llvm-nm -C --defined-only libengine_api.so | grep 'krkr::utils::'
 ```
 
 注意两个已知的行为面：`TVPTimer`（定时器分辨率依赖 `TVPGetRoughTickCount32`）、
-`TVPAddLog` 的日志级别过滤（`DebugIntf`）。搬文件不改任何一条；
+`AddLog` 的日志级别过滤（`DebugIntf`）。搬文件不改任何一条；
 `core_utils_c_api` 是唯一一个只有 `.c` 源的簇，所以根 `project()` 必须开 `C` 语言
 （已经是这样，`check_cmake_graph.sh` 也补了这一条）。

@@ -29,7 +29,7 @@ namespace krkr::utils {
         { // thread-protected
             tTJSCriticalSectionHolder holder(TVPTickWatchCS);
 
-            curtick = TVPGetRoughTickCount32();
+            curtick = krkr::utils::GetRoughTickCount32();
             if(curtick < TVPWatchLastTick) {
                 // timeGetTime() was overflowed
                 TVPTickCountBias += 0x100000000L; // add 1<<32
@@ -39,11 +39,11 @@ namespace krkr::utils {
         return curtick;
     }
 
-    class tTVPWatchThread : public tTVPThread {
+    class tTVPWatchThread : public Thread {
         // thread which watches overflow of 32bit counter of
-        // TVPGetRoughTickCount32
+        // krkr::utils::GetRoughTickCount32
 
-        tTVPThreadEvent Event;
+        krkr::utils::ThreadEvent Event;
 
     public:
         tTVPWatchThread();
@@ -71,11 +71,11 @@ namespace krkr::utils {
     static tTVPAtExit TVPWatchThreadUninitAtExit(TVP_ATEXIT_PRI_SHUTDOWN,
                                                  TVPWatchThreadUninit);
 
-    // TVPStartTickCount
-    void TVPStartTickCount() { TVPWatchThreadInit(); }
+    // krkr::utils::StartTickCount
+    void StartTickCount() { TVPWatchThreadInit(); }
 
-    tTVPWatchThread::tTVPWatchThread() : tTVPThread(true) {
-        TVPWatchLastTick = TVPGetRoughTickCount32();
+    tTVPWatchThread::tTVPWatchThread() : Thread(true) {
+        TVPWatchLastTick = krkr::utils::GetRoughTickCount32();
         SetPriority(ttpNormal);
         Resume();
     }
@@ -97,8 +97,8 @@ namespace krkr::utils {
         }
     }
 
-    // TVPGetTickCount
-    tjs_uint64 TVPGetTickCount() {
+    // krkr::utils::GetTickCount
+    tjs_uint64 GetTickCount() {
         TVPWatchThreadInit();
 
         DWORD curtick = TVPCheckTickOverflow();

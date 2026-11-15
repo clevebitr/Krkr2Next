@@ -1167,3 +1167,96 @@ TVPSearchFromSegmentCache       -> SearchFromSegmentCache
 | 4b | io 残项 | 9 | 45 | 3 | ~15 min |
 
 `check_naming.py` 合计遗留：1297 → 1101 → 1080 → 1043 → **1026**（io 26）。
+
+## 2026-11-15 — 命名统一第 5 轮：utils（51 符号），并发现工具会产出 GCC 编译不过的全限定名
+
+\## 结果
+
+`utils` 遗留 **58 → 8**（合计 1026 → **913**）。合同口径：`utils` 收口，剩下 8 个都不是"还能改的名字"：
+
+| 类别 | 符号 | 处理 |
+|---|---|---|
+| §4 TJS 注册表工厂族 | `TVPCreateNativeClass_{Clipboard,Debug,Pad,Timer}` | 等 `#9` 注册表反转 |
+| 注释里已不存在的符号 | `TVPMainForm`（6 处，全在注释里） | 新登记为 §4 例外：指向已删除的 Win32 主窗口，没有"真实名字"可改 |
+| 别的模块的 | `TVPUninitScriptEngine`（base/script）、`tTVPApplication`（environ）、`tTVPLocalTempStorageHolder`（base） | 各自轮次 |
+
+两批改名（含第 5b）：
+
+```
+utils.tsv（32）: TVPAddLog → AddLog、TVPStartTickCount → StartTickCount、
+  TVPTJS2{Start,End}Dump → {Start,End}TJS2Dump、tTVPThread → Thread、
+  tTVPThreadEvent → ThreadEvent、tTVPThreadPriority → ThreadPriority、
+  tTVPAsyncTriggerMode → AsyncTriggerMode、tTVPClipboardFormat → ClipboardFormat、
+  tTVPTimerImpl → TimerImpl、tTVPTimerThread → TimerThread、
+  TVPTimerEvent → TimerEvent、TVPTimerEventIntarface → ITimerEvent …
+utils-residual.tsv（19）: TVPGetTickCount → GetTickCount、TVPExecThreadTask → ExecThreadTask、
+  TVP{GetThreadNum,GetProcessorNum} → …、TVPAddImportantLog → AddImportantLog、
+  TVP{LoggingToFile,NativeLogLocation,AutoClearLogOnError,AutoLogToFileOnError} → lowerCamelCase、
+  TVPClipboard{Get,Set}Text → {Get,Set}ClipboardText、TVPClipboardHasFormat → HasClipboardFormat、
+  TVPRandomSeed* → randomSeed*、TVPMaxThreadNum → MaxThreadNum（const）、
+  TVPLimitTimerCapacity → limitTimerCapacity、TVPDestroyLoggingHandlerVector → …
+手工（1）: TVPTimer → Timer（22 处，见下）
+```
+
+\## 决策：`TVPTimer` → `Timer` 不走工具，手工改
+
+工具遇到"新名在仓库里已有同名声明"时，会在 **owner 里也用全限定名**兜底。对
+`Timer` 这种**类**来说是灾难：`TVPTimer::TVPTimer()` 会变成
+`krkr::utils::Timer::krkr::utils::Timer()`。而 movie 确实有自己 `NS_KRMOVIE` 里的
+`class Timer`（`movie/ffmpeg/Timer.h`），工具无法区分"不同 namespace 的同名类"。
+
+所以 `TVPTimer` 从 map 里拿掉，用同一套 owner/非 owner 规则手工扫一遍（22 处 /
+6 文件）。代价：`utils/impl/TVPTimer.{h,cpp}` **文件名**仍是旧的 —— N2 要求文件跟主
+类型同名，但改成 `Timer.h` 会和 `movie/ffmpeg/Timer.h` 在 15 条 `-I` 里同名，
+include 解析顺序变成隐式契约。文件名留给"公共头显式路径化"那一轮一起做。
+
+\## 决策：`TVP_THREAD_TASK_FUNC` 是 typedef，不是宏
+
+draft 见 `TVP_` 前缀就当 `macro`，推出 `KRKR_THREAD_TASK_FUNC`（N5 是给**宏**的规则）。
+本轮手动纠正为 `ThreadTaskFunc`（N4 类型）。教训：**`TVP_` 前缀 ≠ 宏**，
+`tjsTypes.h` 里的 `TJS_EXP_FUNC_DEF(rettype, name, arg)` 又让"函数声明"看起来也不像
+函数声明 —— 两者叠加就是 5b 那 19 个漏收符号的来源。
+
+\## 发现（重要）：工具产出了会挂 GCC 的代码
+
+`rename_symbols.py` 的"owner 短名 / 别处全限定"策略有一个隐含前提：**全限定名在任何
+位置都合法**。这条前提在下面这种位置不成立：
+
+```cpp
+namespace krkr::utils {
+void krkr::utils::AddLog(const ttstr &line) { }   // explicit qualification in declaration
+```
+
+而 utils 恰好有一批符号**声明在 `utils/intf/*.h`、定义在 `base/runtime/*.cpp`**
+（`AddLog`、`GetTickCount`、`ExecThreadTask`、`limitTimerCapacity`…），那些文件本身就在
+`namespace krkr::utils` 里 → 第 5 轮一口气产出了 **70 处** 这种代码。
+
+实测两边编译器态度不同：
+
+| 编译器 | 结果 |
+|---|---|
+| `g++ 13` | `error: explicit qualification in declaration of …`（`class N::C`、`static void N::h()` 更严） |
+| `clang++`（NDK r27d） | 只是 `warning: extra qualification on member [-Wextra-qualification]` |
+
+所以 Android CI 会绿，Linux/GCC 会红。这就是"没有编译验证的提交"的典型代价。
+
+为此新增 `scripts/check_qualification.py`（纯 python，已接进 `check_static.sh`）：
+在 `namespace krkr::<mod>` 作用域里出现 `krkr::<mod>::` 即报错；带 `--fix` 可机械去掉
+前缀。跑全仓还发现 **75 处历史遗留**（`StorageIntf.h` 42 / `StorageImpl.h` 12 /
+`IoStorage.cpp` 1 / `ncbind.hpp` 20），前 3 个已在下一个 commit 清掉；
+`ncbind.hpp` 那 20 处是**故意**的（宏体里的模板显式特化，DECISIONS #2），已登记为
+脚本例外。
+
+\## 数据
+
+| 轮次 | 模块 | 符号 | 替换 | 文件 | 耗时 |
+|---|---|---:|---:|---:|---|
+| 1 | extension | 7 | 21 | 4 | ~15 min |
+| 2 | io | 123 | 1023 | 83 | ~50 min |
+| 3 | plugin | 23 | 68 | 7 | ~15 min |
+| 4 | io 全局变量 | 27 | 189 | 11 | ~30 min |
+| 4b | io 残项 | 9 | 45 | 3 | ~15 min |
+| 5 | utils（含 5b） | 51 + 1 手工 | 686 + 22 | 90 | ~70 min |
+
+`check_naming.py` 合计遗留：1297 → 1101 → 1080 → 1043 → 1026 → **913**。
+桥接 393 → **369**（`utils` 84 → 42）。

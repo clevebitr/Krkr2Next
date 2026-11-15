@@ -544,23 +544,23 @@ tjs_error tTVPCrossFadeTransHandler::StartProcess(tjs_uint64 tick) {
 #ifdef TVP_TRANS_SHOW_FPS
     if((tick - StartTick) >= Time / 2) {
         if(Count) {
-            TVPAddLog(TJS_W("update count : ") + ttstr(Count));
-            TVPAddLog(TJS_W("trans time : ") +
+            krkr::utils::AddLog(TJS_W("update count : ") + ttstr(Count));
+            krkr::utils::AddLog(TJS_W("trans time : ") +
                       ttstr((tjs_int)(tick - StartTick)));
-            TVPAddLog(TJS_W("process time : ") + ttstr((tjs_int)ProcessTime));
-            TVPAddLog(TJS_W("process time / trans time (%) : ") +
+            krkr::utils::AddLog(TJS_W("process time : ") + ttstr((tjs_int)ProcessTime));
+            krkr::utils::AddLog(TJS_W("process time / trans time (%) : ") +
                       ttstr((tjs_int)(ProcessTime * 100 / (tick - StartTick))));
-            TVPAddLog(TJS_W("blend time / trans time (%) : ") +
+            krkr::utils::AddLog(TJS_W("blend time / trans time (%) : ") +
                       ttstr((tjs_int)(BlendTime * 100 / (tick - StartTick))));
-            //			TVPAddLog(TJS_W("blt time / trans time (%) :
+            //			krkr::utils::AddLog(TJS_W("blt time / trans time (%) :
             //")
             //+
             // ttstr((tjs_int)(acctime*100/(tick-StartTick))));
             tjs_int avgtime;
             avgtime = ProcessTime / Count;
-            TVPAddLog(TJS_W("process time / update count : ") + ttstr(avgtime));
+            krkr::utils::AddLog(TJS_W("process time / update count : ") + ttstr(avgtime));
             tjs_int fps = Count * 1000 / (tick - StartTick);
-            TVPAddLog(TJS_W("fps : ") + ttstr(fps));
+            krkr::utils::AddLog(TJS_W("fps : ") + ttstr(fps));
 
             Count = 0;
         }
@@ -568,7 +568,7 @@ tjs_error tTVPCrossFadeTransHandler::StartProcess(tjs_uint64 tick) {
         Count++;
     }
 
-    ProcessTick = TVPGetRoughTickCount32();
+    ProcessTick = krkr::utils::GetRoughTickCount32();
 #endif
 
     return TJS_S_TRUE;
@@ -577,7 +577,7 @@ tjs_error tTVPCrossFadeTransHandler::StartProcess(tjs_uint64 tick) {
 tjs_error tTVPCrossFadeTransHandler::EndProcess() {
     // notifies ending of the update
 #ifdef TVP_TRANS_SHOW_FPS
-    ProcessTime += TVPGetRoughTickCount32() - ProcessTick;
+    ProcessTime += krkr::utils::GetRoughTickCount32() - ProcessTick;
 #endif
 
     if(Phase >= PhaseMax)
@@ -590,7 +590,7 @@ tjs_error tTVPCrossFadeTransHandler::Process(
     // process divided region of the entire layer bitmap
 
 #ifdef TVP_TRANS_SHOW_FPS
-    BlendTick = TVPGetRoughTickCount32();
+    BlendTick = krkr::utils::GetRoughTickCount32();
 #endif
 
     if(Phase == 0) {
@@ -609,7 +609,7 @@ tjs_error tTVPCrossFadeTransHandler::Process(
     }
 
 #ifdef TVP_TRANS_SHOW_FPS
-    BlendTime += TVPGetRoughTickCount32() - BlendTick;
+    BlendTime += krkr::utils::GetRoughTickCount32() - BlendTick;
 #endif
 
     return TJS_S_OK;

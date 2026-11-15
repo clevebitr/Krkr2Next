@@ -599,7 +599,7 @@ public:
             param->blendfunc_ = blendfunc;
             int top = param->start_;
             int bottom = param->end_;
-            //	TVPExecThreadTask(&ResamplerFunc,
+            //	krkr::utils::ExecThreadTask(&ResamplerFunc,
             // TVP_THREAD_PARAM(param));
             if(i < (threadNum - 1)) {
                 for(int y = top; y < bottom; y++) {
@@ -609,7 +609,7 @@ public:
             }
         }
         //		TVPEndThreadTask();
-        TVPExecThreadTask(threadNum, [&](int i) { ResamplerFunc(&params[i]); });
+        krkr::utils::ExecThreadTask(threadNum, [&](int i) { ResamplerFunc(&params[i]); });
     }
 
 public:
@@ -645,7 +645,7 @@ public:
         int pixelNum =
             maxwidth * (int)tap * maxheight + maxheight * (int)tap * maxwidth;
         if(pixelNum >= 50 * 500) {
-            threadNum = TVPGetThreadNum();
+            threadNum = krkr::utils::GetThreadNum();
         }
         if(threadNum == 1) { // 面積が少なくスレッドが1の時はそのまま実行
             Resample(clip, blendfunc, dest, destrect, src, srcrect, tap, func);
@@ -688,7 +688,7 @@ public:
         int threadNum = 1;
         int pixelNum = maxwidth * maxheight;
         if(pixelNum >= 50 * 500) {
-            threadNum = TVPGetThreadNum();
+            threadNum = krkr::utils::GetThreadNum();
         }
         if(threadNum == 1) { // 面積が少なくスレッドが1の時はそのまま実行
             ResampleAreaAvg(clip, blendfunc, dest, destrect, src, srcrect);

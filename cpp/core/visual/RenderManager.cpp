@@ -1131,7 +1131,7 @@ public:
 
 static tjs_int GetAdaptiveThreadNum(tjs_int pixelNum, float factor) {
     if(pixelNum >= factor * 500)
-        return TVPGetThreadNum();
+        return krkr::utils::GetThreadNum();
     else
         return 1;
 }
@@ -1167,7 +1167,7 @@ public:
         tjs_int w = rect.right - rect.left;
 
         tjs_int taskNum = GetAdaptiveThreadNum(w * h, 150);
-        TVPExecThreadTask(taskNum, [&](int i) {
+        krkr::utils::ExecThreadTask(taskNum, [&](int i) {
             tjs_int y0, y1;
             y0 = h * i / taskNum;
             y1 = h * (i + 1) / taskNum;
@@ -1238,7 +1238,7 @@ public:
         tjs_int w = rect.right - rect.left;
 
         tjs_int taskNum = GetAdaptiveThreadNum(w * h, THREAD_FACTOR);
-        TVPExecThreadTask(taskNum, [=](int i) {
+        krkr::utils::ExecThreadTask(taskNum, [=](int i) {
             tjs_int y0, y1;
             y0 = h * i / taskNum;
             y1 = h * (i + 1) / taskNum;
@@ -1328,7 +1328,7 @@ public:
         tjs_int w = rect.right - rect.left;
 
         tjs_int taskNum = GetAdaptiveThreadNum(w * h, THREAD_FACTOR);
-        TVPExecThreadTask(taskNum, [&](int i) {
+        krkr::utils::ExecThreadTask(taskNum, [&](int i) {
             tjs_int y0, y1;
             y0 = h * i / taskNum;
             y1 = h * (i + 1) / taskNum;
@@ -1369,7 +1369,7 @@ public:
         bool backwardCopy = (_tar == _src && rctar.top > rcsrc.top);
 
         tjs_int taskNum = GetAdaptiveThreadNum(w * h, THREAD_FACTOR);
-        TVPExecThreadTask(taskNum, [=](int i) {
+        krkr::utils::ExecThreadTask(taskNum, [=](int i) {
             tjs_int y0, y1;
             y0 = h * i / taskNum;
             y1 = h * (i + 1) / taskNum;
@@ -1536,7 +1536,7 @@ public:
 
             tjs_int taskNum =
                 _src == _tar ? 1 : GetAdaptiveThreadNum(w * h, 66);
-            TVPExecThreadTask(taskNum, [=](int i) {
+            krkr::utils::ExecThreadTask(taskNum, [=](int i) {
                 tjs_int y0 = h * i / taskNum;
                 tjs_int y1 = h * (i + 1) / taskNum;
                 this->PartialCopy(_tar, rctar.left, rctar.top + y0, _src,
@@ -1617,7 +1617,7 @@ public:
                 dy = rctar.top;
 
         tjs_int taskNum = GetAdaptiveThreadNum(w * h, THREAD_FACTOR);
-        TVPExecThreadTask(
+        krkr::utils::ExecThreadTask(
             taskNum, [this, _src, _tar, sx, sy, dx, dy, w, h, taskNum](int i) {
                 tjs_int y0, y1;
                 y0 = h * i / taskNum;
@@ -1688,7 +1688,7 @@ public:
         // rctar.left * sizeof(tjs_uint32);
 
         tjs_int taskNum = GetAdaptiveThreadNum(w * h, THREAD_FACTOR);
-        TVPExecThreadTask(taskNum, [&](int i) {
+        krkr::utils::ExecThreadTask(taskNum, [&](int i) {
             tjs_int y0, y1;
             y0 = h * i / taskNum;
             y1 = h * (i + 1) / taskNum;
@@ -1764,7 +1764,7 @@ public:
         // rcrule.left * sizeof(tjs_uint8);
 
         tjs_int taskNum = GetAdaptiveThreadNum(w * h, THREAD_FACTOR);
-        TVPExecThreadTask(taskNum, [&](int i) {
+        krkr::utils::ExecThreadTask(taskNum, [&](int i) {
             tjs_int y0, y1;
             y0 = h * i / taskNum;
             y1 = h * (i + 1) / taskNum;
@@ -3783,10 +3783,10 @@ public:
             TAffuncFunc affineloop = GetStretchFunction(
                 static_cast<tTVPRenderMethod_Software *>(method));
 
-            tjs_int taskNum = TVPGetThreadNum();
+            tjs_int taskNum = krkr::utils::GetThreadNum();
             if(taskNum > nTriangles)
                 taskNum = nTriangles;
-            TVPExecThreadTask(taskNum, [&](int n) {
+            krkr::utils::ExecThreadTask(taskNum, [&](int n) {
                 int begin = nTriangles * n / taskNum,
                     end = nTriangles * (n + 1) / taskNum;
                 for(int i = begin; i < end; ++i) {

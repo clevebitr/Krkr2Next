@@ -243,7 +243,7 @@ void tTVPPassThroughDrawDevice::CreateDrawer(tDrawerType type) {
 
         if(Drawer) {
             if(!Drawer->SetDestPos(DestRect.left, DestRect.top)) {
-                TVPAddImportantLog(
+                krkr::utils::AddImportantLog(
                     TJS_W("Passthrough: Failed to set destination "
                           "position to draw device drawer"));
                 delete Drawer, Drawer = nullptr;
@@ -255,7 +255,7 @@ void tTVPPassThroughDrawDevice::CreateDrawer(tDrawerType type) {
             if(!Drawer->SetDestSizeAndNotifyLayerResize(DestRect.get_width(),
                                                         DestRect.get_height(),
                                                         SrcWidth, SrcHeight)) {
-                TVPAddImportantLog(
+                krkr::utils::AddImportantLog(
                     TJS_W("Passthrough: Failed to set destination "
                           "size and source "
                           "layer size to draw device drawer"));
@@ -271,11 +271,11 @@ void tTVPPassThroughDrawDevice::CreateDrawer(tDrawerType type) {
         RequestInvalidation(
             tTVPRect(0, 0, DestRect.get_width(), DestRect.get_height()));
     } catch(const eTJS &e) {
-        TVPAddImportantLog(TJS_W("Passthrough: Failed to create drawer: ") +
+        krkr::utils::AddImportantLog(TJS_W("Passthrough: Failed to create drawer: ") +
                            e.GetMessage());
         DestroyDrawer();
     } catch(...) {
-        TVPAddImportantLog(
+        krkr::utils::AddImportantLog(
             TJS_W("Passthrough: Failed to create drawer: unknown reason"));
         DestroyDrawer();
     }

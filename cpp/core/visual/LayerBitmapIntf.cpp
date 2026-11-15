@@ -83,7 +83,7 @@ const static float sBmFactor[] = {
 static tjs_int GetAdaptiveThreadNum(tjs_int pixelNum, float factor)
 {
   if (pixelNum >= factor * 500)
-    return TVPGetThreadNum();
+    return krkr::utils::GetThreadNum();
   else
     return 1;
 }
@@ -252,7 +252,7 @@ bool tTVPBaseBitmap::Fill(tTVPRect rect, tjs_uint32 value) {
 
         tjs_int taskNum = GetAdaptiveThreadNum(w * h, 150);
         TVPBeginThreadTask(taskNum);
-        PartialFillParam params[TVPMaxThreadNum];
+        PartialFillParam params[krkr::utils::MaxThreadNum];
         for (tjs_int i = 0; i < taskNum; i++) {
           tjs_int y0, y1;
           y0 = h * i / taskNum;
@@ -267,7 +267,7 @@ bool tTVPBaseBitmap::Fill(tTVPRect rect, tjs_uint32 value) {
           param->h = y1 - y0;
           param->value = value;
           param->is32bpp = is32bpp;
-          TVPExecThreadTask(&PartialFillEntry, TVP_THREAD_PARAM(param));
+          krkr::utils::ExecThreadTask(&PartialFillEntry, TVP_THREAD_PARAM(param));
         }
         TVPEndThreadTask();
 #endif
@@ -411,7 +411,7 @@ bool iTVPBaseBitmap::FillColor(tTVPRect rect, tjs_uint32 color, tjs_int opa) {
 
         tjs_int taskNum = GetAdaptiveThreadNum(w * h, opa == 255 ? 115.f : 55.f);
         TVPBeginThreadTask(taskNum);
-        PartialFillColorParam params[TVPMaxThreadNum];
+        PartialFillColorParam params[krkr::utils::MaxThreadNum];
         for (tjs_int i = 0; i < taskNum; i++) {
           tjs_int y0, y1;
           y0 = h * i / taskNum;
@@ -426,7 +426,7 @@ bool iTVPBaseBitmap::FillColor(tTVPRect rect, tjs_uint32 color, tjs_int opa) {
           param->h = y1 - y0;
           param->color = color;
           param->opa = opa;
-          TVPExecThreadTask(&PartialFillColorEntry, TVP_THREAD_PARAM(param));
+          krkr::utils::ExecThreadTask(&PartialFillColorEntry, TVP_THREAD_PARAM(param));
         }
         TVPEndThreadTask();
 #endif
@@ -541,7 +541,7 @@ bool iTVPBaseBitmap::BlendColor(tTVPRect rect, tjs_uint32 color, tjs_int opa,
           factor = 147;
         tjs_int taskNum = GetAdaptiveThreadNum(w * h, static_cast<float>(factor) );
         TVPBeginThreadTask(taskNum);
-        PartialBlendColorParam params[TVPMaxThreadNum];
+        PartialBlendColorParam params[krkr::utils::MaxThreadNum];
         for (tjs_int i = 0; i < taskNum; i++) {
           tjs_int y0, y1;
           y0 = h * i / taskNum;
@@ -557,7 +557,7 @@ bool iTVPBaseBitmap::BlendColor(tTVPRect rect, tjs_uint32 color, tjs_int opa,
           param->color = color;
           param->opa = opa;
           param->additive = additive;
-          TVPExecThreadTask(&PartialBlendColorEntry, TVP_THREAD_PARAM(param));
+          krkr::utils::ExecThreadTask(&PartialBlendColorEntry, TVP_THREAD_PARAM(param));
         }
         TVPEndThreadTask();
 #endif
@@ -668,7 +668,7 @@ bool iTVPBaseBitmap::RemoveConstOpacity(tTVPRect rect, tjs_int level) {
 
         tjs_int taskNum = GetAdaptiveThreadNum(w * h, level == 255 ? 83.f : 50.f);
         TVPBeginThreadTask(taskNum);
-        PartialRemoveConstOpacityParam params[TVPMaxThreadNum];
+        PartialRemoveConstOpacityParam params[krkr::utils::MaxThreadNum];
         for (tjs_int i = 0; i < taskNum; i++) {
           tjs_int y0, y1;
           y0 = h * i / taskNum;
@@ -682,7 +682,7 @@ bool iTVPBaseBitmap::RemoveConstOpacity(tTVPRect rect, tjs_int level) {
           param->w = w;
           param->h = y1 - y0;
           param->level = level;
-          TVPExecThreadTask(&PartialRemoveConstOpacityEntry, TVP_THREAD_PARAM(param));
+          krkr::utils::ExecThreadTask(&PartialRemoveConstOpacityEntry, TVP_THREAD_PARAM(param));
         }
         TVPEndThreadTask();
 #endif
@@ -750,7 +750,7 @@ bool iTVPBaseBitmap::FillMask(tTVPRect rect, tjs_int value) {
 
         tjs_int taskNum = GetAdaptiveThreadNum(w * h, 84);
         TVPBeginThreadTask(taskNum);
-        PartialFillMaskParam params[TVPMaxThreadNum];
+        PartialFillMaskParam params[krkr::utils::MaxThreadNum];
         for (tjs_int i = 0; i < taskNum; i++) {
           tjs_int y0, y1;
           y0 = h * i / taskNum;
@@ -764,7 +764,7 @@ bool iTVPBaseBitmap::FillMask(tTVPRect rect, tjs_int value) {
           param->w = w;
           param->h = y1 - y0;
           param->value = value;
-          TVPExecThreadTask(&PartialFillMaskEntry, TVP_THREAD_PARAM(param));
+          krkr::utils::ExecThreadTask(&PartialFillMaskEntry, TVP_THREAD_PARAM(param));
         }
         TVPEndThreadTask();
 #endif
@@ -888,7 +888,7 @@ bool tTVPBaseBitmap::CopyRect(tjs_int x, tjs_int y, const iTVPBaseBitmap *ref,
 
         tjs_int taskNum = (ref == this) ? 1 : GetAdaptiveThreadNum(w * h, 66);
         TVPBeginThreadTask(taskNum);
-        PartialCopyRectParam params[TVPMaxThreadNum];
+        PartialCopyRectParam params[krkr::utils::MaxThreadNum];
         for (tjs_int i = 0; i < taskNum; i++) {
           tjs_int y0, y1;
           y0 = h * i / taskNum;
@@ -908,7 +908,7 @@ bool tTVPBaseBitmap::CopyRect(tjs_int x, tjs_int y, const iTVPBaseBitmap *ref,
           param->sy = refrect.top + y0;
           param->plane = plane;
           param->backwardCopy = backwardCopy;
-          TVPExecThreadTask(&PartialCopyRectEntry, TVP_THREAD_PARAM(param));
+          krkr::utils::ExecThreadTask(&PartialCopyRectEntry, TVP_THREAD_PARAM(param));
         }
         TVPEndThreadTask();
 #endif
@@ -1538,7 +1538,7 @@ bool iTVPBaseBitmap::Blt(tjs_int x, tjs_int y, const iTVPBaseBitmap *ref,
 
         tjs_int taskNum = GetAdaptiveThreadNum(w * h, sBmFactor[method]);
         TVPBeginThreadTask(taskNum);
-        PartialBltParam params[TVPMaxThreadNum];
+        PartialBltParam params[krkr::utils::MaxThreadNum];
         for (tjs_int i = 0; i < taskNum; i++) {
           tjs_int y0, y1;
           y0 = h * i / taskNum;
@@ -1558,7 +1558,7 @@ bool iTVPBaseBitmap::Blt(tjs_int x, tjs_int y, const iTVPBaseBitmap *ref,
           param->method = method;
           param->opa = opa;
           param->hda = hda;
-          TVPExecThreadTask(&PartialBltEntry, TVP_THREAD_PARAM(param));
+          krkr::utils::ExecThreadTask(&PartialBltEntry, TVP_THREAD_PARAM(param));
         }
         TVPEndThreadTask();
 #endif
@@ -3419,7 +3419,7 @@ int tTVPBaseBitmap::InternalAffineBlt(tTVPRect destrect, const tTVPBaseBitmap *r
 
         tjs_int taskNum = GetAdaptiveThreadNum(w * h, sBmFactor[method] * 13 / 59);
         TVPBeginThreadTask(taskNum);
-        PartialAffineBltParam params[TVPMaxThreadNum];
+        PartialAffineBltParam params[krkr::utils::MaxThreadNum];
         for (tjs_int i = 0; i < taskNum; i++) {
           tjs_int y0, y1;
           y0 = ych * i / taskNum;
@@ -3453,7 +3453,7 @@ int tTVPBaseBitmap::InternalAffineBlt(tTVPRect destrect, const tTVPBaseBitmap *r
           param->srcpitch = srcpitch;
           param->srccliprect = &srccliprect;
           param->srcrect = &srcrect;
-          TVPExecThreadTask(&PartialAffineBltEntry, TVP_THREAD_PARAM(param));
+          krkr::utils::ExecThreadTask(&PartialAffineBltEntry, TVP_THREAD_PARAM(param));
         }
         TVPEndThreadTask();
 

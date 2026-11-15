@@ -14,7 +14,7 @@
 #include <functional>
 
 namespace krkr::utils {
-    enum tTVPThreadPriority {
+    enum ThreadPriority {
         ttpIdle,
         ttpLowest,
         ttpLower,
@@ -29,20 +29,19 @@ namespace krkr::utils {
 
 namespace krkr::utils {
 
-    const tjs_int TVPMaxThreadNum = 8;
-    typedef const std::function<void(int)> &TVP_THREAD_TASK_FUNC;
+    const tjs_int MaxThreadNum = 8;
+    typedef const std::function<void(int)> &ThreadTaskFunc;
 
 
-    TJS_EXP_FUNC_DEF(tjs_int, TVPGetProcessorNum, ());
+    TJS_EXP_FUNC_DEF(tjs_int, GetProcessorNum, ());
 
-    TJS_EXP_FUNC_DEF(tjs_int, TVPGetThreadNum, ());
+    TJS_EXP_FUNC_DEF(tjs_int, GetThreadNum, ());
 
-    TJS_EXP_FUNC_DEF(void, TVPExecThreadTask,
-                     (int numThreads, TVP_THREAD_TASK_FUNC func));
+    TJS_EXP_FUNC_DEF(void, ExecThreadTask,
+                     (int numThreads, ThreadTaskFunc func));
 } // namespace krkr::utils
 
 // TODO: 过渡兼容，迁移完成后删除
-using krkr::utils::tTVPThreadPriority;
 using krkr::utils::ttpHigher;
 using krkr::utils::ttpHighest;
 using krkr::utils::ttpIdle;
@@ -51,10 +50,5 @@ using krkr::utils::ttpLowest;
 using krkr::utils::ttpNormal;
 using krkr::utils::ttpTimeCritical;
 
-using krkr::utils::TVP_THREAD_TASK_FUNC;
-using krkr::utils::TVPExecThreadTask;
-using krkr::utils::TVPGetProcessorNum;
-using krkr::utils::TVPGetThreadNum;
-using krkr::utils::TVPMaxThreadNum;
 
 #endif

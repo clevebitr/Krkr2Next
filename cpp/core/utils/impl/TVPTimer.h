@@ -4,30 +4,30 @@
 
 namespace krkr::utils {
 
-class TVPTimerEventIntarface {
+class ITimerEvent {
 public:
-    virtual ~TVPTimerEventIntarface() {}
+    virtual ~ITimerEvent() {}
 
     virtual void Handle() = 0;
 };
 
 template <typename T>
-class TVPTimerEvent : public TVPTimerEventIntarface {
+class TimerEvent : public ITimerEvent {
     void (T::*handler_)();
 
     T *owner_;
 
 public:
-    TVPTimerEvent(T *owner, void (T::*Handler)()) :
+    TimerEvent(T *owner, void (T::*Handler)()) :
         owner_(owner), handler_(Handler) {}
 
     void Handle() override { (owner_->*handler_)(); }
 };
 
-class tTVPTimerImpl;
+class TimerImpl;
 
-class TVPTimer {
-    TVPTimerEventIntarface *event_;
+class Timer {
+    ITimerEvent *event_;
     int interval_;
     bool enabled_;
 
@@ -39,20 +39,20 @@ class TVPTimer {
         }
     }
 
-    friend class tTVPTimerImpl;
+    friend class TimerImpl;
 
-    tTVPTimerImpl *impl_;
+    TimerImpl *impl_;
 
 public:
-    TVPTimer();
+    Timer();
 
-    ~TVPTimer();
+    ~Timer();
 
     template <typename T>
     void SetOnTimerHandler(T *owner, void (T::*Handler)()) {
 
         delete event_;
-        event_ = new TVPTimerEvent<T>(owner, Handler);
+        event_ = new TimerEvent<T>(owner, Handler);
         UpdateTimer();
     }
 
@@ -78,9 +78,5 @@ public:
 };
 
 } // namespace krkr::utils
-
-using krkr::utils::TVPTimerEventIntarface;
-using krkr::utils::TVPTimerEvent;
-using krkr::utils::TVPTimer;
 
 #endif // __TVP_TIMER_H__

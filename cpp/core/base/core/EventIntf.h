@@ -15,7 +15,7 @@
 #define EventIntfH
 
 #include "tjsNative.h"
-#include "AsyncTriggerMode.h" // tTVPAsyncTriggerMode（定义在 krkr::utils，见该头注释）
+#include "AsyncTriggerMode.h" // krkr::utils::AsyncTriggerMode（定义在 krkr::utils，见该头注释）
 
 //---------------------------------------------------------------------------
 // Event dispatching
@@ -318,7 +318,7 @@ extern void TVPDeliverCompactEvent(tjs_int level);
 //---------------------------------------------------------------------------
 // AsyncTrigger related
 //---------------------------------------------------------------------------
-// tTVPAsyncTriggerMode 已下移到 core/utils/AsyncTriggerMode.h：
+// krkr::utils::AsyncTriggerMode 已下移到 core/utils/AsyncTriggerMode.h：
 // Timer（utils）与 AsyncTrigger（base）共用，放下层才不制造 utils -> base 反向边。
 /*]*/
 
@@ -334,7 +334,7 @@ protected:
     ttstr ActionName;
 
     bool Cached; // cached operation
-    tTVPAsyncTriggerMode Mode; // event mode
+    krkr::utils::AsyncTriggerMode Mode; // event mode
     tjs_int IdlePendingCount;
 
 public:
@@ -360,9 +360,9 @@ public:
 
     void SetCached(bool b);
 
-    [[nodiscard]] tTVPAsyncTriggerMode GetMode() const { return Mode; }
+    [[nodiscard]] krkr::utils::AsyncTriggerMode GetMode() const { return Mode; }
 
-    void SetMode(tTVPAsyncTriggerMode m);
+    void SetMode(krkr::utils::AsyncTriggerMode m);
 };
 //---------------------------------------------------------------------------
 
@@ -430,7 +430,7 @@ using krkr::base::TVPDeliverCompactEvent;
 using krkr::base::tTJSNI_AsyncTrigger;
 using krkr::base::tTJSNC_AsyncTrigger;
 using krkr::base::TVPCreateNativeClass_AsyncTrigger;
-// tTVPAsyncTriggerMode / atmNormal・atmExclusive・atmAtIdle 的 using 在
+// krkr::utils::AsyncTriggerMode / atmNormal・atmExclusive・atmAtIdle 的 using 在
 // core/utils/AsyncTriggerMode.h 里（它属于 krkr::utils）。
 
 #endif

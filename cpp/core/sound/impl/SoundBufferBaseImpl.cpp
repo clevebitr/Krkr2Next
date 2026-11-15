@@ -14,7 +14,7 @@
 #include "SoundBufferBaseImpl.h"
 #include "WaveImpl.h"
 
-#include "TVPTimer.h"
+#include "krkr::utils::Timer.h"
 
 namespace krkr::sound {
 
@@ -22,7 +22,7 @@ namespace krkr::sound {
 // Sound Buffer Timer Dispatcher ( for fading or commiting defered
 // settings )
 //---------------------------------------------------------------------------
-static class TVPTimer *TVPSoundBufferTimer = nullptr;
+static class krkr::utils::Timer *TVPSoundBufferTimer = nullptr;
 
 static std::vector<tTJSNI_SoundBuffer *> TVPSoundBufferVector;
 
@@ -43,7 +43,7 @@ public:
 void TVPAddSoundBuffer(tTJSNI_SoundBuffer *buf) {
     if(TVPSoundBufferVector.empty()) {
         // first buffer
-        TVPSoundBufferTimer = new TVPTimer(); // Create Timer Object
+        TVPSoundBufferTimer = new krkr::utils::Timer(); // Create Timer Object
         TVPSoundBufferTimer->SetInterval(TVP_SB_BEAT_INTERVAL);
         TVPSoundBufferTimer->SetOnTimerHandler(
             &TVPSoundBufferTimerDispatcher,

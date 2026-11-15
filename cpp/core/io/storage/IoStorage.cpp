@@ -784,7 +784,7 @@ public:
             return ptr->GetObject();
         }
 
-        TVPAddLog(ttstr(TJS_W("(info) ArchiveCache miss: ")) + name);
+        krkr::utils::AddLog(ttstr(TJS_W("(info) ArchiveCache miss: ")) + name);
 
         if(!IsExistentStorageNoSearch(name)) {
             TVPThrowExceptionMessage(TVPCannotFindStorage, name);
@@ -1003,8 +1003,8 @@ static tjs_uint RebuildAutoPathTable() {
     const bool lastWins =
         policy.tieBreak == krkr::io::AutoPathTieBreak::LastRegisteredWins;
 
-    tjs_uint64 tick = TVPGetTickCount();
-    TVPAddLog((const tjs_char *)TVPInfoRebuildingAutoPath);
+    tjs_uint64 tick = krkr::utils::GetTickCount();
+    krkr::utils::AddLog((const tjs_char *)TVPInfoRebuildingAutoPath);
 
     tjs_uint totalcount = 0;
 
@@ -1027,7 +1027,7 @@ static tjs_uint RebuildAutoPathTable() {
             try {
                 arc = archiveCache.Get(arcname);
             } catch(...) {
-                TVPAddLog(ttstr(TJS_W("(warning) Cannot open archive: ")) +
+                krkr::utils::AddLog(ttstr(TJS_W("(warning) Cannot open archive: ")) +
                           arcname);
                 continue;
             }
@@ -1081,7 +1081,7 @@ static tjs_uint RebuildAutoPathTable() {
             }
         }
 
-        //		TVPAddLog(ttstr(TJS_W("(info) Path ")) + path +
+        //		krkr::utils::AddLog(ttstr(TJS_W("(info) Path ")) + path +
         // TJS_W("
         // contains ")
         //+ 			ttstr((tjs_int)count) + TJS_W(" file(s)."));
@@ -1089,9 +1089,9 @@ static tjs_uint RebuildAutoPathTable() {
         totalcount += count;
     }
 
-    tjs_uint64 endtick = TVPGetTickCount();
+    tjs_uint64 endtick = krkr::utils::GetTickCount();
 
-    TVPAddLog(ttstr(TJS_W("(info) Total ")) + ttstr((tjs_int)totalcount) +
+    krkr::utils::AddLog(ttstr(TJS_W("(info) Total ")) + ttstr((tjs_int)totalcount) +
               TJS_W(" file(s) found, ") +
               ttstr((tjs_int)autoPathTable.GetCount()) +
               TJS_W(" file(s) activated.") + TJS_W(" (") +
@@ -1298,7 +1298,7 @@ tTJSBinaryStream *CreateStream(const ttstr &_name, tjs_uint32 flags) {
         // check whether the filename contains '#' (former delimiter
         // for archive filename before 2.19 beta 14)
         if(TJS_strchr(_name.c_str(), '#'))
-            TVPAddLog(TVPFormatMessage(TVPFilenameContainsSharpWarn, _name));
+            krkr::utils::AddLog(TVPFormatMessage(TVPFilenameContainsSharpWarn, _name));
         throw;
     }
 }

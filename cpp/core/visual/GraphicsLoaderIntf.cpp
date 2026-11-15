@@ -2151,7 +2151,7 @@ private:
             return ptr->GetObjectNoAddRef()->GetSize(); // already in cache
         }
 #ifdef _DEBUG
-        TVPAddLog(TJS_W("Touching Image: ") + item.main.filename);
+        krkr::utils::AddLog(TJS_W("Touching Image: ") + item.main.filename);
 #endif
 
         // load into dest
@@ -2415,13 +2415,13 @@ void TVPTouchImages(const std::vector<ttstr> &storages, tjs_int64 limit,
 #endif
     tjs_int count = 0;
     tjs_uint64 bytes = 0;
-    tjs_uint64 starttime = TVPGetTickCount();
+    tjs_uint64 starttime = krkr::utils::GetTickCount();
     tjs_uint64 limittime = starttime + timeout;
     // tTVPBaseBitmap tmp(32, 32, 32);
     ttstr statusstr((const tjs_char *)TVPInfoTouching);
     bool first = true;
     while((tjs_uint)count < storages.size()) {
-        if(timeout && TVPGetTickCount() >= limittime) {
+        if(timeout && krkr::utils::GetTickCount() >= limittime) {
             statusstr += (const tjs_char *)TVPAbortedTimeOut;
             break;
         }
@@ -2465,10 +2465,10 @@ void TVPTouchImages(const std::vector<ttstr> &storages, tjs_int64 limit,
     }
 
     statusstr += TJS_W(" (elapsed ");
-    statusstr += ttstr((tjs_int)(TVPGetTickCount() - starttime));
+    statusstr += ttstr((tjs_int)(krkr::utils::GetTickCount() - starttime));
     statusstr += TJS_W("ms)");
 
-    TVPAddLog(statusstr);
+    krkr::utils::AddLog(statusstr);
 }
 //---------------------------------------------------------------------------
 

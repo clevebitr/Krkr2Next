@@ -576,12 +576,12 @@ static tjs_int processID;
 
 ttstr GetTemporaryName() {
     static tjs_int tempUniqueNum =
-        static_cast<tjs_int>(TVPGetRoughTickCount32());
+        static_cast<tjs_int>(krkr::utils::GetRoughTickCount32());
     tjs_int num = tempUniqueNum++;
     ttstr tempPath = GetAppPath();
 
     unsigned char buf[16];
-    TVPGetRandomBits128(buf);
+    krkr::utils::GetRandomBits128(buf);
     ttstr random{ fmt::format("{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}", buf[0],
                               buf[1], buf[2], buf[3], buf[4], buf[5]) };
 
@@ -862,8 +862,8 @@ LocalFileStream::LocalFileStream(const ttstr &origname,
     }
 #endif
     // push current tick as an environment noise
-    uint32_t tick = TVPGetRoughTickCount32();
-    TVPPushEnvironNoise(&tick, sizeof(tick));
+    uint32_t tick = krkr::utils::GetRoughTickCount32();
+    krkr::utils::PushEnvironNoise(&tick, sizeof(tick));
 }
 
 //---------------------------------------------------------------------------
@@ -885,8 +885,8 @@ LocalFileStream::~LocalFileStream() {
 
     // push current tick as an environment noise
     // (timing information from file accesses may be good noises)
-    uint32_t tick = TVPGetRoughTickCount32();
-    TVPPushEnvironNoise(&tick, sizeof(tick));
+    uint32_t tick = krkr::utils::GetRoughTickCount32();
+    krkr::utils::PushEnvironNoise(&tick, sizeof(tick));
 }
 
 //---------------------------------------------------------------------------
@@ -1598,7 +1598,7 @@ void AutoMountSiblingXP3Archives() {
     std::sort(xp3Names.begin(), xp3Names.end());
 
     if(xp3Names.empty()) {
-        TVPAddImportantLog(TJS_W("(info) No sibling XP3 archives found"));
+        krkr::utils::AddImportantLog(TJS_W("(info) No sibling XP3 archives found"));
         return;
     }
 
@@ -1610,7 +1610,7 @@ void AutoMountSiblingXP3Archives() {
         try {
             arc = OpenArchive(archivePath, true);
         } catch(...) {
-            TVPAddImportantLog(
+            krkr::utils::AddImportantLog(
                 ttstr(TJS_W("(warn) Failed to open sibling archive: ")) +
                 archivePath);
             continue;
@@ -1665,7 +1665,7 @@ void AutoMountSiblingXP3Archives() {
         }
         }
 
-        TVPAddImportantLog(
+        krkr::utils::AddImportantLog(
             ttstr(TJS_W("(info) Auto-mounted sibling archive: ")) +
             archivePath + ttstr(TJS_W(" (")) + ttstr((tjs_int)dirPaths.size()) +
             ttstr(TJS_W(" dirs, ")) + ttstr((tjs_int)fileCount) +
@@ -1723,7 +1723,7 @@ void AutoMountProjectXP3Archives() {
     std::sort(xp3Names.begin(), xp3Names.end());
 
     if(xp3Names.empty()) {
-        TVPAddImportantLog(TJS_W("(info) No XP3 archives in project dir"));
+        krkr::utils::AddImportantLog(TJS_W("(info) No XP3 archives in project dir"));
         return;
     }
 
@@ -1737,7 +1737,7 @@ void AutoMountProjectXP3Archives() {
         try {
             arc = OpenArchive(archivePath, true);
         } catch(...) {
-            TVPAddImportantLog(
+            krkr::utils::AddImportantLog(
                 ttstr(TJS_W("(warn) Failed to open project archive: ")) +
                 archivePath);
             continue;
@@ -1791,14 +1791,14 @@ void AutoMountProjectXP3Archives() {
         }
         }
 
-        TVPAddImportantLog(
+        krkr::utils::AddImportantLog(
             ttstr(TJS_W("(info) Auto-mounted project archive: ")) +
             archivePath + ttstr(TJS_W(" (")) + ttstr((tjs_int)dirPaths.size()) +
             ttstr(TJS_W(" dirs, ")) + ttstr((tjs_int)fileCount) +
             ttstr(TJS_W(" files)")));
     }
 
-    TVPAddImportantLog(ttstr(TJS_W("(info) AutoMountProjectXP3: found ")) +
+    krkr::utils::AddImportantLog(ttstr(TJS_W("(info) AutoMountProjectXP3: found ")) +
                        ttstr((tjs_int)xp3Names.size()) +
                        ttstr(TJS_W(" xp3, mounted ")) + ttstr(mountedCount) +
                        ttstr(TJS_W(" archive(s) in project dir")));

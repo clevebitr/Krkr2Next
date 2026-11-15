@@ -155,7 +155,7 @@ ttstr TVPGetAboutString() {
 
     return TVPFormatMessage(TVPReadAboutStringFromResource().c_str(), verstr,
                             tjsverstr) +
-        TVPGetImportantLog();
+        krkr::utils::GetImportantLog();
 }
 
 //---------------------------------------------------------------------------

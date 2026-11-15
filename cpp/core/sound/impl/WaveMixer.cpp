@@ -729,7 +729,7 @@ public:
             std::vector<std::string> alldev;
             ttstr log(TJS_W("(info) Sound Driver/Device found : "));
             while(*devices) {
-                TVPAddImportantLog(log + devices);
+                krkr::utils::AddImportantLog(log + devices);
                 alldev.emplace_back(devices);
                 devices += alldev.back().length();
             }

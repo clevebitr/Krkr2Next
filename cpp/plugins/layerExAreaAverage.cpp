@@ -26,7 +26,7 @@ struct layerExAreaAverage {
         if(numparams < 9)
             return TJS_E_BADPARAMCOUNT;
 
-        tjs_uint64 tick = TVPGetTickCount();
+        tjs_uint64 tick = krkr::utils::GetTickCount();
 
         tjs_int dImageWidth, dImageHeight, dPitch;
         tjs_uint8 *dBuffer;
@@ -194,11 +194,11 @@ struct layerExAreaAverage {
                               objthis);
         }
 
-        TVPAddLog(TJS_W("stretch copy by area average:RESULT (") +
+        krkr::utils::AddLog(TJS_W("stretch copy by area average:RESULT (") +
                   ttstr((int)sWidth) + TJS_W(",") + ttstr((int)sHeight) +
                   TJS_W(")->(") + ttstr((int)dWidth) + TJS_W(",") +
                   ttstr((int)dHeight) + TJS_W("), time = ") +
-                  ttstr((int)(TVPGetTickCount() - tick)) + TJS_W("(ms)"));
+                  ttstr((int)(krkr::utils::GetTickCount() - tick)) + TJS_W("(ms)"));
 
         return TJS_S_OK;
     }

@@ -208,9 +208,9 @@ void TVPMIDIOutData(const tjs_uint8 *data, int len) {
 //---------------------------------------------------------------------------
 // MIDI sequencer thread and buffer management
 //---------------------------------------------------------------------------
-class tTVPMIDIThread : public tTVPThread {
+class tTVPMIDIThread : public krkr::utils::Thread {
 public:
-    tTVPMIDIThread() : tTVPThread(true) { SetPriority(ttpTimeCritical); };
+    tTVPMIDIThread() : krkr::utils::Thread(true) { SetPriority(ttpTimeCritical); };
 
     ~tTVPMIDIThread() {
         Terminate();
@@ -265,7 +265,7 @@ static void TVPAddMIDIBuffer(tTJSNI_MIDISoundBuffer *buf) {
 
     if(TVPMIDIBuffers.size() == 1) {
         // first buffer
-        // TVPStartTickCount(); // in TickCount.cpp
+        // krkr::utils::StartTickCount(); // in TickCount.cpp
         TVPInitMIDIOut();
         if(!TVPMIDIThread)
             TVPMIDIThread = new tTVPMIDIThread();
@@ -749,7 +749,7 @@ bool tTJSNI_MIDISoundBuffer::OnTimer() {
         }
     }
 
-    tjs_uint64 curtick = TVPGetTickCount();
+    tjs_uint64 curtick = krkr::utils::GetTickCount();
     tjs_uint64 d = curtick - LastTickTime;
     LastTickTime = curtick;
 
@@ -886,7 +886,7 @@ bool tTJSNI_MIDISoundBuffer::StartPlay() {
         Volumes[i] = 100;
     }
 
-    LastTickTime = TVPGetTickCount();
+    LastTickTime = krkr::utils::GetTickCount();
     Playing = true;
 
     return true;

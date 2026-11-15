@@ -2,42 +2,46 @@
 # qualify: krkr::utils
 # owner: cpp/core/utils
 #
-# 由 rename_symbols.py --draft 生成：只做前缀剥离，未做语义审阅。
-# 第 4 列是提示（冲突/无变化），apply 时忽略；人工确认后请删掉或改掉。
-TVPAddOnThreadExitEvent	AddOnThreadExitEvent	fn	
-TVPClearLoggingHandlers	ClearLoggingHandlers	fn	
-TVPCreateNativeClass_Clipboard	CreateNativeClass_Clipboard	fn	
-TVPCreateNativeClass_Debug	CreateNativeClass_Debug	fn	
-TVPCreateNativeClass_Pad	CreateNativeClass_Pad	fn	
-TVPCreateNativeClass_Timer	CreateNativeClass_Timer	fn	
-TVPEncodeUTF8ToUTF16	EncodeUTF8ToUTF16	fn	
-TVPGetConsoleClass	GetConsoleClass	fn	
-TVPGetControllerClass	GetControllerClass	fn	
-TVPGetImportantLog	GetImportantLog	fn	
-TVPGetLastLog	GetLastLog	fn	
-TVPGetRandomBits128	GetRandomBits128	fn	
-TVPGetRoughTickCount32	GetRoughTickCount32	fn	
-TVPGetTJS2ConsoleOutputGateway	GetTJS2ConsoleOutputGateway	fn	
-TVPGetTJS2DumpOutputGateway	GetTJS2DumpOutputGateway	fn	
-TVPOnError	OnError	fn	
-TVPOnErrorHook	OnErrorHook	fn	
-TVPOnThreadExited	OnThreadExited	fn	
-TVPPushEnvironNoise	PushEnvironNoise	fn	
-TVPSetLogLocation	SetLogLocation	fn	
-TVPSetOnLog	SetOnLog	fn	
-TVPStartLogToFile	StartLogToFile	fn	
-TVPStartTickCount	StartTickCount	fn	
-TVPTJS2EndDump	TJS2EndDump	fn	
-TVPTJS2StartDump	TJS2StartDump	fn	
-TVPTimer	Timer	type	冲突:cpp/core/base/runtime/TimerIntf.cpp,cpp/core/movie/ffmpeg/Timer.h
-TVPTimerEvent	TimerEvent	type	
-TVPTimerEventIntarface	TimerEventIntarface	type	
-TVP_SUBMILLI_FRAC_BITS	KRKR_SUBMILLI_FRAC_BITS	macro	
-TVP_THREAD_TASK_FUNC	KRKR_THREAD_TASK_FUNC	macro	
-tTVPAsyncTriggerMode	AsyncTriggerMode	type	
-tTVPClipboardFormat	ClipboardFormat	type	
-tTVPThread	Thread	type	
-tTVPThreadEvent	ThreadEvent	type	
-tTVPThreadPriority	ThreadPriority	type	
-tTVPTimerImpl	TimerImpl	type	
-tTVPTimerThread	TimerThread	type	
+# utils 第 5 轮。由 --draft 生成后**人工审阅**：
+#   · 删掉 4 个 TVPCreateNativeClass_*：属 §4「TJS 注册表工厂族」例外，等注册表反转；
+#   · TVPTimer 不在本 map 里：新名 Timer 与 movie/ffmpeg/Timer.h 的 class Timer 撞名，
+#     工具的"冲突"分支会让 owner 内也全限定 → `TVPTimer::TVPTimer()` 变成
+#     `krkr::utils::Timer::krkr::utils::Timer()`（非法）。改为同 commit 手工改名。
+#   · TVPTJS2StartDump / TVPTJS2EndDump 按 N3 动词表改成 StartTJS2Dump / EndTJS2Dump
+#     （draft 给的是名词在前的 TJS2StartDump）；
+#   · TVP_THREAD_TASK_FUNC 虽然长得像宏，其实是 typedef（const std::function<>&），
+#     按 N4 类型规则改成 ThreadTaskFunc（draft 因为 `TVP_` 前缀误判成 macro）；
+#   · TVPTimerEventIntarface 是抽象接口（只有 virtual Fire），按 N4 用 I + PascalCase
+#     改成 ITimerEvent，顺手去掉 Intarface 的拼写错误。
+TVPAddOnThreadExitEvent	AddOnThreadExitEvent	fn
+TVPClearLoggingHandlers	ClearLoggingHandlers	fn
+TVPEncodeUTF8ToUTF16	EncodeUTF8ToUTF16	fn
+TVPGetConsoleClass	GetConsoleClass	fn
+TVPGetControllerClass	GetControllerClass	fn
+TVPGetImportantLog	GetImportantLog	fn
+TVPGetLastLog	GetLastLog	fn
+TVPGetRandomBits128	GetRandomBits128	fn
+TVPGetRoughTickCount32	GetRoughTickCount32	fn
+TVPGetTJS2ConsoleOutputGateway	GetTJS2ConsoleOutputGateway	fn
+TVPGetTJS2DumpOutputGateway	GetTJS2DumpOutputGateway	fn
+TVPOnError	OnError	fn
+TVPOnErrorHook	OnErrorHook	fn
+TVPOnThreadExited	OnThreadExited	fn
+TVPPushEnvironNoise	PushEnvironNoise	fn
+TVPSetLogLocation	SetLogLocation	fn
+TVPSetOnLog	SetOnLog	fn
+TVPStartLogToFile	StartLogToFile	fn
+TVPStartTickCount	StartTickCount	fn
+TVPTJS2EndDump	EndTJS2Dump	fn
+TVPTJS2StartDump	StartTJS2Dump	fn
+TVP_SUBMILLI_FRAC_BITS	KRKR_SUBMILLI_FRAC_BITS	macro
+TVP_THREAD_TASK_FUNC	ThreadTaskFunc	type
+tTVPAsyncTriggerMode	AsyncTriggerMode	type
+tTVPClipboardFormat	ClipboardFormat	type
+tTVPThread	Thread	type
+tTVPThreadEvent	ThreadEvent	type
+tTVPThreadPriority	ThreadPriority	type
+tTVPTimerImpl	TimerImpl	type
+tTVPTimerThread	TimerThread	type
+TVPTimerEvent	TimerEvent	type
+TVPTimerEventIntarface	ITimerEvent	type

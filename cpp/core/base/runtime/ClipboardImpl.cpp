@@ -18,7 +18,7 @@ namespace krkr::utils {
 //---------------------------------------------------------------------------
 // clipboard related functions
 //---------------------------------------------------------------------------
-bool TVPClipboardHasFormat(tTVPClipboardFormat format) {
+bool HasClipboardFormat(ClipboardFormat format) {
     switch(format) {
         case cbfText: {
             bool result = false;
@@ -39,7 +39,7 @@ bool TVPClipboardHasFormat(tTVPClipboardFormat format) {
 }
 
 //---------------------------------------------------------------------------
-void TVPClipboardSetText(const ttstr &text) {
+void SetClipboardText(const ttstr &text) {
 #if 0
     if( ::OpenClipboard(0) ) {
         HGLOBAL ansihandle = nullptr;
@@ -80,7 +80,7 @@ void TVPClipboardSetText(const ttstr &text) {
 }
 
 //---------------------------------------------------------------------------
-bool TVPClipboardGetText(ttstr &text) {
+bool GetClipboardText(ttstr &text) {
 #if 0
     if(!::OpenClipboard(nullptr)) return false;
 

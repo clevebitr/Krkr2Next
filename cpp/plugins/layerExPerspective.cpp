@@ -254,7 +254,7 @@ static void delMethod(iTJSDispatch2 *dispatch, const tjs_char *methodName) {
 //---------------------------------------------------------------------------
 void InitPlugin_Perspective() {
     // 	if (TVPGetRenderManager()->IsSoftware()) {
-    // 	    TVPAddImportantLog(ttstr(copyright));
+    // 	    krkr::utils::AddImportantLog(ttstr(copyright));
     //
     // 	    // クラスオブジェクトチェック
     // 	    if ((NI_LayerExBase::classId =

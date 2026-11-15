@@ -97,6 +97,7 @@
 | `tar.h` | TAR 格式结构体 | 与 POSIX `tar.h` 同名，改名要同步所有 `#include`（低优先，可改） |
 | **插件可见宿主 API** | `TVP_malloc` `TVP_free` `ZLIB_*` `TVP_md5_*` `TVPDoTryBlock` `TVPRegisterGlobalObject` `TVPRemoveGlobalObject` `TVPRegisteredPlugins` `tvpLoadPlugins` 及 `tTVP{Try,Catch,Finally}BlockFunction` | 这些名字写在 **NCB 宏体**里（`ncbi` / `NCB_*` / `TVP_TRY` 展开成它们），只有和 NCB 宏改造同一批才能改（见 `cpp/core/plugin/README.md` §没做的） |
 | **TJS 注册表工厂族** | `TVPCreateNativeClass_*` | 归属要等 `DECISIONS.md` #9 的注册表反转；现在改名会在反转时再改一次 |
+| `TVPMainForm` | 6 处，**只出现在注释里** | 指向已被删除的 Win32 主窗口，符号本身已不存在（`DebugIntf.cpp` 的 `/* */` 死代码块 + `DebugImpl.cpp` 的 `//` 注释）。没有"真实名字"可改，留着当历史叙述 |
 | `7zArchive.cpp` | — | **不是例外**：它属于 N2，目标 `SevenZipArchive.cpp` |
 | `*.tjs` 资源 | `resources/` | 脚本资源，不是 C++ |
 
@@ -110,7 +111,7 @@
 |---|---|---:|---|
 | 1 | `extension` | 4 | ✅ **已完成**（`TVPAddClassHandler`→`AddClassHandler`、`TVPCauseAtInstallExtensionClass`→`InstallRegisteredClasses`、`TVPResetExtensionClassInstallStateForRestart`→`ResetInstallStateForRestart`、`tTVPAtInstallClass`→`AtInstallClass`；4 条过渡 `using` 同 commit 删除） |
 | 2 | `plugin` | 23（已应用） | ✅ **插件管理函数 / 类型 / 宏完成**（68 处 / 7 文件，49→29）；余下 29 个全是登记例外（插件 ABI、NCB 宏类型、注册表工厂族）与别的模块的符号 |
-| 3 | `utils` | 14（draft） | 🟡 map 已起草；4 个新名冲突待人工处理（`TVPTimer`→`Timer` 撞名） |
+| 3 | `utils` | 37 + 19（已应用） | ✅ **收口**：`utils.tsv` 32 符号 / 303 处 / 53 文件 + `utils-residual.tsv` 19 符号 / 383 处 / 62 文件 + 手工 `TVPTimer`→`Timer` 22 处；遗留 58→**8**（4 个 `TVPCreateNativeClass_*` 例外 + `TVPMainForm` 注释残留 + 3 个别的模块的符号） |
 | 4 | `io` | 123 + 27 + 17（已应用） | ✅ **io 收口**：第 2 轮 1023 处 / 83 文件（`7zArchive.cpp` → `SevenZipArchive.cpp`）、第 4 轮 189 处 / 11 文件（`io-globals.tsv`，27 个 N7 变量）、第 4b 轮 45 处 / 3 文件（`io-residual.tsv`，9 个 `--draft` 漏收符号 + 6 处注释 + 5 处日志串）；遗留 176→**26**，余下**全部是别的模块的符号**（base 13 / utils 6 / environ 5）+ `TVPCreateNativeClass_Storages`（§4 例外） |
 | 5 | `compat` | 0 | ✅ 自有符号已是新风格（`--draft` 扫出 0 个），无需改名 |
 | 6 | `sound` | 112（draft） | 🟡 map 已起草 |
@@ -186,13 +187,14 @@ tTVPAtInstallClass	AtInstallClass	type
 | 3 | `plugin` | 23 | 68 | 7 | ~15 min |
 | 4 | `io` 全局变量（N7） | 27 | 189 | 11 | ~30 min |
 | 4b | `io` 残项（draft 漏收） | 9（+11 注释/日志） | 45 | 3 | ~15 min |
+| 5 | `utils`（含 5b 残项） | 32 + 19 + 1 手工 | 686 + 70 去重限定 | 90 | ~70 min（含新检查脚本） |
 
 **吞吐 ≈ 100~150 符号/小时**（工具成熟后，不含编译回归）。
 
 | 剩余模块 | 自有符号（draft 口径） | 纯改名 | 含编译回归 |
 |---|---:|---|---|
 | ~~`io` 剩余（N7 全局变量）~~ | ~~28~~ | ✅ 第 4 轮完成 | — |
-| `utils` | 37 | ~0.5 h | 0.5~1 天 |
+| ~~`utils`~~ | ~~37~~ | ✅ 第 5 轮完成 | — |
 | `sound` | 132 | ~1.5 h | 1~2 天 |
 | `environ` | 134 | ~1.5 h | 1~2 天 |
 | `base` | ~250（不含 153 个消息例外） | ~3 h | 2~4 天（注册表族要等反转） |

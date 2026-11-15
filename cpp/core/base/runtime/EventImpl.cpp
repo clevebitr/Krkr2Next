@@ -106,10 +106,10 @@ bool TVPGetSystemEventDisabledState() {
 //---------------------------------------------------------------------------
 // tTVPContinuousHandlerCallLimitThread
 //---------------------------------------------------------------------------
-class tTVPContinuousHandlerCallLimitThread : public tTVPThread {
+class tTVPContinuousHandlerCallLimitThread : public krkr::utils::Thread {
     tjs_uint64 NextEventTick;
     tjs_uint64 Interval;
-    tTVPThreadEvent Event;
+    krkr::utils::ThreadEvent Event;
     tTJSCriticalSection CS;
 
     bool Enabled;
@@ -136,10 +136,10 @@ public:
 
 //---------------------------------------------------------------------------
 tTVPContinuousHandlerCallLimitThread::tTVPContinuousHandlerCallLimitThread() :
-    tTVPThread(true),
+    krkr::utils::Thread(true),
     EventQueue(this, &tTVPContinuousHandlerCallLimitThread::WndProc) {
     NextEventTick = 0;
-    Interval = (1 << TVP_SUBMILLI_FRAC_BITS) * 1000 / 60; // default 60Hz
+    Interval = (1 << KRKR_SUBMILLI_FRAC_BITS) * 1000 / 60; // default 60Hz
     Enabled = false;
     EventQueue.Allocate();
     Resume();
@@ -159,7 +159,7 @@ tTVPContinuousHandlerCallLimitThread::~tTVPContinuousHandlerCallLimitThread() {
 //---------------------------------------------------------------------------
 void tTVPContinuousHandlerCallLimitThread::Execute() {
     while(!GetTerminated()) {
-        tjs_uint64 curtick = TVPGetTickCount() << TVP_SUBMILLI_FRAC_BITS;
+        tjs_uint64 curtick = krkr::utils::GetTickCount() << KRKR_SUBMILLI_FRAC_BITS;
         tjs_uint32 sleeptime;
 
         { // thread-protected
@@ -177,8 +177,8 @@ void tTVPContinuousHandlerCallLimitThread::Execute() {
                 }
                 tjs_uint64 sleeptime_64 = NextEventTick - curtick;
                 sleeptime =
-                    (tjs_uint32)(sleeptime_64 >> TVP_SUBMILLI_FRAC_BITS) +
-                    ((sleeptime_64 & ((1 << TVP_SUBMILLI_FRAC_BITS) - 1)) ? 1
+                    (tjs_uint32)(sleeptime_64 >> KRKR_SUBMILLI_FRAC_BITS) +
+                    ((sleeptime_64 & ((1 << KRKR_SUBMILLI_FRAC_BITS) - 1)) ? 1
                                                                           : 0);
                 // add 1 if fraction exists
             } else {
@@ -201,7 +201,7 @@ void tTVPContinuousHandlerCallLimitThread::SetEnabled(bool enabled) {
 
     Enabled = enabled;
     if(enabled) {
-        tjs_uint64 curtick = TVPGetTickCount() << TVP_SUBMILLI_FRAC_BITS;
+        tjs_uint64 curtick = krkr::utils::GetTickCount() << KRKR_SUBMILLI_FRAC_BITS;
         NextEventTick = ((curtick + 1) / Interval) * Interval;
         Event.Set();
     }
@@ -237,7 +237,7 @@ void TVPBeginContinuousEvent() {
                 TVPContinuousHandlerCallLimitThread =
                     new tTVPContinuousHandlerCallLimitThread();
             TVPContinuousHandlerCallLimitThread->SetInterval(
-                (1 << TVP_SUBMILLI_FRAC_BITS) * 1000 /
+                (1 << KRKR_SUBMILLI_FRAC_BITS) * 1000 /
                 TVPContinousHandlerLimitFrequency);
             TVPContinuousHandlerCallLimitThread->SetEnabled(true);
         }

@@ -219,8 +219,8 @@
 //             // output report if object had been leaked
 //             if(TJSObjectHashAnyUnfreed())
 //             {
-//                 TVPOnError();
-//                 TJSReportAllUnfreedObjects(TVPGetTJS2ConsoleOutputGateway());
+//                 krkr::utils::OnError();
+//                 TJSReportAllUnfreedObjects(krkr::utils::GetTJS2ConsoleOutputGateway());
 //             }
 
 //             // release object hash map

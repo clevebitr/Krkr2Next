@@ -21,38 +21,38 @@ namespace krkr::utils {
 // generator using MD5. may not be suitable for high security usage.
 
 namespace { 
-    tjs_uint8 TVPRandomSeedPool[0x1000 + 512];
-    tjs_int TVPRandomSeedPoolPos = 0;
-    tjs_uint8 TVPRandomSeedAtom; // need not to initialize
+    tjs_uint8 randomSeedPool[0x1000 + 512];
+    tjs_int randomSeedPoolPos = 0;
+    tjs_uint8 randomSeedAtom; // need not to initialize
 }
-void TVPPushEnvironNoise(const void *buf, tjs_int bufsize) {
+void PushEnvironNoise(const void *buf, tjs_int bufsize) {
     const auto *p = (const tjs_uint8 *)buf;
     for(int i = 0; i < bufsize; i++) {
-        TVPRandomSeedPool[TVPRandomSeedPoolPos++] ^=
-            (TVPRandomSeedAtom ^= p[i]);
-        TVPRandomSeedPoolPos &= 0xfff;
+        randomSeedPool[randomSeedPoolPos++] ^=
+            (randomSeedAtom ^= p[i]);
+        randomSeedPoolPos &= 0xfff;
     }
-    TVPRandomSeedPoolPos += (p[0] & 1);
-    TVPRandomSeedPoolPos &= 0xfff;
+    randomSeedPoolPos += (p[0] & 1);
+    randomSeedPoolPos &= 0xfff;
 }
 
-void TVPGetRandomBits128(void *dest) {
+void GetRandomBits128(void *dest) {
     // retrieve random bits
 
     // add some noise
     tjs_uint8 buf[16];
-    TVPPushEnvironNoise(buf, 16); // dare to use uninitialized buffer
-    TVPPushEnvironNoise(&TVPRandomSeedPoolPos, sizeof(TVPRandomSeedPoolPos));
+    PushEnvironNoise(buf, 16); // dare to use uninitialized buffer
+    PushEnvironNoise(&randomSeedPoolPos, sizeof(randomSeedPoolPos));
 
-    // make 128bit hash of TVPRandomSeedPool, using MD5 message digest
+    // make 128bit hash of randomSeedPool, using MD5 message digest
     md5_state_t state;
     md5_init(&state);
-    md5_append(&state, TVPRandomSeedPool, 0x1000);
+    md5_append(&state, randomSeedPool, 0x1000);
     md5_finish(&state, buf);
 
     memcpy(dest, buf, 16);
 
     // push hash itself
-    TVPPushEnvironNoise(buf, 16);
+    PushEnvironNoise(buf, 16);
 }
 } //namespace krkr::utils

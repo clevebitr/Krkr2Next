@@ -392,7 +392,7 @@ public:
            filename.length()) {
             r = TVPDeleteFile(filename.AsNarrowStdString());
             if(!r) {
-                TVPAddLog(ttstr(TJS_W("deleteFile : ")) + filename +
+                krkr::utils::AddLog(ttstr(TJS_W("deleteFile : ")) + filename +
                           TJS_W("Failed"));
             } else {
                 // 削除に成功した場合はストレージキャッシュをクリア
@@ -436,7 +436,7 @@ public:
             TVPDeleteFile(ff);
             if(!r) {
                 ttstr mes;
-                TVPAddLog(ttstr(TJS_W("moveFile : ")) + fromFile + ", " +
+                krkr::utils::AddLog(ttstr(TJS_W("moveFile : ")) + fromFile + ", " +
                           toFile + TJS_W("Failed"));
             } else {
                 krkr::io::ClearStorageCaches();
@@ -642,7 +642,7 @@ public:
 
         const bool r = TVPDeleteFile(dir.AsNarrowStdString());
         if(!r) {
-            TVPAddLog(ttstr(TJS_W("removeDirectory : ")) + dir +
+            krkr::utils::AddLog(ttstr(TJS_W("removeDirectory : ")) + dir +
                       TJS_W(" failed."));
         }
         return r;
@@ -662,7 +662,7 @@ public:
         krkr::io::GetLocalPath(dir);
         const bool r = fs::create_directories(dir.AsNarrowStdString());
         if(!r) {
-            TVPAddLog(ttstr(TJS_W("createDirectory : ")) + dir +
+            krkr::utils::AddLog(ttstr(TJS_W("createDirectory : ")) + dir +
                       TJS_W(" failed."));
         }
         return r;
@@ -681,7 +681,7 @@ public:
         krkr::io::GetLocalPath(dir);
         const bool r = fs::create_directories(dir.AsNarrowStdString());
         if(!r) {
-            TVPAddLog(ttstr(TJS_W("createDirectory : ")) + dir +
+            krkr::utils::AddLog(ttstr(TJS_W("createDirectory : ")) + dir +
                       TJS_W(" failed."));
         }
         return r;

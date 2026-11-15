@@ -204,7 +204,7 @@ tTVPKeyRepeatEmulator::tTVPKeyRepeatEmulator() : Pressed(false) {}
 //---------------------------------------------------------------------------
 void tTVPKeyRepeatEmulator::Down() {
     Pressed = true;
-    PressedTick = TVPGetRoughTickCount32();
+    PressedTick = krkr::utils::GetRoughTickCount32();
     LastRepeatCount = 0;
 }
 //---------------------------------------------------------------------------
@@ -222,7 +222,7 @@ tjs_int tTVPKeyRepeatEmulator::GetRepeatCount() {
     if(IntervalTime <= 0)
         return 0;
 
-    auto elapsed = (tjs_int)(TVPGetRoughTickCount32() - PressedTick);
+    auto elapsed = (tjs_int)(krkr::utils::GetRoughTickCount32() - PressedTick);
 
     elapsed -= HoldTime;
     if(elapsed < 0)
@@ -666,7 +666,7 @@ tjs_uint32 tTVPPadDirectInputDevice::GetState()
 /*#ifdef _DEBUG
 	if(js.lX!=0 || js.lY!=0)
 	{
-		TVPAddLog(TJS_W("JoyStick: lX = ")+ttstr((int)js.lX)+TJS_W(", lY = ")+ttstr((int)js.lY));
+		krkr::utils::AddLog(TJS_W("JoyStick: lX = ")+ttstr((int)js.lX)+TJS_W(", lY = ")+ttstr((int)js.lY));
 	}
 #endif
 */

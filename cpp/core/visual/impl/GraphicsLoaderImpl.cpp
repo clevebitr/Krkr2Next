@@ -160,7 +160,7 @@ tTVPSusiePlugin::tTVPSusiePlugin(HINSTANCE inst, const char *api)
 
 	memset(buffer, 0, 256);
 	GetPluginInfo(1, buffer, 255);
-	if(buffer[0]) TVPAddImportantLog( TVPFormatMessage(TVPInfoSusiePluginInfo,ttstr(buffer)) );
+	if(buffer[0]) krkr::utils::AddImportantLog( TVPFormatMessage(TVPInfoSusiePluginInfo,ttstr(buffer)) );
 
 	// retrieve format information
 	tjs_int i;

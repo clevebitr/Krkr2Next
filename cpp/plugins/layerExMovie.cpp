@@ -169,7 +169,7 @@ void layerExMovie::openMovie(const tjs_char *filename, bool alpha) {
     if((in = krkr::io::CreateStream(filename, TJS_BS_READ)) == nullptr) {
         ttstr error = filename;
         error += TJS_W(":ファイルが開けません");
-        TVPAddLog(error);
+        krkr::utils::AddLog(error);
         return;
     }
     ttstr ext = krkr::io::ExtractStorageExt(filename);

@@ -13,7 +13,7 @@
 //---------------------------------------------------------------------------
 #include <cstdint>
 #include <string>
-#include "TVPTimer.h"
+#include "krkr::utils::Timer.h"
 //---------------------------------------------------------------------------
 namespace krkr::environ {
 
@@ -41,7 +41,7 @@ private: // ÉÜÅ[ÉUÅ[êÈåæ
     uint32_t MixedIdleTick{};
     uint32_t LastHeapCeilingTick{};
 
-    TVPTimer SystemWatchTimer;
+    krkr::utils::Timer SystemWatchTimer;
 
 public:
     tTVPSystemControl();

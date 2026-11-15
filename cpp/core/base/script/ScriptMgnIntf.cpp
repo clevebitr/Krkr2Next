@@ -92,9 +92,9 @@ static const tjs_nchar *TVPInitTJSScript =
  /* tTVPScrollTransFrom */ sttLeft=0, sttTop=1, sttRight=2, sttBottom=3,
  /* tTVPScrollTransStay */ ststNoStay=0, ststStayDest=1, ststStaySrc=2, 
  /* tTVPKAGDebugLevel */ tkdlNone=0, tkdlSimple=1, tkdlVerbose=2, 
- /* tTVPAsyncTriggerMode */	atmNormal=0, atmExclusive=1, atmAtIdle=2, 
+ /* krkr::utils::AsyncTriggerMode */	atmNormal=0, atmExclusive=1, atmAtIdle=2, 
  /* tTVPBBStretchType */ stNearest=0, stFastLinear=1, stLinear=2, stCubic=3, stSemiFastLinear = 4, stFastCubic = 5, stLanczos2 = 6, stFastLanczos2 = 7, stLanczos3 = 8, stFastLanczos3 = 9, stSpline16 = 10, stFastSpline16 = 11, stSpline36 = 12, stFastSpline36 = 13, stAreaAvg = 14, stFastAreaAvg = 15, stGaussian = 16, stFastGaussian = 17, stBlackmanSinc = 18, stFastBlackmanSinc = 19, stRefNoClip = 0x10000,
- /* tTVPClipboardFormat */ cbfText = 1,
+ /* krkr::utils::ClipboardFormat */ cbfText = 1,
  /* TVP_COMPACT_LEVEL_???? */ clIdle = 5, clDeactivate = 10, clMinimize = 15, clAll = 100,
  /* tTVPVideoOverlayMode Add: T.Imoto */ vomOverlay=0, vomLayer=1, vomMixer=2, vomMFEVR=3,
  /* tTVPPeriodEventReason */ perLoop = 0, perPeriod = 1, perPrepare = 2, perSegLoop = 3,
@@ -439,7 +439,7 @@ void TVPInitScriptEngine() {
         ttstr str(val);
         if(str == TJS_W("yes")) {
             TJSEnableDebugMode = true;
-            TVPAddImportantLog((const tjs_char *)TVPWarnDebugOptionEnabled);
+            krkr::utils::AddImportantLog((const tjs_char *)TVPWarnDebugOptionEnabled);
             //			if(TVPGetCommandLine(TJS_W("-warnrundelobj"),
             //&val) )
             //			{
@@ -469,13 +469,13 @@ void TVPInitScriptEngine() {
     //	TVPScriptEngine->SetPPValue( TJS_W("kirikiriz"), 1 );
 
     // set TJSGetRandomBits128
-    TJSGetRandomBits128 = TVPGetRandomBits128;
+    TJSGetRandomBits128 = krkr::utils::GetRandomBits128;
 
     // script system initialization
     TVPScriptEngine->ExecScript(ttstr(TVPInitTJSScript));
 
     // set console output gateway handler
-    TVPScriptEngine->SetConsoleOutput(TVPGetTJS2ConsoleOutputGateway());
+    TVPScriptEngine->SetConsoleOutput(krkr::utils::GetTJS2ConsoleOutputGateway());
 
     // set text stream functions
     TJSCreateTextStreamForRead = TVPCreateTextStreamForRead;
@@ -1027,17 +1027,17 @@ void TVPCreateMessageMapFile(const ttstr &filename) {
 // TVPDumpScriptEngine
 //---------------------------------------------------------------------------
 void TVPDumpScriptEngine() {
-    TVPTJS2StartDump();
-    TVPScriptEngine->SetConsoleOutput(TVPGetTJS2DumpOutputGateway());
+    krkr::utils::StartTJS2Dump();
+    TVPScriptEngine->SetConsoleOutput(krkr::utils::GetTJS2DumpOutputGateway());
     try {
         TVPScriptEngine->Dump();
     } catch(...) {
-        TVPTJS2EndDump();
-        TVPScriptEngine->SetConsoleOutput(TVPGetTJS2ConsoleOutputGateway());
+        krkr::utils::EndTJS2Dump();
+        TVPScriptEngine->SetConsoleOutput(krkr::utils::GetTJS2ConsoleOutputGateway());
         throw;
     }
-    TVPScriptEngine->SetConsoleOutput(TVPGetTJS2ConsoleOutputGateway());
-    TVPTJS2EndDump();
+    TVPScriptEngine->SetConsoleOutput(krkr::utils::GetTJS2ConsoleOutputGateway());
+    krkr::utils::EndTJS2Dump();
 }
 //---------------------------------------------------------------------------
 
@@ -1518,12 +1518,12 @@ static void TVPTerminateAfterScriptException(const ttstr &reason) {
 //---------------------------------------------------------------------------
 void TVPShowScriptException(eTJS &e) {
     TVPSetSystemEventDisabledState(true);
-    TVPOnError();
+    krkr::utils::OnError();
 
     if(!TVPSystemUninitCalled) {
         ttstr errstr =
             (ttstr(TVPScriptExceptionRaised) + TJS_W("\n") + e.GetMessage());
-        TVPAddLog(ttstr(TVPScriptExceptionRaised) + TJS_W("\n") +
+        krkr::utils::AddLog(ttstr(TVPScriptExceptionRaised) + TJS_W("\n") +
                   e.GetMessage());
         TVPShowSimpleMessageBox(errstr, TVPGetErrorDialogTitle());
         // Application->MessageDlg( errstr.AsStdString(),
@@ -1535,15 +1535,15 @@ void TVPShowScriptException(eTJS &e) {
 //---------------------------------------------------------------------------
 void TVPShowScriptException(eTJSScriptError &e) {
     TVPSetSystemEventDisabledState(true);
-    TVPOnError();
+    krkr::utils::OnError();
 
     if(!TVPSystemUninitCalled) {
         ttstr errstr =
             (ttstr(TVPScriptExceptionRaised) + TJS_W("\n") + e.GetMessage());
-        TVPAddLog(ttstr(TVPScriptExceptionRaised) + TJS_W("\n") +
+        krkr::utils::AddLog(ttstr(TVPScriptExceptionRaised) + TJS_W("\n") +
                   e.GetMessage());
         if(e.GetTrace().GetLen() != 0)
-            TVPAddLog(ttstr(TJS_W("trace : ")) + e.GetTrace());
+            krkr::utils::AddLog(ttstr(TJS_W("trace : ")) + e.GetTrace());
         TVPShowSimpleMessageBox(errstr, TVPGetErrorDialogTitle());
         //	Application->MessageDlg( errstr.AsStdString(),
         // Application->GetTitle(), mtStop, mbOK );
@@ -1600,7 +1600,7 @@ void TVPShowScriptException(eTJSScriptError &e) {
                             // exepath = exepath + ttstr(str);
                             //_wsystem( exepath.c_str() );
                             arg = ttstr(str);
-                            TVPAddLog(ttstr(TJS_W("(execute) ")) + exepath +
+                            krkr::utils::AddLog(ttstr(TJS_W("(execute) ")) + exepath +
                                       ttstr(TJS_W(" ")) + arg);
                             TVPShellExecute(exepath, arg);
                         }

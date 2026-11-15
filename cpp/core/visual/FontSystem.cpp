@@ -220,7 +220,7 @@ ttstr FontSystem::GetBeingFont(ttstr fonts) {
                low.find(" cjk") != std::string::npos ||
                low.find("sans cjk") != std::string::npos) {
                 if(!below_printed) {
-                    TVPAddLog(
+                    krkr::utils::AddLog(
                         ttstr(TJS_W("FontSystem::GetBeingFont: mono/fullwidth "
                                     "fallback -> ")) +
                         n);
@@ -230,7 +230,7 @@ ttstr FontSystem::GetBeingFont(ttstr fonts) {
         }
         if(!below_printed) {
             below_printed = true;
-            TVPAddLog(
+            krkr::utils::AddLog(
                 ttstr(TJS_W("FontSystem::GetBeingFont: no mono/fullwidth; "
                             "using default ")) +
                 TVPGetDefaultFontName());

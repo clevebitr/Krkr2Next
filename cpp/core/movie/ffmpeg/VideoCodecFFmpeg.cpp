@@ -353,7 +353,7 @@ bool CDVDVideoCodecFFmpeg::Open(CDVDStreamInfo &hints,
         if(tryhw && m_decoderState == STATE_NONE) {
             m_decoderState = STATE_HW_SINGLE;
         } else {
-            int num_threads = TVPGetProcessorNum() * 3 / 2;
+            int num_threads = krkr::utils::GetProcessorNum() * 3 / 2;
             num_threads = std::max(1, std::min(num_threads, 16));
             m_pCodecContext->thread_count = num_threads;
             m_pCodecContext->thread_safe_callbacks = 1;

@@ -1004,7 +1004,7 @@ void tTJSNI_BaseLayer::CheckChildrenVisibleState() {
 void tTJSNI_BaseLayer::ApplyLightContrast(tjs_int brightness_offset,
                                           tjs_int contrast_value) {
     if(!CanHaveImage || !MainImage || !GetHasImage()) {
-        TVPAddLog(
+        krkr::utils::AddLog(
             TJS_W("BaseLayer::ApplyLightContrast: Layer cannot have, does not "
                   "have, or GetHasImage is false for the main image."));
         return;
@@ -1015,14 +1015,14 @@ void tTJSNI_BaseLayer::ApplyLightContrast(tjs_int brightness_offset,
     tjs_uint image_height = GetImageHeight();
 
     if(image_width == 0 || image_height == 0) {
-        TVPAddLog(
+        krkr::utils::AddLog(
             TJS_W("BaseLayer::ApplyLightContrast: Image dimensions are zero."));
         return;
     }
 
     void *buffer_raw = GetMainImagePixelBufferForWrite();
     if(!buffer_raw) {
-        TVPAddLog(TJS_W("BaseLayer::ApplyLightContrast: Failed to get main "
+        krkr::utils::AddLog(TJS_W("BaseLayer::ApplyLightContrast: Failed to get main "
                         "image pixel buffer for writing."));
         return;
     }
@@ -1141,7 +1141,7 @@ void tTJSNI_BaseLayer::ApplyLightContrast(tjs_int brightness_offset,
     SetImageModified(true);
     Update();
 
-    TVPAddLog(TJS_W("BaseLayer::ApplyLightContrast: Brightness adjusted by ") +
+    krkr::utils::AddLog(TJS_W("BaseLayer::ApplyLightContrast: Brightness adjusted by ") +
               ttstr(brightness_offset) + TJS_W(", Contrast factor applied: ") +
               ttstr(std::to_string(actual_contrast_factor)) +
               TJS_W(" (from input contrast_value: ") + ttstr(contrast_value) +
@@ -1488,7 +1488,7 @@ void tTJSNI_BaseLayer::DumpStructure(int level) {
         ttstr ptr{ fmt::format(" (object {})", static_cast<void *>(Owner)) };
         ttstr ptr2{ fmt::format(" (native {})", static_cast<void *>(this)) };
 
-        TVPAddLog(ttstr(indent) + name + ttstr(ptr) + ttstr(ptr2) +
+        krkr::utils::AddLog(ttstr(indent) + name + ttstr(ptr) + ttstr(ptr2) +
                   ttstr(TJS_W(" (")) + ttstr(Rect.left) + ttstr(TJS_W(",")) +
                   ttstr(Rect.top) + ttstr(TJS_W(")-(")) + ttstr(Rect.right) +
                   ttstr(TJS_W(",")) + ttstr(Rect.bottom) + ttstr(TJS_W(") (")) +
@@ -6191,7 +6191,7 @@ std::vector<float> generate_1d_gaussian_kernel(int radius, float sigma) {
 
 void tTJSNI_BaseLayer::ApplyGaussianBlur(tjs_int radius, float sigma) {
     if(!CanHaveImage || !MainImage || !GetHasImage()) {
-        TVPAddLog(TJS_W("BaseLayer::ApplyGaussianBlur: Layer cannot have or "
+        krkr::utils::AddLog(TJS_W("BaseLayer::ApplyGaussianBlur: Layer cannot have or "
                         "does not have a main image."));
         return;
     }
@@ -6200,7 +6200,7 @@ void tTJSNI_BaseLayer::ApplyGaussianBlur(tjs_int radius, float sigma) {
     tjs_uint image_height = GetImageHeight();
 
     if(image_width == 0 || image_height == 0 || radius <= 0 || sigma <= 0.0f) {
-        TVPAddLog(TJS_W("BaseLayer::ApplyGaussianBlur: Invalid parameters "
+        krkr::utils::AddLog(TJS_W("BaseLayer::ApplyGaussianBlur: Invalid parameters "
                         "(dimensions, radius, or sigma)."));
         return;
     }
@@ -6212,7 +6212,7 @@ void tTJSNI_BaseLayer::ApplyGaussianBlur(tjs_int radius, float sigma) {
 
     const void *main_buffer_ptr = GetMainImagePixelBuffer(); // For reading
     if(!main_buffer_ptr) {
-        TVPAddLog(TJS_W("BaseLayer::ApplyGaussianBlur: Failed to get main "
+        krkr::utils::AddLog(TJS_W("BaseLayer::ApplyGaussianBlur: Failed to get main "
                         "image pixel buffer for reading."));
         return;
     }
@@ -6280,7 +6280,7 @@ void tTJSNI_BaseLayer::ApplyGaussianBlur(tjs_int radius, float sigma) {
     // ---
     void *output_buffer_raw = GetMainImagePixelBufferForWrite();
     if(!output_buffer_raw) {
-        TVPAddLog(TJS_W("BaseLayer::ApplyGaussianBlur: Failed to get main "
+        krkr::utils::AddLog(TJS_W("BaseLayer::ApplyGaussianBlur: Failed to get main "
                         "image pixel buffer for writing."));
         return; // Or restore original_pixels to the buffer if appropriate
     }
@@ -6331,7 +6331,7 @@ void tTJSNI_BaseLayer::ApplyGaussianBlur(tjs_int radius, float sigma) {
     SetImageModified(true);
     Update();
 
-    TVPAddLog(TJS_W("BaseLayer::ApplyGaussianBlur: Gaussian blur applied with "
+    krkr::utils::AddLog(TJS_W("BaseLayer::ApplyGaussianBlur: Gaussian blur applied with "
                     "radius ") +
               ttstr(radius) + TJS_W(" and sigma ") +
               ttstr(std::to_string(sigma)));
@@ -8354,7 +8354,7 @@ void tTJSNI_BaseLayer::StartTransition(const ttstr &name, bool withchildren,
             TVPAddContinuousEventHook(&TransIdleCallback);
 
         // initial tick count
-        TVPStartTickCount();
+        krkr::utils::StartTickCount();
         if(UseTransTickCallback) {
             TransTick = 0;
             // initially 0
@@ -8713,8 +8713,8 @@ void tTJSNI_BaseLayer::tTransDrawable::DrawCompleted(const tTVPRect &destrect,
 //---------------------------------------------------------------------------
 tjs_uint64 tTJSNI_BaseLayer::GetTransTick() {
     if(!UseTransTickCallback) {
-        // just use TVPGetTickCount() as a source
-        return TVPGetTickCount();
+        // just use krkr::utils::GetTickCount() as a source
+        return krkr::utils::GetTickCount();
     } else {
         // call TransTickCallback to receive result
         tTJSVariant res;
@@ -9329,7 +9329,7 @@ tTJSNC_Layer::tTJSNC_Layer() : tTJSNativeClass(TJS_W("Layer")) {
         rect.bottom += rect.top;
 
         if(numparams >= 9 && param[8]->Type() != tvtVoid) {
-            TVPAddLog(TVPFormatMessage(
+            krkr::utils::AddLog(TVPFormatMessage(
                 TVPHoldDestinationAlphaParameterIsNowDeprecated,
                 TJS_W("Layer.pileRect"), TJS_W("9")));
         }
@@ -9365,7 +9365,7 @@ tTJSNC_Layer::tTJSNC_Layer() : tTJSNativeClass(TJS_W("Layer")) {
         rect.bottom += rect.top;
 
         if(numparams >= 9 && param[8]->Type() != tvtVoid) {
-            TVPAddLog(TVPFormatMessage(
+            krkr::utils::AddLog(TVPFormatMessage(
                 TVPHoldDestinationAlphaParameterIsNowDeprecated,
                 TJS_W("Layer.blendRect"), TJS_W("9")));
         }
@@ -9469,7 +9469,7 @@ tTJSNC_Layer::tTJSNC_Layer() : tTJSNativeClass(TJS_W("Layer")) {
             mode = omAuto;
 
         if(numparams >= 10 && param[9]->Type() != tvtVoid) {
-            TVPAddLog(TVPFormatMessage(
+            krkr::utils::AddLog(TVPFormatMessage(
                 TVPHoldDestinationAlphaParameterIsNowDeprecated,
                 TJS_W("Layer.operateRect"), TJS_W("10")));
         }
@@ -9578,7 +9578,7 @@ tTJSNC_Layer::tTJSNC_Layer() : tTJSNativeClass(TJS_W("Layer")) {
             type = (tTVPBBStretchType)(tjs_int)*param[10];
 
         if(numparams >= 12 && param[11]->Type() != tvtVoid) {
-            TVPAddLog(TVPFormatMessage(
+            krkr::utils::AddLog(TVPFormatMessage(
                 TVPHoldDestinationAlphaParameterIsNowDeprecated,
                 TJS_W("Layer.stretchPile"), TJS_W("12")));
         }
@@ -9627,7 +9627,7 @@ tTJSNC_Layer::tTJSNC_Layer() : tTJSNativeClass(TJS_W("Layer")) {
             static bool IsWarned = false;
             if(!IsWarned) {
                 IsWarned = true;
-                TVPAddLog(TVPFormatMessage(
+                krkr::utils::AddLog(TVPFormatMessage(
                     TVPHoldDestinationAlphaParameterIsNowDeprecated,
                     TJS_W("Layer.stretchBlend"), TJS_W("12")));
             }
@@ -9815,7 +9815,7 @@ tTJSNC_Layer::tTJSNC_Layer() : tTJSNativeClass(TJS_W("Layer")) {
         if(numparams >= 14 && param[13]->Type() != tvtVoid)
             type = (tTVPBBStretchType)(tjs_int)*param[13];
         if(numparams >= 15 && param[14]->Type() != tvtVoid) {
-            TVPAddLog(TVPFormatMessage(
+            krkr::utils::AddLog(TVPFormatMessage(
                 TVPHoldDestinationAlphaParameterIsNowDeprecated,
                 TJS_W("Layer.affinePile"), TJS_W("15")));
         }
@@ -9877,7 +9877,7 @@ tTJSNC_Layer::tTJSNC_Layer() : tTJSNativeClass(TJS_W("Layer")) {
         if(numparams >= 14 && param[13]->Type() != tvtVoid)
             type = (tTVPBBStretchType)(tjs_int)*param[13];
         if(numparams >= 15 && param[14]->Type() != tvtVoid) {
-            TVPAddLog(TVPFormatMessage(
+            krkr::utils::AddLog(TVPFormatMessage(
                 TVPHoldDestinationAlphaParameterIsNowDeprecated,
                 TJS_W("Layer.affineBlend"), TJS_W("15")));
         }
@@ -9954,7 +9954,7 @@ tTJSNC_Layer::tTJSNC_Layer() : tTJSNativeClass(TJS_W("Layer")) {
         if(numparams >= 15 && param[14]->Type() != tvtVoid)
             type = (tTVPBBStretchType)(tjs_int)*param[14];
         if(numparams >= 16 && param[15]->Type() != tvtVoid) {
-            TVPAddLog(TVPFormatMessage(
+            krkr::utils::AddLog(TVPFormatMessage(
                 TVPHoldDestinationAlphaParameterIsNowDeprecated,
                 TJS_W("Layer.operateAffine"), TJS_W("16")));
         }
@@ -10082,11 +10082,11 @@ tTJSNC_Layer::tTJSNC_Layer() : tTJSNativeClass(TJS_W("Layer")) {
         }
 
         if(radius <= 0) {
-            TVPAddLog(TJS_W("Layer.gaussianBlur: Radius must be positive."));
+            krkr::utils::AddLog(TJS_W("Layer.gaussianBlur: Radius must be positive."));
             return TJS_E_INVALIDPARAM;
         }
         if(sigma <= 0.0f) {
-            TVPAddLog(TJS_W("Layer.gaussianBlur: Sigma must be positive."));
+            krkr::utils::AddLog(TJS_W("Layer.gaussianBlur: Sigma must be positive."));
             return TJS_E_INVALIDPARAM;
         }
 

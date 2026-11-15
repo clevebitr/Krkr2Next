@@ -36,15 +36,15 @@ namespace krkr::utils {
         if(!processor_num) {
             processor_num = std::thread::hardware_concurrency();
             tjs_char tmp[34];
-            TVPAddLog(ttstr(TJS_W("Detected CPU core(s): ")) +
+            krkr::utils::AddLog(ttstr(TJS_W("Detected CPU core(s): ")) +
                       TJS_tTVInt_to_str(processor_num, tmp));
         }
         return processor_num;
     }
 
-    tjs_int TVPGetProcessorNum() { return GetProcesserNum(); }
+    tjs_int GetProcessorNum() { return GetProcesserNum(); }
 
-    tTVPThread::tTVPThread(bool suspended) {
+    Thread::Thread(bool suspended) {
         Terminated = false;
         Suspended = suspended;
 
@@ -59,7 +59,7 @@ namespace krkr::utils {
         }
     }
 
-    tTVPThread::~tTVPThread() {
+    Thread::~Thread() {
         // Ensure the std::thread is not joinable when destroyed.
         // Subclass destructors SHOULD call Terminate() + WaitFor() first.
         // This is a safety net to avoid std::terminate().
@@ -70,19 +70,19 @@ namespace krkr::utils {
         }
     }
 
-    void *tTVPThread::StartProc(void *arg) {
-        auto *_this = (tTVPThread *)arg;
+    void *Thread::StartProc(void *arg) {
+        auto *_this = (krkr::utils::Thread *)arg;
         if(_this->Suspended) {
             std::unique_lock lk(_this->_mutex);
             _this->_cond.wait(lk);
         }
         _this->Execute();
         _this->Finished.store(true, std::memory_order_release);
-        TVPOnThreadExited();
+        krkr::utils::OnThreadExited();
         return nullptr;
     }
 
-    void tTVPThread::WaitFor() {
+    void Thread::WaitFor() {
         if(Handle.joinable()) {
             Handle.join();
         }
@@ -93,27 +93,27 @@ namespace krkr::utils {
         }
     }
 
-    tTVPThreadPriority tTVPThread::GetPriority() {
+    ThreadPriority Thread::GetPriority() {
         // TODO: impl
         return ttpNormal;
     }
 
-    void tTVPThread::SetPriority(tTVPThreadPriority pri) {
+    void Thread::SetPriority(ThreadPriority pri) {
         // TODO: impl
     }
 
-    void tTVPThread::Resume() {
+    void Thread::Resume() {
         Suspended = false;
         _cond.notify_one();
         // while((tjs_int32)ResumeThread(Handle) > 1) ;
     }
 
-    void tTVPThreadEvent::Set() {
+    void ThreadEvent::Set() {
         std::unique_lock lk(Mutex);
         Handle.notify_one();
     }
 
-    void tTVPThreadEvent::WaitFor(tjs_uint timeout) {
+    void ThreadEvent::WaitFor(tjs_uint timeout) {
         // wait for event;
         // returns true if the event is set, otherwise (when timed out)
         // returns false.
@@ -127,14 +127,14 @@ namespace krkr::utils {
     }
 
 
-    tjs_int TVPGetThreadNum() {
+    tjs_int GetThreadNum() {
         tjs_int threadNum =
             TVPDrawThreadNum ? TVPDrawThreadNum : GetProcesserNum();
-        threadNum = std::min(threadNum, TVPMaxThreadNum);
+        threadNum = std::min(threadNum, krkr::utils::MaxThreadNum);
         return threadNum;
     }
 
-    void TVPExecThreadTask(int numThreads, TVP_THREAD_TASK_FUNC func) {
+    void ExecThreadTask(int numThreads, ThreadTaskFunc func) {
         if(numThreads == 1) {
             func(0);
             return;
@@ -165,13 +165,13 @@ namespace krkr::utils {
 
     std::vector<std::function<void()>> _OnThreadExitedEvents;
 
-    void TVPOnThreadExited() {
+    void OnThreadExited() {
         for(const auto &ev : _OnThreadExitedEvents) {
             ev();
         }
     }
 
-    void TVPAddOnThreadExitEvent(const std::function<void()> &ev) {
+    void AddOnThreadExitEvent(const std::function<void()> &ev) {
         _OnThreadExitedEvents.emplace_back(ev);
     }
 

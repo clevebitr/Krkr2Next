@@ -1045,8 +1045,8 @@ void tTJSNI_KAGParser::LoadScenario(const ttstr &name) {
             static ttstr hr(
                 TJS_W("========================================")
                     TJS_W("========================================"));
-            TVPAddLog(hr);
-            TVPAddLog(TJS_W("Scenario loaded : ") + name);
+            krkr::utils::AddLog(hr);
+            krkr::utils::AddLog(TJS_W("Scenario loaded : ") + name);
         }
     }
 
@@ -1149,8 +1149,8 @@ void tTJSNI_KAGParser::GoToLabel(const ttstr &name) {
     if(DebugLevel >= tkdlSimple) {
         static ttstr hr(TJS_W("- - - - - - - - - - - - - - - - - - - - ")
                             TJS_W("- - - - - - - - - - - - - - - - - - - - "));
-        TVPAddLog(hr);
-        TVPAddLog(StorageShortName + TJS_W(" : jumped to : ") + name);
+        krkr::utils::AddLog(hr);
+        krkr::utils::AddLog(StorageShortName + TJS_W(" : jumped to : ") + name);
     }
 
     BreakConditionAndMacro();
@@ -1284,7 +1284,7 @@ bool tTJSNI_KAGParser::SkipCommentOrLabel() {
     LineBufferUsing = false;
 
     if(DebugLevel >= tkdlVerbose) {
-        TVPAddLog(StorageShortName + TJS_W(" : ") + CurLineStr);
+        krkr::utils::AddLog(StorageShortName + TJS_W(" : ") + CurLineStr);
     }
 
     return true;
@@ -1571,7 +1571,7 @@ void tTJSNI_KAGParser::FindNearestLabel(tjs_int start, tjs_int &labelline,
 void tTJSNI_KAGParser::PushCallStack() {
     // push current position information
     if(DebugLevel >= tkdlVerbose) {
-        TVPAddLog(StorageShortName +
+        krkr::utils::AddLog(StorageShortName +
                   TJS_W(" : call stack depth before calling : ") +
                   ttstr((int)CallStack.size()));
     }
@@ -1648,7 +1648,7 @@ void tTJSNI_KAGParser::PopCallStack(const ttstr &storage, const ttstr &label) {
                 label = TJS_W("(start)");
             else
                 label = data.Label;
-            TVPAddLog(StorageShortName + TJS_W(" : returned to : ") + label +
+            krkr::utils::AddLog(StorageShortName + TJS_W(" : returned to : ") + label +
                       TJS_W(" line offset ") + ttstr(data.Offset));
         }
     }
@@ -1668,7 +1668,7 @@ void tTJSNI_KAGParser::PopCallStack(const ttstr &storage, const ttstr &label) {
     }
 
     if(DebugLevel >= tkdlVerbose) {
-        TVPAddLog(StorageShortName +
+        krkr::utils::AddLog(StorageShortName +
                   TJS_W(" : call stack depth after returning : ") +
                   ttstr((int)CallStack.size()));
     }
@@ -2090,7 +2090,7 @@ parse_start:
                             TVPThrowExceptionMessage(TVPKAGSyntaxError);
                         RecordingMacro = false;
                         if(DebugLevel >= tkdlVerbose) {
-                            TVPAddLog(TJS_W("macro : ") + RecordingMacroName +
+                            krkr::utils::AddLog(TJS_W("macro : ") + RecordingMacroName +
                                       TJS_W(" : ") + RecordingMacroStr);
                         }
 

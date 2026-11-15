@@ -435,7 +435,7 @@ namespace SimpleBinder {
                            obj->PropSet(_flag, key.c_str(), NULL, &val, obj));
             }
             static inline void Error(const ttstr &message) {
-                TVPAddImportantLog(message);
+                krkr::utils::AddImportantLog(message);
             }
             virtual bool checkInstanceOf(const tjs_char *classname) {
                 return false;

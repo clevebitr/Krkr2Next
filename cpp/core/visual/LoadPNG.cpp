@@ -93,8 +93,8 @@ static void PNG_error(png_structp ps, png_const_charp msg) {
 // user_warning_fn
 static void PNG_warning(png_structp ps, png_const_charp msg) {
     // do nothing
-    // TVPAddLog( TJS_W("PNG warning:") );
-    // TVPAddLog( msg );
+    // krkr::utils::AddLog( TJS_W("PNG warning:") );
+    // krkr::utils::AddLog( msg );
 }
 //---------------------------------------------------------------------------
 // user_read_data

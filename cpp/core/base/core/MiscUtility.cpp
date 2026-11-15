@@ -6,7 +6,7 @@
 namespace krkr::utils {
 
 //---------------------------------------------------------------------------
-bool TVPEncodeUTF8ToUTF16(ttstr &output, const std::string &source) {
+bool EncodeUTF8ToUTF16(ttstr &output, const std::string &source) {
     tjs_int len = TVPUtf8ToWideCharString(source.c_str(), nullptr);
     if(len == -1)
         return false;

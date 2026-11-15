@@ -17,19 +17,19 @@ namespace krkr::utils {
 
 /*[*/
 //---------------------------------------------------------------------------
-// tTVPClipboardFormat
+// ClipboardFormat
 //---------------------------------------------------------------------------
-enum tTVPClipboardFormat { cbfText = 1 };
+enum ClipboardFormat { cbfText = 1 };
 /*]*/
 
 //---------------------------------------------------------------------------
 // implement these in each platform
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(bool, TVPClipboardHasFormat, (tTVPClipboardFormat format));
+TJS_EXP_FUNC_DEF(bool, HasClipboardFormat, (ClipboardFormat format));
 
-TJS_EXP_FUNC_DEF(void, TVPClipboardSetText, (const ttstr &text));
+TJS_EXP_FUNC_DEF(void, SetClipboardText, (const ttstr &text));
 
-TJS_EXP_FUNC_DEF(bool, TVPClipboardGetText, (ttstr & text));
+TJS_EXP_FUNC_DEF(bool, GetClipboardText, (ttstr & text));
 
 //---------------------------------------------------------------------------
 // tTJSNI_BaseClipboard
@@ -65,11 +65,7 @@ extern tTJSNativeClass *TVPCreateNativeClass_Clipboard();
 } // namespace krkr::utils
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::utils::tTVPClipboardFormat;
 using krkr::utils::cbfText;
-using krkr::utils::TVPClipboardHasFormat;
-using krkr::utils::TVPClipboardSetText;
-using krkr::utils::TVPClipboardGetText;
 using krkr::utils::tTJSNI_BaseClipboard;
 using krkr::utils::tTJSNC_Clipboard;
 using krkr::utils::TVPCreateNativeClass_Clipboard;

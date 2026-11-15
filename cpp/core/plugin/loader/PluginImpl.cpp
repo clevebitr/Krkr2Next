@@ -469,7 +469,7 @@ void tvpLoadPlugins() {
     // load each plugin
     autoLoadPluginCount = (tjs_int)list.size();
     for(auto &i : list) {
-        TVPAddImportantLog(ttstr(TJS_W("(info) Loading ")) +
+        krkr::utils::AddImportantLog(ttstr(TJS_W("(info) Loading ")) +
                            ttstr(i.Name.c_str()));
         LoadPlugin((i.Path + "/" + i.Name).c_str());
     }

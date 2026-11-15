@@ -79,7 +79,7 @@ void TVPFireOnApplicationActivateEvent(bool activate_or_deactivate) {
     } catch(const eTJS &e) {
         // the system should not throw exceptions during retrieving
         // the function
-        TVPAddLog(TVPFormatMessage(
+        krkr::utils::AddLog(TVPFormatMessage(
             TVPErrorInRetrievingSystemOnActivateOnDeactivate, e.GetMessage()));
         return;
     }
@@ -266,7 +266,7 @@ tTJSNC_System::tTJSNC_System() : inherited(TJS_W("System")) {
 
         tjs_uint8 uuid[16];
 
-        TVPGetRandomBits128(uuid);
+        krkr::utils::GetRandomBits128(uuid);
 
         uuid[8] &= 0x3f;
         uuid[8] |= 0x80; // override clock_seq
@@ -421,7 +421,7 @@ TJS_END_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL(drawThreadNum)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(processorNum){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetProcessorNum();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = krkr::utils::GetProcessorNum();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
