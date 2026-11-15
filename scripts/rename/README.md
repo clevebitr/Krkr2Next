@@ -54,6 +54,7 @@ python3 scripts/check_naming.py --update-baseline
 | `io.tsv` | ✅ 已应用（第 2 轮，123 符号） |
 | `plugin.tsv` | ✅ 已应用（第 3 轮，23 符号） |
 | `io-globals.tsv` | ✅ 已应用（第 4 轮，27 个 N7 变量；已审阅：改写 lowerCamelCase、删 `TVPCreateNativeClass_Storages`） |
+| `io-residual.tsv` | ✅ 已应用（第 4b 轮，9 个 `--draft` 漏收符号；手写：多行定义 / 匿名结构体 / 跨行 typedef） |
 | `utils.tsv` `sound.tsv` `environ.tsv` | 🟡 `--draft` 生成，**未审阅**，冲突列需要人工处理 |
 | `base.tsv` | ⬜ 未起草（465 个符号，先做非消息部分） |
 

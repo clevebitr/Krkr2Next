@@ -35,21 +35,21 @@ bool allowExtractProtectedStorage = true;
 //---------------------------------------------------------------------------
 // archive filter related
 //---------------------------------------------------------------------------
-tTVPXP3ArchiveExtractionFilter xp3ArchiveExtractionFilter = nullptr;
+XP3ArchiveExtractionFilter xp3ArchiveExtractionFilter = nullptr;
 
-void SetXP3ArchiveExtractionFilter(tTVPXP3ArchiveExtractionFilter filter) {
+void SetXP3ArchiveExtractionFilter(XP3ArchiveExtractionFilter filter) {
     xp3ArchiveExtractionFilter = filter;
 }
 //---------------------------------------------------------------------------
 
-static tTVPXP3ArchiveContentFilter xp3ArchiveContentFilter = nullptr;
+static XP3ArchiveContentFilter xp3ArchiveContentFilter = nullptr;
 
-void SetXP3ArchiveContentFilter(tTVPXP3ArchiveContentFilter filter) {
+void SetXP3ArchiveContentFilter(XP3ArchiveContentFilter filter) {
     xp3ArchiveContentFilter = filter;
 }
 
 //---------------------------------------------------------------------------
-// tTVPXP3ArchiveHandleCache
+// ArchiveHandleCacheItem
 //---------------------------------------------------------------------------
 #define KRKR_MAX_ARCHIVE_HANDLE_CACHE 8
 static tjs_uint archiveHandleCacheAge = 0;
@@ -950,8 +950,8 @@ typedef tTJSRefHolder<SegmentData> SegmentDataHolder;
 
 typedef tTJSHashTable<SegmentCacheSearchData, SegmentDataHolder,
                       SegmentCacheSearchHashFunc>
-    tTVPSegmentCache;
-static tTVPSegmentCache segmentCache;
+    SegmentCache;
+static SegmentCache segmentCache;
 static tjs_uint segmentCacheTotalBytes = 0;
 
 static tTJSCriticalSection segmentCacheCS;
@@ -966,7 +966,7 @@ static void CheckSegmentCacheLimit() {
         krkr::io::EffectiveSegmentCacheLimitBytes());
     while(segmentCacheTotalBytes > limit) {
         // chop last segment
-        tTVPSegmentCache::tIterator i;
+        SegmentCache::tIterator i;
         i = segmentCache.GetLast();
         if(!i.IsNull()) {
             tjs_uint size = i.GetValue().GetObjectNoAddRef()->GetSize();
@@ -1001,13 +1001,13 @@ struct ClearSegmentCacheCallback : public tTVPCompactEventCallbackIntf {
             FreeArchiveHandlePool();
         }
     }
-} static TVPClearSegmentCacheCallback;
+} static clearSegmentCacheCallback;
 
 static bool clearSegmentCacheCallbackInit = false;
 
 //---------------------------------------------------------------------------
 static SegmentData *
-TVPSearchFromSegmentCache(const SegmentCacheSearchData &sdata,
+SearchFromSegmentCache(const SegmentCacheSearchData &sdata,
                           tjs_uint32 hash) {
     tTJSCriticalSectionHolder cs_holder(segmentCacheCS);
 
@@ -1025,7 +1025,7 @@ TVPSearchFromSegmentCache(const SegmentCacheSearchData &sdata,
 static void PushToSegmentCache(const SegmentCacheSearchData &sdata,
                                   tjs_uint32 hash, SegmentData *data) {
     if(!clearSegmentCacheCallbackInit) {
-        TVPAddCompactEventHook(&TVPClearSegmentCacheCallback);
+        TVPAddCompactEventHook(&clearSegmentCacheCallback);
         clearSegmentCacheCallbackInit = true;
     }
 
@@ -1108,7 +1108,7 @@ void XP3ArchiveStream::EnsureSegment() {
             tjs_uint32 hash;
             hash = SegmentCacheSearchHashFunc::Make(sdata);
 
-            SegmentData = TVPSearchFromSegmentCache(sdata, hash);
+            SegmentData = SearchFromSegmentCache(sdata, hash);
             if(!SegmentData) {
                 // not found in cache
                 Stream->SetPosition(CurSegment->Start);

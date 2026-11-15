@@ -1093,3 +1093,77 @@ extern tjs_uint krkr::io::segmentCacheLimit;   // 工具产物，不能这么写
 | 4 | io 全局变量 | 27 | 189 | 11 | ~30 min |
 
 `check_naming.py` 合计遗留：1297 → 1101 → 1080 → **1043**。
+
+## 2026-11-15 — 命名统一第 4b 轮：io 残项（9 符号 / 45 处），io 收官
+
+\## 结果
+
+`io` 遗留 **43 → 26**（合计 1043 → **1026**）。26 个全部**不再是 io 自己的符号**：
+
+| 归属 | 符号 |
+|---|---|
+| `base` | `TVPThrowExceptionMessage` `tTVPArchive` `iTVPStorageMedia` `TVPFormatMessage` `iTVPStorageLister` `tTVPPluginHolder` `TVPMmapAlloc/Free` `tTVPLocalFileInfo` `TVPAddCompactEventHook` `tTVPAtExit` `tTVPCompactEventCallbackIntf` `tTVPStreamHolder` |
+| `utils` | `TVPAddLog` `TVPAddImportantLog` `TVPGetTickCount` `TVPGetRoughTickCount32` `TVPPushEnvironNoise` `TVPGetRandomBits128` |
+| `environ` | `TVPProjectDir` `TVPCreateFolders` `TVPSelectFile` `TVPGetMessageByLocale` `TVPShowSimpleMessageBox` |
+| §4 例外 | `TVPCreateNativeClass_Storages` |
+
+代码改名 9 个（手写 `scripts/rename/maps/io-residual.tsv`）：
+
+```
+TVPAutoPathTable                -> autoPathTable
+TVPStorageMediaManager          -> storageMediaManager
+TVPArchiveCache                 -> archiveCache
+TVPClearAutoPathCacheCallback   -> clearAutoPathCacheCallback
+TVPClearSegmentCacheCallback    -> clearSegmentCacheCallback
+tTVPXP3ArchiveExtractionFilter  -> XP3ArchiveExtractionFilter   (type)
+tTVPXP3ArchiveContentFilter     -> XP3ArchiveContentFilter      (type)
+tTVPSegmentCache                -> SegmentCache                 (type)
+TVPSearchFromSegmentCache       -> SearchFromSegmentCache
+```
+
+\## 决策：注释与日志串里的旧名，跟代码一起改（但不进 map）
+
+11 处命中只有两种形态，工具都不该管（条目的 kind 是代码符号，硬塞进 map 会触发
+"新名已存在 → 全限定"的噪声）：
+
+| 形态 | 处理 | 例子 |
+|---|---|---|
+| 分区注释里的旧名 | 改成**现在真实的符号名** | `// TVPCheckExistantLocalFile` → `// CheckExistentLocalFile`（顺手把 `Existant` 拼写对齐成代码里的 `Existent`） |
+| 日志串里的旧名 | 改成现在真实的函数名 | `"AutoMountXP3: TVPGetLocalName threw: {}"` → `"AutoMountXP3: GetLocalName threw: {}"` |
+
+后者与"命名轮不改日志文本"并不矛盾：**文本里的标识符**已经不是标识符了 ——
+函数前几轮已改名成 `GetLocalName` / `BoostAutoMountPaths`，串里留旧名只会误导 `grep`。
+措辞一个字没动。
+
+两条特殊情况：
+
+- `// TVPIsRealStorage…`（带省略号）改成真实名 `!IsRealStorageNoSearchNoNormalize`；
+- `// tTVPXP3ArchiveHandleCache` 那个符号**根本不存在**（只有 `ArchiveHandleCacheItem`
+  + `archiveHandleCache*` 变量），所以写成 `// ArchiveHandleCacheItem`。
+
+\## 决策：`TVPCreateFolders` 不归 io，尽管 io 里有它的声明
+
+`StorageIntf.h` / `StorageImpl.h` 里把它声明成 `krkr::io::TVPCreateFolders`（还带
+`using` 桥接），但**定义在 environ**（`platform/android/AndroidUtils.cpp`、
+`platform/stubs/platform_linux.cpp` 各一份全局定义）。按 §2"归属看定义在哪个目录"，
+它属于 environ 那一轮；现在在 io 里改名会让那两份定义对不上。
+
+\## 工具债：`--draft` 的两处已知盲区
+
+1. 逐行正则 → 漏多行定义、匿名结构体上的名字、跨行 typedef；
+2. 不改字符串字面量 → 只出现在日志里的名字永远数不掉。
+
+第一条要么手写 map（本轮的 `io-residual.tsv`），要么把 draft 改成"先按 `;`/`{}` 切逻辑
+语句再匹配"。第二条保持现状（默认不动文案），需要时手工改。
+
+\## 数据
+
+| 轮次 | 模块 | 符号 | 替换 | 文件 | 耗时 |
+|---|---|---:|---:|---:|---|
+| 1 | extension | 7 | 21 | 4 | ~15 min |
+| 2 | io | 123 | 1023 | 83 | ~50 min |
+| 3 | plugin | 23 | 68 | 7 | ~15 min |
+| 4 | io 全局变量 | 27 | 189 | 11 | ~30 min |
+| 4b | io 残项 | 9 | 45 | 3 | ~15 min |
+
+`check_naming.py` 合计遗留：1297 → 1101 → 1080 → 1043 → **1026**（io 26）。

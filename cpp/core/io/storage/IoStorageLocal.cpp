@@ -664,7 +664,7 @@ tTJSBinaryStream *krkr::io::OpenStream(const ttstr &_name, tjs_uint32 flags) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCheckExistantLocalFile
+// CheckExistentLocalFile
 //---------------------------------------------------------------------------
 bool CheckExistentLocalFile(const ttstr &name) {
 #if 0
@@ -683,7 +683,7 @@ bool CheckExistentLocalFile(const ttstr &name) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCheckExistantLocalFolder
+// CheckExistentLocalFolder
 //---------------------------------------------------------------------------
 bool CheckExistentLocalFolder(const ttstr &name) {
     tTVP_stat s{};
@@ -759,7 +759,7 @@ int CheckArchive(const ttstr &localname) {
 }
 
 //---------------------------------------------------------------------------
-// TVPLocalExtrectFilePath
+// LocalExtractFilePath
 //---------------------------------------------------------------------------
 ttstr LocalExtractFilePath(const ttstr &name) {
     // this extracts given name's path under local filename rule
@@ -1550,11 +1550,11 @@ void AutoMountSiblingXP3Archives() {
     try {
         GetLocalPath(nativeParent);
     } catch(eTJSError &e) {
-        spdlog::error("AutoMountXP3: TVPGetLocalName threw: {}",
+        spdlog::error("AutoMountXP3: GetLocalName threw: {}",
                       e.GetMessage().AsStdString());
         return;
     } catch(...) {
-        spdlog::error("AutoMountXP3: TVPGetLocalName threw unknown exception");
+        spdlog::error("AutoMountXP3: GetLocalName threw unknown exception");
         return;
     }
 
@@ -1692,7 +1692,7 @@ void AutoMountProjectXP3Archives() {
     try {
         GetLocalPath(nativeProj);
     } catch(...) {
-        spdlog::error("AutoMountProjectXP3: TVPGetLocalName threw for {}",
+        spdlog::error("AutoMountProjectXP3: GetLocalName threw for {}",
                       projStorage.AsStdString());
         return;
     }
@@ -1908,7 +1908,7 @@ void BoostAutoMountPaths() {
 
     if(patchEntries.empty()) {
         // 没有补丁档案：现有顺序就是"散装 > 档案"，不需要动。
-        spdlog::info("TVPBoostAutoMountPaths: 无补丁档案，auto path 顺序不变"
+        spdlog::info("BoostAutoMountPaths: 无补丁档案，auto path 顺序不变"
                      "（total {}）",
                      autoPathList.size());
         return;
@@ -1939,7 +1939,7 @@ void BoostAutoMountPaths() {
 
     AutoPathTableInit = false;
     spdlog::info(
-        "TVPBoostAutoMountPaths: moved {} patch archive path(s) to {} (rule={}, "
+        "BoostAutoMountPaths: moved {} patch archive path(s) to {} (rule={}, "
         "total {})",
         patchEntries.size(), appendAtEnd ? "end" : "front",
         sequencedRule ? "prefix+seq" : "substring", autoPathList.size());
@@ -1955,7 +1955,7 @@ void BoostAutoMountPaths() {
                 head += " | ";
             head += autoPathList[i].AsStdString();
         }
-        spdlog::info("TVPBoostAutoMountPaths: 队首 {} 条 = {}", kShow, head);
+        spdlog::info("BoostAutoMountPaths: 队首 {} 条 = {}", kShow, head);
     }
 }
 

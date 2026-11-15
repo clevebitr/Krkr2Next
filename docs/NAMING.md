@@ -111,7 +111,7 @@
 | 1 | `extension` | 4 | ✅ **已完成**（`TVPAddClassHandler`→`AddClassHandler`、`TVPCauseAtInstallExtensionClass`→`InstallRegisteredClasses`、`TVPResetExtensionClassInstallStateForRestart`→`ResetInstallStateForRestart`、`tTVPAtInstallClass`→`AtInstallClass`；4 条过渡 `using` 同 commit 删除） |
 | 2 | `plugin` | 23（已应用） | ✅ **插件管理函数 / 类型 / 宏完成**（68 处 / 7 文件，49→29）；余下 29 个全是登记例外（插件 ABI、NCB 宏类型、注册表工厂族）与别的模块的符号 |
 | 3 | `utils` | 14（draft） | 🟡 map 已起草；4 个新名冲突待人工处理（`TVPTimer`→`Timer` 撞名） |
-| 4 | `io` | 123 + 27（已应用） | ✅ **函数/类型/宏 + N7 全局变量都已完成**：第 2 轮 1023 处 / 83 文件（`7zArchive.cpp` → `SevenZipArchive.cpp`），第 4 轮 189 处 / 11 文件（`io-globals.tsv`，27 个变量改 lowerCamelCase）；遗留 176→**43**，余下是**跨模块符号**（base/utils 的，各轮处理）+ `--draft` 漏掉的多行定义/日志字符串（见 `DECISIONS.md` 第 4 轮） |
+| 4 | `io` | 123 + 27 + 17（已应用） | ✅ **io 收口**：第 2 轮 1023 处 / 83 文件（`7zArchive.cpp` → `SevenZipArchive.cpp`）、第 4 轮 189 处 / 11 文件（`io-globals.tsv`，27 个 N7 变量）、第 4b 轮 45 处 / 3 文件（`io-residual.tsv`，9 个 `--draft` 漏收符号 + 6 处注释 + 5 处日志串）；遗留 176→**26**，余下**全部是别的模块的符号**（base 13 / utils 6 / environ 5）+ `TVPCreateNativeClass_Storages`（§4 例外） |
 | 5 | `compat` | 0 | ✅ 自有符号已是新风格（`--draft` 扫出 0 个），无需改名 |
 | 6 | `sound` | 112（draft） | 🟡 map 已起草 |
 | 7 | `environ` | 101（draft） | 🟡 map 已起草 |
@@ -185,6 +185,7 @@ tTVPAtInstallClass	AtInstallClass	type
 | 2 | `io` | 123 | 1023 | 83 | ~50 min（含 4 处工具修正） |
 | 3 | `plugin` | 23 | 68 | 7 | ~15 min |
 | 4 | `io` 全局变量（N7） | 27 | 189 | 11 | ~30 min |
+| 4b | `io` 残项（draft 漏收） | 9（+11 注释/日志） | 45 | 3 | ~15 min |
 
 **吞吐 ≈ 100~150 符号/小时**（工具成熟后，不含编译回归）。
 
@@ -195,7 +196,7 @@ tTVPAtInstallClass	AtInstallClass	type
 | `sound` | 132 | ~1.5 h | 1~2 天 |
 | `environ` | 134 | ~1.5 h | 1~2 天 |
 | `base` | ~250（不含 153 个消息例外） | ~3 h | 2~4 天（注册表族要等反转） |
-| `io` 残项 | 13（draft 漏收，需手写 map） | ~0.5 h | — |
+| ~~`io` 残项~~ | ~~13~~ | ✅ 第 4b 轮完成（9 符号 + 11 处注释/日志） | — |
 
 结论：**纯改名还剩 5~7 小时**（再 5 轮左右）；
 **含编译验证 1.5~2 周**；加上仓库里积压的未编译提交的首次全量验证（3~5 天），

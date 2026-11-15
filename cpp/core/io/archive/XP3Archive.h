@@ -49,21 +49,21 @@ struct XP3ExtractionFilterInfo {
 // platforms, for backward application compatibility.
 
 typedef void(KRKR_XP3_EXTRACTION_FILTER_CONVENTION
-                 *tTVPXP3ArchiveExtractionFilter)(
+                 *XP3ArchiveExtractionFilter)(
     XP3ExtractionFilterInfo *info, tTJSVariant *ctx);
 
 typedef tjs_int(
-    KRKR_XP3_EXTRACTION_FILTER_CONVENTION *tTVPXP3ArchiveContentFilter)(
+    KRKR_XP3_EXTRACTION_FILTER_CONVENTION *XP3ArchiveContentFilter)(
     const ttstr &filepath, const ttstr &archivename, tjs_uint64 filesize,
     tTJSVariant *ctx);
 
 /*]*/
 //---------------------------------------------------------------------------
 TJS_EXP_FUNC_DEF(void, SetXP3ArchiveExtractionFilter,
-                 (tTVPXP3ArchiveExtractionFilter filter));
+                 (XP3ArchiveExtractionFilter filter));
 
 TJS_EXP_FUNC_DEF(void, SetXP3ArchiveContentFilter,
-                 (tTVPXP3ArchiveContentFilter filter));
+                 (XP3ArchiveContentFilter filter));
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------

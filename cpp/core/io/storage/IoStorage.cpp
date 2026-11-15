@@ -239,7 +239,7 @@ public:
     void GetListAt(const ttstr &name, iTVPStorageLister *lister);
 
     ttstr GetLocallyAccessibleName(const ttstr &name);
-} TVPStorageMediaManager;
+} storageMediaManager;
 
 //---------------------------------------------------------------------------
 StorageMediaManager::StorageMediaManager() {
@@ -566,27 +566,27 @@ ttstr StorageMediaManager::GetLocallyAccessibleName(const ttstr &name) {
 
 //---------------------------------------------------------------------------
 void GetStorageListAt(const ttstr &name, iTVPStorageLister *lister) {
-    TVPStorageMediaManager.GetListAt(name, lister);
+    storageMediaManager.GetListAt(name, lister);
 }
 
 //---------------------------------------------------------------------------
 void RegisterStorageMedia(iTVPStorageMedia *media) {
-    TVPStorageMediaManager.Register(media);
+    storageMediaManager.Register(media);
 }
 
 //---------------------------------------------------------------------------
 void UnregisterStorageMedia(iTVPStorageMedia *media) {
-    TVPStorageMediaManager.Unregister(media);
+    storageMediaManager.Unregister(media);
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPNormalizeStorgeName : storage name normalization
+// NormalizeStorageName : storage name normalization
 //---------------------------------------------------------------------------
 ttstr krkr::io::NormalizeStorageName(const ttstr &_name)
 // TODO: check what is done in krkr::io::NormalizeStorageName
 {
-    return TVPStorageMediaManager.NormalizeStorageName(_name);
+    return storageMediaManager.NormalizeStorageName(_name);
 }
 //---------------------------------------------------------------------------
 
@@ -594,7 +594,7 @@ ttstr krkr::io::NormalizeStorageName(const ttstr &_name)
 // SetCurrentStorageDirectory
 //---------------------------------------------------------------------------
 void SetCurrentStorageDirectory(const ttstr &_name) {
-    TVPStorageMediaManager.SetCurrentDirectory(_name);
+    storageMediaManager.SetCurrentDirectory(_name);
     ClearStorageCaches();
 }
 //---------------------------------------------------------------------------
@@ -615,7 +615,7 @@ ttstr GetLocallyAccessiblePath(const ttstr &name) {
         return TJS_W("");
     // in-archive storage is always not accessible from local file
     // system
-    return TVPStorageMediaManager.GetLocallyAccessibleName(name);
+    return storageMediaManager.GetLocallyAccessibleName(name);
 }
 //---------------------------------------------------------------------------
 
@@ -800,13 +800,13 @@ public:
     }
 
 private:
-} TVPArchiveCache;
+} archiveCache;
 
-void ClearArchiveCache() { TVPArchiveCache.Clear(); }
-tjs_uint GetArchiveCacheCount() { return TVPArchiveCache.GetCount(); }
-tjs_uint GetArchiveCacheLimit() { return TVPArchiveCache.GetMaxCount(); }
+void ClearArchiveCache() { archiveCache.Clear(); }
+tjs_uint GetArchiveCacheCount() { return archiveCache.GetCount(); }
+tjs_uint GetArchiveCacheLimit() { return archiveCache.GetMaxCount(); }
 void SetArchiveCacheCount(tjs_uint max_count) {
-    TVPArchiveCache.SetMaxCount((tjs_int)max_count);
+    archiveCache.SetMaxCount((tjs_int)max_count);
 }
 
 static tTVPAtExit ClearArchiveCacheAtExit(TVP_ATEXIT_PRI_SHUTDOWN,
@@ -832,7 +832,7 @@ static bool IsRealStorageNoSearchNoNormalize(const ttstr &name) {
         ttstr arcname(name, (int)(sharp_pos - name.c_str()));
 
         tTVPArchive *arc;
-        arc = TVPArchiveCache.Get(arcname);
+        arc = archiveCache.Get(arcname);
         bool ret;
         try {
             ttstr in_arc_name(sharp_pos + 1);
@@ -846,7 +846,7 @@ static bool IsRealStorageNoSearchNoNormalize(const ttstr &name) {
         return ret;
     }
 
-    return TVPStorageMediaManager.CheckExistentStorage(name);
+    return storageMediaManager.CheckExistentStorage(name);
 }
 
 bool IsExistentStorageNoSearchNoNormalize(const ttstr &name) {
@@ -872,11 +872,11 @@ bool IsExistentStorageNoSearch(const ttstr &_name) {
 #define KRKR_AUTO_PATH_HASH_SIZE 1024
 tTJSHashCache<ttstr, ttstr> AutoPathCache(KRKR_DEFAULT_AUTOPATH_CACHE_NUM);
 tTJSHashTable<ttstr, ttstr, tTJSHashFunc<ttstr>, KRKR_AUTO_PATH_HASH_SIZE>
-    TVPAutoPathTable;
+    autoPathTable;
 
 //---------------------------------------------------------------------------
 static void InvalidateAutoPathTable() {
-    TVPAutoPathTable.Clear();
+    autoPathTable.Clear();
     AutoPathTableInit = false;
 }
 
@@ -897,7 +897,7 @@ struct ClearAutoPathCacheCallback : public tTVPCompactEventCallbackIntf {
             ClearAutoPathSearchCache();
         }
     }
-} static TVPClearAutoPathCacheCallback;
+} static clearAutoPathCacheCallback;
 
 static bool clearAutoPathCacheCallbackInit = false;
 
@@ -976,7 +976,7 @@ static tjs_uint RebuildAutoPathTable() {
 
     tTJSCriticalSectionHolder cs_holder(createStreamCS);
 
-    TVPAutoPathTable.Clear();
+    autoPathTable.Clear();
 
     // 同名 basename 只认**先出现**的那条 auto-path，后出现的不许覆盖。
     //
@@ -1025,7 +1025,7 @@ static tjs_uint RebuildAutoPathTable() {
 
             tTVPArchive *arc = nullptr;
             try {
-                arc = TVPArchiveCache.Get(arcname);
+                arc = archiveCache.Get(arcname);
             } catch(...) {
                 TVPAddLog(ttstr(TJS_W("(warning) Cannot open archive: ")) +
                           arcname);
@@ -1047,8 +1047,8 @@ static tjs_uint RebuildAutoPathTable() {
                                            TJS_W('/'))) {
                                 ttstr sname = ExtractStorageName(name);
                                 // 同键策略见函数开头（lastWins 时后写覆盖，即后注册者赢）
-                                if(lastWins || !TVPAutoPathTable.Find(sname)) {
-                                    TVPAutoPathTable.Add(sname, path);
+                                if(lastWins || !autoPathTable.Find(sname)) {
+                                    autoPathTable.Add(sname, path);
                                 }
                                 count++;
                             }
@@ -1071,11 +1071,11 @@ static tjs_uint RebuildAutoPathTable() {
                 void Add(const ttstr &file) override { list.push_back(file); }
             } lister;
 
-            TVPStorageMediaManager.GetListAt(path, &lister);
+            storageMediaManager.GetListAt(path, &lister);
             for(auto &i : lister.list) {
                 // 同键策略见函数开头
-                if(lastWins || !TVPAutoPathTable.Find(i)) {
-                    TVPAutoPathTable.Add(i, path);
+                if(lastWins || !autoPathTable.Find(i)) {
+                    autoPathTable.Add(i, path);
                 }
                 count++;
             }
@@ -1093,7 +1093,7 @@ static tjs_uint RebuildAutoPathTable() {
 
     TVPAddLog(ttstr(TJS_W("(info) Total ")) + ttstr((tjs_int)totalcount) +
               TJS_W(" file(s) found, ") +
-              ttstr((tjs_int)TVPAutoPathTable.GetCount()) +
+              ttstr((tjs_int)autoPathTable.GetCount()) +
               TJS_W(" file(s) activated.") + TJS_W(" (") +
               ttstr((tjs_int)(endtick - tick)) + TJS_W("ms)"));
 
@@ -1113,7 +1113,7 @@ ttstr GetPlacedPath(const ttstr &name) {
 #if 0 // needn't
     if(!clearAutoPathCacheCallbackInit)
     {
-        TVPAddCompactEventHook(&TVPClearAutoPathCacheCallback);
+        TVPAddCompactEventHook(&clearAutoPathCacheCallback);
         clearAutoPathCacheCallbackInit = true;
     }
 #endif
@@ -1147,7 +1147,7 @@ ttstr GetPlacedPath(const ttstr &name) {
     ttstr storagename = ExtractStorageName(normalized);
 
     RebuildAutoPathTable(); // ensure auto path table
-    ttstr *result = TVPAutoPathTable.Find(storagename);
+    ttstr *result = autoPathTable.Find(storagename);
     if(result) {
         // found in table
         ttstr found = *result + storagename;
@@ -1156,7 +1156,7 @@ ttstr GetPlacedPath(const ttstr &name) {
     }
 
     // 物理与 auto-path 都没找到：最后才问虚拟文件 provider（伴生脚本）。
-    // 返回裸名，由 CreateStream 的 `!TVPIsRealStorage…` 分支打开虚拟流。
+    // 返回裸名，由 CreateStream 的 `!IsRealStorageNoSearchNoNormalize` 分支打开虚拟流。
     if(krkr::io::IsVirtualFile(normalized)) {
         AutoPathCache.Add(name, normalized);
         return normalized;
@@ -1240,7 +1240,7 @@ static tTJSBinaryStream *_TVPCreateStream(const ttstr &_name,
 
         tTVPArchive *arc;
         tTJSBinaryStream *stream;
-        arc = TVPArchiveCache.Get(arcname);
+        arc = archiveCache.Get(arcname);
         try {
             ttstr in_arc_name(sharp_pos + 1);
             tTVPArchive::NormalizeInArchiveStorageName(in_arc_name);
@@ -1259,7 +1259,7 @@ static tTJSBinaryStream *_TVPCreateStream(const ttstr &_name,
 
     tTJSBinaryStream *stream;
     try {
-        stream = TVPStorageMediaManager.Open(name, flags);
+        stream = storageMediaManager.Open(name, flags);
     } catch(...) {
         if(access >= 1)
             RemoveFromStorageCache(_name);
@@ -1332,7 +1332,7 @@ tjs_uint GetAutoPathCacheLimit() {
 
 tjs_uint GetAutoPathTableCount() {
     tTJSCriticalSectionHolder cs_holder(createStreamCS);
-    return TVPAutoPathTable.GetCount();
+    return autoPathTable.GetCount();
 }
 
 void RemoveFromStorageCache(const ttstr &name) {
