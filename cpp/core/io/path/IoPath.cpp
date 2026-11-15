@@ -6,7 +6,7 @@
 
 namespace krkr::io {
 
-    tjs_char TVPArchiveDelimiter = '>';
+    tjs_char archiveDelimiter = '>';
 
     ttstr ExtractStorageExt(const ttstr &name) {
 
@@ -19,7 +19,7 @@ namespace krkr::io {
                 break;
             if(*p == TJS_W('/'))
                 break;
-            if(*p == TVPArchiveDelimiter)
+            if(*p == archiveDelimiter)
                 break;
             if(*p == TJS_W('.')) {
                 // found extension delimiter
@@ -45,7 +45,7 @@ namespace krkr::io {
                 break;
             if(*p == TJS_W('/'))
                 break;
-            if(*p == TVPArchiveDelimiter)
+            if(*p == archiveDelimiter)
                 break;
 
             p--;
@@ -70,7 +70,7 @@ namespace krkr::io {
                 break;
             if(*p == TJS_W('/'))
                 break;
-            if(*p == TVPArchiveDelimiter)
+            if(*p == archiveDelimiter)
                 break;
 
             p--;
@@ -91,7 +91,7 @@ namespace krkr::io {
                 break;
             if(*p == TJS_W('/'))
                 break;
-            if(*p == TVPArchiveDelimiter)
+            if(*p == archiveDelimiter)
                 break;
             if(*p == TJS_W('.')) {
                 // found extension delimiter

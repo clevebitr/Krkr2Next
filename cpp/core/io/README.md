@@ -64,7 +64,7 @@ environ / 第三方库全部挂在 `core_io_module` 上 —— 和搬迁前的�
 - **`policy` 半接线**：`StoragePolicy` 的取值已经接了一部分（M1.3：注入点 +
   段缓存预算），`auto path` tie-break / 挂载排序等仍是"登记了取值但实现还没读"。
   读 `policy/StoragePolicy.h` 时注意它自己写着这句话。
-- **`archive` 的段缓存**：`TVPSegmentCacheLimit*` 的声明在
+- **`archive` 的段缓存**：`segmentCacheLimit*` 的声明在
   `base/core/StorageIntf.h`，实现与覆盖标记在 `policy/IoPolicy.cpp`，
   两边是一对"分离的意图"，改动时两边一起看。
 

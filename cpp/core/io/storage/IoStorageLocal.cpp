@@ -572,21 +572,21 @@ void PreNormalizeStorageName(ttstr &name) {
 //---------------------------------------------------------------------------
 // GetTemporaryName
 //---------------------------------------------------------------------------
-static tjs_int TVPProcessID;
+static tjs_int processID;
 
 ttstr GetTemporaryName() {
-    static tjs_int TVPTempUniqueNum =
+    static tjs_int tempUniqueNum =
         static_cast<tjs_int>(TVPGetRoughTickCount32());
-    tjs_int num = TVPTempUniqueNum++;
-    ttstr TVPTempPath = GetAppPath();
+    tjs_int num = tempUniqueNum++;
+    ttstr tempPath = GetAppPath();
 
     unsigned char buf[16];
     TVPGetRandomBits128(buf);
     ttstr random{ fmt::format("{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}", buf[0],
                               buf[1], buf[2], buf[3], buf[4], buf[5]) };
 
-    return TVPTempPath + TJS_W("krkr_") + random + TJS_W("_") + ttstr(num) +
-        TJS_W("_") + ttstr(TVPProcessID);
+    return tempPath + TJS_W("krkr_") + random + TJS_W("_") + ttstr(num) +
+        TJS_W("_") + ttstr(processID);
 }
 //---------------------------------------------------------------------------
 
@@ -613,11 +613,11 @@ bool RemoveFolder(const ttstr &name) {
 //---------------------------------------------------------------------------
 // apppath 缓存提升到文件作用域，使 ResetStorageImplForRestart 可复位
 // （TVPProjectDir 在 runtime-restart 时被清空，旧缓存必须重建）。
-static ttstr TVPAppPathCache;
-static bool TVPAppPathCacheValid = false;
+static ttstr appPathCache;
+static bool appPathCacheValid = false;
 
 ttstr GetAppPath() {
-    if(!TVPAppPathCacheValid) {
+    if(!appPathCacheValid) {
         ttstr dir = TVPProjectDir;
         // 档案工程（`.../data.xp3>`）下 ExtractStoragePath 会保留末尾的 '>'，
         // 于是 `GetAppPath() + "patch.tjs"` 变成"包里找 patch.tjs"、临时文件名也会
@@ -625,21 +625,21 @@ ttstr GetAppPath() {
         // 去掉 '>'，取档案所在目录（见 io/policy/StoragePolicy.h 的 stripArchiveDelimiterInAppPath）。
         if(krkr::io::ActiveStoragePolicy().stripArchiveDelimiterInAppPath) {
             const tjs_int len = dir.GetLen();
-            if(len > 0 && dir.GetLastChar() == TVPArchiveDelimiter)
+            if(len > 0 && dir.GetLastChar() == archiveDelimiter)
                 dir = ttstr(dir.c_str(), len - 1);
         }
-        TVPAppPathCache = ExtractStoragePath(dir);
-        TVPAppPathCacheValid = true;
+        appPathCache = ExtractStoragePath(dir);
+        appPathCacheValid = true;
     }
-    return TVPAppPathCache;
+    return appPathCache;
 }
 
 void ResetStorageImplForRestart() {
-    TVPAppPathCache.Clear();
-    TVPAppPathCacheValid = false;
+    appPathCache.Clear();
+    appPathCacheValid = false;
     // runtime-restart 切换游戏时清空累积的 auto-path（上一游戏工程归档路径+脚本
     // addAutoPath），否则旧游戏归档路径混入新游戏搜索表 →
-    // 换不同游戏文件解析错乱/黑屏。 （TVPAutoMountedPaths 每次启动已被
+    // 换不同游戏文件解析错乱/黑屏。 （autoMountedPaths 每次启动已被
     // BoostAutoMountPaths 消费清空，无需在此处理。）
     ClearAutoPathListForRestart();
 }
@@ -1518,7 +1518,7 @@ bool SaveStreamToFile(tTJSBinaryStream *st, tjs_uint64 offset,
 //---------------------------------------------------------------------------
 // AutoMountSiblingXP3Archives
 //---------------------------------------------------------------------------
-static std::vector<ttstr> TVPAutoMountedPaths;
+static std::vector<ttstr> autoMountedPaths;
 
 void AutoMountSiblingXP3Archives() {
     // 一个进程可能先后开多个标题。绝不能把上一个包选定的 Cx 解码器漏给下一个
@@ -1637,7 +1637,7 @@ void AutoMountSiblingXP3Archives() {
 
         arc->Release();
 
-        tjs_char delimStr[2] = { TVPArchiveDelimiter, 0 };
+        tjs_char delimStr[2] = { archiveDelimiter, 0 };
         ttstr archiveBase = archivePath + ttstr(delimStr);
 
         // 包内目录条目的处理顺序由策略决定（见 io/policy/StoragePolicy.h 的 archiveRoot）：
@@ -1658,7 +1658,7 @@ void AutoMountSiblingXP3Archives() {
             ttstr autoPath = archiveBase + dirStr;
             try {
                 AddAutoPath(autoPath);
-                TVPAutoMountedPaths.push_back(
+                autoMountedPaths.push_back(
                     krkr::io::NormalizeStorageName(autoPath));
             } catch(...) {
             }
@@ -1764,7 +1764,7 @@ void AutoMountProjectXP3Archives() {
         }
         arc->Release();
 
-        tjs_char delimStr[2] = { TVPArchiveDelimiter, 0 };
+        tjs_char delimStr[2] = { archiveDelimiter, 0 };
         ttstr archiveBase = archivePath + ttstr(delimStr);
         // 包内目录条目的处理顺序由策略决定（见 io/policy/StoragePolicy.h 的 archiveRoot）：
         //   旧层 RootFirst：字典序，根目录 "" 天然最先（历史行为）；
@@ -1784,7 +1784,7 @@ void AutoMountProjectXP3Archives() {
             ttstr autoPath = archiveBase + dirStr;
             try {
                 AddAutoPath(autoPath);
-                TVPAutoMountedPaths.push_back(
+                autoMountedPaths.push_back(
                     krkr::io::NormalizeStorageName(autoPath));
             } catch(...) {
             }
@@ -1863,7 +1863,7 @@ static bool IsPatchArchiveNameSequenced(std::string name, int *sequence) {
 //---------------------------------------------------------------------------
 
 void BoostAutoMountPaths() {
-    if(TVPAutoMountedPaths.empty())
+    if(autoMountedPaths.empty())
         return;
 
     // 目标优先级（表语义：**列表靠前 = 优先**）：
@@ -1901,39 +1901,39 @@ void BoostAutoMountPaths() {
     };
 
     std::vector<ttstr> patchEntries;
-    for(const auto &p : TVPAutoMountedPaths)
+    for(const auto &p : autoMountedPaths)
         if(isPatchArchivePath(p))
             patchEntries.push_back(p);
-    TVPAutoMountedPaths.clear();
+    autoMountedPaths.clear();
 
     if(patchEntries.empty()) {
         // 没有补丁档案：现有顺序就是"散装 > 档案"，不需要动。
         spdlog::info("TVPBoostAutoMountPaths: 无补丁档案，auto path 顺序不变"
                      "（total {}）",
-                     TVPAutoPathList.size());
+                     autoPathList.size());
         return;
     }
 
     for(const auto &p : patchEntries) {
-        auto it = std::find(TVPAutoPathList.begin(), TVPAutoPathList.end(), p);
-        if(it != TVPAutoPathList.end())
-            TVPAutoPathList.erase(it);
+        auto it = std::find(autoPathList.begin(), autoPathList.end(), p);
+        if(it != autoPathList.end())
+            autoPathList.erase(it);
     }
 
     if(appendAtEnd) {
         // AetherKiri 层：表是"后注册者优先"，所以补丁档案要挪到**队尾**才算最高优先级。
-        TVPAutoPathList.insert(TVPAutoPathList.end(), patchEntries.begin(),
+        autoPathList.insert(autoPathList.end(), patchEntries.begin(),
                                patchEntries.end());
     } else {
-        auto insertAt = TVPAutoPathList.end();
-        for(auto it = TVPAutoPathList.begin(); it != TVPAutoPathList.end();
+        auto insertAt = autoPathList.end();
+        for(auto it = autoPathList.begin(); it != autoPathList.end();
             ++it) {
             if(isArchivePath(*it)) {
                 insertAt = it; // 第一条（非补丁）档案条目之前
                 break;
             }
         }
-        TVPAutoPathList.insert(insertAt, patchEntries.begin(),
+        autoPathList.insert(insertAt, patchEntries.begin(),
                                patchEntries.end());
     }
 
@@ -1942,7 +1942,7 @@ void BoostAutoMountPaths() {
         "TVPBoostAutoMountPaths: moved {} patch archive path(s) to {} (rule={}, "
         "total {})",
         patchEntries.size(), appendAtEnd ? "end" : "front",
-        sequencedRule ? "prefix+seq" : "substring", TVPAutoPathList.size());
+        sequencedRule ? "prefix+seq" : "substring", autoPathList.size());
 
     // 判定性探针：补丁层（汉化 patch.xp3 / patch_appendN.xp3）是否真的排在
     // data.xp3 之前 —— 表是"先注册者优先"，顺序错了就是"打了补丁却取到原版脚本"
@@ -1950,10 +1950,10 @@ void BoostAutoMountPaths() {
     {
         constexpr size_t kShow = 8;
         std::string head;
-        for(size_t i = 0; i < TVPAutoPathList.size() && i < kShow; ++i) {
+        for(size_t i = 0; i < autoPathList.size() && i < kShow; ++i) {
             if(!head.empty())
                 head += " | ";
-            head += TVPAutoPathList[i].AsStdString();
+            head += autoPathList[i].AsStdString();
         }
         spdlog::info("TVPBoostAutoMountPaths: 队首 {} 条 = {}", kShow, head);
     }

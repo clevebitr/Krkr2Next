@@ -2,33 +2,38 @@
 # qualify: krkr::io
 # owner: cpp/core/io
 #
-# 由 rename_symbols.py --draft 生成：只做前缀剥离，未做语义审阅。
-# 第 4 列是提示（冲突/无变化），apply 时忽略；人工确认后请删掉或改掉。
-TVPAllowExtractProtectedStorage	AllowExtractProtectedStorage	var	
-TVPAppPathCache	AppPathCache	var	
-TVPAppPathCacheValid	AppPathCacheValid	var	
-TVPArchiveDelimiter	ArchiveDelimiter	var	
-TVPArchiveHandleCacheAge	ArchiveHandleCacheAge	var	
-TVPArchiveHandleCacheCS	ArchiveHandleCacheCS	var	
-TVPArchiveHandleCacheInit	ArchiveHandleCacheInit	var	
-TVPArchiveHandleCachePool	ArchiveHandleCachePool	var	
-TVPArchiveHandleCacheShutdown	ArchiveHandleCacheShutdown	var	
-TVPAutoMountedPaths	AutoMountedPaths	var	
-TVPAutoPathList	AutoPathList	var	
-TVPClearAutoPathCacheCallbackInit	ClearAutoPathCacheCallbackInit	var	
-TVPClearSegmentCacheCallbackInit	ClearSegmentCacheCallbackInit	var	
-TVPCreateNativeClass_Storages	CreateNativeClass_Storages	fn	
-TVPCreateStreamCS	CreateStreamCS	var	
-TVPCurrentMedia	CurrentMedia	var	
-TVPProcessID	ProcessID	var	
-TVPSegmentCache	SegmentCache	var	
-TVPSegmentCacheCS	SegmentCacheCS	var	
-TVPSegmentCacheLimit	SegmentCacheLimit	var	
-TVPSegmentCacheLimitOverridden	SegmentCacheLimitOverridden	var	
-TVPSegmentCacheLimitOverrideBytes	SegmentCacheLimitOverrideBytes	var	
-TVPSegmentCacheTotalBytes	SegmentCacheTotalBytes	var	
-TVPTempPath	TempPath	var	
-TVPTempUniqueNum	TempUniqueNum	var	
-TVPXP3ArchiveContentFilter	XP3ArchiveContentFilter	var	
-TVPXP3ArchiveExtractionFilter	XP3ArchiveExtractionFilter	var	
-TVP_AUTOPATH_CACHE_MISS_MARKER	KRKR_AUTOPATH_CACHE_MISS_MARKER	macro	
+# io 模块第 4 轮：N7 namespace 作用域变量 / 文件作用域变量（docs/NAMING.md §1 N7）。
+# 由 --draft 生成后已人工审阅：
+#   · 变量 → lowerCamelCase（N7：可变变量小驼峰），不是 draft 的 UpperCamelCase；
+#   · TVP_AUTOPATH_CACHE_MISS_MARKER 是 `static const tjs_char *`（**不是** #define），
+#     按"常量 UpperCamelCase"改名为 AutoPathCacheMissMarker，kind 仍是 var；
+#   · TVPCreateNativeClass_Storages 已从 map 删除：属 §4「TJS 注册表工厂族」例外；
+#   · TVPAllowExtractProtectedStorage / TVPTempPath / TVPTempUniqueNum 虽是 .cpp 内
+#     文件/函数作用域变量，同样按 N6/N7 改（无跨 TU 影响）。
+TVPAllowExtractProtectedStorage	allowExtractProtectedStorage	var
+TVPAppPathCache	appPathCache	var
+TVPAppPathCacheValid	appPathCacheValid	var
+TVPArchiveDelimiter	archiveDelimiter	var
+TVPArchiveHandleCacheAge	archiveHandleCacheAge	var
+TVPArchiveHandleCacheCS	archiveHandleCacheCS	var
+TVPArchiveHandleCacheInit	archiveHandleCacheInit	var
+TVPArchiveHandleCachePool	archiveHandleCachePool	var
+TVPArchiveHandleCacheShutdown	archiveHandleCacheShutdown	var
+TVPAutoMountedPaths	autoMountedPaths	var
+TVPAutoPathList	autoPathList	var
+TVPClearAutoPathCacheCallbackInit	clearAutoPathCacheCallbackInit	var
+TVPClearSegmentCacheCallbackInit	clearSegmentCacheCallbackInit	var
+TVPCreateStreamCS	createStreamCS	var
+TVPCurrentMedia	currentMedia	var
+TVPProcessID	processID	var
+TVPSegmentCache	segmentCache	var
+TVPSegmentCacheCS	segmentCacheCS	var
+TVPSegmentCacheLimit	segmentCacheLimit	var
+TVPSegmentCacheLimitOverridden	segmentCacheLimitOverridden	var
+TVPSegmentCacheLimitOverrideBytes	segmentCacheLimitOverrideBytes	var
+TVPSegmentCacheTotalBytes	segmentCacheTotalBytes	var
+TVPTempPath	tempPath	var
+TVPTempUniqueNum	tempUniqueNum	var
+TVPXP3ArchiveContentFilter	xp3ArchiveContentFilter	var
+TVPXP3ArchiveExtractionFilter	xp3ArchiveExtractionFilter	var
+TVP_AUTOPATH_CACHE_MISS_MARKER	AutoPathCacheMissMarker	var

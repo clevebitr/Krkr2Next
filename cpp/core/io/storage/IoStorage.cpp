@@ -30,24 +30,24 @@
 
 #define KRKR_DEFAULT_ARCHIVE_CACHE_NUM 128
 #define KRKR_DEFAULT_AUTOPATH_CACHE_NUM 256
-static const tjs_char *TVP_AUTOPATH_CACHE_MISS_MARKER = TJS_W("\x01");
+static const tjs_char *AutoPathCacheMissMarker = TJS_W("\x01");
 
 namespace krkr::io {
 
-std::vector<ttstr> TVPAutoPathList;
+std::vector<ttstr> autoPathList;
 bool AutoPathTableInit = false;
 
 //---------------------------------------------------------------------------
 // global variables
 //---------------------------------------------------------------------------
 // current media ( ex. "http" "ftp" "file" )
-ttstr TVPCurrentMedia = TJS_W("file");
+ttstr currentMedia = TJS_W("file");
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 // statics
 //---------------------------------------------------------------------------
-static tTJSStaticCriticalSection TVPCreateStreamCS;
+static tTJSStaticCriticalSection createStreamCS;
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -123,7 +123,7 @@ static bool RepairMissingDelimiter(ttstr &name) {
     const bool isArchive =
         endsWith(".xp3") || endsWith(".tpm") || endsWith(".apk") || endsWith(".zip");
 
-    tjs_char delim[2] = { isArchive ? TVPArchiveDelimiter : TJS_W('/'), 0 };
+    tjs_char delim[2] = { isArchive ? archiveDelimiter : TJS_W('/'), 0 };
     name += ttstr(delim);
 
     if(auto logger = spdlog::get("core")) {
@@ -327,7 +327,7 @@ ttstr StorageMediaManager::NormalizeStorageName(const ttstr &name,
     ttstr inarchive_name;
     bool inarc_name_found = false;
     pca = tmp.c_str();
-    pa = TJS_strchr(pca, TVPArchiveDelimiter);
+    pa = TJS_strchr(pca, archiveDelimiter);
     if(pa) {
         inarchive_name = ttstr(pa + 1);
         tTVPArchive::NormalizeInArchiveStorageName(inarchive_name);
@@ -398,7 +398,7 @@ ttstr StorageMediaManager::NormalizeStorageName(const ttstr &name,
 
     // supply omitted and normalize
     if(media.IsEmpty()) {
-        media = TVPCurrentMedia;
+        media = currentMedia;
         if(media.IsEmpty())
             media = TJS_W("file");
     } else {
@@ -427,7 +427,7 @@ ttstr StorageMediaManager::NormalizeStorageName(const ttstr &name,
     // compress redudant path accesses
     if(inarc_name_found) {
         tjs_char tmp[2];
-        tmp[0] = TVPArchiveDelimiter;
+        tmp[0] = archiveDelimiter;
         tmp[1] = 0;
         path += tmp + inarchive_name;
     }
@@ -437,7 +437,7 @@ ttstr StorageMediaManager::NormalizeStorageName(const ttstr &name,
     tjs_int dot_count = -1;
 
     while(true) {
-        if(*pa == TVPArchiveDelimiter || *pa == TJS_W('/') || *pa == 0) {
+        if(*pa == archiveDelimiter || *pa == TJS_W('/') || *pa == 0) {
             tjs_char delim = 0;
 
             if(*pa && dot_count == 0) {
@@ -446,13 +446,13 @@ ttstr StorageMediaManager::NormalizeStorageName(const ttstr &name,
             } else if(dot_count > 0) {
                 pb--;
                 while(pb >= pc) {
-                    if(*pb == TJS_W('/') || *pb == TVPArchiveDelimiter) {
+                    if(*pb == TJS_W('/') || *pb == archiveDelimiter) {
                         dot_count--;
                         if(dot_count == 0) {
                             delim = *pb;
                             break;
                         }
-                        if(*pb == TVPArchiveDelimiter)
+                        if(*pb == archiveDelimiter)
                             TVPThrowExceptionMessage(TVPInvalidPathName, name);
                     }
                     pb--;
@@ -499,7 +499,7 @@ ttstr StorageMediaManager::NormalizeStorageName(const ttstr &name,
 void StorageMediaManager::SetCurrentDirectory(const ttstr &name) {
     ttstr work(name);
     tjs_char ch = work.GetLastChar();
-    if(ch != TJS_W('/') && ch != TJS_W('\\') && ch != TVPArchiveDelimiter) {
+    if(ch != TJS_W('/') && ch != TJS_W('\\') && ch != archiveDelimiter) {
         if(!RepairMissingDelimiter(work))
             TVPThrowExceptionMessage(TVPMissingPathDelimiterAtLast);
     }
@@ -510,7 +510,7 @@ void StorageMediaManager::SetCurrentDirectory(const ttstr &name) {
     tMediaRecord *rec = GetMediaRecord(media);
     rec->CurrentDomain = domain;
     rec->CurrentPath = path;
-    TVPCurrentMedia = media;
+    currentMedia = media;
 }
 
 //---------------------------------------------------------------------------
@@ -611,7 +611,7 @@ void GetLocalPath(ttstr &name) {
 
 //---------------------------------------------------------------------------
 ttstr GetLocallyAccessiblePath(const ttstr &name) {
-    if(TJS_strchr(name.c_str(), TVPArchiveDelimiter))
+    if(TJS_strchr(name.c_str(), archiveDelimiter))
         return TJS_W("");
     // in-archive storage is always not accessible from local file
     // system
@@ -823,9 +823,9 @@ static tTVPAtExit ClearArchiveCacheAtExit(TVP_ATEXIT_PRI_SHUTDOWN,
 // 也算成存在——两者不能互相调用，否则就是"虚拟文件自己证明自己存在"。
 static bool IsRealStorageNoSearchNoNormalize(const ttstr &name) {
     // does name contain > ?
-    tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
+    tTJSCriticalSectionHolder cs_holder(createStreamCS);
 
-    const tjs_char *sharp_pos = TJS_strchr(name.c_str(), TVPArchiveDelimiter);
+    const tjs_char *sharp_pos = TJS_strchr(name.c_str(), archiveDelimiter);
     if(sharp_pos) {
         // this storagename indicates a file in an archive
 
@@ -893,21 +893,21 @@ static void ClearAutoPathCache() {
 struct ClearAutoPathCacheCallback : public tTVPCompactEventCallbackIntf {
     void OnCompact(tjs_int level) override {
         if(level >= TVP_COMPACT_LEVEL_DEACTIVATE) {
-            tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
+            tTJSCriticalSectionHolder cs_holder(createStreamCS);
             ClearAutoPathSearchCache();
         }
     }
 } static TVPClearAutoPathCacheCallback;
 
-static bool TVPClearAutoPathCacheCallbackInit = false;
+static bool clearAutoPathCacheCallbackInit = false;
 
 //---------------------------------------------------------------------------
 void AddAutoPath(const ttstr &name) {
-    tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
+    tTJSCriticalSectionHolder cs_holder(createStreamCS);
 
     ttstr work(name);
     tjs_char lastchar = work.GetLastChar();
-    if(lastchar != TVPArchiveDelimiter && lastchar != TJS_W('/') &&
+    if(lastchar != archiveDelimiter && lastchar != TJS_W('/') &&
        lastchar != TJS_W('\\')) {
         if(!RepairMissingDelimiter(work))
             TVPThrowExceptionMessage(TVPMissingPathDelimiterAtLast);
@@ -916,15 +916,15 @@ void AddAutoPath(const ttstr &name) {
     ttstr normalized = krkr::io::NormalizeStorageName(work);
 
     auto i =
-        std::find(TVPAutoPathList.begin(), TVPAutoPathList.end(), normalized);
-    if(i == TVPAutoPathList.end()) {
-        TVPAutoPathList.push_back(normalized);
+        std::find(autoPathList.begin(), autoPathList.end(), normalized);
+    if(i == autoPathList.end()) {
+        autoPathList.push_back(normalized);
     } else if(krkr::io::ActiveStoragePolicy().patchPriority ==
               krkr::io::PatchPriorityEnd::AppendAtEnd) {
         // AetherKiri 层：重新添加同一条 = 提升优先级（先删再 push_back）。
         // 旧层（先注册者优先）保持"已存在就不动"，两者语义各自自洽。
-        TVPAutoPathList.erase(i);
-        TVPAutoPathList.push_back(normalized);
+        autoPathList.erase(i);
+        autoPathList.push_back(normalized);
     }
 
     ClearAutoPathCache();
@@ -932,11 +932,11 @@ void AddAutoPath(const ttstr &name) {
 
 //---------------------------------------------------------------------------
 void RemoveAutoPath(const ttstr &name) {
-    tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
+    tTJSCriticalSectionHolder cs_holder(createStreamCS);
 
     ttstr work(name);
     tjs_char lastchar = work.GetLastChar();
-    if(lastchar != TVPArchiveDelimiter && lastchar != TJS_W('/') &&
+    if(lastchar != archiveDelimiter && lastchar != TJS_W('/') &&
        lastchar != TJS_W('\\')) {
         if(!RepairMissingDelimiter(work))
             TVPThrowExceptionMessage(TVPMissingPathDelimiterAtLast);
@@ -945,9 +945,9 @@ void RemoveAutoPath(const ttstr &name) {
     ttstr normalized = krkr::io::NormalizeStorageName(work);
 
     auto i =
-        std::find(TVPAutoPathList.begin(), TVPAutoPathList.end(), normalized);
-    if(i != TVPAutoPathList.end())
-        TVPAutoPathList.erase(i);
+        std::find(autoPathList.begin(), autoPathList.end(), normalized);
+    if(i != autoPathList.end())
+        autoPathList.erase(i);
 
     ClearAutoPathCache();
 }
@@ -957,13 +957,13 @@ void RemoveAutoPath(const ttstr &name) {
 // runtime-restart 用
 //---------------------------------------------------------------------------
 // runtime-restart 切换游戏时，上一游戏的归档 auto-path（工程目录 xp3 + 脚本
-// addAutoPath）已永久残留在全局 TVPAutoPathList
+// addAutoPath）已永久残留在全局 autoPathList
 // 里只增不清，混入新游戏的搜索表， 导致换不同游戏文件解析错乱/黑屏（同款重启因
 // BoostAutoMountPaths 去重挪位而
 // 看似正常）。这里整表重置：清列表、清缓存、使路径表失效（下次重建只含当前游戏）。
 void ClearAutoPathListForRestart() {
-    tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
-    TVPAutoPathList.clear();
+    tTJSCriticalSectionHolder cs_holder(createStreamCS);
+    autoPathList.clear();
     AutoPathCache.Clear();
     InvalidateAutoPathTable();
 }
@@ -974,7 +974,7 @@ static tjs_uint RebuildAutoPathTable() {
     if(AutoPathTableInit)
         return 0;
 
-    tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
+    tTJSCriticalSectionHolder cs_holder(createStreamCS);
 
     TVPAutoPathTable.Clear();
 
@@ -1009,12 +1009,12 @@ static tjs_uint RebuildAutoPathTable() {
     tjs_uint totalcount = 0;
 
     std::vector<ttstr>::iterator it;
-    for(it = TVPAutoPathList.begin(); it != TVPAutoPathList.end(); it++) {
+    for(it = autoPathList.begin(); it != autoPathList.end(); it++) {
         const ttstr &path = *it;
         tjs_uint count = 0;
 
         const tjs_char *sharp_pos =
-            TJS_strchr(path.c_str(), TVPArchiveDelimiter);
+            TJS_strchr(path.c_str(), archiveDelimiter);
         if(sharp_pos) {
             // this storagename indicates a file in an archive
 
@@ -1111,21 +1111,21 @@ ttstr GetPlacedPath(const ttstr &name) {
     // returned name is normalized. returns empty string if the
     // storage is not found.
 #if 0 // needn't
-    if(!TVPClearAutoPathCacheCallbackInit)
+    if(!clearAutoPathCacheCallbackInit)
     {
         TVPAddCompactEventHook(&TVPClearAutoPathCacheCallback);
-        TVPClearAutoPathCacheCallbackInit = true;
+        clearAutoPathCacheCallbackInit = true;
     }
 #endif
 
     ttstr *incache = AutoPathCache.FindAndTouch(name);
     if(incache) {
-        if(*incache == TVP_AUTOPATH_CACHE_MISS_MARKER)
+        if(*incache == AutoPathCacheMissMarker)
             return {};
         return *incache; // found in cache
     }
 
-    tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
+    tTJSCriticalSectionHolder cs_holder(createStreamCS);
 
     ttstr normalized(krkr::io::NormalizeStorageName(name));
 
@@ -1163,7 +1163,7 @@ ttstr GetPlacedPath(const ttstr &name) {
     }
 
     // not found
-    AutoPathCache.Add(name, TVP_AUTOPATH_CACHE_MISS_MARKER);
+    AutoPathCache.Add(name, AutoPathCacheMissMarker);
     return {};
 }
 //---------------------------------------------------------------------------
@@ -1203,7 +1203,7 @@ bool IsExistentStorage(const ttstr &name) {
 //---------------------------------------------------------------------------
 static tTJSBinaryStream *_TVPCreateStream(const ttstr &_name,
                                           tjs_uint32 flags) {
-    tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
+    tTJSCriticalSectionHolder cs_holder(createStreamCS);
 
     ttstr name;
 
@@ -1230,7 +1230,7 @@ static tTJSBinaryStream *_TVPCreateStream(const ttstr &_name,
     }
 
     // does name contain > ?
-    const tjs_char *sharp_pos = TJS_strchr(name.c_str(), TVPArchiveDelimiter);
+    const tjs_char *sharp_pos = TJS_strchr(name.c_str(), archiveDelimiter);
     if(sharp_pos) {
         // this storagename indicates a file in an archive
         if((flags & TJS_BS_ACCESS_MASK) != TJS_BS_READ)
@@ -1316,22 +1316,22 @@ void ClearStorageCaches() {
 void SetAutoPathCacheMaxCount(tjs_uint max_count) {
     if(max_count < 1)
         max_count = 1;
-    tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
+    tTJSCriticalSectionHolder cs_holder(createStreamCS);
     AutoPathCache.SetMaxCount(max_count);
 }
 
 tjs_uint GetAutoPathCacheCount() {
-    tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
+    tTJSCriticalSectionHolder cs_holder(createStreamCS);
     return AutoPathCache.GetCount();
 }
 
 tjs_uint GetAutoPathCacheLimit() {
-    tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
+    tTJSCriticalSectionHolder cs_holder(createStreamCS);
     return AutoPathCache.GetMaxCount();
 }
 
 tjs_uint GetAutoPathTableCount() {
-    tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
+    tTJSCriticalSectionHolder cs_holder(createStreamCS);
     return TVPAutoPathTable.GetCount();
 }
 

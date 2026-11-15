@@ -3,7 +3,7 @@
 //
 #include "IoPolicy.h"
 
-#include "StorageIntf.h" // TVPSegmentCacheLimitOverridden / ...OverrideBytes（base 声明）
+#include "StorageIntf.h" // segmentCacheLimitOverridden / ...OverrideBytes（base 声明）
 
 #include <spdlog/spdlog.h>
 
@@ -44,12 +44,12 @@ namespace krkr::io {
 
     // XP3 段缓存预算的显式覆盖状态。声明在 base 的 StorageIntf.h（见那里的注释）：
     // 低内存判定在 base，io 只读这两个全局，方向是 io -> base。
-    bool TVPSegmentCacheLimitOverridden = false;
-    unsigned long long TVPSegmentCacheLimitOverrideBytes = 0;
+    bool segmentCacheLimitOverridden = false;
+    unsigned long long segmentCacheLimitOverrideBytes = 0;
 
     void SetSegmentCacheLimitOverride(unsigned long long bytes) {
-        TVPSegmentCacheLimitOverridden = true;
-        TVPSegmentCacheLimitOverrideBytes = bytes;
+        segmentCacheLimitOverridden = true;
+        segmentCacheLimitOverrideBytes = bytes;
         if(auto logger = spdlog::get("core")) {
             logger->info("io: XP3 段缓存预算被显式覆盖为 {} 字节（策略值不再生效）",
                          bytes);
@@ -57,12 +57,12 @@ namespace krkr::io {
     }
 
     bool HasSegmentCacheLimitOverride() {
-        return TVPSegmentCacheLimitOverridden;
+        return segmentCacheLimitOverridden;
     }
 
     unsigned long long EffectiveSegmentCacheLimitBytes() {
-        return TVPSegmentCacheLimitOverridden
-                   ? TVPSegmentCacheLimitOverrideBytes
+        return segmentCacheLimitOverridden
+                   ? segmentCacheLimitOverrideBytes
                    : ActiveStoragePolicy().xp3SegmentCacheBytes;
     }
 

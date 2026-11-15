@@ -562,7 +562,7 @@ static void PostRegistCallback() {
         krkr::io::SetXP3ArchiveExtractionFilter(TVPXP3ArchiveExtractionFilterWrapper);
         krkr::io::SetXP3ArchiveContentFilter(TVPXP3ArchiveContentFilterWrapper);
     }
-    // krkr::io::SetXP3ArchiveExtractionFilter(TVPXP3ArchiveExtractionFilter);
+    // krkr::io::SetXP3ArchiveExtractionFilter(krkr::io::xp3ArchiveExtractionFilter);
 }
 
 NCB_POST_REGIST_CALLBACK(PostRegistCallback);

@@ -240,7 +240,7 @@ void tTVPAsyncImageLoader::LoadRequest(iTJSDispatch2 *owner, tTJSNI_Bitmap *bmp,
     PushLoadQueue(owner, bmp, nname);
 }
 
-// tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
+// tTJSCriticalSectionHolder cs_holder(krkr::io::createStreamCS);
 //	tTJSBinaryStream* stream = krkr::io::CreateStream(nname, TJS_BS_READ);
 // krkr::io::CreateStream はロックされているので、非同期で実行可能
 

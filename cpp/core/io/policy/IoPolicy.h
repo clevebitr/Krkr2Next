@@ -25,7 +25,7 @@ namespace krkr::io {
 
     // ── XP3 段缓存预算 ────────────────────────────────────────────────
     // 取值优先级：显式覆盖（低内存路径 SysInitImpl、或将来脚本设置）> 激活层策略。
-    // 为什么不能直接读策略：`TVPSegmentCacheLimit` 是静态初始化期定型的全局，而层激活
+    // 为什么不能直接读策略：`segmentCacheLimit` 是静态初始化期定型的全局，而层激活
     // 发生在 engine_create（更晚）；改成"惰性 + 显式覆盖标记"后两边的意图都能保住。
     void SetSegmentCacheLimitOverride(unsigned long long bytes);
     bool HasSegmentCacheLimitOverride();

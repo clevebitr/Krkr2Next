@@ -133,7 +133,7 @@ void TVPInitializeBaseSystems() {
     // set system archive delimiter
     tTJSVariant v;
     if(TVPGetCommandLine(TJS_W("-arcdelim"), &v))
-        TVPArchiveDelimiter = ttstr(v)[0];
+        krkr::io::archiveDelimiter = ttstr(v)[0];
 
     // set default current directory
     {
@@ -164,10 +164,10 @@ void krkr::base::TVPBeforeSystemInit() {
     // set system archive delimiter after patch.tjs specified
     tTJSVariant v;
     if(TVPGetCommandLine(TJS_W("-arcdelim"), &v))
-        TVPArchiveDelimiter = ttstr(v)[0];
+        krkr::io::archiveDelimiter = ttstr(v)[0];
 
     if(krkr::io::IsExistentStorageNoSearchNoNormalize(TVPProjectDir)) {
-        TVPProjectDir += TVPArchiveDelimiter;
+        TVPProjectDir += krkr::io::archiveDelimiter;
     } else {
         TVPProjectDir += TJS_W("/");
     }
@@ -215,13 +215,13 @@ void krkr::base::TVPBeforeSystemInit() {
             // extra low memory
             if(TJSObjectHashBitsLimit > 0)
                 TJSObjectHashBitsLimit = 0;
-            TVPSegmentCacheLimit = 0;
+            krkr::io::segmentCacheLimit = 0;
             // 同步告知 IO 组件：这是**显式覆盖**，优先级高于激活层的策略值
             // （否则策略里的 1 MiB/256 MiB 会把这个“极低内存就关缓存”的决定盖掉）。
             // 状态声明在 StorageIntf.h（krkr::io 块）里，io 只读它——base 不再 include
             // io/policy/IoPolicy.h。
-            TVPSegmentCacheLimitOverridden = true;
-            TVPSegmentCacheLimitOverrideBytes = 0;
+            krkr::io::segmentCacheLimitOverridden = true;
+            krkr::io::segmentCacheLimitOverrideBytes = 0;
             TVPFreeUnusedLayerCache = true; // in LayerIntf.cpp
         } else if(TVPTotalPhysMemory < 256 * 1024 * 1024) {
             // low memory

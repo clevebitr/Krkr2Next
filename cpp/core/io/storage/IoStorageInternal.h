@@ -8,7 +8,7 @@
 // IoStorage.cpp 与 IoStorageLocal.cpp 之间共享的内部状态。
 namespace krkr::io {
 
-extern std::vector<ttstr> TVPAutoPathList;
+extern std::vector<ttstr> autoPathList;
 extern bool AutoPathTableInit;
 
 } // namespace krkr::io

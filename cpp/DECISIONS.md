@@ -1013,3 +1013,83 @@ io 70 / utils 58 / plugin 49 / compat 3 / extension 1）。
 | 3 | plugin | 23 | 68 | 7 | ~15 min |
 
 `check_naming.py` 合计遗留：1297 → 1101 → **1080**。
+
+## 2026-11-15 — 命名统一第 4 轮：io 全局变量（N7），27 符号 / 189 处
+
+\## 结果
+
+`io` 遗留 **69 → 43**（合计 1080 → **1043**），替换 189 处 / 11 个文件：
+
+| 类别 | 例子 | 目标名 |
+|---|---|---|
+| 导出全局（声明在 base 门面） | `TVPArchiveDelimiter` `TVPSegmentCacheLimit*` `TVPAutoPathList` `TVPCurrentMedia` | `archiveDelimiter` `segmentCacheLimit*` `autoPathList` `currentMedia` |
+| 文件作用域 static | `TVPArchiveHandleCachePool` `TVPSegmentCacheCS` `TVPAppPathCache` `TVPCreateStreamCS` | `archiveHandleCachePool` … |
+| 函数内 static / 局部 | `TVPProcessID` `TVPTempUniqueNum` `TVPTempPath` | `processID` `tempUniqueNum` `tempPath` |
+| 常量 | `TVP_AUTOPATH_CACHE_MISS_MARKER`（`static const tjs_char *`，**不是** `#define`） | `AutoPathCacheMissMarker` |
+
+## 决策：N7 一律 lowerCamelCase，draft 的 UpperCamelCase 不要直接用
+
+`--draft` 对所有变量都推导 UpperCamelCase（`TVPAutoPathList` → `AutoPathList`），
+但 N7 写的是"**变量** lowerCamelCase、**常量** UpperCamelCase"。本轮 27 条全部人工
+改成 lowerCamelCase；只有 `TVP_AUTOPATH_CACHE_MISS_MARKER` 按常量处理（它是指向
+`const tjs_char` 的常量指针），draft 还把它误判成 `macro`（因为名字里有 `TVP_` 前缀）。
+
+## 决策：非 owner 头里的 `extern` 声明要手工收进 namespace，桥接同 commit 删
+
+工具的策略是"owner 内短名、其它地方全限定"。对**变量声明**这是非法代码：
+
+```cpp
+namespace krkr::io {
+extern tjs_uint krkr::io::segmentCacheLimit;   // 工具产物，不能这么写
+}
+```
+
+而 `StorageIntf.h`（base 门面）里恰恰是这些变量的声明。所以本轮 apply 之后手工做了
+两件事，都在同一个 commit 里：
+
+1. 声明去掉限定（`extern tjs_uint segmentCacheLimit;`，仍在 `namespace krkr::io` 内）；
+2. 删掉 `using krkr::io::<新名>;` 桥接 —— 工具的 `drop_bridges` 只处理 **owner 目录**，
+   门面头里的桥接不会被删，而工具替换后这些桥接已经变成 **新名**（`using krkr::io::archiveDelimiter;`），
+   留着就等于统一没发生（§3）。
+
+`TVPCreateNativeClass_Storages` 从 map 里删掉了：属 §4「TJS 注册表工厂族」，
+等 `#9` 的注册表反转，现在改名要改两次。
+
+## 发现：`--draft` 漏收两类符号（io 残 13 个要靠手写 map）
+
+| 漏收形态 | 例子 | 原因 |
+|---|---|---|
+| 定义跨多行 | `static tTJSHashTable<…>\n    TVPAutoPathTable;`、`} TVPStorageMediaManager;`、`static void\nTVPGetLocalName(…)` | draft 是**逐行**正则，只认"单行内 类型 + 名字" |
+| 匿名结构体上的名字 | `} TVPArchiveCache;` `} static TVPClearAutoPathCacheCallback;` | 行首不是 class/struct/typedef |
+
+另外旧名还出现在**日志字符串**里（`spdlog::error("AutoMountXP3: TVPGetLocalName threw: {}")`），
+工具默认跳过字符串字面量，所以这几个符号即使改了名、`check_naming` 仍会数到命中。
+要清掉必须改日志文本 —— 那不属于"命名统一"，留给 4b 轮单独决定。
+
+## 验证
+
+本机 PATH 里没有 `cmake` / `clang++`，但工具其实都在（`/f/runtime/cmake`、
+`/f/runtime/ninja`、`/f/runtime/android-ndk/r27d` 的 **windows-x86_64** 版）。
+试过了、还是编不了：`cpp/core/tjs2/tjsString.h` 直接要 `boost/locale.hpp`，而
+`out/android/debug/vcpkg_installed/arm64-android/include/boost` 里**没有 locale**
+（vcpkg 只装了部分包）。`scripts/check_tu.sh` 还写死 `HOST_TAG=linux-x86_64` 和搬迁前的
+旧 `-I` 布局（`cpp/io`、`cpp/utils/win32`），要跑通得先修这两处。
+所以**编译验证仍然欠账**，和前三轮一样等 CI。本轮做的是：
+
+- `python scripts/check_naming.py`：8 个模块全部 ≤ 基线；io 69 → 43；
+- 27 个旧名全仓 `grep` 归零（只剩 `DECISIONS.md` / `io/README.md` 的历史叙述）；
+- 11 个文件的 diff 逐个 token 审阅（`git diff -U1`），只动了标识符与 3 处提及旧名的注释；
+- `bash scripts/check_static.sh`：唯一失败项是
+  `compat/upstream/aetherkiri_ports.json` 找不到 —— 该文件**未被 git 跟踪**，
+  与本次改动无关，是预存在的环境缺口（连带 `check_port_drift.py` 报错）。
+
+## 数据
+
+| 轮次 | 模块 | 符号 | 替换 | 文件 | 耗时 |
+|---|---|---:|---:|---:|---|
+| 1 | extension | 7 | 21 | 4 | ~15 min |
+| 2 | io | 123 | 1023 | 83 | ~50 min |
+| 3 | plugin | 23 | 68 | 7 | ~15 min |
+| 4 | io 全局变量 | 27 | 189 | 11 | ~30 min |
+
+`check_naming.py` 合计遗留：1297 → 1101 → 1080 → **1043**。
