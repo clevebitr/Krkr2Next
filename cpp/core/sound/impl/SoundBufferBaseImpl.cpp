@@ -22,51 +22,51 @@ namespace krkr::sound {
 // Sound Buffer Timer Dispatcher ( for fading or commiting defered
 // settings )
 //---------------------------------------------------------------------------
-static class krkr::utils::Timer *TVPSoundBufferTimer = nullptr;
+static class krkr::utils::Timer *soundBufferTimer = nullptr;
 
-static std::vector<tTJSNI_SoundBuffer *> TVPSoundBufferVector;
+static std::vector<tTJSNI_SoundBuffer *> soundBufferVector;
 
 //---------------------------------------------------------------------------
-class tTVPSoundBufferTimerDispatcher {
+class SoundBufferTimerDispatcher {
 public:
     void Handler() {
         std::vector<tTJSNI_SoundBuffer *>::iterator i;
-        for(i = TVPSoundBufferVector.begin(); i != TVPSoundBufferVector.end();
+        for(i = soundBufferVector.begin(); i != soundBufferVector.end();
             i++) {
             (*i)->TimerBeatHandler();
         }
-        TVPWaveSoundBufferCommitSettings();
+        CommitWaveSoundBufferSettings();
     }
-} static TVPSoundBufferTimerDispatcher;
+} static soundBufferTimerDispatcher;
 
 //---------------------------------------------------------------------------
-void TVPAddSoundBuffer(tTJSNI_SoundBuffer *buf) {
-    if(TVPSoundBufferVector.empty()) {
+void AddSoundBuffer(tTJSNI_SoundBuffer *buf) {
+    if(soundBufferVector.empty()) {
         // first buffer
-        TVPSoundBufferTimer = new krkr::utils::Timer(); // Create Timer Object
-        TVPSoundBufferTimer->SetInterval(TVP_SB_BEAT_INTERVAL);
-        TVPSoundBufferTimer->SetOnTimerHandler(
-            &TVPSoundBufferTimerDispatcher,
-            &tTVPSoundBufferTimerDispatcher::Handler);
+        soundBufferTimer = new krkr::utils::Timer(); // Create Timer Object
+        soundBufferTimer->SetInterval(KRKR_SB_BEAT_INTERVAL);
+        soundBufferTimer->SetOnTimerHandler(
+            &soundBufferTimerDispatcher,
+            &SoundBufferTimerDispatcher::Handler);
     }
 
-    TVPSoundBufferVector.push_back(buf);
+    soundBufferVector.push_back(buf);
 }
 
 //---------------------------------------------------------------------------
-void TVPRemoveSoundBuffer(tTJSNI_SoundBuffer *buf) {
-    if(!TVPSoundBufferVector.empty()) {
+void RemoveSoundBuffer(tTJSNI_SoundBuffer *buf) {
+    if(!soundBufferVector.empty()) {
         std::vector<tTJSNI_SoundBuffer *>::iterator i;
-        i = std::find(TVPSoundBufferVector.begin(), TVPSoundBufferVector.end(),
+        i = std::find(soundBufferVector.begin(), soundBufferVector.end(),
                       buf);
-        if(i != TVPSoundBufferVector.end()) {
-            TVPSoundBufferVector.erase(i);
+        if(i != soundBufferVector.end()) {
+            soundBufferVector.erase(i);
         }
     }
 
-    if(TVPSoundBufferVector.empty()) {
+    if(soundBufferVector.empty()) {
         // all buffer was removed
-        delete TVPSoundBufferTimer;
+        delete soundBufferTimer;
     }
 }
 //---------------------------------------------------------------------------
@@ -83,14 +83,14 @@ tjs_error tTJSNI_SoundBuffer::Construct(tjs_int numparams, tTJSVariant **param,
     if(TJS_FAILED(hr))
         return hr;
 
-    TVPAddSoundBuffer(this);
+    AddSoundBuffer(this);
 
     return TJS_S_OK;
 }
 
 //---------------------------------------------------------------------------
 void tTJSNI_SoundBuffer::Invalidate() {
-    TVPRemoveSoundBuffer(this);
+    RemoveSoundBuffer(this);
 
     inherited::Invalidate();
 }

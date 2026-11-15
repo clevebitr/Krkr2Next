@@ -47,11 +47,11 @@ protected:
     bool CanDeliverEvents;
     tTJSNI_Window *Window{};
     TJS::tTJSVariantClosure ActionOwner;
-    tTVPSoundStatus Status; // status
+    krkr::sound::SoundStatus Status; // status
 
     [[nodiscard]] ttstr GetStatusString() const;
-    void SetStatus(tTVPSoundStatus s);
-    void SetStatusAsync(tTVPSoundStatus s);
+    void SetStatus(krkr::sound::SoundStatus s);
+    void SetStatusAsync(krkr::sound::SoundStatus s);
     void FireCallbackCommand(const ttstr &command, const ttstr &argument);
     void FirePeriodEvent(tTVPPeriodEventReason reason);
     void FireFrameUpdateEvent(tjs_int frame);

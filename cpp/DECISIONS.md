@@ -1301,3 +1301,75 @@ TimerImpl.cpp : TVPTimerCS、TimerIntf.cpp : TVPLimitTimerCapacity 等
    这类只能手工改（或用 `--roots` 收窄 + owner 指到 base/runtime）；
 3. base 现有 367 个遗留里，属于 `namespace krkr::utils` 的有 ~30 个（本文件临时统计），
    其余才是真正的 base 符号（`TVPThrowExceptionMessage` 46、`TVPMsg*` 等）。
+
+## 2026-11-15 — 命名统一第 6 轮：sound（191 符号 / 1327 处），顺带修正消息符号口径
+
+\## 结果
+
+`sound` 遗留 **211 → 20**（合计 910 → **693**，含口径修正）。两批：
+
+| 批次 | 符号 | 替换 | 文件 | 内容 |
+|---|---:|---:|---:|---|
+| `sound.tsv` | 127 | 893 | 36 | 函数 / 类型 / 宏（`tTVPWaveFormat`→`WaveFormat`、`tTVPWaveLoopManager`→`WaveLoopManager`、`iTVPSoundBuffer`→`ISoundBuffer`、`TVPConvertPCMTo16bits`→`ConvertPCMTo16bits` …） |
+| `sound-residual.tsv` | 64 | 434 | 9 | N7 变量（`TVPPrimaryBuffer`→`primaryBuffer`、`TVPDirectSound`→`directSound`、`TVPMIDIOutHandle`→`midiOutHandle` …）+ `tTVPForceConvertMode`→`ForceConvertMode` |
+| 手工 | 2 | 2 | 2 | 只在注释里的旧名 |
+
+剩下 20 个全是别的模块的：base 10（`TVPThrowExceptionMessage` 34、`TVPPostEvent`、
+`TVPUtf8ToWideCharString`、`tTVPAtExit` …）、environ 5（`TVPGetCommandLine` 16、
+`TVPCPUType`、`TVPRelinquishCPU` …）、movie 1（`TVPInitLibAVCodec`），
+加 4 个例外（3 个 `TVPCreateNativeClass_*` + `extern "C"` 的 `TVPWaveMixer_ASM_Init`）。
+
+\## 决策：两条改名避开"成员函数遮蔽"（工具报了冲突，这次真冲突）
+
+| 原名 | draft | 实际采用 | 原因 |
+|---|---|---|---|
+| `TVPCreateSoundBuffer` | `CreateSoundBuffer` | `CreateSoundBufferObject` | `CreateSoundBuffer` 既是 `tTJSNI_WaveSoundBuffer` 的成员，也是 COM 的 `IDirectSound::CreateSoundBuffer`；WaveImpl.cpp 里不带限定调用会落到成员上（静默改语义） |
+| `TVPReschedulePendingLabelEvent` | `ReschedulePendingLabelEvent` | `RequestReschedulePendingLabelEvent` | 同名成员 `tTVPWaveSoundBufferThread::ReschedulePendingLabelEvent` |
+
+`sound` 是本轮第一个**真撞名**（之前 utils 的 `TVPTimer`→`Timer` 是跨 namespace 的假撞名）。
+判据：新名如果在**同一 namespace 的某个类**里已作为成员声明，就必须换名——工具已能报
+（`class` 体内的 `类型 名字(` 也匹配），本轮 2 例都是它报出来的。
+
+\## 决策：消息符号例外的口径修正（`MsgImpl.h` 也要算）
+
+`check_naming.py` 原来只从 `MsgIntfInc.h` 收集消息符号（152 个），但 `MsgImpl.h`
+（同样由 `gentext.pl Messages.xlsx` 生成）里另有 ~40 个 `tTJSMessageHolder`
+只在这一个文件里声明。它们在被使用的模块里被当成"遗留符号"计数了 ——
+`sound` 就多算了 9 个（`TVPCannotInitDirectSound`、`TVPMalformedMIDIMessage`、
+`TVPInvalidSMF`、`TVPMCIError` …）。
+
+修正：两个文件都读（union，192 个）。影响是**指标口径**，不是代码：
+
+| 模块 | 修正前 | 修正后 |
+|---|---:|---:|
+| sound | 211 | 202（本轮开工前的真实值） |
+| environ | 272 | 248 |
+| base | 367 | 366 |
+
+`rename_symbols.py --draft` 同步修正（否则 draft 还会把消息符号当候选）。
+
+\## 再记 `--draft` 的盲区（sound 版）
+
+sound 的 64 个残项里，变量占了全部：
+
+- **多行定义**：`static tTVPAtExit\n    TVPShutdownWaveSoundBuffersAtExit(...)`；
+- **匿名 struct / enum 实例**：`} TVPPrimaryDelayedStopper;`、`} TVPForceConvertMode = fcm16bit;`、
+  `} static TVPWaveDecoderManager;`；
+- **引用定义**：`std::vector<X*> &TVPWaveSoundBufferVector = ...`；
+- 变量根本不在 draft 的候选集里（draft 的 var 分支只认"单行 + 赋值/分号")。
+
+结论：**变量一律手写 map**（sound-residual 是第三个手写 map，前两个是 io-residual / utils-residual）。
+
+\## 数据
+
+| 轮次 | 模块 | 符号 | 替换 | 文件 | 耗时 |
+|---|---|---:|---:|---:|---|
+| 1 | extension | 7 | 21 | 4 | ~15 min |
+| 2 | io | 123 | 1023 | 83 | ~50 min |
+| 3 | plugin | 23 | 68 | 7 | ~15 min |
+| 4 / 4b | io | 27 + 9 | 189 + 45 | 11 + 3 | ~45 min |
+| 5 | utils | 51 + 1 | 708 | 90 | ~70 min |
+| 6 | sound | 127 + 64 + 2 | 1327 | 39 | ~80 min |
+
+`check_naming.py` 合计遗留：1297 → 1101 → 1080 → 1043 → 1026 → 910 → **693**
+（口径修正让 910 这一档实际是 878）。

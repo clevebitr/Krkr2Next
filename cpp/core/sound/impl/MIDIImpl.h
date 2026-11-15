@@ -19,17 +19,17 @@
 namespace krkr::sound {
 
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(void, TVPMIDIOutData, (const tjs_uint8 *data, int len));
+TJS_EXP_FUNC_DEF(void, MIDIOutData, (const tjs_uint8 *data, int len));
 /* output MIDI data (can be multiple data at once) */
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 // tTJSNI_MIDISoundBuffer : MIDI Native Instance
 //---------------------------------------------------------------------------
-class tTVPSMFTrack;
+class SMFTrack;
 
 class tTJSNI_MIDISoundBuffer : public tTJSNI_BaseMIDISoundBuffer {
-    friend class tTVPSMFTrack;
+    friend class SMFTrack;
 
     typedef tTJSNI_BaseMIDISoundBuffer inherited;
 
@@ -43,7 +43,7 @@ public:
 
 #ifdef TVP_ENABLE_MIDI
 private:
-    std::vector<tTVPSMFTrack *> Tracks;
+    std::vector<SMFTrack *> Tracks;
     tjs_int Division;
 
     tjs_int64 Position;
@@ -117,7 +117,6 @@ protected:
 } // namespace krkr::sound
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::sound::TVPMIDIOutData;
 using krkr::sound::tTJSNI_MIDISoundBuffer;
 
 //---------------------------------------------------------------------------

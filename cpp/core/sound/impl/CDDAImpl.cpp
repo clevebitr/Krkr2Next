@@ -24,12 +24,12 @@ namespace krkr::sound {
 //---------------------------------------------------------------------------
 // CD-DA volume controling functions ( by mixer )
 //---------------------------------------------------------------------------
-tTVPCDDAVolumeControlType TVPCDDAVolumeControlType = cvctMixer;
+CDDAVolumeControlType cddaVolumeControlType = cvctMixer;
 // method for controling CD-DA volume
-static bool TVPCDDAVolumeControlTypeInit = false;
-void TVPInitCDDAVolumeControlType() {
+static bool cddaVolumeControlTypeInit = false;
+void InitCDDAVolumeControlType() {
     // retrieve command line option "-cdvol"
-    if(TVPCDDAVolumeControlTypeInit)
+    if(cddaVolumeControlTypeInit)
         return;
 
     // -cdvol=mixer  : use mixer (default)
@@ -39,28 +39,28 @@ void TVPInitCDDAVolumeControlType() {
     if(TVPGetCommandLine(TJS_W("-cdvol"), &val)) {
         ttstr str(val);
         if(str == TJS_W("mixer"))
-            TVPCDDAVolumeControlType = cvctMixer;
+            cddaVolumeControlType = cvctMixer;
         else if(str == TJS_W("direct"))
-            TVPCDDAVolumeControlType = cvctDirect;
+            cddaVolumeControlType = cvctDirect;
         else
             TVPThrowExceptionMessage(TVPCommandLineParamIgnoredAndDefaultUsed,
                                      TJS_W("-cdvol"), str);
     }
 
-    TVPCDDAVolumeControlTypeInit = true;
+    cddaVolumeControlTypeInit = true;
 }
 //---------------------------------------------------------------------------
 #define NUMVOLUMEFADERS_MAX 0x40
-static UINT TVPMixerIDs[NUMVOLUMEFADERS_MAX];
-static MIXERCONTROL TVPMixerControls[NUMVOLUMEFADERS_MAX];
-static MIXERCONTROLDETAILS TVPMixerControlDetails[NUMVOLUMEFADERS_MAX];
-static MIXERCONTROLDETAILS_UNSIGNED TVPOriginalVolumes[NUMVOLUMEFADERS_MAX];
-static tjs_int TVPNumMixerControls = 0;
-static bool TVPMixerInit = false;
+static UINT mixerIDs[NUMVOLUMEFADERS_MAX];
+static MIXERCONTROL mixerControls[NUMVOLUMEFADERS_MAX];
+static MIXERCONTROLDETAILS mixerControlDetails[NUMVOLUMEFADERS_MAX];
+static MIXERCONTROLDETAILS_UNSIGNED originalVolumes[NUMVOLUMEFADERS_MAX];
+static tjs_int numMixerControls = 0;
+static bool mixerInit = false;
 //---------------------------------------------------------------------------
-static void TVPGetMixerControls() {
+static void GetMixerControls() {
     // list up all of volume feders connected to CD
-    if(TVPMixerInit)
+    if(mixerInit)
         return;
 
     tjs_int i;
@@ -152,10 +152,10 @@ static void TVPGetMixerControls() {
                             // 1. its component type is COMPACTDISC
                             // 2. or its name starts with "CD"
 
-                            TVPMixerIDs[TVPNumMixerControls] = i;
+                            mixerIDs[numMixerControls] = i;
 
                             MIXERCONTROLDETAILS *pmxcd =
-                                TVPMixerControlDetails + TVPNumMixerControls;
+                                mixerControlDetails + numMixerControls;
 
                             ZeroMemory(pmxcd, sizeof(MIXERCONTROLDETAILS));
                             pmxcd->cbStruct = sizeof(MIXERCONTROLDETAILS);
@@ -165,15 +165,15 @@ static void TVPGetMixerControls() {
                             pmxcd->cbDetails =
                                 sizeof(MIXERCONTROLDETAILS_UNSIGNED);
                             pmxcd->paDetails =
-                                TVPOriginalVolumes + TVPNumMixerControls;
+                                originalVolumes + numMixerControls;
 
-                            TVPMixerControls[TVPNumMixerControls] = pmxc[l];
+                            mixerControls[numMixerControls] = pmxc[l];
 
                             if(MMSYSERR_NOERROR ==
                                mixerGetControlDetails((HMIXEROBJ)hmx, pmxcd,
                                                       0L)) // get initial volume
                             {
-                                TVPNumMixerControls++;
+                                numMixerControls++;
                             }
 
                             break;
@@ -181,50 +181,50 @@ static void TVPGetMixerControls() {
                     }
 
                     delete[] pmxc;
-                    if(TVPNumMixerControls >= NUMVOLUMEFADERS_MAX)
+                    if(numMixerControls >= NUMVOLUMEFADERS_MAX)
                         break;
                 }
-                if(TVPNumMixerControls >= NUMVOLUMEFADERS_MAX)
+                if(numMixerControls >= NUMVOLUMEFADERS_MAX)
                     break;
             }
-            if(TVPNumMixerControls >= NUMVOLUMEFADERS_MAX)
+            if(numMixerControls >= NUMVOLUMEFADERS_MAX)
                 break;
         }
         mixerClose(hmx);
-        if(TVPNumMixerControls >= NUMVOLUMEFADERS_MAX)
+        if(numMixerControls >= NUMVOLUMEFADERS_MAX)
             break;
     }
 
-    TVPMixerInit = true;
+    mixerInit = true;
 }
 
 //---------------------------------------------------------------------------
-void TVPRestoreCDVolume() {
-    if(!TVPMixerInit)
+void RestoreCDVolume() {
+    if(!mixerInit)
         return;
     tjs_int i;
-    for(i = 0; i < TVPNumMixerControls; i++) {
+    for(i = 0; i < numMixerControls; i++) {
         HMIXER hmx;
-        if(MMSYSERR_NOERROR == mixerOpen(&hmx, TVPMixerIDs[i], 0, 0, 0)) {
-            mixerSetControlDetails((HMIXEROBJ)hmx, TVPMixerControlDetails + i,
+        if(MMSYSERR_NOERROR == mixerOpen(&hmx, mixerIDs[i], 0, 0, 0)) {
+            mixerSetControlDetails((HMIXEROBJ)hmx, mixerControlDetails + i,
                                    0L);
             mixerClose(hmx);
         }
     }
 }
 //---------------------------------------------------------------------------
-static tTVPAtExit TVPRestoreCDVolumeAtExit(TVP_ATEXIT_PRI_RELEASE,
-                                           TVPRestoreCDVolume);
+static tTVPAtExit RestoreCDVolumeAtExit(TVP_ATEXIT_PRI_RELEASE,
+                                           RestoreCDVolume);
 //---------------------------------------------------------------------------
-static void TVPSetCDVolume(int v) {
-    if(!TVPMixerInit)
-        TVPGetMixerControls();
+static void SetCDVolume(int v) {
+    if(!mixerInit)
+        GetMixerControls();
     tjs_int i;
-    for(i = 0; i < TVPNumMixerControls; i++) {
+    for(i = 0; i < numMixerControls; i++) {
         HMIXER hmx;
-        if(MMSYSERR_NOERROR == mixerOpen(&hmx, TVPMixerIDs[i], 0, 0, 0)) {
-            MIXERCONTROLDETAILS mxcd = TVPMixerControlDetails[i];
-            MIXERCONTROLDETAILS_UNSIGNED mxcd_u = TVPOriginalVolumes[i];
+        if(MMSYSERR_NOERROR == mixerOpen(&hmx, mixerIDs[i], 0, 0, 0)) {
+            MIXERCONTROLDETAILS mxcd = mixerControlDetails[i];
+            MIXERCONTROLDETAILS_UNSIGNED mxcd_u = originalVolumes[i];
             mxcd.paDetails = &mxcd_u;
 
             float vd = mxcd_u.dwValue;
@@ -248,13 +248,13 @@ static void TVPSetCDVolume(int v) {
 //---------------------------------------------------------------------------
 // MCI error string retrieval function
 //---------------------------------------------------------------------------
-ttstr TVPGetMCIErrorString(MCIERROR err) {
+ttstr GetMCIErrorString(MCIERROR err) {
     char msg[1024];
     mciGetErrorString(err, msg, sizeof(msg));
     return ttstr(msg);
 }
-void TVPThrowMCIErrorString(MCIERROR err) {
-    TVPThrowExceptionMessage(TVPMCIError, TVPGetMCIErrorString(err));
+void ThrowMCIErrorString(MCIERROR err) {
+    TVPThrowExceptionMessage(TVPMCIError, GetMCIErrorString(err));
 }
 //---------------------------------------------------------------------------
 #endif // ENABLE_CDDA
@@ -264,7 +264,7 @@ void TVPThrowMCIErrorString(MCIERROR err) {
 //---------------------------------------------------------------------------
 tTJSNI_CDDASoundBuffer::tTJSNI_CDDASoundBuffer() {
 #ifdef ENABLE_CDDA
-    TVPInitCDDAVolumeControlType();
+    InitCDDAVolumeControlType();
     Volume = 100000;
     Volume2 = 100000;
     Drive = -1;
@@ -461,7 +461,7 @@ void tTJSNI_CDDASoundBuffer::Open(const ttstr &storage) {
         if(err) {
             SetStatus(ssUnload);
             AfterOpenMedia();
-            TVPThrowMCIErrorString(err);
+            ThrowMCIErrorString(err);
         }
 
         AfterOpenMedia();
@@ -521,7 +521,7 @@ void tTJSNI_CDDASoundBuffer::Play() {
         MCIERROR err;
         err = StartPlay();
         if(err)
-            TVPThrowMCIErrorString(err);
+            ThrowMCIErrorString(err);
         SetStatus(ssPlay);
     }
 }
@@ -531,7 +531,7 @@ void tTJSNI_CDDASoundBuffer::Stop() {
         MCIERROR err;
         err = StopPlay();
         if(err)
-            TVPThrowMCIErrorString(err);
+            ThrowMCIErrorString(err);
         SetStatus(ssStop);
     }
 }
@@ -564,7 +564,7 @@ void tTJSNI_CDDASoundBuffer::TimerBeatHandler() {
 bool tTJSNI_CDDASoundBuffer::ReadOrgVolumeData() {
     // read current CD-DA volume from the system registry
 
-    if(TVPCDDAVolumeControlType != cvctDirect)
+    if(cddaVolumeControlType != cvctDirect)
         return false;
 
     char key[256];
@@ -603,7 +603,7 @@ bool tTJSNI_CDDASoundBuffer::ReadOrgVolumeData() {
 void tTJSNI_CDDASoundBuffer::WriteVolumeRegistry(tjs_int vol) {
     // write new CD-DA volume information to the system registry
 
-    if(TVPCDDAVolumeControlType != cvctDirect)
+    if(cddaVolumeControlType != cvctDirect)
         return;
 
     char key[256];
@@ -642,10 +642,10 @@ bool tTJSNI_CDDASoundBuffer::BeforeOpenMedia() {
 
     tjs_int v = (Volume / 10) * (Volume2 / 10) / 1000;
 
-    if(TVPCDDAVolumeControlType == cvctMixer || !ReadOrgVolumeData()) {
+    if(cddaVolumeControlType == cvctMixer || !ReadOrgVolumeData()) {
         // mixer or cannot open the key;
         // use mixer
-        TVPSetCDVolume(v);
+        SetCDVolume(v);
         return false;
     }
 

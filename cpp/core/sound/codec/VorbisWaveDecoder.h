@@ -4,19 +4,19 @@
 
 namespace krkr::sound {
 
-class VorbisWaveDecoderCreator : public tTVPWaveDecoderCreator {
+class VorbisWaveDecoderCreator : public WaveDecoderCreator {
 public:
     // VorbisWaveDecoderCreator() {
-    // TVPRegisterWaveDecoderCreator(this); }
-    tTVPWaveDecoder *Create(const ttstr &storagename,
+    // RegisterWaveDecoderCreator(this); }
+    WaveDecoder *Create(const ttstr &storagename,
                             const ttstr &extension) override;
 };
 
-class OpusWaveDecoderCreator : public tTVPWaveDecoderCreator {
+class OpusWaveDecoderCreator : public WaveDecoderCreator {
 public:
     // VorbisWaveDecoderCreator() {
-    // TVPRegisterWaveDecoderCreator(this); }
-    tTVPWaveDecoder *Create(const ttstr &storagename,
+    // RegisterWaveDecoderCreator(this); }
+    WaveDecoder *Create(const ttstr &storagename,
                             const ttstr &extension) override;
 };
 

@@ -37,7 +37,7 @@ static int64_t GetLayoutByChannels(int nChannel) {
 }
 
 class CAEStreamAL : public IAEStream {
-    iTVPSoundBuffer *m_impl = nullptr;
+    krkr::sound::ISoundBuffer *m_impl = nullptr;
     AEAudioFormat m_format;
     IAEClockCallback *m_cbClock;
     double m_lastPts = 0;
@@ -133,7 +133,7 @@ public:
                 IAEClockCallback *clock) {
         m_format = audioFormat;
         m_cbClock = clock;
-        tTVPWaveFormat format;
+        krkr::sound::WaveFormat format;
         format.SamplesPerSec = audioFormat.m_sampleRate;
         format.Channels = audioFormat.m_channelLayout.Count();
         format.BitsPerSample = 0;
@@ -154,7 +154,7 @@ public:
         format.SpeakerConfig = 0;
         format.IsFloat = false;
         format.Seekable = false;
-        m_impl = TVPCreateSoundBuffer(format, 8);
+        m_impl = krkr::sound::CreateSoundBufferObject(format, 8);
     }
 
     ~CAEStreamAL() override {
@@ -242,7 +242,7 @@ public:
     }
 
     double GetCacheTotal() override {
-        // return std::max(GetDelay(), (double)TVPAL_BUFFER_COUNT);
+        // return std::max(GetDelay(), (double)AL_BUFFER_COUNT);
         return GetDelay();
     }
 
@@ -255,7 +255,7 @@ public:
     void Drain(bool wait) override {} // TODO
     void Flush() override { m_impl->Reset(); }
 
-    iTVPSoundBuffer *GetNativeImpl() override { return m_impl; }
+    krkr::sound::ISoundBuffer *GetNativeImpl() override { return m_impl; }
 };
 
 bool CAEFactory::SupportsRaw(AEAudioFormat &format) {
@@ -288,7 +288,7 @@ bool CAEFactory::SupportsRaw(AEAudioFormat &format) {
         if(AE)
           return AE->SupportsRaw(format);
 #endif
-    // refer to the format in TVPALSoundWrap::Init
+    // refer to the format in krkr::sound::ALSoundWrap::Init
     switch(format.m_dataFormat) {
         case AE_FMT_U8:
         case AE_FMT_S16LE:

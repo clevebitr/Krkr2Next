@@ -30,9 +30,9 @@
 
 namespace krkr::sound {
 
-class iTVPAudioRenderer;
+class IAudioRenderer;
 
-static iTVPAudioRenderer *TVPAudioRenderer;
+static IAudioRenderer *audioRenderer;
 
 template <int ch>
 void MixAudioS16CPP(void *dst, const void *src, int samples, int16_t *volume) {
@@ -61,7 +61,7 @@ template <int ch>
 void MixAudioF32CPP(void *dst, const void *src, int samples, int16_t *volume) {
     float *dst32 = (float *)dst;
     const float *src32 = (const float *)src;
-    const float fmaxvolume = 1.0f / 16384 /*tTVPSoundBuffer::MAX_VOLUME*/;
+    const float fmaxvolume = 1.0f / 16384 /*SoundBuffer::MAX_VOLUME*/;
     float fvolume[ch];
     for(int i = 0; i < ch; ++i)
         fvolume[i] = volume[i] * fmaxvolume;
@@ -99,7 +99,7 @@ static FAudioMix *_AudioMixF32[8] = { // 7.1 max
 
 extern "C" void TVPWaveMixer_ASM_Init(FAudioMix **func16, FAudioMix **func32);
 
-class tTVPSoundBuffer : public iTVPSoundBuffer {
+class SoundBuffer : public ISoundBuffer {
 public:
     bool _playing = false;
     float _volume = 1;
@@ -130,7 +130,7 @@ public:
     tjs_uint _sendedFrontBuffer = 0;
     tjs_uint _sendedSamples = 0, _inCachedSamples = 0;
 
-    tTVPSoundBuffer(int framesize, SDL_AudioCVT *cvt) :
+    SoundBuffer(int framesize, SDL_AudioCVT *cvt) :
         _frame_size(framesize), _cvt(cvt) {
         RecalcVolume();
         if(cvt) {
@@ -141,7 +141,7 @@ public:
         }
     }
 
-    ~tTVPSoundBuffer() override;
+    ~SoundBuffer() override;
 
     void Release() override { delete this; }
 
@@ -233,22 +233,22 @@ public:
     void FillBuffer(uint8_t *out, int len);
 };
 
-class iTVPAudioRenderer {
+class IAudioRenderer {
 protected:
     SDL_AudioSpec _spec;
     std::mutex _streams_mtx;
-    std::unordered_set<tTVPSoundBuffer *> _streams;
+    std::unordered_set<SoundBuffer *> _streams;
     int _frame_size = 0;
 
 public:
-    iTVPAudioRenderer() {
+    IAudioRenderer() {
         memset(&_spec, 0, sizeof(_spec));
         _spec.freq = 48000;
         _spec.format = AUDIO_S16;
         _spec.channels = 2;
         _spec.callback = [](void *p, Uint8 *s, int l) {
             memset(s, 0, l);
-            ((iTVPAudioRenderer *)p)->FillBuffer(s, l);
+            ((IAudioRenderer *)p)->FillBuffer(s, l);
         };
         _spec.userdata = this;
         _spec.size = 4;
@@ -277,7 +277,7 @@ public:
 
     virtual bool Init() = 0;
 
-    virtual tTVPSoundBuffer *CreateStream(tTVPWaveFormat &fmt, int bufcount) {
+    virtual SoundBuffer *CreateStream(WaveFormat &fmt, int bufcount) {
         SDL_AudioSpec spec;
         memset(&spec, 0, sizeof(spec));
         spec.freq = fmt.SamplesPerSec;
@@ -312,14 +312,14 @@ public:
             }
         }
 
-        tTVPSoundBuffer *s =
-            new tTVPSoundBuffer(fmt.BytesPerSample * fmt.Channels, cvt);
+        SoundBuffer *s =
+            new SoundBuffer(fmt.BytesPerSample * fmt.Channels, cvt);
         std::lock_guard<std::mutex> lk(_streams_mtx);
         _streams.emplace(s);
         return s;
     }
 
-    void ReleaseStream(tTVPSoundBuffer *s) {
+    void ReleaseStream(SoundBuffer *s) {
         std::lock_guard<std::mutex> lk(_streams_mtx);
         _streams.erase(s);
     }
@@ -327,7 +327,7 @@ public:
     void FillBuffer(Uint8 *buf, int len) {
         // memset(buf, 0, len);
         std::lock_guard<std::mutex> lk(_streams_mtx);
-        for(tTVPSoundBuffer *s : _streams) {
+        for(SoundBuffer *s : _streams) {
             s->FillBuffer(buf, len);
         }
     }
@@ -343,30 +343,30 @@ public:
     virtual int32_t GetUnprocessedSamples() { return 0; }
 };
 
-tTVPSoundBuffer::~tTVPSoundBuffer() {
+SoundBuffer::~SoundBuffer() {
     Stop();
-    TVPAudioRenderer->ReleaseStream(this);
+    audioRenderer->ReleaseStream(this);
     if(_cvt)
         delete _cvt;
 }
 
-tjs_uint tTVPSoundBuffer::GetLatencySamples() {
-    int32_t samples = TVPAudioRenderer->GetUnprocessedSamples();
+tjs_uint SoundBuffer::GetLatencySamples() {
+    int32_t samples = audioRenderer->GetUnprocessedSamples();
     return samples + _inCachedSamples;
 }
 
-tjs_uint tTVPSoundBuffer::GetCurrentPlaySamples() {
-    int32_t samples = TVPAudioRenderer->GetUnprocessedSamples();
+tjs_uint SoundBuffer::GetCurrentPlaySamples() {
+    int32_t samples = audioRenderer->GetUnprocessedSamples();
     if(samples > _sendedSamples)
         return 0;
     return _sendedSamples - samples; // -GetLatencySamples();
 }
 
-float tTVPSoundBuffer::GetLatencySeconds() {
-    return GetLatencySamples() / TVPAudioRenderer->GetSpec().freq;
+float SoundBuffer::GetLatencySeconds() {
+    return GetLatencySamples() / audioRenderer->GetSpec().freq;
 }
 
-void tTVPSoundBuffer::FillBuffer(uint8_t *out, int len) {
+void SoundBuffer::FillBuffer(uint8_t *out, int len) {
     if(!_playing)
         return;
     std::lock_guard<std::mutex> lk(_buffer_mtx);
@@ -374,7 +374,7 @@ void tTVPSoundBuffer::FillBuffer(uint8_t *out, int len) {
         std::vector<uint8_t> &buf = _buffers.front();
         if(buf.size() > _sendedFrontBuffer) {
             int n = std::min((size_t)len, buf.size() - _sendedFrontBuffer);
-            int samples = TVPAudioRenderer->MixAudio(
+            int samples = audioRenderer->MixAudio(
                 out, &buf.front() + _sendedFrontBuffer, n, _volume_raw);
             _sendedSamples += samples;
             _inCachedSamples -= samples;
@@ -389,7 +389,7 @@ void tTVPSoundBuffer::FillBuffer(uint8_t *out, int len) {
     }
 }
 
-class tTVPAudioRendererSDL : public iTVPAudioRenderer {
+class AudioRendererSDL : public IAudioRenderer {
     SDL_AudioDeviceID _playback_id;
 
 public:
@@ -411,12 +411,12 @@ public:
 
 #ifdef __ANDROID__
 
-class tTVPAudioRendererOboe : public iTVPAudioRenderer,
+class AudioRendererOboe : public IAudioRenderer,
                               public oboe::AudioStreamCallback {
     oboe::AudioStream *_oboeAudioStream = nullptr;
 
 public:
-    virtual ~tTVPAudioRendererOboe() {
+    virtual ~AudioRendererOboe() {
         if(_oboeAudioStream)
             delete _oboeAudioStream;
     }
@@ -487,8 +487,8 @@ public:
 
 #endif
 
-class tTVPSoundBufferAL : public tTVPSoundBuffer {
-    typedef tTVPSoundBuffer inherit;
+class SoundBufferAL : public SoundBuffer {
+    typedef SoundBuffer inherit;
 
     ALuint _alSource;
     ALenum _alFormat;
@@ -496,11 +496,11 @@ class tTVPSoundBufferAL : public tTVPSoundBuffer {
     tjs_uint *_bufferSize;
     tjs_uint _bufferCount;
     int _bufferIdx = -1;
-    tTVPWaveFormat _format;
+    WaveFormat _format;
 
 public:
-    tTVPSoundBufferAL(tTVPWaveFormat &desired, int bufcount) :
-        tTVPSoundBuffer(desired.BytesPerSample * desired.Channels, nullptr),
+    SoundBufferAL(WaveFormat &desired, int bufcount) :
+        SoundBuffer(desired.BytesPerSample * desired.Channels, nullptr),
         _bufferCount(bufcount) {
         _bufferIds = new ALuint[bufcount];
         _bufferIds2 = new ALuint[bufcount];
@@ -536,7 +536,7 @@ public:
         }
     }
 
-    ~tTVPSoundBufferAL() override {
+    ~SoundBufferAL() override {
         alDeleteBuffers(_bufferCount, _bufferIds);
         alDeleteSources(1, &_alSource);
         delete[] _bufferIds;
@@ -701,12 +701,12 @@ public:
     }
 };
 
-class tTVPAudioRendererAL : public iTVPAudioRenderer {
+class AudioRendererAL : public IAudioRenderer {
     ALCdevice *_device = nullptr;
     ALCcontext *_context = nullptr;
 
 public:
-    virtual ~tTVPAudioRendererAL() {
+    virtual ~AudioRendererAL() {
         if(_context) {
             // alDeleteSources(TVP_MAX_AUDIO_COUNT, _alSources);
             alcMakeContextCurrent(nullptr);
@@ -744,8 +744,8 @@ public:
         return true;
     }
 
-    tTVPSoundBuffer *CreateStream(tTVPWaveFormat &fmt, int bufcount) override {
-        tTVPSoundBuffer *s = new tTVPSoundBufferAL(fmt, bufcount);
+    SoundBuffer *CreateStream(WaveFormat &fmt, int bufcount) override {
+        SoundBuffer *s = new SoundBufferAL(fmt, bufcount);
         _streams.emplace(s);
         return s;
     }
@@ -753,10 +753,10 @@ public:
     ALCcontext *GetContext() { return _context; }
 };
 
-void tTVPSoundBufferAL::checkerr(const char *funcname) {
+void SoundBufferAL::checkerr(const char *funcname) {
 #if _DEBUG
     ALCcontext *ctx =
-        static_cast<tTVPAudioRendererAL *>(TVPAudioRenderer)->GetContext();
+        static_cast<AudioRendererAL *>(audioRenderer)->GetContext();
     if(alcGetCurrentContext() != ctx) {
         alcMakeContextCurrent(ctx);
     }
@@ -767,46 +767,46 @@ void tTVPSoundBufferAL::checkerr(const char *funcname) {
 #endif
 }
 
-static iTVPAudioRenderer *CreateAudioRenderer() {
-    iTVPAudioRenderer *renderer = nullptr;
+static IAudioRenderer *CreateAudioRenderer() {
+    IAudioRenderer *renderer = nullptr;
 #ifdef __ANDROID__
-    renderer = new tTVPAudioRendererOboe;
+    renderer = new AudioRendererOboe;
     if(renderer->Init())
         return renderer;
     delete renderer;
 #elif defined(_MSC_VER) && 0
-    renderer = new tTVPAudioRendererSDL;
+    renderer = new AudioRendererSDL;
     renderer->Init();
     return renderer;
 #endif
-    renderer = new tTVPAudioRendererAL;
+    renderer = new AudioRendererAL;
     renderer->Init();
     return renderer;
 }
 
-void TVPInitDirectSound(int freq) {
-    if(!TVPAudioRenderer) {
-        TVPAudioRenderer = CreateAudioRenderer();
+void InitDirectSound(int freq) {
+    if(!audioRenderer) {
+        audioRenderer = CreateAudioRenderer();
     }
-    // TVPInitSoundOptions();
+    // InitSoundOptions();
 }
 
-void TVPUninitDirectSound() {
+void UninitDirectSound() {
     // nothing to do
 }
 
-iTVPSoundBuffer *TVPCreateSoundBuffer(tTVPWaveFormat &fmt, int bufcount) {
-    return TVPAudioRenderer->CreateStream(fmt, bufcount);
+ISoundBuffer *CreateSoundBufferObject(WaveFormat &fmt, int bufcount) {
+    return audioRenderer->CreateStream(fmt, bufcount);
 }
 
 #if 0
-int TVPALSoundWrap::GetNextBufferIndex() {
+int ALSoundWrap::GetNextBufferIndex() {
     int n = _bufferIdx + 1;
-    if (n >= TVPAL_BUFFER_COUNT) n = 0;
+    if (n >= AL_BUFFER_COUNT) n = 0;
     return n;
 }
 
-void TVPALSoundWrap::SetSampleOffset(tjs_uint n /*= 0*/) {
+void ALSoundWrap::SetSampleOffset(tjs_uint n /*= 0*/) {
     _samplesProcessed = n;
 }
 #endif

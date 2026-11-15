@@ -27,12 +27,12 @@ static bool OldEncoderWarned = false;
 // gain information static bool Use_Album_Gain = false; // whether to
 // use album gain, otherwise use track gain
 
-class VorbisWaveDecoder : public tTVPWaveDecoder // decoder interface
+class VorbisWaveDecoder : public WaveDecoder // decoder interface
 {
     bool InputFileInit; // whether InputFile is inited
     OggVorbis_File InputFile; // OggVorbis_File instance
     tTJSBinaryStream *InputStream; // input stream
-    tTVPWaveFormat Format; // output PCM format
+    WaveFormat Format; // output PCM format
     int CurrentSection; // current section in vorbis stream
     int pcmsize;
 
@@ -54,13 +54,13 @@ public:
 
 public:
     // ITSSWaveDecoder
-    void GetFormat(tTVPWaveFormat &format) override { format = Format; }
+    void GetFormat(WaveFormat &format) override { format = Format; }
 
     bool Render(void *buf, tjs_uint bufsamplelen, tjs_uint &rendered) override;
 
     bool SetPosition(tjs_uint64 samplepos) override;
 
-    bool DesiredFormat(const tTVPWaveFormat &format) override {
+    bool DesiredFormat(const WaveFormat &format) override {
         if(format.IsFloat == Format.IsFloat)
             return false;
         if(format.IsFloat) {
@@ -130,7 +130,7 @@ private:
     }
 };
 
-tTVPWaveDecoder *VorbisWaveDecoderCreator::Create(const ttstr &storagename,
+WaveDecoder *VorbisWaveDecoderCreator::Create(const ttstr &storagename,
                                                   const ttstr &extension) {
     static ttstr strext = TJS_W(".ogg");
     VorbisWaveDecoder *decoder = nullptr;
@@ -314,11 +314,11 @@ bool VorbisWaveDecoder::SetStream(const ttstr &url) {
 
 #include <opus/opusfile.h>
 
-class OpusWaveDecoder : public tTVPWaveDecoder // decoder interface
+class OpusWaveDecoder : public WaveDecoder // decoder interface
 {
     OggOpusFile *InputFile; // OggOpusFile instance
     tTJSBinaryStream *InputStream; // input stream
-    tTVPWaveFormat Format; // output PCM format
+    WaveFormat Format; // output PCM format
     opus_int16 *Buffer, *pBuffer;
     int BufferRemain; // in samples
 
@@ -399,7 +399,7 @@ public:
 
 public:
     // ITSSWaveDecoder
-    void GetFormat(tTVPWaveFormat &format) override { format = Format; }
+    void GetFormat(WaveFormat &format) override { format = Format; }
 
     bool Render(void *_buf, tjs_uint bufsamplelen,
                 tjs_uint &rendered) override {
@@ -502,7 +502,7 @@ public:
     }
 };
 
-tTVPWaveDecoder *OpusWaveDecoderCreator::Create(const ttstr &storagename,
+WaveDecoder *OpusWaveDecoderCreator::Create(const ttstr &storagename,
                                                 const ttstr &extension) {
     OpusWaveDecoder *decoder = nullptr;
     decoder = new OpusWaveDecoder();

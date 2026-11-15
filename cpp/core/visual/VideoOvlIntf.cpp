@@ -88,7 +88,7 @@ ttstr tTJSNI_BaseVideoOverlay::GetStatusString() const {
     }
 }
 //---------------------------------------------------------------------------
-void tTJSNI_BaseVideoOverlay::SetStatus(tTVPSoundStatus s) {
+void tTJSNI_BaseVideoOverlay::SetStatus(krkr::sound::SoundStatus s) {
     // this function may call the onStatusChanged event immediately
 
     if(Status != s) {
@@ -110,7 +110,7 @@ void tTJSNI_BaseVideoOverlay::SetStatus(tTVPSoundStatus s) {
     }
 }
 //---------------------------------------------------------------------------
-void tTJSNI_BaseVideoOverlay::SetStatusAsync(tTVPSoundStatus s) {
+void tTJSNI_BaseVideoOverlay::SetStatusAsync(krkr::sound::SoundStatus s) {
     // this function posts the onStatusChanged event
 
     if(Status != s) {

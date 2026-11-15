@@ -97,8 +97,8 @@ ttstr ExePath() { return TVPNativeProjectDir; }
 bool TVPCheckAbout();
 bool TVPCheckPrintDataPath();
 void krkr::utils::OnError();
-void TVPLockSoundMixer();
-void TVPUnlockSoundMixer();
+void krkr::sound::LockSoundMixer();
+void krkr::sound::UnlockSoundMixer();
 
 static bool _warnLowMem = true;
 void TVPCheckMemory() {
@@ -854,8 +854,8 @@ void tTVPApplication::OnActivate() {
         return;
 
     //	TVPRestoreFullScreenWindowAtActivation();
-    TVPResetVolumeToAllSoundBuffer();
-    TVPUnlockSoundMixer();
+    krkr::sound::ResetVolumeToAllSoundBuffer();
+    krkr::sound::UnlockSoundMixer();
 
     // trigger System.onActivate event
     TVPPostApplicationActivateEvent();
@@ -874,8 +874,8 @@ void tTVPApplication::OnDeactivate() {
     TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_DEACTIVATE);
 
     // set sound volume
-    TVPResetVolumeToAllSoundBuffer();
-    TVPLockSoundMixer();
+    krkr::sound::ResetVolumeToAllSoundBuffer();
+    krkr::sound::LockSoundMixer();
 
     // trigger System.onDeactivate event
     TVPPostApplicationDeactivateEvent();

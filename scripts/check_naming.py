@@ -86,11 +86,20 @@ MSG_DEFINE_RE = re.compile(r"TVP_MSG_DEFINE\(\s*(\w+)")
 
 
 def load_message_symbols() -> set[str]:
-    """从生成文件里解析出消息符号名（这些永不改名，见契约 §4）。"""
-    path = REPO_ROOT / "cpp/core/base/core/MsgIntfInc.h"
-    if not path.is_file():
-        return set()
-    return set(MSG_DEFINE_RE.findall(path.read_text(encoding="utf-8", errors="replace")))
+    """从生成文件里解析出消息符号名（这些永不改名，见契约 §4）。
+
+    两个文件都要读：`MsgIntfInc.h`（152 个）与 `MsgImpl.h`（192 个）都由
+    `gentext.pl Messages.xlsx` 生成，但**集合不同** —— 只在 MsgImpl.h 里声明的
+    那 ~40 个 tTJSMessageHolder 以前被当成"遗留符号"数进来了（如
+    `TVPCannotInitDirectSound`、`TVPMalformedMIDIMessage`），在用到它们的模块
+    （sound/base）里凭空多出几十个假指标。
+    """
+    names: set[str] = set()
+    for rel in ("cpp/core/base/core/MsgIntfInc.h", "cpp/core/base/core/MsgImpl.h"):
+        path = REPO_ROOT / rel
+        if path.is_file():
+            names |= set(MSG_DEFINE_RE.findall(path.read_text(encoding="utf-8", errors="replace")))
+    return names
 
 
 def module_files(module: str) -> list[Path]:

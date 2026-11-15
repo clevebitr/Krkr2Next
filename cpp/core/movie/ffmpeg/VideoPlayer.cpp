@@ -183,7 +183,7 @@ BasePlayer::BasePlayer(CBaseRenderer *renderer) :
     m_CurrentVideo(STREAM_VIDEO, VideoPlayer_VIDEO), m_messenger("player"),
     m_renderManager(m_clock, this),
     m_processInfo(CProcessInfo::CreateInstance()), m_pRenderer(renderer) {
-    TVPInitDirectSound(); // to avoid initialize in other thread
+    krkr::sound::InitDirectSound(); // to avoid initialize in other thread
     TVPInitLibAVCodec();
     m_playSpeed = DVD_PLAYSPEED_NORMAL;
     m_newPlaySpeed = DVD_PLAYSPEED_NORMAL;
@@ -1865,7 +1865,7 @@ int64_t BasePlayer::GetTime() {
         if (m_VideoPlayerAudio) {
             CDVDAudio *audioDev = m_VideoPlayerAudio->GetOutputDevice();
             if (audioDev && audioDev->m_pAudioStream) {
-                iTVPSoundBuffer *alsound = audioDev->m_pAudioStream->GetNativeImpl();
+                krkr::sound::ISoundBuffer *alsound = audioDev->m_pAudioStream->GetNativeImpl();
                 int remainSamples = alsound->GetUnprocessedSamples();
     // 			double audio_clk = is->audio_clock - (double)remainSamples / is->audio_tgt.freq;
     // 			set_clock_at(&is->audclk, audio_clk, is->audio_clock_serial, av_gettime() / 1000000.0);

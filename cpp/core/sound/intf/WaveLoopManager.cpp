@@ -42,10 +42,10 @@
 namespace krkr::sound {
 
 //---------------------------------------------------------------------------
-const int TVPWaveLoopLinkGiveUpCount = 10;
+const int WaveLoopLinkGiveUpCount = 10;
 // This is for preventing infinite loop caused by recursive links.
 // If the decoding point does not change when the loop manager follows
-// the links, after 'TVPWaveLoopLinkGiveUpCount' times the loop
+// the links, after 'WaveLoopLinkGiveUpCount' times the loop
 // manager will give up the decoding.
 //---------------------------------------------------------------------------
 
@@ -61,20 +61,20 @@ const int TVPWaveLoopLinkGiveUpCount = 10;
 #pragma pack(push, 1)
 #endif
 
-struct tTVPPCM8 {
+struct PCM8 {
     tjs_uint8 value;
 
-    tTVPPCM8(tjs_int v) { value = (tjs_uint8)(v + 0x80); }
+    PCM8(tjs_int v) { value = (tjs_uint8)(v + 0x80); }
 
     void operator=(tjs_int v) { value = (tjs_uint8)(v + 0x80); }
 
     operator tjs_int() const { return (tjs_int)value - 0x80; }
 };
 
-struct tTVPPCM24 {
+struct PCM24 {
     tjs_uint8 value[3];
 
-    tTVPPCM24(tjs_int v) { operator=(v); }
+    PCM24(tjs_int v) { operator=(v); }
 
     void operator=(tjs_int v) {
 #if TJS_HOST_IS_BIG_ENDIAN
@@ -111,7 +111,7 @@ struct tTVPPCM24 {
 // Crossfade Template function
 //---------------------------------------------------------------------------
 template <typename T>
-static void TVPCrossFadeIntegerBlend(void *dest, void *src1, void *src2,
+static void CrossFadeIntegerBlend(void *dest, void *src1, void *src2,
                                      tjs_int ratiostart, tjs_int ratioend,
                                      tjs_int samples, tjs_int channels) {
     tjs_uint blend_step =
@@ -140,9 +140,9 @@ static void TVPCrossFadeIntegerBlend(void *dest, void *src1, void *src2,
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPWaveLoopManager
+// WaveLoopManager
 //---------------------------------------------------------------------------
-tTVPWaveLoopManager::tTVPWaveLoopManager() {
+WaveLoopManager::WaveLoopManager() {
     Position = 0;
     IsLinksSorted = false;
     IsLabelsSorted = false;
@@ -153,7 +153,7 @@ tTVPWaveLoopManager::tTVPWaveLoopManager() {
     IgnoreLinks = false;
     Looping = false;
 
-    Format = new tTVPWaveFormat;
+    Format = new WaveFormat;
     memset(Format, 0, sizeof(*Format));
 
     ClearFlags();
@@ -161,13 +161,13 @@ tTVPWaveLoopManager::tTVPWaveLoopManager() {
 }
 
 //---------------------------------------------------------------------------
-tTVPWaveLoopManager::~tTVPWaveLoopManager() {
+WaveLoopManager::~WaveLoopManager() {
     ClearCrossFadeInformation();
     delete Format;
 }
 
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::SetDecoder(tTVPWaveDecoder *decoder) {
+void WaveLoopManager::SetDecoder(WaveDecoder *decoder) {
     // set decoder and compute ShortCrossFadeHalfSamples
     Decoder = decoder;
     if(decoder)
@@ -175,17 +175,17 @@ void tTVPWaveLoopManager::SetDecoder(tTVPWaveDecoder *decoder) {
     else
         memset(Format, 0, sizeof(*Format));
     ShortCrossFadeHalfSamples =
-        Format->SamplesPerSec * TVP_WL_SMOOTH_TIME_HALF / 1000;
+        Format->SamplesPerSec * KRKR_WL_SMOOTH_TIME_HALF / 1000;
 }
 
 //---------------------------------------------------------------------------
-int tTVPWaveLoopManager::GetFlag(tjs_int index) {
+int WaveLoopManager::GetFlag(tjs_int index) {
     volatile tTJSCriticalSectionHolder CS(FlagsCS);
     return Flags[index];
 }
 
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::CopyFlags(tjs_int *dest) {
+void WaveLoopManager::CopyFlags(tjs_int *dest) {
     volatile tTJSCriticalSectionHolder CS(FlagsCS);
     // copy flags into dest, and clear FlagsModifiedByLabelExpression
     memcpy(dest, Flags, sizeof(Flags));
@@ -193,30 +193,30 @@ void tTVPWaveLoopManager::CopyFlags(tjs_int *dest) {
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWaveLoopManager::GetFlagsModifiedByLabelExpression() {
+bool WaveLoopManager::GetFlagsModifiedByLabelExpression() {
     volatile tTJSCriticalSectionHolder CS(FlagsCS);
     return FlagsModifiedByLabelExpression;
 }
 
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::SetFlag(tjs_int index, tjs_int f) {
+void WaveLoopManager::SetFlag(tjs_int index, tjs_int f) {
     volatile tTJSCriticalSectionHolder CS(FlagsCS);
     if(f < 0)
         f = 0;
-    if(f > TVP_WL_MAX_FLAG_VALUE)
-        f = TVP_WL_MAX_FLAG_VALUE;
+    if(f > KRKR_WL_MAX_FLAG_VALUE)
+        f = KRKR_WL_MAX_FLAG_VALUE;
     Flags[index] = f;
 }
 
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::ClearFlags() {
+void WaveLoopManager::ClearFlags() {
     volatile tTJSCriticalSectionHolder CS(FlagsCS);
-    for(tjs_int i = 0; i < TVP_WL_MAX_FLAGS; i++)
+    for(tjs_int i = 0; i < KRKR_WL_MAX_FLAGS; i++)
         Flags[i] = 0;
 }
 
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::ClearLinksAndLabels() {
+void WaveLoopManager::ClearLinksAndLabels() {
     // clear links and labels
     volatile tTJSCriticalSectionHolder CS(FlagsCS);
     Labels.clear();
@@ -226,57 +226,57 @@ void tTVPWaveLoopManager::ClearLinksAndLabels() {
 }
 
 //---------------------------------------------------------------------------
-const std::vector<tTVPWaveLoopLink> &tTVPWaveLoopManager::GetLinks() const {
+const std::vector<WaveLoopLink> &WaveLoopManager::GetLinks() const {
     volatile tTJSCriticalSectionHolder CS(
-        const_cast<tTVPWaveLoopManager *>(this)->FlagsCS);
+        const_cast<WaveLoopManager *>(this)->FlagsCS);
     return Links;
 }
 
 //---------------------------------------------------------------------------
-const std::vector<tTVPWaveLabel> &tTVPWaveLoopManager::GetLabels() const {
+const std::vector<WaveLabel> &WaveLoopManager::GetLabels() const {
     volatile tTJSCriticalSectionHolder CS(
-        const_cast<tTVPWaveLoopManager *>(this)->FlagsCS);
+        const_cast<WaveLoopManager *>(this)->FlagsCS);
     return Labels;
 }
 
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::SetLinks(const std::vector<tTVPWaveLoopLink> &links) {
+void WaveLoopManager::SetLinks(const std::vector<WaveLoopLink> &links) {
     volatile tTJSCriticalSectionHolder CS(FlagsCS);
     Links = links;
     IsLinksSorted = false;
 }
 
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::SetLabels(const std::vector<tTVPWaveLabel> &labels) {
+void WaveLoopManager::SetLabels(const std::vector<WaveLabel> &labels) {
     volatile tTJSCriticalSectionHolder CS(FlagsCS);
     Labels = labels;
     IsLabelsSorted = false;
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWaveLoopManager::GetIgnoreLinks() const {
+bool WaveLoopManager::GetIgnoreLinks() const {
     volatile tTJSCriticalSectionHolder CS(
-        const_cast<tTVPWaveLoopManager *>(this)->DataCS);
+        const_cast<WaveLoopManager *>(this)->DataCS);
     return IgnoreLinks;
 }
 
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::SetIgnoreLinks(bool b) {
+void WaveLoopManager::SetIgnoreLinks(bool b) {
     volatile tTJSCriticalSectionHolder CS(DataCS);
     IgnoreLinks = b;
 }
 
 //---------------------------------------------------------------------------
-tjs_int64 tTVPWaveLoopManager::GetPosition() const {
+tjs_int64 WaveLoopManager::GetPosition() const {
     // we cannot assume that the 64bit data access is truely atomic on
     // 32bit machines.
     volatile tTJSCriticalSectionHolder CS(
-        const_cast<tTVPWaveLoopManager *>(this)->FlagsCS);
+        const_cast<WaveLoopManager *>(this)->FlagsCS);
     return Position;
 }
 
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::SetPosition(tjs_int64 pos) {
+void WaveLoopManager::SetPosition(tjs_int64 pos) {
     volatile tTJSCriticalSectionHolder CS(DataCS);
     Position = pos;
     ClearCrossFadeInformation();
@@ -284,9 +284,9 @@ void tTVPWaveLoopManager::SetPosition(tjs_int64 pos) {
 }
 
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::Decode(void *dest, tjs_uint samples,
+void WaveLoopManager::Decode(void *dest, tjs_uint samples,
                                  tjs_uint &written,
-                                 tTVPWaveSegmentQueue &segments) {
+                                 WaveSegmentQueue &segments) {
     // decode from current position
     // note that segements will not be cleared
     volatile tTJSCriticalSectionHolder CS(DataCS);
@@ -297,7 +297,7 @@ void tTVPWaveLoopManager::Decode(void *dest, tjs_uint samples,
 
     tjs_int give_up_count = 0;
 
-    std::deque<tTVPWaveLabel> labels;
+    std::deque<WaveLabel> labels;
 
     while(written != samples /* && Position < Format->TotalSamples*/) {
         // clear labels
@@ -309,13 +309,13 @@ void tTVPWaveLoopManager::Decode(void *dest, tjs_uint samples,
         tjs_int before_count;
 
         // check nearest link
-        tTVPWaveLoopLink link;
+        WaveLoopLink link;
         if(!IgnoreLinks && GetNearestEvent(Position, link, false)) {
             // nearest event found ...
             if(link.From == Position) {
                 // do jump
                 give_up_count++;
-                if(give_up_count >= TVPWaveLoopLinkGiveUpCount)
+                if(give_up_count >= WaveLoopLinkGiveUpCount)
                     break; // give up decoding
 
                 Position = link.To;
@@ -352,7 +352,7 @@ void tTVPWaveLoopManager::Decode(void *dest, tjs_uint samples,
                             (tjs_int)(Format->TotalSamples - link.From);
                     if(Format->TotalSamples - link.To < after_count)
                         after_count = (tjs_int)(Format->TotalSamples - link.To);
-                    tTVPWaveLoopLink over_to_link;
+                    WaveLoopLink over_to_link;
                     if(GetNearestEvent(link.To, over_to_link, true)) {
                         if(over_to_link.From - link.To < after_count)
                             after_count =
@@ -435,7 +435,7 @@ void tTVPWaveLoopManager::Decode(void *dest, tjs_uint samples,
 
         // evaluate each label
         GetLabelAt(Position, Position + one_unit, labels);
-        for(std::deque<tTVPWaveLabel>::iterator i = labels.begin();
+        for(std::deque<WaveLabel>::iterator i = labels.begin();
             i != labels.end(); i++) {
             if(i->Name.c_str()[0] == ':') {
                 // for each label
@@ -444,7 +444,7 @@ void tTVPWaveLoopManager::Decode(void *dest, tjs_uint samples,
         }
 
         // calculate each label offset
-        for(std::deque<tTVPWaveLabel>::iterator i = labels.begin();
+        for(std::deque<WaveLabel>::iterator i = labels.begin();
             i != labels.end(); i++)
             i->Offset = (tjs_int)(i->Position - Position) + written;
 
@@ -452,7 +452,7 @@ void tTVPWaveLoopManager::Decode(void *dest, tjs_uint samples,
         segments.Enqueue(labels);
 
         // enqueue segment
-        segments.Enqueue(tTVPWaveSegment(Position, one_unit));
+        segments.Enqueue(WaveSegment(Position, one_unit));
 
         // decode or copy
         if(!CrossFadeSamples) {
@@ -496,8 +496,8 @@ void tTVPWaveLoopManager::Decode(void *dest, tjs_uint samples,
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWaveLoopManager::GetNearestEvent(tjs_int64 current,
-                                          tTVPWaveLoopLink &link,
+bool WaveLoopManager::GetNearestEvent(tjs_int64 current,
+                                          WaveLoopLink &link,
                                           bool ignore_conditions) {
     // search nearest event in future, from current.
     // this checks conditions unless ignore_conditions is true.
@@ -595,8 +595,8 @@ bool tTVPWaveLoopManager::GetNearestEvent(tjs_int64 current,
 }
 
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::GetLabelAt(tjs_int64 from, tjs_int64 to,
-                                     std::deque<tTVPWaveLabel> &labels) {
+void WaveLoopManager::GetLabelAt(tjs_int64 from, tjs_int64 to,
+                                     std::deque<WaveLabel> &labels) {
     volatile tTJSCriticalSectionHolder CS(FlagsCS);
 
     if(Labels.size() == 0)
@@ -643,7 +643,7 @@ void tTVPWaveLoopManager::GetLabelAt(tjs_int64 from, tjs_int64 to,
 }
 
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::DoCrossFade(void *dest, void *src1, void *src2,
+void WaveLoopManager::DoCrossFade(void *dest, void *src1, void *src2,
                                       tjs_int samples, tjs_int ratiostart,
                                       tjs_int ratioend) {
     // do on-memory wave crossfade
@@ -668,19 +668,19 @@ void tTVPWaveLoopManager::DoCrossFade(void *dest, void *src1, void *src2,
         }
     } else {
         if(Format->BytesPerSample == 1) {
-            TVPCrossFadeIntegerBlend<tTVPPCM8>(dest, src1, src2, ratiostart,
+            CrossFadeIntegerBlend<PCM8>(dest, src1, src2, ratiostart,
                                                ratioend, samples,
                                                Format->Channels);
         } else if(Format->BytesPerSample == 2) {
-            TVPCrossFadeIntegerBlend<tjs_int16>(dest, src1, src2, ratiostart,
+            CrossFadeIntegerBlend<tjs_int16>(dest, src1, src2, ratiostart,
                                                 ratioend, samples,
                                                 Format->Channels);
         } else if(Format->BytesPerSample == 3) {
-            TVPCrossFadeIntegerBlend<tTVPPCM24>(dest, src1, src2, ratiostart,
+            CrossFadeIntegerBlend<PCM24>(dest, src1, src2, ratiostart,
                                                 ratioend, samples,
                                                 Format->Channels);
         } else if(Format->BytesPerSample == 4) {
-            TVPCrossFadeIntegerBlend<tjs_int32>(dest, src1, src2, ratiostart,
+            CrossFadeIntegerBlend<tjs_int32>(dest, src1, src2, ratiostart,
                                                 ratioend, samples,
                                                 Format->Channels);
         }
@@ -688,17 +688,17 @@ void tTVPWaveLoopManager::DoCrossFade(void *dest, void *src1, void *src2,
 }
 
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::ClearCrossFadeInformation() {
+void WaveLoopManager::ClearCrossFadeInformation() {
     if(CrossFadeSamples)
         delete[] CrossFadeSamples, CrossFadeSamples = nullptr;
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWaveLoopManager::GetLabelExpression(
-    const tTVPLabelStringType &label,
-    tTVPWaveLoopManager::tExpressionToken *ope, tjs_int *lv, tjs_int *rv,
+bool WaveLoopManager::GetLabelExpression(
+    const LabelStringType &label,
+    WaveLoopManager::tExpressionToken *ope, tjs_int *lv, tjs_int *rv,
     bool *is_rv_indirect) {
-    const tTVPLabelCharType *p = label.c_str();
+    const LabelCharType *p = label.c_str();
     tExpressionToken token;
     tExpressionToken operation;
     tjs_int value = 0;
@@ -717,7 +717,7 @@ bool tTVPWaveLoopManager::GetLabelExpression(
     if(token != etInteger)
         return false; // lvalue must form of '[' integer ']'
     lvalue = value;
-    if(lvalue < 0 || lvalue >= TVP_WL_MAX_FLAGS)
+    if(lvalue < 0 || lvalue >= KRKR_WL_MAX_FLAGS)
         return false; // out of the range
     token = GetExpressionToken(p, &value);
     if(token != etRBracket)
@@ -744,7 +744,7 @@ bool tTVPWaveLoopManager::GetLabelExpression(
             return false; // rvalue does not have form of '[' integer
                           // ']'
         rvalue = value;
-        if(rvalue < 0 || rvalue >= TVP_WL_MAX_FLAGS)
+        if(rvalue < 0 || rvalue >= KRKR_WL_MAX_FLAGS)
             return false; // out of the range
         token = GetExpressionToken(p, &value);
         if(token != etRBracket)
@@ -780,8 +780,8 @@ bool tTVPWaveLoopManager::GetLabelExpression(
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWaveLoopManager::EvalLabelExpression(
-    const tTVPLabelStringType &label) {
+bool WaveLoopManager::EvalLabelExpression(
+    const LabelStringType &label) {
     // eval expression specified by 'label'
     // commit the result when 'commit' is true.
     // returns whether the label syntax is correct.
@@ -826,15 +826,15 @@ bool tTVPWaveLoopManager::EvalLabelExpression(
 
     if(Flags[lvalue] < 0)
         Flags[lvalue] = 0;
-    if(Flags[lvalue] > TVP_WL_MAX_FLAG_VALUE)
-        Flags[lvalue] = TVP_WL_MAX_FLAG_VALUE;
+    if(Flags[lvalue] > KRKR_WL_MAX_FLAG_VALUE)
+        Flags[lvalue] = KRKR_WL_MAX_FLAG_VALUE;
 
     return true;
 }
 
 //---------------------------------------------------------------------------
-tTVPWaveLoopManager::tExpressionToken
-tTVPWaveLoopManager::GetExpressionToken(const tTVPLabelCharType *&p,
+WaveLoopManager::tExpressionToken
+WaveLoopManager::GetExpressionToken(const LabelCharType *&p,
                                         tjs_int *value) {
     // get token at pointer 'p'
 
@@ -903,7 +903,7 @@ tTVPWaveLoopManager::GetExpressionToken(const tTVPLabelCharType *&p,
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWaveLoopManager::GetLabelCharInt(const tTVPLabelCharType *s,
+bool WaveLoopManager::GetLabelCharInt(const LabelCharType *s,
                                           tjs_int &v) {
     // convert string to integer
     tjs_int r = 0;
@@ -933,7 +933,7 @@ bool tTVPWaveLoopManager::GetLabelCharInt(const tTVPLabelCharType *s,
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWaveLoopManager::GetInt(char *s, tjs_int &v) {
+bool WaveLoopManager::GetInt(char *s, tjs_int &v) {
     // convert string to integer
     tjs_int r = 0;
     bool sign = false;
@@ -962,7 +962,7 @@ bool tTVPWaveLoopManager::GetInt(char *s, tjs_int &v) {
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWaveLoopManager::GetInt64(char *s, tjs_int64 &v) {
+bool WaveLoopManager::GetInt64(char *s, tjs_int64 &v) {
     // convert string to integer
     tjs_int64 r = 0;
     bool sign = false;
@@ -991,7 +991,7 @@ bool tTVPWaveLoopManager::GetInt64(char *s, tjs_int64 &v) {
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWaveLoopManager::GetBool(char *s, bool &v) {
+bool WaveLoopManager::GetBool(char *s, bool &v) {
     // convert string to boolean
     if(!strcasecmp(s, "True")) {
         v = true;
@@ -1013,7 +1013,7 @@ bool tTVPWaveLoopManager::GetBool(char *s, bool &v) {
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWaveLoopManager::GetCondition(char *s, tTVPWaveLoopLinkCondition &v) {
+bool WaveLoopManager::GetCondition(char *s, WaveLoopLinkCondition &v) {
     // get condition value
     if(!strcasecmp(s, "no")) {
         v = llcNone;
@@ -1047,7 +1047,7 @@ bool tTVPWaveLoopManager::GetCondition(char *s, tTVPWaveLoopLinkCondition &v) {
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWaveLoopManager::GetString(char *s, tTVPLabelStringType &v) {
+bool WaveLoopManager::GetString(char *s, LabelStringType &v) {
     // convert utf-8 string s to v
 
     // compute output (unicode) size
@@ -1078,7 +1078,7 @@ bool tTVPWaveLoopManager::GetString(char *s, tTVPLabelStringType &v) {
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWaveLoopManager::GetEntityToken(char *&p, char **name, char **value) {
+bool WaveLoopManager::GetEntityToken(char *&p, char **name, char **value) {
     // get name=value string at 'p'.
     // returns whether the token can be got or not.
     // on success, *id will point start of the name, and value will
@@ -1161,8 +1161,8 @@ bool tTVPWaveLoopManager::GetEntityToken(char *&p, char **name, char **value) {
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWaveLoopManager::ReadLinkInformation(char *&p,
-                                              tTVPWaveLoopLink &link) {
+bool WaveLoopManager::ReadLinkInformation(char *&p,
+                                              WaveLoopLink &link) {
     // read link information from 'p'.
     // p must point '{' , which indicates start of the block.
     if(*p != '{')
@@ -1230,7 +1230,7 @@ bool tTVPWaveLoopManager::ReadLinkInformation(char *&p,
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWaveLoopManager::ReadLabelInformation(char *&p, tTVPWaveLabel &label) {
+bool WaveLoopManager::ReadLabelInformation(char *&p, WaveLabel &label) {
     // read label information from 'p'.
     // p must point '{' , which indicates start of the block.
     if(*p != '{')
@@ -1286,7 +1286,7 @@ bool tTVPWaveLoopManager::ReadLabelInformation(char *&p, tTVPWaveLabel &label) {
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWaveLoopManager::ReadInformation(char *p) {
+bool WaveLoopManager::ReadInformation(char *p) {
     // read information from 'p'
     volatile tTJSCriticalSectionHolder CS(FlagsCS);
 
@@ -1301,7 +1301,7 @@ bool tTVPWaveLoopManager::ReadInformation(char *p) {
         char *p_start = strstr(p, "LoopStart=");
         if(!p_length || !p_start)
             return false; // read error
-        tTVPWaveLoopLink link;
+        WaveLoopLink link;
         link.Smooth = false;
         link.Condition = llcNone;
         link.RefValue = 0;
@@ -1346,7 +1346,7 @@ bool tTVPWaveLoopManager::ReadInformation(char *p) {
                     p++;
                 if(!*p)
                     return false;
-                tTVPWaveLoopLink link;
+                WaveLoopLink link;
                 if(!ReadLinkInformation(p, link))
                     return false;
                 Links.emplace_back(link);
@@ -1356,7 +1356,7 @@ bool tTVPWaveLoopManager::ReadInformation(char *p) {
                     p++;
                 if(!*p)
                     return false;
-                tTVPWaveLabel label;
+                WaveLabel label;
                 if(!ReadLabelInformation(p, label))
                     return false;
                 Labels.emplace_back(label);
@@ -1375,7 +1375,7 @@ bool tTVPWaveLoopManager::ReadInformation(char *p) {
     return true; // done
 }
 
-bool tTVPWaveLoopManager::DesiredFormat(const tTVPWaveFormat &format) {
+bool WaveLoopManager::DesiredFormat(const WaveFormat &format) {
     if(!Decoder->DesiredFormat(format))
         return false;
     SetDecoder(Decoder);
@@ -1384,20 +1384,20 @@ bool tTVPWaveLoopManager::DesiredFormat(const tTVPWaveFormat &format) {
 //---------------------------------------------------------------------------
 #ifdef TVP_IN_LOOP_TUNER
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::PutInt(AnsiString &s, tjs_int v) {
+void WaveLoopManager::PutInt(AnsiString &s, tjs_int v) {
     s += AnsiString((int)v);
 }
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::PutInt64(AnsiString &s, tjs_int64 v) {
+void WaveLoopManager::PutInt64(AnsiString &s, tjs_int64 v) {
     s += AnsiString((__int64)v);
 }
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::PutBool(AnsiString &s, bool v) {
+void WaveLoopManager::PutBool(AnsiString &s, bool v) {
     s += v ? "True" : "False";
 }
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::PutCondition(AnsiString &s,
-                                       tTVPWaveLoopLinkCondition v) {
+void WaveLoopManager::PutCondition(AnsiString &s,
+                                       WaveLoopLinkCondition v) {
     switch(v) {
         case llcNone:
             s += "no";
@@ -1423,7 +1423,7 @@ void tTVPWaveLoopManager::PutCondition(AnsiString &s,
     }
 }
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::PutString(AnsiString &s, tTVPLabelStringType v) {
+void WaveLoopManager::PutString(AnsiString &s, LabelStringType v) {
     // convert v to a utf-8 string
     const tjs_char *pi;
 
@@ -1452,7 +1452,7 @@ void tTVPWaveLoopManager::PutString(AnsiString &s, tTVPLabelStringType v) {
     delete[] out;
 }
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::DoSpacing(AnsiString &l, int col) {
+void WaveLoopManager::DoSpacing(AnsiString &l, int col) {
     // fill space until the string becomes specified length
     static const char *spaces16 = "                ";
     int length = l.Length();
@@ -1466,7 +1466,7 @@ void tTVPWaveLoopManager::DoSpacing(AnsiString &l, int col) {
     }
 }
 //---------------------------------------------------------------------------
-void tTVPWaveLoopManager::WriteInformation(AnsiString &s) {
+void WaveLoopManager::WriteInformation(AnsiString &s) {
     // write current link/label information into s
     volatile tTJSCriticalSectionHolder CS(FlagsCS);
 
@@ -1479,7 +1479,7 @@ void tTVPWaveLoopManager::WriteInformation(AnsiString &s) {
     Link { From=0000000000000000; To=0000000000000000; Smooth=False;
     Condition=ne; RefValue=444444444; CondVar=99; }
     */
-    for(std::vector<tTVPWaveLoopLink>::iterator i = Links.begin();
+    for(std::vector<WaveLoopLink>::iterator i = Links.begin();
         i != Links.end(); i++) {
         AnsiString l;
         l = "Link { ";
@@ -1522,7 +1522,7 @@ void tTVPWaveLoopManager::WriteInformation(AnsiString &s) {
     /*
     Label { Position=0000000000000000; name=" "; }
     */
-    for(std::vector<tTVPWaveLabel>::iterator i = Labels.begin();
+    for(std::vector<WaveLabel>::iterator i = Labels.begin();
         i != Labels.end(); i++) {
         AnsiString l;
         l = "Label { ";

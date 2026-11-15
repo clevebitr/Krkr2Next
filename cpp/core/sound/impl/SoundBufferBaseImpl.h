@@ -12,7 +12,7 @@
 #ifndef SoundBufferBaseImplH
 #define SoundBufferBaseImplH
 
-#define TVP_SB_BEAT_INTERVAL 60
+#define KRKR_SB_BEAT_INTERVAL 60
 
 #include "SoundBufferBaseIntf.h"
 

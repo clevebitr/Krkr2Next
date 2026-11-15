@@ -20,14 +20,14 @@ namespace krkr::sound {
 //---------------------------------------------------------------------------
 //! @brief 再生セグメント情報
 //---------------------------------------------------------------------------
-struct tTVPWaveSegment {
+struct WaveSegment {
     //! @brief コンストラクタ
-    tTVPWaveSegment(tjs_int64 start, tjs_int64 length) {
+    WaveSegment(tjs_int64 start, tjs_int64 length) {
         Start = start;
         Length = FilteredLength = length;
     }
 
-    tTVPWaveSegment(tjs_int64 start, tjs_int64 length,
+    WaveSegment(tjs_int64 start, tjs_int64 length,
                     tjs_int64 filteredlength) {
         Start = start;
         Length = length;
@@ -46,7 +46,7 @@ struct tTVPWaveSegment {
 //---------------------------------------------------------------------------
 //! @brief 再生ラベル情報
 //---------------------------------------------------------------------------
-struct tTVPWaveLabel {
+struct WaveLabel {
     //! @brief コンストラクタ
     tjs_int64 Position; //!< オリジナルデコーダ上でのラベル位置 (PCM
                         //!< サンプルグラニュール数単位)
@@ -54,9 +54,9 @@ struct tTVPWaveLabel {
     tjs_int Offset;
     /*!< オフセット
         @note
-        This member will be set in tTVPWaveLoopManager::Render,
+        This member will be set in WaveLoopManager::Render,
         and will contain the sample granule offset from first decoding
-        point at call of tTVPWaveLoopManager::Render().
+        point at call of WaveLoopManager::Render().
     */
 
 #ifdef TVP_IN_LOOP_TUNER
@@ -66,30 +66,30 @@ struct tTVPWaveLabel {
 #endif
 
     struct tSortByPositionFuncObj {
-        bool operator()(const tTVPWaveLabel &lhs,
-                        const tTVPWaveLabel &rhs) const {
+        bool operator()(const WaveLabel &lhs,
+                        const WaveLabel &rhs) const {
             return lhs.Position < rhs.Position;
         }
     };
 
     struct tSortByOffsetFuncObj {
-        bool operator()(const tTVPWaveLabel &lhs,
-                        const tTVPWaveLabel &rhs) const {
+        bool operator()(const WaveLabel &lhs,
+                        const WaveLabel &rhs) const {
             return lhs.Offset < rhs.Offset;
         }
     };
 
 #ifdef TVP_IN_LOOP_TUNER
     struct tSortByIndexFuncObj {
-        bool operator()(const tTVPWaveLabel &lhs,
-                        const tTVPWaveLabel &rhs) const {
+        bool operator()(const WaveLabel &lhs,
+                        const WaveLabel &rhs) const {
             return lhs.Index < rhs.Index;
         }
     };
 #endif
 
     //! @brief コンストラクタ
-    tTVPWaveLabel() {
+    WaveLabel() {
         Position = 0;
         Offset = 0;
 #ifdef TVP_IN_LOOP_TUNER
@@ -99,7 +99,7 @@ struct tTVPWaveLabel {
     }
 
     //! @brief コンストラクタ
-    tTVPWaveLabel(tjs_int64 position, const ttstr &name, tjs_int offset) :
+    WaveLabel(tjs_int64 position, const ttstr &name, tjs_int offset) :
         Position(position), Name(name), Offset(offset) {
 #ifdef TVP_IN_LOOP_TUNER
         NameWidth = 0;
@@ -109,7 +109,7 @@ struct tTVPWaveLabel {
 };
 
 //---------------------------------------------------------------------------
-bool inline operator<(const tTVPWaveLabel &lhs, const tTVPWaveLabel &rhs) {
+bool inline operator<(const WaveLabel &lhs, const WaveLabel &rhs) {
     return lhs.Position < rhs.Position;
 }
 //---------------------------------------------------------------------------
@@ -117,12 +117,12 @@ bool inline operator<(const tTVPWaveLabel &lhs, const tTVPWaveLabel &rhs) {
 //---------------------------------------------------------------------------
 //! @brief Waveのセグメント・ラベルのキューを管理するクラス
 //---------------------------------------------------------------------------
-class tTVPWaveSegmentQueue {
+class WaveSegmentQueue {
     // deque による Segments と Labels の配列。
     // 実用上は、これらの配列に大量のデータが入ることはまずないので
     // vector で十分なのかもしれないが ...
-    std::deque<tTVPWaveSegment> Segments; //!< セグメントの配列
-    std::deque<tTVPWaveLabel> Labels; //!< ラベルの配列
+    std::deque<WaveSegment> Segments; //!< セグメントの配列
+    std::deque<WaveLabel> Labels; //!< ラベルの配列
 
 public:
     //! @brief		内容をクリアする
@@ -130,45 +130,45 @@ public:
 
     //! @brief		セグメントの配列を得る
     //! @return		セグメントの配列
-    [[nodiscard]] const std::deque<tTVPWaveSegment> &GetSegments() const {
+    [[nodiscard]] const std::deque<WaveSegment> &GetSegments() const {
         return Segments;
     }
 
     //! @brief		ラベルの配列を得る
     //! @return		ラベルの配列
-    [[nodiscard]] const std::deque<tTVPWaveLabel> &GetLabels() const {
+    [[nodiscard]] const std::deque<WaveLabel> &GetLabels() const {
         return Labels;
     }
 
     //! @brief		tTVPWaveSegmentQueueをエンキューする
     //! @param		queue
     //! エンキューしたいtTVPWaveSegmentQueueオブジェクト
-    void Enqueue(const tTVPWaveSegmentQueue &queue);
+    void Enqueue(const WaveSegmentQueue &queue);
 
     //! @brief		tTVPWaveSegmentをエンキューする
     //! @param		queue
     //! エンキューしたいtTVPWaveSegmentオブジェクト
-    void Enqueue(const tTVPWaveSegment &segment);
+    void Enqueue(const WaveSegment &segment);
 
     //! @brief		tTVPWaveLabelをエンキューする
     //! @param		queue エンキューしたいtTVPWaveLabelオブジェクト
     //! @note		Offset は修正されないので注意
-    void Enqueue(const tTVPWaveLabel &Label);
+    void Enqueue(const WaveLabel &Label);
 
     //! @brief		tTVPWaveSegmentの配列をエンキューする
     //! @param		queue		エンキューしたい
-    //! std::dequeue<tTVPWaveSegment>オブジェクト
-    void Enqueue(const std::deque<tTVPWaveSegment> &segments);
+    //! std::dequeue<WaveSegment>オブジェクト
+    void Enqueue(const std::deque<WaveSegment> &segments);
 
     //! @brief		tTVPWaveLabelの配列をエンキューする
     //! @param		queue		エンキューしたい
-    //! std::dequeue<tTVPWaveLabel>オブジェクト
-    void Enqueue(const std::deque<tTVPWaveLabel> &Labels);
+    //! std::dequeue<WaveLabel>オブジェクト
+    void Enqueue(const std::deque<WaveLabel> &Labels);
 
     //! @brief		先頭から指定長さ分をデキューする
     //! @param		dest		格納先キュー(内容はクリアされる)
     //! @param		length		切り出す長さ(サンプルグラニュール単位)
-    void Dequeue(tTVPWaveSegmentQueue &dest, tjs_int64 length);
+    void Dequeue(WaveSegmentQueue &dest, tjs_int64 length);
 
     //! @brief		このキューの全体の長さを得る
     //! @return		このキューの長さ (サンプルグラニュール単位)
@@ -191,8 +191,5 @@ public:
 
 } // namespace krkr::sound
 
-using krkr::sound::tTVPWaveSegment;
-using krkr::sound::tTVPWaveLabel;
-using krkr::sound::tTVPWaveSegmentQueue;
 
 #endif

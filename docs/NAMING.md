@@ -114,7 +114,7 @@
 | 3 | `utils` | 37 + 19（已应用） | ✅ **收口**：`utils.tsv` 32 符号 / 303 处 / 53 文件 + `utils-residual.tsv` 19 符号 / 383 处 / 62 文件 + 手工 `TVPTimer`→`Timer` 22 处；遗留 58→**8**（4 个 `TVPCreateNativeClass_*` 例外 + `TVPMainForm` 注释残留 + 3 个别的模块的符号） |
 | 4 | `io` | 123 + 27 + 17（已应用） | ✅ **io 收口**：第 2 轮 1023 处 / 83 文件（`7zArchive.cpp` → `SevenZipArchive.cpp`）、第 4 轮 189 处 / 11 文件（`io-globals.tsv`，27 个 N7 变量）、第 4b 轮 45 处 / 3 文件（`io-residual.tsv`，9 个 `--draft` 漏收符号 + 6 处注释 + 5 处日志串）；遗留 176→**26**，余下**全部是别的模块的符号**（base 13 / utils 6 / environ 5）+ `TVPCreateNativeClass_Storages`（§4 例外） |
 | 5 | `compat` | 0 | ✅ 自有符号已是新风格（`--draft` 扫出 0 个），无需改名 |
-| 6 | `sound` | 112（draft） | 🟡 map 已起草 |
+| 6 | `sound` | 127 + 64（已应用） | ✅ **收口**：`sound.tsv` 127 符号 / 893 处 / 36 文件 + `sound-residual.tsv` 64 符号 / 434 处 / 9 文件（N7 变量、匿名 struct/enum 实例、多行定义）+ 2 处注释；遗留 211→**20**（全部是 base/environ/movie 的符号 + 4 个例外）。同时修正了消息符号口径：`MsgImpl.h` 里独有的 ~40 个 `tTJSMessageHolder` 以前被当成遗留符号 |
 | 7 | `environ` | 101（draft） | 🟡 map 已起草 |
 | 8 | `base` | 465（基线） | ⬜ 未起草；先做非消息部分，消息符号永久例外 |
 | 9 | `visual` / `movie` | — | 这两块结构未动；它们的**调用点**会在 1–8 里被 codemod 顺带更新 |
@@ -188,6 +188,7 @@ tTVPAtInstallClass	AtInstallClass	type
 | 4 | `io` 全局变量（N7） | 27 | 189 | 11 | ~30 min |
 | 4b | `io` 残项（draft 漏收） | 9（+11 注释/日志） | 45 | 3 | ~15 min |
 | 5 | `utils`（含 5b 残项） | 32 + 19 + 1 手工 | 686 + 70 去重限定 | 90 | ~70 min（含新检查脚本） |
+| 6 | `sound`（含 6b 残项） | 127 + 64 + 2 注释 | 1327 | 39 | ~80 min |
 
 **吞吐 ≈ 100~150 符号/小时**（工具成熟后，不含编译回归）。
 
@@ -195,7 +196,7 @@ tTVPAtInstallClass	AtInstallClass	type
 |---|---:|---|---|
 | ~~`io` 剩余（N7 全局变量）~~ | ~~28~~ | ✅ 第 4 轮完成 | — |
 | ~~`utils`~~ | ~~37~~ | ✅ 第 5 轮完成 | — |
-| `sound` | 132 | ~1.5 h | 1~2 天 |
+| ~~`sound`~~ | ~~132~~ | ✅ 第 6 轮完成 | — |
 | `environ` | 134 | ~1.5 h | 1~2 天 |
 | `base` | ~250（不含 153 个消息例外） | ~3 h | 2~4 天（注册表族要等反转） |
 | ~~`io` 残项~~ | ~~13~~ | ✅ 第 4b 轮完成（9 符号 + 11 处注释/日志） | — |

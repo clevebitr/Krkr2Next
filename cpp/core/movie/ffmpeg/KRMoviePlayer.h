@@ -11,9 +11,9 @@
 struct SwsContext;
 
 namespace krkr::sound {
-class iTVPSoundBuffer;
+class ISoundBuffer;
 }
-using krkr::sound::iTVPSoundBuffer;
+using krkr::sound::ISoundBuffer;
 
 class TVPYUVSprite;
 
@@ -226,7 +226,7 @@ public:
 protected:
     TVPMoviePlayer();
 
-    iTVPSoundBuffer *GetSoundDevice();
+    krkr::sound::ISoundBuffer *GetSoundDevice();
 
     uint32_t RefCount = 1;
     bool Visible = false;

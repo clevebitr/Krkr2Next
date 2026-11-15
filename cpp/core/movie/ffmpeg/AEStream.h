@@ -8,9 +8,9 @@ extern "C" {
 }
 
 namespace krkr::sound {
-class iTVPSoundBuffer;
+class ISoundBuffer;
 }
-using krkr::sound::iTVPSoundBuffer;
+using krkr::sound::ISoundBuffer;
 
 NS_KRMOVIE_BEGIN
 /**
@@ -282,7 +282,7 @@ public:
      */
     virtual bool HasDSP() { return false; }
 
-    virtual iTVPSoundBuffer *GetNativeImpl() { return nullptr; }
+    virtual krkr::sound::ISoundBuffer *GetNativeImpl() { return nullptr; }
 };
 
 NS_KRMOVIE_END

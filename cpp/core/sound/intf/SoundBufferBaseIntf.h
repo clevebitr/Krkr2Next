@@ -16,9 +16,9 @@
 namespace krkr::sound {
 
 //---------------------------------------------------------------------------
-// tTVPSoundStatus
+// SoundStatus
 //---------------------------------------------------------------------------
-enum tTVPSoundStatus {
+enum SoundStatus {
     ssUnload, // data is not specified
     ssStop, // stop
     ssPlay, // play
@@ -33,7 +33,7 @@ enum tTVPSoundStatus {
 class tTJSNI_BaseSoundBuffer : public tTJSNativeInstance {
     typedef tTJSNativeInstance inherited;
 
-    friend class tTVPSoundBufferTimerDispatcher;
+    friend class SoundBufferTimerDispatcher;
 
 public:
     tTJSNI_BaseSoundBuffer();
@@ -46,7 +46,7 @@ public:
 protected:
     iTJSDispatch2 *Owner; // owner object
     tTJSVariantClosure ActionOwner; // object to send action
-    tTVPSoundStatus Status; // status
+    SoundStatus Status; // status
 
     // volume functions ( implement this in child classes )
     // tTJSNI_BaseSoundBuffer/tTJSNI_SoundBuffer manage this when
@@ -61,12 +61,12 @@ public:
 protected:
     bool CanDeliverEvents;
 
-    void SetStatus(tTVPSoundStatus s);
+    void SetStatus(SoundStatus s);
 
-    void SetStatusAsync(tTVPSoundStatus s);
+    void SetStatusAsync(SoundStatus s);
 
 public:
-    [[nodiscard]] tTVPSoundStatus GetStatus() const { return Status; }
+    [[nodiscard]] SoundStatus GetStatus() const { return Status; }
 
 public:
     [[nodiscard]] tTJSVariantClosure GetActionOwnerNoAddRef() const {
@@ -78,7 +78,7 @@ public:
 protected:
     virtual void TimerBeatHandler();
     // call this in tTJSNI_SoundBuffer periodically.
-    // interval time must be declered as TVP_SB_BEAT_INTERVAL in ms.
+    // interval time must be declered as KRKR_SB_BEAT_INTERVAL in ms.
     // accuracy is so not be required.
 
 private:
@@ -101,7 +101,6 @@ public:
 #include "SoundBufferBaseImpl.h"
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::sound::tTVPSoundStatus;
 using krkr::sound::tTJSNI_BaseSoundBuffer;
 using krkr::sound::tTJSNI_SoundBuffer;
 

@@ -3,11 +3,11 @@
 #include "WaveIntf.h"
 #include <cstring>
 
-class PassThroughWaveFilterBase : public iTVPBasicWaveFilter,
-                                  public tTVPSampleAndLabelSource {
+class PassThroughWaveFilterBase : public krkr::sound::IBasicWaveFilter,
+                                  public krkr::sound::SampleAndLabelSource {
 public:
-    tTVPSampleAndLabelSource *
-    Recreate(tTVPSampleAndLabelSource *source) override {
+    krkr::sound::SampleAndLabelSource *
+    Recreate(krkr::sound::SampleAndLabelSource *source) override {
         source_ = source;
         if(source_) {
             format_ = source_->GetFormat();
@@ -27,7 +27,7 @@ public:
     void Reset() override {}
 
     void Decode(void *dest, tjs_uint samples, tjs_uint &written,
-                tTVPWaveSegmentQueue &segments) override {
+                krkr::sound::WaveSegmentQueue &segments) override {
         if(!source_) {
             written = 0;
             segments.Clear();
@@ -36,7 +36,7 @@ public:
         source_->Decode(dest, samples, written, segments);
     }
 
-    [[nodiscard]] const tTVPWaveFormat &GetFormat() const override {
+    [[nodiscard]] const krkr::sound::WaveFormat &GetFormat() const override {
         return format_;
     }
 
@@ -47,8 +47,8 @@ protected:
     }
 
 private:
-    tTVPSampleAndLabelSource *source_ = nullptr;
-    tTVPWaveFormat format_{};
+    krkr::sound::SampleAndLabelSource *source_ = nullptr;
+    krkr::sound::WaveFormat format_{};
 };
 
 inline void CopyVariantParams(std::vector<tTJSVariant> &dest, tjs_int count,

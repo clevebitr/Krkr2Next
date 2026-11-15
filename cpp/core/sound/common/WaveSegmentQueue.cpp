@@ -17,24 +17,24 @@
 namespace krkr::sound {
 
 //---------------------------------------------------------------------------
-void tTVPWaveSegmentQueue::Clear() {
+void WaveSegmentQueue::Clear() {
     Labels.clear();
     Segments.clear();
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void tTVPWaveSegmentQueue::Enqueue(const tTVPWaveSegmentQueue &queue) {
+void WaveSegmentQueue::Enqueue(const WaveSegmentQueue &queue) {
     Enqueue(queue.Labels); // Labels をエンキュー(こっちを先にしないとだめ)
     Enqueue(queue.Segments); // segments をキュー(こっちは後)
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void tTVPWaveSegmentQueue::Enqueue(const tTVPWaveSegment &segment) {
+void WaveSegmentQueue::Enqueue(const WaveSegment &segment) {
     if(Segments.size() > 0) {
         // 既存のセグメントが 1 個以上ある
-        tTVPWaveSegment &last = Segments.back();
+        WaveSegment &last = Segments.back();
         // 最後のセグメントとこれから追加しようとするセグメントが連続してるか？
         if(last.Start + last.Length == segment.Start &&
            (double)last.FilteredLength / last.Length ==
@@ -55,14 +55,14 @@ void tTVPWaveSegmentQueue::Enqueue(const tTVPWaveSegment &segment) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void tTVPWaveSegmentQueue::Enqueue(const tTVPWaveLabel &Label) {
+void WaveSegmentQueue::Enqueue(const WaveLabel &Label) {
     Labels.push_back(Label);
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void tTVPWaveSegmentQueue::Enqueue(
-    const std::deque<tTVPWaveSegment> &segments) {
+void WaveSegmentQueue::Enqueue(
+    const std::deque<WaveSegment> &segments) {
     // segment の追加
     for(const auto &segment : segments)
         Enqueue(segment);
@@ -70,7 +70,7 @@ void tTVPWaveSegmentQueue::Enqueue(
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void tTVPWaveSegmentQueue::Enqueue(const std::deque<tTVPWaveLabel> &Labels) {
+void WaveSegmentQueue::Enqueue(const std::deque<WaveLabel> &Labels) {
     // オフセットに加算する値を得る
     tjs_int64 Label_offset = GetFilteredLength();
 
@@ -83,7 +83,7 @@ void tTVPWaveSegmentQueue::Enqueue(const std::deque<tTVPWaveLabel> &Labels) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void tTVPWaveSegmentQueue::Dequeue(tTVPWaveSegmentQueue &dest,
+void WaveSegmentQueue::Dequeue(WaveSegmentQueue &dest,
                                    tjs_int64 length) {
     tjs_int64 remain;
     // dest をクリア
@@ -108,7 +108,7 @@ void tTVPWaveSegmentQueue::Dequeue(tTVPWaveSegmentQueue &dest,
                 (double)Segments.front().FilteredLength * remain);
             if(newlength > 0)
                 dest.Enqueue(
-                    tTVPWaveSegment(Segments.front().Start, newlength, remain));
+                    WaveSegment(Segments.front().Start, newlength, remain));
 
             // Segments.front() の Start, Length と FilteredLength
             // を修正
@@ -145,7 +145,7 @@ void tTVPWaveSegmentQueue::Dequeue(tTVPWaveSegmentQueue &dest,
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-tjs_int64 tTVPWaveSegmentQueue::GetFilteredLength() const {
+tjs_int64 WaveSegmentQueue::GetFilteredLength() const {
     // キューの長さは すべての Segments のFilteredLengthの合計
     tjs_int64 length = 0;
     for(const auto &Segment : Segments)
@@ -156,7 +156,7 @@ tjs_int64 tTVPWaveSegmentQueue::GetFilteredLength() const {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void tTVPWaveSegmentQueue::Scale(tjs_int64 new_total_filtered_length) {
+void WaveSegmentQueue::Scale(tjs_int64 new_total_filtered_length) {
     // キューの FilteredLength を変化させる
     tjs_int64 total_length_was = GetFilteredLength(); // 変化前の長さ
 
@@ -186,7 +186,7 @@ void tTVPWaveSegmentQueue::Scale(tjs_int64 new_total_filtered_length) {
     }
 
     // からっぽのSegments の除去
-    for(std::deque<tTVPWaveSegment>::iterator i = Segments.begin();
+    for(std::deque<WaveSegment>::iterator i = Segments.begin();
         i != Segments.end();) {
         if(i->FilteredLength == 0 || i->Length == 0)
             i = Segments.erase(i);
@@ -204,7 +204,7 @@ void tTVPWaveSegmentQueue::Scale(tjs_int64 new_total_filtered_length) {
 
 //---------------------------------------------------------------------------
 tjs_int64
-tTVPWaveSegmentQueue::FilteredPositionToDecodePosition(tjs_int64 pos) const {
+WaveSegmentQueue::FilteredPositionToDecodePosition(tjs_int64 pos) const {
     // Segments の修正
     tjs_int64 offset_filtered = 0;
 

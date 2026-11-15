@@ -62,7 +62,7 @@ static const int ima_step_size[89] = {
 };
 
 //---------------------------------------------------------------------------
-class TCWFDecoder : public tTVPWaveDecoder {
+class TCWFDecoder : public krkr::sound::WaveDecoder {
     TTCWFHeader Header;
     tTJSBinaryStream *InputStream;
     tjs_int64 StreamPos;
@@ -73,7 +73,7 @@ class TCWFDecoder : public tTVPWaveDecoder {
     long BufferRemain;
     BYTE *BlockBuffer;
     short int *Samples;
-    tTVPWaveFormat TSSFormat;
+    krkr::sound::WaveFormat TSSFormat;
 
 public:
     TCWFDecoder();
@@ -81,7 +81,7 @@ public:
 
 public:
     // ITSSWaveDecoder
-    virtual void GetFormat(tTVPWaveFormat &format);
+    virtual void GetFormat(krkr::sound::WaveFormat &format);
     virtual bool Render(void *buf, tjs_uint bufsamplelen, tjs_uint &rendered);
     virtual bool SetPosition(tjs_uint64 samplepos);
 
@@ -89,9 +89,9 @@ public:
     bool ReadBlock(int, int);
 };
 
-class TCWFWaveDecoderCreator : public tTVPWaveDecoderCreator {
+class TCWFWaveDecoderCreator : public krkr::sound::WaveDecoderCreator {
 public:
-    tTVPWaveDecoder *Create(const ttstr &storagename, const ttstr &extension) {
+    krkr::sound::WaveDecoder *Create(const ttstr &storagename, const ttstr &extension) {
         TCWFDecoder *decoder = new TCWFDecoder();
         if(!decoder->Open(storagename)) {
             delete decoder;
@@ -121,7 +121,7 @@ TCWFDecoder::~TCWFDecoder() {
         delete[] Samples;
 }
 //---------------------------------------------------------------------------
-void TCWFDecoder::GetFormat(tTVPWaveFormat &format) { format = TSSFormat; }
+void TCWFDecoder::GetFormat(krkr::sound::WaveFormat &format) { format = TSSFormat; }
 //---------------------------------------------------------------------------
 bool TCWFDecoder::Render(void *buf, tjs_uint bufsamplelen, tjs_uint &rendered) {
     // 展開
@@ -357,6 +357,6 @@ bool TCWFDecoder::ReadBlock(int numchans, int chan) {
 //---------------------------------------------------------------------------
 
 static TCWFWaveDecoderCreator creator;
-static void _init() { TVPRegisterWaveDecoderCreator(&creator); }
+static void _init() { krkr::sound::RegisterWaveDecoderCreator(&creator); }
 
 NCB_PRE_REGIST_CALLBACK(_init);

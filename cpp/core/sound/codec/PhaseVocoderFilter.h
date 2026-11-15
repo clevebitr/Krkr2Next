@@ -23,8 +23,8 @@ class tRisaPhaseVocoderDSP;
 // tTJSNI_PhaseVocoder
 //---------------------------------------------------------------------------
 class tTJSNI_PhaseVocoder : public tTJSNativeInstance,
-                            public iTVPBasicWaveFilter,
-                            public tTVPSampleAndLabelSource {
+                            public IBasicWaveFilter,
+                            public SampleAndLabelSource {
     typedef tTJSNativeInstance inherited;
 
 public:
@@ -61,39 +61,39 @@ public:
     void SetTime(float time) { Time = time; }
 
 private:
-    tTVPSampleAndLabelSource *
-    Recreate(tTVPSampleAndLabelSource *source) override;
+    SampleAndLabelSource *
+    Recreate(SampleAndLabelSource *source) override;
 
-    // from iTVPBasicWaveFilter
-    void Clear() override; // from iTVPBasicWaveFilter
-    void Reset() override; // from iTVPBasicWaveFilter
-    void Update() override; // from iTVPBasicWaveFilter
+    // from IBasicWaveFilter
+    void Clear() override; // from IBasicWaveFilter
+    void Reset() override; // from IBasicWaveFilter
+    void Update() override; // from IBasicWaveFilter
 
 private:
-    tTVPSampleAndLabelSource *Source; // source filter
+    SampleAndLabelSource *Source; // source filter
 
     tRisaPhaseVocoderDSP *PhaseVocoder; // Phase Vocoder DSP instance
     char *FormatConvertBuffer; // buffer for converting PCM formats
                                // internally
     size_t FormatConvertBufferSize;
 
-    tTVPWaveFormat InputFormat;
-    tTVPWaveFormat OutputFormat;
+    WaveFormat InputFormat;
+    WaveFormat OutputFormat;
 
-    tTVPWaveSegmentQueue InputSegments;
-    tTVPWaveSegmentQueue OutputSegments;
+    WaveSegmentQueue InputSegments;
+    WaveSegmentQueue OutputSegments;
 
     void Fill(float *dest, tjs_uint samples, tjs_uint &written,
-              tTVPWaveSegmentQueue &segments);
+              WaveSegmentQueue &segments);
 
     void Decode(void *dest, tjs_uint samples, tjs_uint &written,
-                tTVPWaveSegmentQueue &segments)
-        override; // from tTVPSampleAndLabelSource
+                WaveSegmentQueue &segments)
+        override; // from SampleAndLabelSource
 
-    [[nodiscard]] const tTVPWaveFormat &GetFormat() const override {
+    [[nodiscard]] const WaveFormat &GetFormat() const override {
         return OutputFormat;
     }
-    // from tTVPSampleAndLabelSource
+    // from SampleAndLabelSource
 };
 //---------------------------------------------------------------------------
 

@@ -40,9 +40,9 @@ ttstr TVPDataPath; // data directory (in unified storage name)
 
 extern void TVPGL_C_Init();
 
-// TVPStopAllWaveSoundsForRestart 定义在 sound 模块的全局作用域。块作用域的
+// krkr::sound::StopAllWaveSoundsForRestart 定义在 sound 模块的全局作用域。块作用域的
 // extern 声明在 namespace 内会绑到该 namespace，所以提到文件作用域。
-extern void TVPStopAllWaveSoundsForRestart();
+extern void krkr::sound::StopAllWaveSoundsForRestart();
 
 namespace krkr::base {
 
@@ -191,10 +191,10 @@ void TVPResetRuntimeForRestart() {
     TVPClearScnearioCache();
 
     // tTVPAtExit 一次性、首次已消费 → 重启不再执行
-    // ShutdownWaveSoundBuffers，上一游戏的 BGM/音效由 TVPWaveSoundBufferThread
+    // ShutdownWaveSoundBuffers，上一游戏的 BGM/音效由 krkr::sound::waveSoundBufferThread
     // 继续混音输出、叠进下一游戏。这里显式停掉。 （实现见
-    // cpp/core/sound/impl/WaveImpl.cpp TVPStopAllWaveSoundsForRestart）
-    TVPStopAllWaveSoundsForRestart();
+    // cpp/core/sound/impl/WaveImpl.cpp krkr::sound::StopAllWaveSoundsForRestart）
+    krkr::sound::StopAllWaveSoundsForRestart();
 }
 //---------------------------------------------------------------------------
 

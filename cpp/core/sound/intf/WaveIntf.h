@@ -24,7 +24,7 @@ namespace krkr::sound {
 //---------------------------------------------------------------------------
 // Sound Global Focus Mode
 //---------------------------------------------------------------------------
-enum tTVPSoundGlobalFocusMode {
+enum SoundGlobalFocusMode {
     /*0*/ sgfmNeverMute, // never mutes
     /*1*/ sgfmMuteOnMinimize, // will mute on the application minimize
     /*2*/ sgfmMuteOnDeactivate // will mute on the application
@@ -44,7 +44,7 @@ extern tjs_uint8 TVP_GUID_KSDATAFORMAT_SUBTYPE_IEEE_FLOAT[16];
 //---------------------------------------------------------------------------
 // PCM data format (internal use)
 //---------------------------------------------------------------------------
-struct tTVPWaveFormat {
+struct WaveFormat {
     tjs_uint SamplesPerSec; // sample granule per sec
     tjs_uint Channels;
     tjs_uint BitsPerSample; // per one sample
@@ -61,33 +61,33 @@ struct tTVPWaveFormat {
 //---------------------------------------------------------------------------
 // PCM bit depth converter
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(void, TVPConvertPCMTo16bits,
+TJS_EXP_FUNC_DEF(void, ConvertPCMTo16bits,
                  (tjs_int16 * output, const void *input,
-                  const tTVPWaveFormat &format, tjs_int count, bool downmix));
+                  const WaveFormat &format, tjs_int count, bool downmix));
 
-TJS_EXP_FUNC_DEF(void, TVPConvertPCMTo16bits,
+TJS_EXP_FUNC_DEF(void, ConvertPCMTo16bits,
                  (tjs_int16 * output, const void *input, tjs_int channels,
                   tjs_int bytespersample, tjs_int bitspersample, bool isfloat,
                   tjs_int count, bool downmix));
 
-TJS_EXP_FUNC_DEF(void, TVPConvertPCMToFloat,
+TJS_EXP_FUNC_DEF(void, ConvertPCMToFloat,
                  (float *output, const void *input, tjs_int channels,
                   tjs_int bytespersample, tjs_int bitspersample, bool isfloat,
                   tjs_int count));
 
-TJS_EXP_FUNC_DEF(void, TVPConvertPCMToFloat,
+TJS_EXP_FUNC_DEF(void, ConvertPCMToFloat,
                  (float *output, const void *input,
-                  const tTVPWaveFormat &format, tjs_int count));
+                  const WaveFormat &format, tjs_int count));
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPWaveDecoder interface
+// WaveDecoder interface
 //---------------------------------------------------------------------------
-class tTVPWaveDecoder {
+class WaveDecoder {
 public:
-    virtual ~tTVPWaveDecoder() = default;
+    virtual ~WaveDecoder() = default;
 
-    virtual void GetFormat(tTVPWaveFormat &format) = 0;
+    virtual void GetFormat(WaveFormat &format) = 0;
 
     /* Retrieve PCM format, etc. */
 
@@ -111,41 +111,41 @@ public:
        sample granule. returns whether the seeking is succeeded.
     */
 
-    virtual bool DesiredFormat(const tTVPWaveFormat &format) { return false; }
+    virtual bool DesiredFormat(const WaveFormat &format) { return false; }
 };
 
 //---------------------------------------------------------------------------
-class tTVPWaveDecoderCreator {
+class WaveDecoderCreator {
 public:
-    virtual tTVPWaveDecoder *Create(const ttstr &storagename,
+    virtual WaveDecoder *Create(const ttstr &storagename,
                                     const ttstr &extension) = 0;
     /*
-        Create tTVPWaveDecoder instance. returns nullptr if failed.
+        Create WaveDecoder instance. returns nullptr if failed.
     */
 };
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPWaveDecoder interface management
+// WaveDecoder interface management
 //---------------------------------------------------------------------------
-extern void TVPRegisterWaveDecoderCreator(tTVPWaveDecoderCreator *d);
+extern void RegisterWaveDecoderCreator(WaveDecoderCreator *d);
 
-extern void TVPUnregisterWaveDecoderCreator(tTVPWaveDecoderCreator *d);
+extern void UnregisterWaveDecoderCreator(WaveDecoderCreator *d);
 
-extern tTVPWaveDecoder *TVPCreateWaveDecoder(const ttstr &storagename);
+extern WaveDecoder *CreateWaveDecoder(const ttstr &storagename);
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 // interface for basic filter management
 //---------------------------------------------------------------------------
-class tTVPSampleAndLabelSource;
+class SampleAndLabelSource;
 
-class iTVPBasicWaveFilter {
+class IBasicWaveFilter {
 public:
     // recreate filter. filter will remain owned by the each filter
     // instance.
-    virtual tTVPSampleAndLabelSource *
-    Recreate(tTVPSampleAndLabelSource *source) = 0;
+    virtual SampleAndLabelSource *
+    Recreate(SampleAndLabelSource *source) = 0;
 
     virtual void Clear() = 0;
 
@@ -158,7 +158,7 @@ public:
 //---------------------------------------------------------------------------
 // tTJSNI_BaseWaveSoundBuffer
 //---------------------------------------------------------------------------
-class tTVPWaveLoopManager;
+class WaveLoopManager;
 
 class tTJSNI_BaseWaveSoundBuffer : public tTJSNI_SoundBuffer {
     typedef tTJSNI_SoundBuffer inherited;
@@ -168,9 +168,9 @@ class tTJSNI_BaseWaveSoundBuffer : public tTJSNI_SoundBuffer {
 
     struct tFilterObjectAndInterface {
         tTJSVariant Filter; // filter object
-        iTVPBasicWaveFilter *Interface; // filter interface
+        IBasicWaveFilter *Interface; // filter interface
         tFilterObjectAndInterface(const tTJSVariant &filter,
-                                  iTVPBasicWaveFilter *interf) :
+                                  IBasicWaveFilter *interf) :
             Filter(filter), Interface(interf) {
             ;
         }
@@ -180,8 +180,8 @@ class tTJSNI_BaseWaveSoundBuffer : public tTJSNI_SoundBuffer {
         FilterInterfaces; // backupped filter interface array
 
 protected:
-    tTVPWaveLoopManager *LoopManager; // will be set by tTJSNI_WaveSoundBuffer
-    tTVPSampleAndLabelSource *FilterOutput; // filter output
+    WaveLoopManager *LoopManager; // will be set by tTJSNI_WaveSoundBuffer
+    SampleAndLabelSource *FilterOutput; // filter output
     iTJSDispatch2 *Filters; // wave filters array (TJS2 array object)
 public:
     tTJSNI_BaseWaveSoundBuffer();
@@ -209,7 +209,7 @@ public:
 
     iTJSDispatch2 *GetWaveLabelsObjectNoAddRef();
 
-    [[nodiscard]] tTVPWaveLoopManager *GetWaveLoopManager() const {
+    [[nodiscard]] WaveLoopManager *GetWaveLoopManager() const {
         return LoopManager;
     }
 
@@ -282,30 +282,19 @@ protected:
 };
 
 //---------------------------------------------------------------------------
-iTJSDispatch2 *TVPCreateWaveFlagsObject(iTJSDispatch2 *buffer);
+iTJSDispatch2 *CreateWaveFlagsObject(iTJSDispatch2 *buffer);
 //---------------------------------------------------------------------------
 
 } // namespace krkr::sound
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::sound::tTVPSoundGlobalFocusMode;
 using krkr::sound::TVP_GUID_KSDATAFORMAT_SUBTYPE_PCM;
 using krkr::sound::TVP_GUID_KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
-using krkr::sound::tTVPWaveFormat;
-using krkr::sound::TVPConvertPCMTo16bits;
-using krkr::sound::TVPConvertPCMToFloat;
-using krkr::sound::tTVPWaveDecoder;
-using krkr::sound::tTVPWaveDecoderCreator;
-using krkr::sound::TVPRegisterWaveDecoderCreator;
-using krkr::sound::TVPUnregisterWaveDecoderCreator;
-using krkr::sound::TVPCreateWaveDecoder;
-using krkr::sound::iTVPBasicWaveFilter;
 using krkr::sound::tTJSNI_BaseWaveSoundBuffer;
 using krkr::sound::tTJSNI_WaveSoundBuffer;
 using krkr::sound::tTJSNC_WaveSoundBuffer;
 using krkr::sound::TVPCreateNativeClass_WaveSoundBuffer;
 using krkr::sound::tTJSNI_WaveFlags;
 using krkr::sound::tTJSNC_WaveFlags;
-using krkr::sound::TVPCreateWaveFlagsObject;
 
 #endif

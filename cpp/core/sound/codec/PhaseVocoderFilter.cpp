@@ -45,7 +45,7 @@ TJS_END_NATIVE_CONSTRUCTOR_DECL(/*TJS class name*/ PhaseVocoder)
 TJS_BEGIN_NATIVE_PROP_DECL(interface){ TJS_BEGIN_NATIVE_PROP_GETTER{
     TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
                             /*var. type*/ tTJSNI_PhaseVocoder);
-*result = reinterpret_cast<tjs_int64>((iTVPBasicWaveFilter *)_this);
+*result = reinterpret_cast<tjs_int64>((IBasicWaveFilter *)_this);
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -207,8 +207,8 @@ void tTJSNI_PhaseVocoder::SetOverlap(int overlap) {
 }
 
 //---------------------------------------------------------------------------
-tTVPSampleAndLabelSource *
-tTJSNI_PhaseVocoder::Recreate(tTVPSampleAndLabelSource *source) {
+SampleAndLabelSource *
+tTJSNI_PhaseVocoder::Recreate(SampleAndLabelSource *source) {
     if(Source)
         TVPThrowExceptionMessage(TVPCannotConnectMultipleWaveSoundBufferAtOnce);
 
@@ -263,7 +263,7 @@ void tTJSNI_PhaseVocoder::Update() {
 
 //---------------------------------------------------------------------------
 void tTJSNI_PhaseVocoder::Fill(float *dest, tjs_uint samples, tjs_uint &written,
-                               tTVPWaveSegmentQueue &segments) {
+                               WaveSegmentQueue &segments) {
     if(InputFormat.IsFloat && InputFormat.BitsPerSample == 32 &&
        InputFormat.BytesPerSample == 4) {
         // 入力も32bitフロートなので変換の必要はない
@@ -283,7 +283,7 @@ void tTJSNI_PhaseVocoder::Fill(float *dest, tjs_uint samples, tjs_uint &written,
         // バッファにデコードを行う
         Source->Decode(FormatConvertBuffer, samples, written, segments);
         // 変換を行う
-        TVPConvertPCMToFloat(dest, FormatConvertBuffer, InputFormat, written);
+        ConvertPCMToFloat(dest, FormatConvertBuffer, InputFormat, written);
     }
     if(written < samples) {
         // デコードされたサンプル数が要求されたサンプル数に満たない場合
@@ -296,7 +296,7 @@ void tTJSNI_PhaseVocoder::Fill(float *dest, tjs_uint samples, tjs_uint &written,
 //---------------------------------------------------------------------------
 void tTJSNI_PhaseVocoder::Decode(void *dest, tjs_uint samples,
                                  tjs_uint &written,
-                                 tTVPWaveSegmentQueue &segments) {
+                                 WaveSegmentQueue &segments) {
     if(!PhaseVocoder) {
         // PhaseVocoder を作成
         auto *pv = new tRisaPhaseVocoderDSP(Window, InputFormat.SamplesPerSec,
@@ -309,7 +309,7 @@ void tTJSNI_PhaseVocoder::Decode(void *dest, tjs_uint samples,
 
     size_t inputhopsize = PhaseVocoder->GetInputHopSize();
     size_t outputhopsize = PhaseVocoder->GetOutputHopSize();
-    tTVPWaveSegmentQueue queue;
+    WaveSegmentQueue queue;
 
     auto *dest_buf = (float *)dest;
     written = 0;

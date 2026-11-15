@@ -287,7 +287,7 @@ void TVPMoviePlayer::GetPlayRate(double *rate) {
     *rate = m_pPlayer->GetSpeed();
 }
 
-iTVPSoundBuffer *TVPMoviePlayer::GetSoundDevice() {
+krkr::sound::ISoundBuffer *TVPMoviePlayer::GetSoundDevice() {
     IDVDStreamPlayerAudio *audioplayer = m_pPlayer->GetAudioPlayer();
     if(!audioplayer)
         return nullptr;
@@ -298,27 +298,27 @@ iTVPSoundBuffer *TVPMoviePlayer::GetSoundDevice() {
 }
 
 void TVPMoviePlayer::GetAudioBalance(long *balance) {
-    iTVPSoundBuffer *alsound = GetSoundDevice();
+    krkr::sound::ISoundBuffer *alsound = GetSoundDevice();
     if(alsound) {
         *balance = alsound->GetPan() * 100000;
     }
 }
 
 void TVPMoviePlayer::SetAudioBalance(long balance) {
-    iTVPSoundBuffer *alsound = GetSoundDevice();
+    krkr::sound::ISoundBuffer *alsound = GetSoundDevice();
     if(alsound) {
         alsound->SetPan(balance / 100000.0f);
     }
 }
 
 void TVPMoviePlayer::SetAudioVolume(long volume) {
-    iTVPSoundBuffer *alsound = GetSoundDevice();
+    krkr::sound::ISoundBuffer *alsound = GetSoundDevice();
     if(alsound)
         alsound->SetVolume(volume / 100000.f);
 }
 
 void TVPMoviePlayer::GetAudioVolume(long *volume) {
-    iTVPSoundBuffer *alsound = GetSoundDevice();
+    krkr::sound::ISoundBuffer *alsound = GetSoundDevice();
     if(alsound)
         *volume = alsound->GetVolume() * 100000;
 }

@@ -27,7 +27,7 @@ extern "C" {
 
 namespace krkr::sound {
 
-class FFWaveDecoder : public tTVPWaveDecoder // decoder interface
+class FFWaveDecoder : public WaveDecoder // decoder interface
 {
     bool IsPlanar;
 
@@ -36,7 +36,7 @@ class FFWaveDecoder : public tTVPWaveDecoder // decoder interface
     int audio_buf_samples;
     int64_t audio_frame_next_pts;
     int64_t stream_start_time;
-    tTVPWaveFormat Format; // output PCM format
+    WaveFormat Format; // output PCM format
     AVSampleFormat AVFmt;
     AVPacket pkt_temp;
     AVStream *AudioStream;
@@ -77,7 +77,7 @@ public:
 
 public:
     // ITSSWaveDecoder
-    void GetFormat(tTVPWaveFormat &format) override { format = Format; }
+    void GetFormat(WaveFormat &format) override { format = Format; }
 
     bool Render(void *buf, tjs_uint bufsamplelen, tjs_uint &rendered) override;
 
@@ -102,7 +102,7 @@ static int64_t AVSeekFunc(void *opaque, int64_t offset, int whence) {
     }
 }
 
-tTVPWaveDecoder *FFWaveDecoderCreator::Create(const ttstr &storagename,
+WaveDecoder *FFWaveDecoderCreator::Create(const ttstr &storagename,
                                               const ttstr &extension) {
     TVPInitLibAVCodec();
 

@@ -31,9 +31,8 @@ struct IDirectSound;
 #endif
 
 namespace krkr::sound {
-class iTVPSoundBuffer;
+class ISoundBuffer;
 }
-using krkr::sound::iTVPSoundBuffer;
 
 /*]*/
 
@@ -43,37 +42,37 @@ namespace krkr::sound {
 // Constants
 //---------------------------------------------------------------------------
 
-#define TVP_WSB_ACCESS_FREQ (8) // wave sound buffer access frequency (hz)
+#define KRKR_WSB_ACCESS_FREQ (8) // wave sound buffer access frequency (hz)
 
-#define TVP_TIMEOFS_INVALID_VALUE                                              \
+#define KRKR_TIMEOFS_INVALID_VALUE                                              \
     ((tjs_int)(-2147483648LL)) // invalid value for 32bit time offset
 
 //---------------------------------------------------------------------------
 
-TJS_EXP_FUNC_DEF(void, TVPReleaseDirectSound, ());
+TJS_EXP_FUNC_DEF(void, ReleaseDirectSound, ());
 
-TJS_EXP_FUNC_DEF(IDirectSound *, TVPGetDirectSound, ());
+TJS_EXP_FUNC_DEF(IDirectSound *, GetDirectSound, ());
 
-extern void TVPResetVolumeToAllSoundBuffer();
+extern void ResetVolumeToAllSoundBuffer();
 
-extern void TVPSetWaveSoundBufferUse3DMode(bool b);
+extern void SetWaveSoundBufferUse3DMode(bool b);
 
-extern bool TVPGetWaveSoundBufferUse3DMode();
+extern bool GetWaveSoundBufferUse3DMode();
 
-extern void TVPWaveSoundBufferCommitSettings();
+extern void CommitWaveSoundBufferSettings();
 
 #if 0
-extern tjs_int TVPVolumeToDSAttenuate(tjs_int volume);
-extern tjs_int TVPDSAttenuateToVolume(tjs_int att);
-extern tjs_int TVPPanToDSAttenuate(tjs_int volume);
-extern tjs_int TVPDSAttenuateToPan(tjs_int att);
+extern tjs_int VolumeToDSAttenuate(tjs_int volume);
+extern tjs_int DSAttenuateToVolume(tjs_int att);
+extern tjs_int PanToDSAttenuate(tjs_int volume);
+extern tjs_int DSAttenuateToPan(tjs_int att);
 #endif
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 // tTJSNI_WaveSoundBuffer : Wave Native Instance
 //---------------------------------------------------------------------------
-class tTVPWaveSoundBufferDecodeThread;
+class WaveSoundBufferDecodeThread;
 
 class tTJSNI_WaveSoundBuffer : public tTJSNI_BaseWaveSoundBuffer {
     typedef tTJSNI_BaseWaveSoundBuffer inherited;
@@ -89,7 +88,7 @@ public:
     //-- buffer management
     //------------------------------------------------
 private:
-    iTVPSoundBuffer *SoundBuffer;
+    ISoundBuffer *SoundBuffer;
 #if 0
     LPDIRECTSOUND3DBUFFER Sound3DBuffer;
 #endif
@@ -109,8 +108,8 @@ private:
 #if 0
     WAVEFORMATEXTENSIBLE Format;
 #endif
-    tTVPWaveFormat C_InputFormat;
-    tTVPWaveFormat InputFormat;
+    WaveFormat C_InputFormat;
+    WaveFormat InputFormat;
 
     tjs_int BufferBytes;
     tjs_int AccessUnitBytes;
@@ -145,8 +144,8 @@ public:
     tTJSCriticalSection &GetBufferCS() { return BufferCS; }
 
 private:
-    tTVPWaveDecoder *Decoder;
-    tTVPWaveSoundBufferDecodeThread *Thread;
+    WaveDecoder *Decoder;
+    WaveSoundBufferDecodeThread *Thread;
 
 public:
     bool ThreadCallbackEnabled;
@@ -169,10 +168,10 @@ private:
     bool L2BufferEnded;
     tjs_uint8 *VisBuffer; // buffer for visualization
     tjs_int *L2BufferDecodedSamplesInUnit;
-    tTVPWaveSegmentQueue *L1BufferSegmentQueues;
-    std::vector<tTVPWaveLabel> LabelEventQueue;
+    WaveSegmentQueue *L1BufferSegmentQueues;
+    std::vector<WaveLabel> LabelEventQueue;
     tjs_int64 *L1BufferDecodeSamplePos;
-    tTVPWaveSegmentQueue *L2BufferSegmentQueues;
+    WaveSegmentQueue *L2BufferSegmentQueues;
 
     tjs_int64 DecodePos; // decoded samples from directsound buffer play
     tjs_int64 LastCheckedDecodePos; // last sured position (-1 for not
@@ -184,7 +183,7 @@ private:
     void Clear();
 
     tjs_uint Decode(void *buffer, tjs_uint bufsamplelen,
-                    tTVPWaveSegmentQueue &segments);
+                    WaveSegmentQueue &segments);
 
 public:
     bool FillL2Buffer(bool firstwrite, bool fromdecodethread);
@@ -192,9 +191,9 @@ public:
 private:
     void PrepareToReadL2Buffer(bool firstread);
 
-    tjs_uint ReadL2Buffer(void *buffer, tTVPWaveSegmentQueue &segments);
+    tjs_uint ReadL2Buffer(void *buffer, WaveSegmentQueue &segments);
 
-    void FillDSBuffer(tjs_int writepos, tTVPWaveSegmentQueue &segments);
+    void FillDSBuffer(tjs_int writepos, WaveSegmentQueue &segments);
 
 public:
     bool FillBuffer(bool firstwrite = false, bool allowpause = true);
@@ -265,7 +264,7 @@ private:
     tjs_int Volume2;
     tjs_int Frequency;
     static tjs_int GlobalVolume;
-    static tTVPSoundGlobalFocusMode GlobalFocusMode;
+    static SoundGlobalFocusMode GlobalFocusMode;
 
     bool BufferCanControlPan;
     bool BufferCanControlFrequency;
@@ -292,9 +291,9 @@ public:
 
     static tjs_int GetGlobalVolume() { return GlobalVolume; }
 
-    static void SetGlobalFocusMode(tTVPSoundGlobalFocusMode b);
+    static void SetGlobalFocusMode(SoundGlobalFocusMode b);
 
-    static tTVPSoundGlobalFocusMode GetGlobalFocusMode() {
+    static SoundGlobalFocusMode GetGlobalFocusMode() {
         return GlobalFocusMode;
     }
 
@@ -347,12 +346,6 @@ public:
 } // namespace krkr::sound
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::sound::TVPReleaseDirectSound;
-using krkr::sound::TVPGetDirectSound;
-using krkr::sound::TVPResetVolumeToAllSoundBuffer;
-using krkr::sound::TVPSetWaveSoundBufferUse3DMode;
-using krkr::sound::TVPGetWaveSoundBufferUse3DMode;
-using krkr::sound::TVPWaveSoundBufferCommitSettings;
 using krkr::sound::tTJSNI_WaveSoundBuffer;
 
 #endif

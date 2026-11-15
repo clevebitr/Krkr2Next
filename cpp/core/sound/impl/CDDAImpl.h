@@ -17,13 +17,13 @@
 namespace krkr::sound {
 
 //---------------------------------------------------------------------------
-// tTVPCDDAVolumeControlType
+// CDDAVolumeControlType
 //---------------------------------------------------------------------------
-enum tTVPCDDAVolumeControlType {
+enum CDDAVolumeControlType {
     cvctMixer, // use sound card's mixer
     cvctDirect // direct control for CD-ROM drive
 };
-extern tTVPCDDAVolumeControlType TVPCDDAVolumeControlType;
+extern CDDAVolumeControlType cddaVolumeControlType;
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -110,8 +110,6 @@ protected:
 } // namespace krkr::sound
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::sound::tTVPCDDAVolumeControlType;
-using krkr::sound::TVPCDDAVolumeControlType;
 using krkr::sound::CD_AUDIO_VOLUME_DATA;
 using krkr::sound::tTJSNI_CDDASoundBuffer;
 

@@ -945,11 +945,11 @@ tjs_int tTJSNI_VideoOverlay::GetAudioBalance() {
     if(VideoOverlay) {
         VideoOverlay->GetAudioBalance(&result);
     }
-    return /*TVPDSAttenuateToPan*/ (result);
+    return /*krkr::sound::DSAttenuateToPan*/ (result);
 }
 void tTJSNI_VideoOverlay::SetAudioBalance(tjs_int b) {
     if(VideoOverlay) {
-        VideoOverlay->SetAudioBalance(/*TVPPanToDSAttenuate*/ (b));
+        VideoOverlay->SetAudioBalance(/*krkr::sound::PanToDSAttenuate*/ (b));
     }
 }
 tjs_int tTJSNI_VideoOverlay::GetAudioVolume() {
@@ -957,11 +957,11 @@ tjs_int tTJSNI_VideoOverlay::GetAudioVolume() {
     if(VideoOverlay) {
         VideoOverlay->GetAudioVolume(&result);
     }
-    return /*TVPDSAttenuateToVolume*/ (result);
+    return /*krkr::sound::DSAttenuateToVolume*/ (result);
 }
 void tTJSNI_VideoOverlay::SetAudioVolume(tjs_int b) {
     if(VideoOverlay) {
-        VideoOverlay->SetAudioVolume(/*TVPVolumeToDSAttenuate*/ (b));
+        VideoOverlay->SetAudioVolume(/*krkr::sound::VolumeToDSAttenuate*/ (b));
     }
 }
 tjs_uint tTJSNI_VideoOverlay::GetNumberOfAudioStream() {

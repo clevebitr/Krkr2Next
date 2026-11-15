@@ -76,7 +76,7 @@ ttstr tTJSNI_BaseSoundBuffer::GetStatusString() const {
 }
 
 //---------------------------------------------------------------------------
-void tTJSNI_BaseSoundBuffer::SetStatus(tTVPSoundStatus s) {
+void tTJSNI_BaseSoundBuffer::SetStatus(SoundStatus s) {
     if(Status != s) {
         Status = s;
 
@@ -97,7 +97,7 @@ void tTJSNI_BaseSoundBuffer::SetStatus(tTVPSoundStatus s) {
 }
 
 //---------------------------------------------------------------------------
-void tTJSNI_BaseSoundBuffer::SetStatusAsync(tTVPSoundStatus s) {
+void tTJSNI_BaseSoundBuffer::SetStatusAsync(SoundStatus s) {
     // asynchronous version of SetStatus
     // the event may not be delivered immediately.
 
@@ -127,7 +127,7 @@ void tTJSNI_BaseSoundBuffer::TimerBeatHandler() {
         return;
 
     if(BlankLeft) {
-        BlankLeft -= TVP_SB_BEAT_INTERVAL;
+        BlankLeft -= KRKR_SB_BEAT_INTERVAL;
         if(BlankLeft < 0)
             BlankLeft = 0;
     } else if(FadeCount) {
@@ -163,9 +163,9 @@ void tTJSNI_BaseSoundBuffer::Fade(tjs_int to, tjs_int time, tjs_int blanktime) {
         StopFade(false, false);
 
     // set some parameters
-    DeltaVolume = (to - GetVolume()) * TVP_SB_BEAT_INTERVAL / time;
+    DeltaVolume = (to - GetVolume()) * KRKR_SB_BEAT_INTERVAL / time;
     TargetVolume = to;
-    FadeCount = time / TVP_SB_BEAT_INTERVAL;
+    FadeCount = time / KRKR_SB_BEAT_INTERVAL;
     BlankLeft = blanktime;
     InFading = true;
     if(FadeCount == 0 && BlankLeft == 0)

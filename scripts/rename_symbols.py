@@ -403,9 +403,13 @@ def run_draft(module: str, out_path: Path, roots: list[str]) -> int:
     exceptions_prefix = [str((REPO_ROOT / p).resolve()) for p in DRAFT_EXCEPTION_FILES
                          if not p.endswith((".h", ".hpp", ".c", ".inc", ".cpp"))]
 
-    msg_path = REPO_ROOT / "cpp/core/base/core/MsgIntfInc.h"
-    messages = set(MSG_DEFINE_RE.findall(msg_path.read_text(encoding="utf-8", errors="replace"))) \
-        if msg_path.is_file() else set()
+    # 消息符号：两个生成文件都要读（理由见 check_naming.py 的同名函数）
+    messages: set[str] = set()
+    for msg_rel in ("cpp/core/base/core/MsgIntfInc.h", "cpp/core/base/core/MsgImpl.h"):
+        msg_path = REPO_ROOT / msg_rel
+        if msg_path.is_file():
+            messages |= set(MSG_DEFINE_RE.findall(
+                msg_path.read_text(encoding="utf-8", errors="replace")))
 
     # 1) 只收"在本模块里有定义"的符号：定义行判定放宽到 class/struct/typedef/宏/函数
     candidates: dict[str, str] = {}

@@ -23,27 +23,27 @@
 #include "WaveReader.h"
 #endif
 
-#define TVP_WL_MAX_FLAGS 16
+#define KRKR_WL_MAX_FLAGS 16
 
-#define TVP_WL_MAX_FLAG_VALUE 9999
+#define KRKR_WL_MAX_FLAG_VALUE 9999
 
-#define TVP_WL_SMOOTH_TIME 50
-#define TVP_WL_SMOOTH_TIME_HALF (TVP_WL_SMOOTH_TIME / 2)
+#define KRKR_WL_SMOOTH_TIME 50
+#define KRKR_WL_SMOOTH_TIME_HALF (KRKR_WL_SMOOTH_TIME / 2)
 
-#define TVP_WL_MAX_ID_LEN 16
+#define KRKR_WL_MAX_ID_LEN 16
 
 namespace krkr::sound {
 
-class tTVPWaveDecoder;
-struct tTVPWaveFormat;
+class WaveDecoder;
+struct WaveFormat;
 
 //---------------------------------------------------------------------------
 #ifdef TVP_IN_LOOP_TUNER
-typedef AnsiString tTVPLabelStringType;
-typedef char tTVPLabelCharType;
+typedef AnsiString LabelStringType;
+typedef char LabelCharType;
 #else
-typedef ttstr tTVPLabelStringType;
-typedef tjs_char tTVPLabelCharType;
+typedef ttstr LabelStringType;
+typedef tjs_char LabelCharType;
 #endif
 //---------------------------------------------------------------------------
 
@@ -83,9 +83,9 @@ public:
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPWaveLoopLink : link structure
+// WaveLoopLink : link structure
 //---------------------------------------------------------------------------
-enum tTVPWaveLoopLinkCondition {
+enum WaveLoopLinkCondition {
     llcNone,
     llcEqual,
     llcNotEqual,
@@ -96,11 +96,11 @@ enum tTVPWaveLoopLinkCondition {
 };
 
 //---------------------------------------------------------------------------
-struct tTVPWaveLoopLink {
+struct WaveLoopLink {
     tjs_int64 From; // 'From' in sample position
     tjs_int64 To; // 'To' in sample position
     bool Smooth; // Smooth transition (uses short 50ms crossfade)
-    tTVPWaveLoopLinkCondition Condition; // Condition
+    WaveLoopLinkCondition Condition; // Condition
     tjs_int RefValue;
     tjs_int CondVar; // Condition variable index
 #ifdef TVP_IN_LOOP_TUNER
@@ -111,8 +111,8 @@ struct tTVPWaveLoopLink {
     tjs_int Index; // link index
 
     struct tSortByDistanceFuncObj {
-        bool operator()(const tTVPWaveLoopLink &lhs,
-                        const tTVPWaveLoopLink &rhs) const {
+        bool operator()(const WaveLoopLink &lhs,
+                        const WaveLoopLink &rhs) const {
             tjs_int64 lhs_dist = lhs.From - lhs.To;
             if(lhs_dist < 0)
                 lhs_dist = -lhs_dist;
@@ -124,14 +124,14 @@ struct tTVPWaveLoopLink {
     };
 
     struct tSortByIndexFuncObj {
-        bool operator()(const tTVPWaveLoopLink &lhs,
-                        const tTVPWaveLoopLink &rhs) const {
+        bool operator()(const WaveLoopLink &lhs,
+                        const WaveLoopLink &rhs) const {
             return lhs.Index < rhs.Index;
         }
     };
 #endif
 
-    tTVPWaveLoopLink() {
+    WaveLoopLink() {
         From = To = 0;
         Smooth = false;
         Condition = llcNone;
@@ -145,8 +145,8 @@ struct tTVPWaveLoopLink {
 };
 
 //---------------------------------------------------------------------------
-bool inline operator<(const tTVPWaveLoopLink &lhs,
-                      const tTVPWaveLoopLink &rhs) {
+bool inline operator<(const WaveLoopLink &lhs,
+                      const WaveLoopLink &rhs) {
     if(lhs.From < rhs.From)
         return true;
     if(lhs.From == rhs.From) {
@@ -161,39 +161,39 @@ bool inline operator<(const tTVPWaveLoopLink &lhs,
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPSampleAndLabelSource : source interface for sound sample and
+// SampleAndLabelSource : source interface for sound sample and
 // its label info
 //---------------------------------------------------------------------------
-class tTVPSampleAndLabelSource {
+class SampleAndLabelSource {
 public:
     virtual void Decode(void *dest, tjs_uint samples, tjs_uint &written,
-                        tTVPWaveSegmentQueue &segments) = 0;
+                        WaveSegmentQueue &segments) = 0;
 
-    [[nodiscard]] virtual const tTVPWaveFormat &GetFormat() const = 0;
+    [[nodiscard]] virtual const WaveFormat &GetFormat() const = 0;
 
-    virtual ~tTVPSampleAndLabelSource() = default;
+    virtual ~SampleAndLabelSource() = default;
 
-    virtual bool DesiredFormat(const tTVPWaveFormat &format) { return false; }
+    virtual bool DesiredFormat(const WaveFormat &format) { return false; }
 };
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPWaveLoopManager : wave loop manager
+// WaveLoopManager : wave loop manager
 //---------------------------------------------------------------------------
-class tTVPWaveLoopManager : public tTVPSampleAndLabelSource {
+class WaveLoopManager : public SampleAndLabelSource {
     tTJSCriticalSection FlagsCS; // CS to protect flags/links/labels
-    int Flags[TVP_WL_MAX_FLAGS];
+    int Flags[KRKR_WL_MAX_FLAGS];
     bool FlagsModifiedByLabelExpression; // true if the flags are
                                          // modified by
                                          // EvalLabelExpression
-    std::vector<tTVPWaveLoopLink> Links;
-    std::vector<tTVPWaveLabel> Labels;
+    std::vector<WaveLoopLink> Links;
+    std::vector<WaveLabel> Labels;
     tTJSCriticalSection DataCS; // CS to protect other members
-    tTVPWaveFormat *Format;
-    tTVPWaveDecoder *Decoder;
+    WaveFormat *Format;
+    WaveDecoder *Decoder;
 
     tjs_int ShortCrossFadeHalfSamples;
-    // TVP_WL_SMOOTH_TIME_HALF in sample unit
+    // KRKR_WL_SMOOTH_TIME_HALF in sample unit
 
     bool Looping;
 
@@ -209,11 +209,11 @@ class tTVPWaveLoopManager : public tTVPSampleAndLabelSource {
     bool IgnoreLinks; // decode the samples with ignoring links
 
 public:
-    tTVPWaveLoopManager();
+    WaveLoopManager();
 
-    ~tTVPWaveLoopManager() override;
+    ~WaveLoopManager() override;
 
-    void SetDecoder(tTVPWaveDecoder *decoder);
+    void SetDecoder(WaveDecoder *decoder);
 
     int GetFlag(tjs_int index);
 
@@ -227,13 +227,13 @@ public:
 
     void ClearLinksAndLabels();
 
-    [[nodiscard]] const std::vector<tTVPWaveLoopLink> &GetLinks() const;
+    [[nodiscard]] const std::vector<WaveLoopLink> &GetLinks() const;
 
-    [[nodiscard]] const std::vector<tTVPWaveLabel> &GetLabels() const;
+    [[nodiscard]] const std::vector<WaveLabel> &GetLabels() const;
 
-    void SetLinks(const std::vector<tTVPWaveLoopLink> &links);
+    void SetLinks(const std::vector<WaveLoopLink> &links);
 
-    void SetLabels(const std::vector<tTVPWaveLabel> &labels);
+    void SetLabels(const std::vector<WaveLabel> &labels);
 
     [[nodiscard]] bool GetIgnoreLinks() const;
 
@@ -248,22 +248,22 @@ public:
     void SetLooping(bool b) { Looping = b; }
 
     void Decode(void *dest, tjs_uint samples, tjs_uint &written,
-                tTVPWaveSegmentQueue &segments)
-        override; // from tTVPSampleAndLabelSource
+                WaveSegmentQueue &segments)
+        override; // from SampleAndLabelSource
 
-    [[nodiscard]] const tTVPWaveFormat &GetFormat() const override {
+    [[nodiscard]] const WaveFormat &GetFormat() const override {
         return *Format;
     }
 
-    // from tTVPSampleAndLabelSource
-    bool DesiredFormat(const tTVPWaveFormat &format) override;
+    // from SampleAndLabelSource
+    bool DesiredFormat(const WaveFormat &format) override;
 
 private:
-    bool GetNearestEvent(tjs_int64 current, tTVPWaveLoopLink &link,
+    bool GetNearestEvent(tjs_int64 current, WaveLoopLink &link,
                          bool ignore_conditions);
 
     void GetLabelAt(tjs_int64 from, tjs_int64 to,
-                    std::deque<tTVPWaveLabel> &labels);
+                    std::deque<WaveLabel> &labels);
 
     void DoCrossFade(void *dest, void *src1, void *src2, tjs_int samples,
                      tjs_int ratiostart, tjs_int ratioend);
@@ -287,18 +287,18 @@ private:
     };
 
 public:
-    static bool GetLabelExpression(const tTVPLabelStringType &label,
+    static bool GetLabelExpression(const LabelStringType &label,
                                    tExpressionToken *ope = nullptr,
                                    tjs_int *lv = nullptr, tjs_int *rv = nullptr,
                                    bool *is_rv_indirect = nullptr);
 
 private:
-    bool EvalLabelExpression(const tTVPLabelStringType &label);
+    bool EvalLabelExpression(const LabelStringType &label);
 
-    static tExpressionToken GetExpressionToken(const tTVPLabelCharType *&p,
+    static tExpressionToken GetExpressionToken(const LabelCharType *&p,
                                                tjs_int *value);
 
-    static bool GetLabelCharInt(const tTVPLabelCharType *s, tjs_int &v);
+    static bool GetLabelCharInt(const LabelCharType *s, tjs_int &v);
 
     //--- loop information input/output stuff
 private:
@@ -308,15 +308,15 @@ private:
 
     static bool GetBool(char *s, bool &v);
 
-    static bool GetCondition(char *s, tTVPWaveLoopLinkCondition &v);
+    static bool GetCondition(char *s, WaveLoopLinkCondition &v);
 
-    static bool GetString(char *s, tTVPLabelStringType &v);
+    static bool GetString(char *s, LabelStringType &v);
 
     static bool GetEntityToken(char *&p, char **name, char **value);
 
-    static bool ReadLinkInformation(char *&p, tTVPWaveLoopLink &link);
+    static bool ReadLinkInformation(char *&p, WaveLoopLink &link);
 
-    static bool ReadLabelInformation(char *&p, tTVPWaveLabel &label);
+    static bool ReadLabelInformation(char *&p, WaveLabel &label);
 
 public:
     bool ReadInformation(char *p);
@@ -327,8 +327,8 @@ private:
     static void PutInt(AnsiString &s, tjs_int v);
     static void PutInt64(AnsiString &s, tjs_int64 v);
     static void PutBool(AnsiString &s, bool v);
-    static void PutCondition(AnsiString &s, tTVPWaveLoopLinkCondition v);
-    static void PutString(AnsiString &s, tTVPLabelStringType v);
+    static void PutCondition(AnsiString &s, WaveLoopLinkCondition v);
+    static void PutString(AnsiString &s, LabelStringType v);
     static void DoSpacing(AnsiString &l, int col);
 
 public:
@@ -341,11 +341,5 @@ public:
 
 } // namespace krkr::sound
 
-using krkr::sound::tTVPLabelStringType;
-using krkr::sound::tTVPLabelCharType;
-using krkr::sound::tTVPWaveLoopLinkCondition;
-using krkr::sound::tTVPWaveLoopLink;
-using krkr::sound::tTVPSampleAndLabelSource;
-using krkr::sound::tTVPWaveLoopManager;
 
 #endif

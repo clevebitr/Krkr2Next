@@ -95,7 +95,7 @@ extern void PCMConvertLoopFloat32ToInt16_sse(void * __restrict dest, const void 
 //---------------------------------------------------------------------------
 // Wave format convertion routines
 //---------------------------------------------------------------------------
-static void TVPConvertFloatPCMTo16bits(tjs_int16 *output, const float *input,
+static void ConvertFloatPCMTo16bits(tjs_int16 *output, const float *input,
                                        tjs_int channels, tjs_int count,
                                        bool downmix) {
     // convert 32bit float to 16bit integer
@@ -141,7 +141,7 @@ static void TVPConvertFloatPCMTo16bits(tjs_int16 *output, const float *input,
 }
 
 //---------------------------------------------------------------------------
-static void TVPConvertIntegerPCMTo16bits(tjs_int16 *output, const void *input,
+static void ConvertIntegerPCMTo16bits(tjs_int16 *output, const void *input,
                                          tjs_int bytespersample,
                                          tjs_int validbits, tjs_int channels,
                                          tjs_int count, bool downmix) {
@@ -269,32 +269,32 @@ static void TVPConvertIntegerPCMTo16bits(tjs_int16 *output, const void *input,
 }
 
 //---------------------------------------------------------------------------
-void TVPConvertPCMTo16bits(tjs_int16 *output, const void *input,
+void ConvertPCMTo16bits(tjs_int16 *output, const void *input,
                            tjs_int channels, tjs_int bytespersample,
                            tjs_int bitspersample, bool isfloat, tjs_int count,
                            bool downmix) {
     // cconvert specified format to 16bit PCM
 
     if(isfloat)
-        TVPConvertFloatPCMTo16bits(output, (const float *)input, channels,
+        ConvertFloatPCMTo16bits(output, (const float *)input, channels,
                                    count, downmix);
     else
-        TVPConvertIntegerPCMTo16bits(output, input, bytespersample,
+        ConvertIntegerPCMTo16bits(output, input, bytespersample,
                                      bitspersample, channels, count, downmix);
 }
 
 //---------------------------------------------------------------------------
-void TVPConvertPCMTo16bits(tjs_int16 *output, const void *input,
-                           const tTVPWaveFormat &format, tjs_int count,
+void ConvertPCMTo16bits(tjs_int16 *output, const void *input,
+                           const WaveFormat &format, tjs_int count,
                            bool downmix) {
     // cconvert specified format to 16bit PCM
-    TVPConvertPCMTo16bits(output, input, format.Channels, format.BytesPerSample,
+    ConvertPCMTo16bits(output, input, format.Channels, format.BytesPerSample,
                           format.BitsPerSample, format.IsFloat, count, downmix);
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-static void TVPConvertFloatPCMToFloat(float *output, const float *input,
+static void ConvertFloatPCMToFloat(float *output, const float *input,
                                       tjs_int channels, tjs_int count) {
     // convert 32bit float to float
 
@@ -303,7 +303,7 @@ static void TVPConvertFloatPCMToFloat(float *output, const float *input,
 }
 
 //---------------------------------------------------------------------------
-static void TVPConvertIntegerPCMToFloat(float *output, const void *input,
+static void ConvertIntegerPCMToFloat(float *output, const void *input,
                                         tjs_int bytespersample,
                                         tjs_int validbits, tjs_int channels,
                                         tjs_int count) {
@@ -373,45 +373,45 @@ static void TVPConvertIntegerPCMToFloat(float *output, const void *input,
 }
 
 //---------------------------------------------------------------------------
-void TVPConvertPCMToFloat(float *output, const void *input, tjs_int channels,
+void ConvertPCMToFloat(float *output, const void *input, tjs_int channels,
                           tjs_int bytespersample, tjs_int bitspersample,
                           bool isfloat, tjs_int count) {
     // cconvert specified format to 16bit PCM
 
     if(isfloat)
-        TVPConvertFloatPCMToFloat(output, (const float *)input, channels,
+        ConvertFloatPCMToFloat(output, (const float *)input, channels,
                                   count);
     else
-        TVPConvertIntegerPCMToFloat(output, input, bytespersample,
+        ConvertIntegerPCMToFloat(output, input, bytespersample,
                                     bitspersample, channels, count);
 }
 
 //---------------------------------------------------------------------------
-void TVPConvertPCMToFloat(float *output, const void *input,
-                          const tTVPWaveFormat &format, tjs_int count) {
+void ConvertPCMToFloat(float *output, const void *input,
+                          const WaveFormat &format, tjs_int count) {
     // cconvert specified format to 16bit PCM
-    TVPConvertPCMToFloat(output, input, format.Channels, format.BytesPerSample,
+    ConvertPCMToFloat(output, input, format.Channels, format.BytesPerSample,
                          format.BitsPerSample, format.IsFloat, count);
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPWD_RIFFWave
+// WD_RIFFWave
 //---------------------------------------------------------------------------
-class tTVPWD_RIFFWave : public tTVPWaveDecoder {
+class WD_RIFFWave : public WaveDecoder {
     tTJSBinaryStream *Stream;
-    tTVPWaveFormat Format;
+    WaveFormat Format;
     tjs_uint64 DataStart;
     tjs_uint64 CurrentPos;
     tjs_uint SampleSize;
 
 public:
-    tTVPWD_RIFFWave(tTJSBinaryStream *stream, tjs_uint64 datastart,
-                    const tTVPWaveFormat &format);
+    WD_RIFFWave(tTJSBinaryStream *stream, tjs_uint64 datastart,
+                    const WaveFormat &format);
 
-    ~tTVPWD_RIFFWave() override;
+    ~WD_RIFFWave() override;
 
-    void GetFormat(tTVPWaveFormat &format) override;
+    void GetFormat(WaveFormat &format) override;
 
     bool Render(void *buf, tjs_uint bufsamplelen, tjs_uint &rendered) override;
 
@@ -419,8 +419,8 @@ public:
 };
 
 //---------------------------------------------------------------------------
-tTVPWD_RIFFWave::tTVPWD_RIFFWave(tTJSBinaryStream *stream, tjs_uint64 datastart,
-                                 const tTVPWaveFormat &format) {
+WD_RIFFWave::WD_RIFFWave(tTJSBinaryStream *stream, tjs_uint64 datastart,
+                                 const WaveFormat &format) {
     Stream = stream;
     DataStart = datastart;
     Format = format;
@@ -430,13 +430,13 @@ tTVPWD_RIFFWave::tTVPWD_RIFFWave(tTJSBinaryStream *stream, tjs_uint64 datastart,
 }
 
 //---------------------------------------------------------------------------
-tTVPWD_RIFFWave::~tTVPWD_RIFFWave() { delete Stream; }
+WD_RIFFWave::~WD_RIFFWave() { delete Stream; }
 
 //---------------------------------------------------------------------------
-void tTVPWD_RIFFWave::GetFormat(tTVPWaveFormat &format) { format = Format; }
+void WD_RIFFWave::GetFormat(WaveFormat &format) { format = Format; }
 
 //---------------------------------------------------------------------------
-bool tTVPWD_RIFFWave::Render(void *buf, tjs_uint bufsamplelen,
+bool WD_RIFFWave::Render(void *buf, tjs_uint bufsamplelen,
                              tjs_uint &rendered) {
     tjs_uint64 remain = Format.TotalSamples - CurrentPos;
     tjs_uint writesamples =
@@ -489,7 +489,7 @@ bool tTVPWD_RIFFWave::Render(void *buf, tjs_uint bufsamplelen,
 }
 
 //---------------------------------------------------------------------------
-bool tTVPWD_RIFFWave::SetPosition(tjs_uint64 samplepos) {
+bool WD_RIFFWave::SetPosition(tjs_uint64 samplepos) {
     if(Format.TotalSamples <= samplepos)
         return false;
 
@@ -510,14 +510,14 @@ bool tTVPWD_RIFFWave::SetPosition(tjs_uint64 samplepos) {
 //---------------------------------------------------------------------------
 // default RIFF Wave Decoder creator
 //---------------------------------------------------------------------------
-class tTVPWDC_RIFFWave : public tTVPWaveDecoderCreator {
+class WDC_RIFFWave : public WaveDecoderCreator {
 public:
-    tTVPWaveDecoder *Create(const ttstr &storagename,
+    WaveDecoder *Create(const ttstr &storagename,
                             const ttstr &extension) override;
 };
 
 //---------------------------------------------------------------------------
-static bool TVPFindRIFFChunk(tTVPStreamHolder &stream, const tjs_uint8 *chunk) {
+static bool FindRIFFChunk(tTVPStreamHolder &stream, const tjs_uint8 *chunk) {
     tjs_uint8 buf[4];
     while(true) {
         if(4 != stream->Read(buf, 4))
@@ -535,7 +535,7 @@ static bool TVPFindRIFFChunk(tTVPStreamHolder &stream, const tjs_uint8 *chunk) {
 }
 
 //---------------------------------------------------------------------------
-tTVPWaveDecoder *tTVPWDC_RIFFWave::Create(const ttstr &storagename,
+WaveDecoder *WDC_RIFFWave::Create(const ttstr &storagename,
                                           const ttstr &extension) {
     if(extension != TJS_W(".wav"))
         return nullptr;
@@ -576,14 +576,14 @@ tTVPWaveDecoder *tTVPWDC_RIFFWave::Create(const ttstr &storagename,
             return nullptr;
 
         // find fmt chunk
-        if(!TVPFindRIFFChunk(stream, fmt_mark))
+        if(!FindRIFFChunk(stream, fmt_mark))
             return nullptr;
 
         size = stream->ReadI32LE();
         next = stream->GetPosition() + size;
 
         // read format
-        tTVPWaveFormat format;
+        WaveFormat format;
         //		bool do_reorder_5poiont1ch = false;
         // whether to reorder 5.1ch channel samples
         // (AC3 order to WAVEFORMATEXTENSIBLE order)
@@ -672,7 +672,7 @@ tTVPWaveDecoder *tTVPWDC_RIFFWave::Create(const ttstr &storagename,
             return nullptr;
 
         // find data chunk
-        if(!TVPFindRIFFChunk(stream, data_mark))
+        if(!FindRIFFChunk(stream, data_mark))
             return nullptr;
 
         size = stream->ReadI32LE();
@@ -690,10 +690,10 @@ tTVPWaveDecoder *tTVPWDC_RIFFWave::Create(const ttstr &storagename,
             size / (format.Channels * format.BitsPerSample / 8);
         format.TotalTime = format.TotalSamples * 1000 / format.SamplesPerSec;
 
-        // create tTVPWD_RIFFWave instance
+        // create WD_RIFFWave instance
         format.Seekable = true;
-        tTVPWD_RIFFWave *decoder =
-            new tTVPWD_RIFFWave(stream.Get(), datastart, format);
+        WD_RIFFWave *decoder =
+            new WD_RIFFWave(stream.Get(), datastart, format);
         stream.Disown();
 
         return decoder;
@@ -706,61 +706,61 @@ tTVPWaveDecoder *tTVPWDC_RIFFWave::Create(const ttstr &storagename,
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPWaveDecoder interface management
+// WaveDecoder interface management
 //---------------------------------------------------------------------------
-bool TVPWaveDecoderManagerAvail = false;
+bool waveDecoderManagerAvail = false;
 
-struct tTVPWaveDecoderManager {
-    std::vector<tTVPWaveDecoderCreator *> Creators;
-    tTVPWDC_RIFFWave RIFFWaveDecoderCreator;
+struct WaveDecoderManager {
+    std::vector<WaveDecoderCreator *> Creators;
+    WDC_RIFFWave RIFFWaveDecoderCreator;
     VorbisWaveDecoderCreator vorbisWaveDecoderCreator;
     FFWaveDecoderCreator ffWaveDecoderCreator;
     OpusWaveDecoderCreator opusWaveDecoderCreator;
 
-    tTVPWaveDecoderManager() {
-        TVPWaveDecoderManagerAvail = true;
-        TVPRegisterWaveDecoderCreator(&ffWaveDecoderCreator);
-        TVPRegisterWaveDecoderCreator(&opusWaveDecoderCreator);
-        TVPRegisterWaveDecoderCreator(&RIFFWaveDecoderCreator);
-        TVPRegisterWaveDecoderCreator(&vorbisWaveDecoderCreator);
+    WaveDecoderManager() {
+        waveDecoderManagerAvail = true;
+        RegisterWaveDecoderCreator(&ffWaveDecoderCreator);
+        RegisterWaveDecoderCreator(&opusWaveDecoderCreator);
+        RegisterWaveDecoderCreator(&RIFFWaveDecoderCreator);
+        RegisterWaveDecoderCreator(&vorbisWaveDecoderCreator);
     }
 
-    ~tTVPWaveDecoderManager() { TVPWaveDecoderManagerAvail = false; }
+    ~WaveDecoderManager() { waveDecoderManagerAvail = false; }
 
-} static TVPWaveDecoderManager;
+} static waveDecoderManager;
 
 //---------------------------------------------------------------------------
-void TVPRegisterWaveDecoderCreator(tTVPWaveDecoderCreator *d) {
-    if(TVPWaveDecoderManagerAvail)
-        TVPWaveDecoderManager.Creators.push_back(d);
+void RegisterWaveDecoderCreator(WaveDecoderCreator *d) {
+    if(waveDecoderManagerAvail)
+        waveDecoderManager.Creators.push_back(d);
 }
 
 //---------------------------------------------------------------------------
-void TVPUnregisterWaveDecoderCreator(tTVPWaveDecoderCreator *d) {
-    if(TVPWaveDecoderManagerAvail) {
-        std::vector<tTVPWaveDecoderCreator *>::iterator i;
-        i = std::find(TVPWaveDecoderManager.Creators.begin(),
-                      TVPWaveDecoderManager.Creators.end(), d);
-        if(i != TVPWaveDecoderManager.Creators.end()) {
-            TVPWaveDecoderManager.Creators.erase(i);
+void UnregisterWaveDecoderCreator(WaveDecoderCreator *d) {
+    if(waveDecoderManagerAvail) {
+        std::vector<WaveDecoderCreator *>::iterator i;
+        i = std::find(waveDecoderManager.Creators.begin(),
+                      waveDecoderManager.Creators.end(), d);
+        if(i != waveDecoderManager.Creators.end()) {
+            waveDecoderManager.Creators.erase(i);
         }
     }
 }
 
 //---------------------------------------------------------------------------
-tTVPWaveDecoder *TVPCreateWaveDecoder(const ttstr &storagename) {
+WaveDecoder *CreateWaveDecoder(const ttstr &storagename) {
     // find a decoder and create its instance.
     // throws an exception when the decodable decoder is not found.
-    if(!TVPWaveDecoderManagerAvail)
+    if(!waveDecoderManagerAvail)
         return nullptr;
 
     ttstr ext(krkr::io::ExtractStorageExt(storagename));
     ext.ToLowerCase();
 
-    tjs_int i = (tjs_int)(TVPWaveDecoderManager.Creators.size() - 1);
+    tjs_int i = (tjs_int)(waveDecoderManager.Creators.size() - 1);
     for(; i >= 0; i--) {
-        tTVPWaveDecoder *decoder;
-        decoder = TVPWaveDecoderManager.Creators[i]->Create(storagename, ext);
+        WaveDecoder *decoder;
+        decoder = waveDecoderManager.Creators[i]->Create(storagename, ext);
         if(decoder)
             return decoder;
     }
@@ -776,15 +776,15 @@ tTVPWaveDecoder *TVPCreateWaveDecoder(const ttstr &storagename) {
 class iSoundBufferConvertToPCM16
     : public tTJSDispatch, // could be hold by
                            // tFilterObjectAndInterface
-      public iTVPBasicWaveFilter,
-      public tTVPSampleAndLabelSource {
+      public IBasicWaveFilter,
+      public SampleAndLabelSource {
 protected:
-    tTVPSampleAndLabelSource *Source; // source filter
-    tTVPWaveFormat OutputFormat;
+    SampleAndLabelSource *Source; // source filter
+    WaveFormat OutputFormat;
 
 public:
-    tTVPSampleAndLabelSource *
-    Recreate(tTVPSampleAndLabelSource *source) override {
+    SampleAndLabelSource *
+    Recreate(SampleAndLabelSource *source) override {
         Source = source;
         OutputFormat = source->GetFormat();
         OutputFormat.IsFloat = false;
@@ -801,7 +801,7 @@ public:
 
     void Reset() override {};
 
-    const tTVPWaveFormat &GetFormat() const override { return OutputFormat; }
+    const WaveFormat &GetFormat() const override { return OutputFormat; }
 };
 
 //---------------------------------------------------------------------------
@@ -809,7 +809,7 @@ class SoundBufferConvertFloatToPCM16 : public iSoundBufferConvertToPCM16 {
     std::vector<float> buffer;
 
     void Decode(void *dest, tjs_uint samples, tjs_uint &written,
-                tTVPWaveSegmentQueue &segments) override {
+                WaveSegmentQueue &segments) override {
         tjs_uint numsamples = samples * OutputFormat.Channels;
         if(buffer.size() < numsamples)
             buffer.resize(numsamples);
@@ -825,7 +825,7 @@ class SoundBufferConvertPCM24ToPCM16 : public iSoundBufferConvertToPCM16 {
     std::vector<char> buffer;
 
     void Decode(void *dest, tjs_uint samples, tjs_uint &written,
-                tTVPWaveSegmentQueue &segments) override {
+                WaveSegmentQueue &segments) override {
         tjs_uint numsamples = samples * OutputFormat.Channels;
         if(buffer.size() < numsamples * 3)
             buffer.resize(numsamples * 3);
@@ -845,7 +845,7 @@ class SoundBufferConvertPCM32ToPCM16 : public iSoundBufferConvertToPCM16 {
     std::vector<int32_t> buffer;
 
     void Decode(void *dest, tjs_uint samples, tjs_uint &written,
-                tTVPWaveSegmentQueue &segments) override {
+                WaveSegmentQueue &segments) override {
         tjs_uint numsamples = samples * OutputFormat.Channels;
         if(buffer.size() < numsamples)
             buffer.resize(numsamples);
@@ -934,14 +934,14 @@ void tTJSNI_BaseWaveSoundBuffer::RebuildFilterChain() {
     for(int i = 0; i < count; i++) {
         Filters->PropGetByNum(0, i, &v, Filters);
 
-        // get iTVPBasicWaveFilter interface
+        // get IBasicWaveFilter interface
         tTJSVariantClosure clo = v.AsObjectClosureNoAddRef();
         tTJSVariant iface_v;
         if(TJS_FAILED(clo.PropGet(0, TJS_W("interface"), nullptr, &iface_v,
                                   nullptr))) {
             continue;
         }
-        iTVPBasicWaveFilter *filter = reinterpret_cast<iTVPBasicWaveFilter *>(
+        IBasicWaveFilter *filter = reinterpret_cast<IBasicWaveFilter *>(
             (tjs_intptr_t)(tjs_int64)iface_v);
         if(!filter) {
             continue;
@@ -961,7 +961,7 @@ void tTJSNI_BaseWaveSoundBuffer::RebuildFilterChain() {
         FilterOutput = i->Interface->Recreate(FilterOutput);
     }
 
-    const tTVPWaveFormat &filteredFormat = FilterOutput->GetFormat();
+    const WaveFormat &filteredFormat = FilterOutput->GetFormat();
     if(filteredFormat.IsFloat) {
         SoundBufferConvertFloatToPCM16 *filter =
             new SoundBufferConvertFloatToPCM16;
@@ -1034,7 +1034,7 @@ iTJSDispatch2 *tTJSNI_BaseWaveSoundBuffer::GetWaveFlagsObjectNoAddRef() {
     if(!Owner)
         TVPThrowInternalError;
 
-    WaveFlagsObject = TVPCreateWaveFlagsObject(Owner);
+    WaveFlagsObject = CreateWaveFlagsObject(Owner);
 
     return WaveFlagsObject;
 }
@@ -1048,12 +1048,12 @@ iTJSDispatch2 *tTJSNI_BaseWaveSoundBuffer::GetWaveLabelsObjectNoAddRef() {
     WaveLabelsObject = TJSCreateDictionaryObject();
 
     if(LoopManager) {
-        const std::vector<tTVPWaveLabel> &labels = LoopManager->GetLabels();
+        const std::vector<WaveLabel> &labels = LoopManager->GetLabels();
 
         int freq = FilterOutput->GetFormat().SamplesPerSec;
 
         int count = 0;
-        for(std::vector<tTVPWaveLabel>::const_iterator i = labels.begin();
+        for(std::vector<WaveLabel>::const_iterator i = labels.begin();
             i != labels.end(); i++, count++) {
             iTJSDispatch2 *item_dic = TJSCreateDictionaryObject();
             try {
@@ -1619,7 +1619,7 @@ TJS_END_NATIVE_PROP_GETTER
 
 TJS_BEGIN_NATIVE_PROP_SETTER {
     tTJSNI_WaveSoundBuffer::SetGlobalFocusMode(
-        (tTVPSoundGlobalFocusMode)(tjs_int)*param);
+        (SoundGlobalFocusMode)(tjs_int)*param);
 
     return TJS_S_OK;
 }
@@ -1693,7 +1693,7 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ reset) {
     TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
                             /*var. type*/ tTJSNI_WaveFlags);
 
-    tTVPWaveLoopManager *manager =
+    WaveLoopManager *manager =
         _this->GetBuffer()->GetWaveLoopManager(); /* note that the manager can
                                                      be nullptr */
 
@@ -1711,7 +1711,7 @@ TJS_END_NATIVE_METHOD_DECL(/*func. name*/ reset)
 TJS_BEGIN_NATIVE_PROP_DECL(count){ TJS_BEGIN_NATIVE_PROP_GETTER{
     TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
                             /*var. type*/ tTJSNI_WaveFlags);
-*result = TVP_WL_MAX_FLAGS; // always this value
+*result = KRKR_WL_MAX_FLAGS; // always this value
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -1720,11 +1720,11 @@ TJS_DENY_NATIVE_PROP_SETTER
 }
 TJS_END_NATIVE_PROP_DECL(count)
 //----------------------------------------------------------------------
-#define TVP_DEFINE_FLAG_PROP(N)                                                \
+#define KRKR_DEFINE_FLAG_PROP(N)                                                \
     TJS_BEGIN_NATIVE_PROP_DECL(N){                                             \
         TJS_BEGIN_NATIVE_PROP_GETTER{ TJS_GET_NATIVE_INSTANCE(                 \
             /*var. name*/ _this, /*var. type*/ tTJSNI_WaveFlags);              \
-    tTVPWaveLoopManager *manager =                                             \
+    WaveLoopManager *manager =                                             \
         _this->GetBuffer()->GetWaveLoopManager(); /* note that the manager can \
                                                      be nullptr */             \
     if(manager)                                                                \
@@ -1738,7 +1738,7 @@ TJS_END_NATIVE_PROP_DECL(count)
     TJS_BEGIN_NATIVE_PROP_SETTER {                                             \
         TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,                           \
                                 /*var. type*/ tTJSNI_WaveFlags);               \
-        tTVPWaveLoopManager *manager =                                         \
+        WaveLoopManager *manager =                                         \
             _this->GetBuffer()->GetWaveLoopManager(); /* note that the manager \
                                                          can be nullptr */     \
         if(manager)                                                            \
@@ -1749,29 +1749,29 @@ TJS_END_NATIVE_PROP_DECL(count)
     }                                                                          \
     TJS_END_NATIVE_PROP_DECL(N)
 
-TVP_DEFINE_FLAG_PROP(0)
-TVP_DEFINE_FLAG_PROP(1)
-TVP_DEFINE_FLAG_PROP(2)
-TVP_DEFINE_FLAG_PROP(3)
-TVP_DEFINE_FLAG_PROP(4)
-TVP_DEFINE_FLAG_PROP(5)
-TVP_DEFINE_FLAG_PROP(6)
-TVP_DEFINE_FLAG_PROP(7)
-TVP_DEFINE_FLAG_PROP(8)
-TVP_DEFINE_FLAG_PROP(9)
-TVP_DEFINE_FLAG_PROP(10)
-TVP_DEFINE_FLAG_PROP(11)
-TVP_DEFINE_FLAG_PROP(12)
-TVP_DEFINE_FLAG_PROP(13)
-TVP_DEFINE_FLAG_PROP(14)
-TVP_DEFINE_FLAG_PROP(15)
+KRKR_DEFINE_FLAG_PROP(0)
+KRKR_DEFINE_FLAG_PROP(1)
+KRKR_DEFINE_FLAG_PROP(2)
+KRKR_DEFINE_FLAG_PROP(3)
+KRKR_DEFINE_FLAG_PROP(4)
+KRKR_DEFINE_FLAG_PROP(5)
+KRKR_DEFINE_FLAG_PROP(6)
+KRKR_DEFINE_FLAG_PROP(7)
+KRKR_DEFINE_FLAG_PROP(8)
+KRKR_DEFINE_FLAG_PROP(9)
+KRKR_DEFINE_FLAG_PROP(10)
+KRKR_DEFINE_FLAG_PROP(11)
+KRKR_DEFINE_FLAG_PROP(12)
+KRKR_DEFINE_FLAG_PROP(13)
+KRKR_DEFINE_FLAG_PROP(14)
+KRKR_DEFINE_FLAG_PROP(15)
 
 //----------------------------------------------------------------------
 TJS_END_NATIVE_MEMBERS
 }
 
 //---------------------------------------------------------------------------
-iTJSDispatch2 *TVPCreateWaveFlagsObject(iTJSDispatch2 *buffer) {
+iTJSDispatch2 *CreateWaveFlagsObject(iTJSDispatch2 *buffer) {
     struct tHolder {
         iTJSDispatch2 *Obj;
 

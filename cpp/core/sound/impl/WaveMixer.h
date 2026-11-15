@@ -4,19 +4,19 @@
 #include <list>
 #include <mutex>
 
-#define TVPAL_BUFFER_COUNT 4
+#define AL_BUFFER_COUNT 4
 
 namespace krkr::sound {
 
 struct ALSoundImpl;
 
-void TVPInitDirectSound(int freq = 48000);
+void InitDirectSound(int freq = 48000);
 
-void TVPUninitDirectSound();
+void UninitDirectSound();
 
-class iTVPSoundBuffer {
+class ISoundBuffer {
 public:
-    virtual ~iTVPSoundBuffer() = default;
+    virtual ~ISoundBuffer() = default;
 
     virtual void Release() = 0;
 
@@ -58,31 +58,31 @@ public:
     }
 };
 
-iTVPSoundBuffer *TVPCreateSoundBuffer(tTVPWaveFormat &fmt, int bufcount);
+ISoundBuffer *CreateSoundBufferObject(WaveFormat &fmt, int bufcount);
 
 #if 0
-class TVPALSoundWrap : public iTVPSoundBuffer {
+class ALSoundWrap : public ISoundBuffer {
 private:
     ALSoundImpl *_impl;
-    tjs_uint _bufferSize[TVPAL_BUFFER_COUNT];
-    //int _tags[TVPAL_BUFFER_COUNT];
+    tjs_uint _bufferSize[AL_BUFFER_COUNT];
+    //int _tags[AL_BUFFER_COUNT];
     int _bufferIdx;
     //int _tagPoint;
     tjs_uint _samplesProcessed;
-    tTVPWaveFormat SoundFormat;
+    WaveFormat SoundFormat;
     bool _inPlaying;
 
     std::mutex _mutex;
 protected:
-    TVPALSoundWrap();
+    ALSoundWrap();
 
 public:
-    virtual ~TVPALSoundWrap();
-    static TVPALSoundWrap * Create(const tTVPWaveFormat &desired);
+    virtual ~ALSoundWrap();
+    static ALSoundWrap * Create(const WaveFormat &desired);
     void Release();
-    void Update(); // callback from TVPSoundMixerList
+    void Update(); // callback from the sound mixer list
     virtual bool DoFillBuffer();
-    void Init(const tTVPWaveFormat &desired);
+    void Init(const WaveFormat &desired);
 
     int GetNextBufferIndex();
     int GetRemainBuffers();
@@ -110,7 +110,3 @@ public:
 } // namespace krkr::sound
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::sound::TVPInitDirectSound;
-using krkr::sound::TVPUninitDirectSound;
-using krkr::sound::iTVPSoundBuffer;
-using krkr::sound::TVPCreateSoundBuffer;
