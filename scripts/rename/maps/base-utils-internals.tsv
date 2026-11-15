@@ -2,12 +2,11 @@
 # qualify: krkr::utils
 # owner: cpp/core/base
 #
-# base 第 8 轮（C）：**`namespace krkr::utils` 的内部符号，代码却写在 base/runtime**。
-# 这是 DECISIONS #28 记的那个坑：按目录归属会把这些符号算成 base，按 namespace
-# 归属它们是 utils。它们绝大多数是文件内 `static`，所以 owner 必须是实际定义目录
-# （cpp/core/base），不能把它们挪进 utils 的 map。
-
-TVPCreateNativeClass_Timer	CreateNativeClass_Timer	fn
-TVPCreateNativeClass_Clipboard	CreateNativeClass_Clipboard	fn
-TVPCreateNativeClass_Debug	CreateNativeClass_Debug	fn
-TVPCreateNativeClass_Pad	CreateNativeClass_Pad	fn
+# 【空】第 8 轮最后没用上这张 map。
+#
+# 原本打算单独收 `namespace krkr::utils` 内部、但代码写在 base/runtime 的符号
+# （DECISIONS #28 记的坑）。实际分类时发现这些符号**没有头文件声明**，于是自动落进
+# `base-globals.tsv` 的 `kind=global` 组 —— 对文件内 `static` 来说"全局裸名替换"正好
+# 是正确的做法（它们本来就只在这一个 TU 里有效），不需要单独一张 map。
+#
+# 保留这个空文件是为了让目录里"没有这一组"这件事有据可查。
