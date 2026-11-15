@@ -183,6 +183,25 @@ tTVPAtInstallClass	AtInstallClass	type
 
 ---
 
+## 8.5 编译验证状态（2026-11-15）
+
+文本层面 8 个模块已收口（合计遗留 **132**），**但 Linux 宿主构建尚未通过**。
+
+- 构建环境已搭好：WSL2 Ubuntu-22.04 + cmake 3.31 + ninja + g++，`cmake --preset
+  "Linux Debug Config"` 跑通（127 个 vcpkg 包），`out/linux/debug/build.ninja` 已生成；
+  复现命令与踩坑（`fribidi` 手工下载、`libgdiplus` 缺 X11、WSL 回收后台进程）见
+  `cpp/DECISIONS.md` 的「编译验证 #1」。
+- 首次 `ninja -k 0` 到 195/873 就有 **7305 行 error / 148 个 TU 失败**，其中 90% 是
+  一个根因的级联：`base-globals.tsv` 里 62 条其实声明在 `namespace krkr::base` 的符号
+  被按"全局裸名"改写（`ThrowExceptionMessage` 一个就 1615 行）。
+- 已修两处独立事故（`6b513e4`）：`MemoryStream` 的跨 namespace 误改、
+  `DrawFace`/`HitType` 与成员变量撞名。
+- 下一步：回退 base 轮 → 修分类脚本（认 `TJS_EXP_FUNC_DEF`/`extern` 声明）→ 重新 apply
+  → 重编。命令见 DECISIONS「编译验证 #1」的 A 方案。
+
+> 结论：**"模块收口" ≠ "能编译"**。收口只是把遗留名字降下来了，编译验证是独立的一关，
+> 而且这一关会反过来改 map（这次就是）。
+
 ## 9. 工作量估算（基于前 4 轮实测）
 
 | 轮次 | 模块 | 符号 | 替换处 | 文件 | 耗时 |

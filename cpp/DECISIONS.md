@@ -1499,3 +1499,104 @@ tTVPWatchThread   -> WatchThread           TVPWatchThread   -> watchThread
 
 至此 **8 个模块全部收口**（余项全部是 §4 例外或尚未动的 visual/movie/plugins）。
 下一步不是改名，而是**编译验证**：这 8 轮共改了 6000+ 处、没有任何一次完整编译。
+
+## 2026-11-15 — 编译验证 #1：WSL Linux 构建跑通 configure，7305 行错误，主因是 base 轮的 kind=global 用错
+
+\## 状态
+
+WSL Linux 宿主构建**首次跑通 configure**（8 轮改名后的第一次真编译），`ninja` 跑到一半
+主动叫停：**7305 行 error / 148 个 TU 失败**。已修 2 处（`6b513e4`），主因已定位但未动手。
+合计遗留符号 132，8 个模块"文本层面"收口，**但编译未通过**。
+
+\## 环境：怎么在 WSL 里把 Linux 宿主构建跑起来（下次直接照抄）
+
+```bash
+# 前置：WSL2 Ubuntu-22.04（24 核），vcpkg 在 /opt/vcpkg，~/.cache/vcpkg 有源码缓存
+wsl.exe -d Ubuntu-22.04 -- bash -lc 'export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq
+  apt-get install -y -qq libx11-dev libxext-dev libxrandr-dev libxi-dev \
+    libxcursor-dev libxinerama-dev libxkbcommon-dev libgl1-mesa-dev \
+    libegl1-mesa-dev libgles2-mesa-dev libglu1-mesa-dev autoconf automake \
+    libtool pkg-config libasound2-dev libudev-dev libfontconfig1-dev \
+    libpng-dev libglib2.0-dev'
+
+# configure（127 个 vcpkg 包，冷启动 ~45 min）
+# 关键：WSL 会回收后台进程，必须 setsid + </dev/null + disown
+wsl.exe -d Ubuntu-22.04 -- bash -lc 'cd /mnt/f/Projetcs/Krkr2Next &&
+  setsid nohup env VCPKG_ROOT=/opt/vcpkg cmake --preset "Linux Debug Config" \
+    > out/linux/cfg.log 2>&1 < /dev/null & disown'
+
+# build（-k 0 一次收全错误）
+wsl.exe -d Ubuntu-22.04 -- bash -lc 'cd /mnt/f/Projetcs/Krkr2Next &&
+  setsid nohup ninja -C out/linux/debug -j24 -k 0 > out/linux/build.log 2>&1 < /dev/null & disown'
+```
+
+踩到的两个**环境**坑（不是代码）：
+
+| 坑 | 现象 | 解法 |
+|---|---|---|
+| `fribidi` 下载失败 | `curl ERR 56/7`，vcpkg 判"非瞬时错误"不重试 | 手工 `curl -fL` 下到 `/opt/vcpkg/downloads/fribidi-fribidi-v1.0.16.tar.gz`，SHA512 对着 `ports/fribidi/portfile.cmake` 校验（`13d7104f…`）通过 |
+| `libgdiplus` 编不过 | `Could NOT find X11 (missing: X11_X11_INCLUDE_PATH X11_X11_LIB)` | 装上面那批 `-dev` 包 |
+
+configure 结果：`Configuring done (1435.0s)`，`out/linux/debug/build.ninja` 已生成。
+`out/linux/{cfg,build}.log` 留在工作区（`out/` 不入库）。
+
+\## 已修两处（`6b513e4`）
+
+1. **`MemoryStream`（第 2 轮遗留的重伤）**：`tTVPMemoryStream` 属于 base
+   （`base/core/UtilStreams.h/.cpp`），却被收进 io 的 map → 非 owner 侧写成
+   `krkr::io::MemoryStream`，而那两个文件本身在 `namespace krkr::base` 里：
+   `class krkr::io::MemoryStream`、`krkr::io::MemoryStream::krkr::io::MemoryStream()`、
+   `using krkr::base::krkr::io::MemoryStream;` 全非法 → 22 个 TU 直接挂。
+   修法：回 `krkr::base::MemoryStream`（UtilStreams 内去限定 + 33 处引用 + global bridge）。
+
+2. **`DrawFace` / `HitType` 撞成员名**：base 轮把 visual 的 `tTVPDrawFace`/`tTVPHitType`
+   改成 `DrawFace`/`HitType`，与既有成员 `DrawFace DrawFace;`、`HitType HitType;` 同名
+   → `changes meaning of 'DrawFace'`。按 N6 把成员改成 `drawFace`/`hitType`（88 + 4 处）。
+
+\## 主因（未修）：base 轮的 `kind=global` 用错了一批符号
+
+`base-globals.tsv` 240 条里 **62 条其实声明在 `namespace krkr::base`**（`MsgIntf.h`、
+`EventIntf.h` 等，形态是 `TJS_EXP_FUNC_DEF(...)` / `extern`），却被按"全局裸名"改写：
+
+```
+error: 'ThrowExceptionMessage' was not declared in this scope;
+       did you mean 'krkr::base::ThrowExceptionMessage'?     ← 编译器自己指出了病根
+```
+
+错误分布（同一根因的级联）：
+
+| 错误形态 | 行数 | 代表符号 |
+|---|---:|---|
+| `'X' was not declared in this scope` | 913+702 | `ThrowExceptionMessage` |
+| `expected class-name before '{'` / `does not name a type` | 597+524+497 | `BaseInputEvent` `UniqueTagForInputEvent` |
+| `'X' was not declared` 其余 | 195+176+93+78+69+56 | `GetScriptDispatch` `ExecuteExpression` `CreateEventObject` |
+
+出错误最多的文件都是**头文件**（说明是级联）：
+`visual/WindowIntf.h` 2340 行 / `plugin/ncb/ncbind.hpp` 1458 / `visual/LayerIntf.h` 377。
+
+**根因是我自己的分类脚本**：判断"声明在哪个 namespace"时漏了 `TJS_EXP_FUNC_DEF(...)`
+与 `extern` 两种形态 → 判成 NO-DECL → 进 globals 桶。这正是第 5 轮记过的
+`--draft` 盲区（宏形声明），换了个形式又踩一次。
+
+\## 明天的两条路（已评估，建议 A）
+
+**A. 回退重来（推荐）**
+1. `git revert 36e49d8`（base 轮，305 符号一次性回退；`6b513e4` 的两处修复保留）；
+2. 修分类脚本：按**声明所在 namespace** 判定，认 `TJS_EXP_FUNC_DEF` / `extern` / `class` /
+   `enum` / `typedef` / `using` 全部声明形态（可直接复用 `scripts/check_qualification.py`
+   的 namespace 追踪）；
+3. 重新生成 `base.tsv`（qualify `krkr::base`，预计 ~127 条）/ `base-globals.tsv`
+   （真全局，预计 ~178 条）并 apply；
+4. 重编 `ninja -k 0` → 剩下的才是真新错误。
+   成本 ~15 min 改名 + 一轮 build，收益是 map 本身变正确（否则下次重跑又错）。
+
+**B. 就地打补丁**：给那 62 个符号做一次"非 base 目录裸名 → `krkr::base::X`"的补限定 pass。
+快，但 map 仍是错的，不可重跑。
+
+\## 提醒
+
+- `visual` / `movie` / `plugins` 的命名轮还没做（`namespace krkr2` 21 处也在 visual/simd）。
+  `WindowIntf.h` 那些 `expected class-name` 里有一部分是 visual 自己直接裸用 base 类型，
+  A 方案第 3 步会顺手把它们需要的限定写对。
+- 本次构建只到 `195/873` 目标就停了，**后面还有大量未编译的 TU**，错误量还会涨。
