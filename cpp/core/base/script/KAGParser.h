@@ -30,7 +30,7 @@ using namespace TJS;
 //---------------------------------------------------------------------------
 // KAG Parser debug level
 //---------------------------------------------------------------------------
-enum tTVPKAGDebugLevel {
+enum KAGDebugLevel {
     tkdlNone, // none is reported
     tkdlSimple, // simple report
     tkdlVerbose // complete report ( verbose )
@@ -38,18 +38,18 @@ enum tTVPKAGDebugLevel {
 /*]*/
 
 //---------------------------------------------------------------------------
-// tTVPCharHolder
+// CharHolder
 //---------------------------------------------------------------------------
-class tTVPCharHolder {
+class CharHolder {
     tjs_char *Buffer;
     size_t BufferSize;
 
 public:
-    tTVPCharHolder() : Buffer(nullptr), BufferSize(0) {}
+    CharHolder() : Buffer(nullptr), BufferSize(0) {}
 
-    ~tTVPCharHolder() { Clear(); }
+    ~CharHolder() { Clear(); }
 
-    tTVPCharHolder(const tTVPCharHolder &ref) : Buffer(nullptr), BufferSize(0) {
+    CharHolder(const CharHolder &ref) : Buffer(nullptr), BufferSize(0) {
         operator=(ref);
     }
 
@@ -59,7 +59,7 @@ public:
         BufferSize = 0;
     }
 
-    void operator=(const tTVPCharHolder &ref) {
+    void operator=(const CharHolder &ref) {
         Clear();
         BufferSize = ref.BufferSize;
         Buffer = new tjs_char[BufferSize];
@@ -82,9 +82,9 @@ public:
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPScenarioCacheItem : Scenario Cache Item
+// ScenarioCacheItem : Scenario Cache Item
 //---------------------------------------------------------------------------
-class tTVPScenarioCacheItem {
+class ScenarioCacheItem {
 public:
     struct tLine {
         const tjs_char *Start;
@@ -92,7 +92,7 @@ public:
     };
 
 private:
-    tTVPCharHolder Buffer;
+    CharHolder Buffer;
     tLine *Lines;
     tjs_int LineCount;
 
@@ -118,10 +118,10 @@ private:
     tjs_int RefCount;
 
 public:
-    tTVPScenarioCacheItem(const ttstr &name, bool istring);
+    ScenarioCacheItem(const ttstr &name, bool istring);
 
 protected:
-    ~tTVPScenarioCacheItem();
+    ~ScenarioCacheItem();
 
 public:
     void AddRef();
@@ -208,8 +208,8 @@ private:
 
     std::vector<tCallStackData> CallStack;
 
-    tTVPScenarioCacheItem *Scenario;
-    tTVPScenarioCacheItem::tLine *Lines; // is copied from Scenario
+    ScenarioCacheItem *Scenario;
+    ScenarioCacheItem::tLine *Lines; // is copied from Scenario
     tjs_int LineCount; // is copied from Scenario
 
     ttstr StorageName;
@@ -224,7 +224,7 @@ private:
     ttstr CurPage; // Current Page Name
     tjs_int TagLine; // line number of previous tag
 
-    tTVPKAGDebugLevel DebugLevel; // debugging log level
+    KAGDebugLevel DebugLevel; // debugging log level
     bool ProcessSpecialTags; // whether to process special tags
     bool IgnoreCR; // CR is not interpreted as [r] tag when this is
                    // true
@@ -352,9 +352,9 @@ public:
 
     bool GetIgnoreCR() const { return IgnoreCR; }
 
-    void SetDebugLevel(tTVPKAGDebugLevel level) { DebugLevel = level; }
+    void SetDebugLevel(KAGDebugLevel level) { DebugLevel = level; }
 
-    tTVPKAGDebugLevel GetDebugLevel() const { return DebugLevel; }
+    KAGDebugLevel GetDebugLevel() const { return DebugLevel; }
 
     iTJSDispatch2 *GetMacrosNoAddRef() const { return Macros; }
     iTJSDispatch2 *GetParamMacrosNoAddRef() const { return ParamMacros; }
@@ -377,9 +377,9 @@ public:
     iTJSDispatch2 *CloneTag(iTJSDispatch2 *source);
 };
 
-extern iTJSDispatch2 *TVPCreateNativeClass_KAGParser();
+extern iTJSDispatch2 *CreateNativeClass_KAGParser();
 extern void
-TVPClearScnearioCache(); // runtime-restart 时清空跨游戏残留的场景缓存
+ClearScnearioCache(); // runtime-restart 时清空跨游戏残留的场景缓存
 
 // 编译场景（.scn / PSB 场景树）标签解析回调。
 //
@@ -387,12 +387,12 @@ TVPClearScnearioCache(); // runtime-restart 时清空跨游戏残留的场景缓
 // 用途：某些发行版把脚本编译进 PSB（同名 `.scn`），此时读脚本会失败而**标签仍在**
 // （由 psbfile 侧遍历场景树提供）。注册回调后：
 //   - `LoadScenario` 读不到脚本但存在 `.scn` 时，用合成的 "*\n" 缓冲继续，而不是抛异常；
-//   - `GoToLabel` 在标签缓存里找不到时，先问回调，再决定是否抛 TVPKAGLabelNotFound。
+//   - `GoToLabel` 在标签缓存里找不到时，先问回调，再决定是否抛 KAGLabelNotFound。
 // 未注册回调时行为与移植前**完全一致**（读失败照旧抛、标签找不到照旧抛）。
-typedef bool (*tTVPCompiledScenarioLabelResolver)(const ttstr &storage,
+typedef bool (*CompiledScenarioLabelResolver)(const ttstr &storage,
                                                   const ttstr &label);
-TJS_EXP_FUNC_DEF(void, TVPRegisterCompiledScenarioLabelResolver,
-                 (tTVPCompiledScenarioLabelResolver resolver));
+TJS_EXP_FUNC_DEF(void, RegisterCompiledScenarioLabelResolver,
+                 (CompiledScenarioLabelResolver resolver));
 
 
 #endif

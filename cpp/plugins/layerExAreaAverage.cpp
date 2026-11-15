@@ -64,7 +64,7 @@ struct layerExAreaAverage {
         tjs_int sHeight = param[8]->AsInteger();
 
         if(dWidth > sWidth || dHeight > sHeight) {
-            TVPThrowExceptionMessage(TJS_W("stretchCopyAA cannot enlarge."));
+            ThrowExceptionMessage(TJS_W("stretchCopyAA cannot enlarge."));
             return TJS_E_FAIL;
         }
 

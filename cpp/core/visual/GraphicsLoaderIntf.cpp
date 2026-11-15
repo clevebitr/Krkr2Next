@@ -161,7 +161,7 @@ bool TVPAcceptSaveAsBMP(void *formatdata, const ttstr &type,
         result = true;
     if(result && dic) {
         tTJSVariant result;
-        TVPExecuteExpression(TJS_W("(const)%[")
+        ExecuteExpression(TJS_W("(const)%[")
                                  TJS_W("\"bpp\"=>(const)%[\"type\"=>"
                                        "\"select\",\"items\"=>(const)["
                                        "\"32\",\"24\",\"8\"],\"desc\"=>"
@@ -360,19 +360,19 @@ void TVPLoadImageHeader(const ttstr &storagename, iTJSDispatch2 **dic) {
 
     ttstr ext = krkr::io::ExtractStorageExt(storagename);
     if(ext == TJS_W(""))
-        TVPThrowExceptionMessage(TVPUnknownGraphicFormat, storagename);
+        ThrowExceptionMessage(TVPUnknownGraphicFormat, storagename);
     tTVPGraphicHandlerType *handler = TVPGraphicType.Hash.Find(ext);
     if(!handler)
-        TVPThrowExceptionMessage(TVPUnknownGraphicFormat, storagename);
+        ThrowExceptionMessage(TVPUnknownGraphicFormat, storagename);
 
-    tTVPStreamHolder holder(storagename); // open a storage named "storagename"
+    StreamHolder holder(storagename); // open a storage named "storagename"
     handler->Header(holder.Get(), dic);
 }
 //---------------------------------------------------------------------------
 void TVPSaveImage(const ttstr &storagename, const ttstr &mode,
                   const iTVPBaseBitmap *image, iTJSDispatch2 *meta) {
     if(!image->Is32BPP())
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
 
     tTVPGraphicHandlerType *handler;
     tTJSHashTable<ttstr, tTVPGraphicHandlerType>::tIterator i;
@@ -387,7 +387,7 @@ void TVPSaveImage(const ttstr &storagename, const ttstr &mode,
     if(handler)
         handler->Save(storagename, mode, image, meta);
     else
-        TVPThrowExceptionMessage(TVPUnknownGraphicFormat, mode);
+        ThrowExceptionMessage(TVPUnknownGraphicFormat, mode);
 }
 //---------------------------------------------------------------------------
 bool TVPGetSaveOption(const ttstr &type, iTJSDispatch2 **dic) {
@@ -442,11 +442,11 @@ void TVPInternalLoadBMP(void *callbackdata,
                             // fall through -- read the RGB masks
             */
         case BI_BITFIELDS:
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TVPImageLoadError, (const tjs_char *)TVPBitFieldsNotSupported);
 
         default:
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TVPImageLoadError,
                 (const tjs_char *)TVPCompressedBmpNotSupported);
     }
@@ -484,7 +484,7 @@ void TVPInternalLoadBMP(void *callbackdata,
         }
     } else {
         if(mode == glmPalettized)
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TVPImageLoadError,
                 (const tjs_char *)TVPUnsupportedColorModeForPalettImage);
     }
@@ -675,7 +675,7 @@ void TVPLoadBMP(void *formatdata, void *callbackdata,
     tjs_uint8 magic[2];
     src->ReadBuffer(magic, 2);
     if(magic[0] != TJS_N('B') || magic[1] != TJS_N('M'))
-        TVPThrowExceptionMessage(TVPImageLoadError,
+        ThrowExceptionMessage(TVPImageLoadError,
                                  (const tjs_char *)TVPNotWindowsBmp);
 
     // read the BITMAPFILEHEADER
@@ -709,7 +709,7 @@ void TVPLoadBMP(void *formatdata, void *callbackdata,
         bi.biClrUsed = src->ReadI32LE();
         bi.biClrImportant = src->ReadI32LE();
     } else {
-        TVPThrowExceptionMessage(TVPImageLoadError,
+        ThrowExceptionMessage(TVPImageLoadError,
                                  (const tjs_char *)TVPUnsupportedHeaderVersion);
     }
 
@@ -798,7 +798,7 @@ void TVPSaveTextureAsBMP(tTJSBinaryStream *dst, iTVPTexture2D *bmp,
     tjs_uint8 *buf = nullptr;
 
     try {
-        TVPClearGraphicCache();
+        ClearGraphicCache();
 
         // prepare header
         tjs_uint bmppitch = bmp->GetWidth() * pixelbytes;
@@ -921,7 +921,7 @@ void TVPLoadHeaderBMP(void *formatdata, tTJSBinaryStream *src,
     tjs_uint8 magic[2];
     src->ReadBuffer(magic, 2);
     if(magic[0] != TJS_N('B') || magic[1] != TJS_N('M'))
-        TVPThrowExceptionMessage(TVPImageLoadError,
+        ThrowExceptionMessage(TVPImageLoadError,
                                  (const tjs_char *)TVPNotWindowsBmp);
 
     // read the BITMAPFILEHEADER
@@ -955,7 +955,7 @@ void TVPLoadHeaderBMP(void *formatdata, tTJSBinaryStream *src,
         bi.biClrUsed = src->ReadI32LE();
         bi.biClrImportant = src->ReadI32LE();
     } else {
-        TVPThrowExceptionMessage(TVPImageLoadError,
+        ThrowExceptionMessage(TVPImageLoadError,
                                  (const tjs_char *)TVPUnsupportedHeaderVersion);
     }
 
@@ -1021,7 +1021,7 @@ static int TVPLoadGraphic_SizeCallback(void *callbackdata, tjs_uint w,
 
         // check the image previously loaded
         if(data->Dest->GetWidth() != w || data->Dest->GetHeight() != h)
-            TVPThrowExceptionMessage(TVPMaskSizeMismatch);
+            ThrowExceptionMessage(TVPMaskSizeMismatch);
 
         // allocate line buffer
         data->Buffer = new tjs_uint8[w];
@@ -1477,14 +1477,14 @@ static void TVPCheckGraphicCacheLimit() {
     }
 }
 //---------------------------------------------------------------------------
-void TVPClearGraphicCache() {
+void ClearGraphicCache() {
     TVPGraphicCache.Clear();
     TVPGraphicCacheTotalBytes = 0;
 }
-static tTVPAtExit TVPUninitMessageLoad(KRKR_ATEXIT_PRI_RELEASE,
-                                       TVPClearGraphicCache);
+static AtExit TVPUninitMessageLoad(KRKR_ATEXIT_PRI_RELEASE,
+                                       ClearGraphicCache);
 //---------------------------------------------------------------------------
-struct tTVPClearGraphicCacheCallback : public tTVPCompactEventCallbackIntf {
+struct tTVPClearGraphicCacheCallback : public CompactEventCallbackIntf {
     void OnCompact(tjs_int level) override {
         if(level >= TVP_COMPACT_LEVEL_MINIMIZE) {
             TVPCheckGraphicCacheLimit();
@@ -1498,7 +1498,7 @@ void TVPPushGraphicCache(const ttstr &nname, tTVPBitmap *bmp,
     if(TVPGraphicCacheEnabled) {
         // graphic compact initialization
         if(!TVPClearGraphicCacheCallbackInit) {
-            TVPAddCompactEventHook(&TVPClearGraphicCacheCallback);
+            AddCompactEventHook(&TVPClearGraphicCacheCallback);
             TVPClearGraphicCacheCallbackInit = true;
         }
 
@@ -1599,7 +1599,7 @@ tTVPGraphicHandlerType *TVPFindGraphicLoadHandler(ttstr &_name, ttstr *maskname,
                                                   ttstr *provincename) {
     // graphic compact initialization
     if(!TVPClearGraphicCacheCallbackInit) {
-        TVPAddCompactEventHook(&TVPClearGraphicCacheCallback);
+        AddCompactEventHook(&TVPClearGraphicCacheCallback);
         TVPClearGraphicCacheCallbackInit = true;
     }
 
@@ -1629,7 +1629,7 @@ tTVPGraphicHandlerType *TVPFindGraphicLoadHandler(ttstr &_name, ttstr *maskname,
             // not found
             ttstr fmt = LocaleConfigManager::GetInstance()->GetText(
                 "err_cannot_suggest_graph_ext");
-            TVPThrowExceptionMessage(fmt.c_str(), name);
+            ThrowExceptionMessage(fmt.c_str(), name);
         }
 
         handler = &i.GetValue();
@@ -1642,7 +1642,7 @@ tTVPGraphicHandlerType *TVPFindGraphicLoadHandler(ttstr &_name, ttstr *maskname,
     }
 
     if(!handler)
-        TVPThrowExceptionMessage(TVPUnknownGraphicFormat, name);
+        ThrowExceptionMessage(TVPUnknownGraphicFormat, name);
     ttstr retname(name);
 
     if(maskname) {
@@ -1723,7 +1723,7 @@ TVPInternalLoadBitmap(const ttstr &_name, tjs_uint32 keyidx, tjs_uint desw,
     ttstr name(_name), maskname;
     tTVPGraphicHandlerType *handler = TVPFindGraphicLoadHandler(
         name, &maskname, mode == glmNormal ? provincename : nullptr);
-    tTVPStreamHolder holder(name); // open a storage named "name"
+    StreamHolder holder(name); // open a storage named "name"
 
     // load the image
     tTVPLoadGraphicData data;
@@ -1819,7 +1819,7 @@ TVPInternalLoadTexture(const ttstr &_name,
         // mask merge is not supported
         return nullptr;
     }
-    tTVPStreamHolder holder(name);
+    StreamHolder holder(name);
     return TVPLoadPVRv3(
         holder.Get(), [MetaInfo](const ttstr &k, const tTJSVariant &v) {
             if(!*MetaInfo)
@@ -2163,7 +2163,7 @@ private:
             tTVPBitmap *bmp;
             // from TVPInternalLoadGraphic
             {
-                // tTVPStreamHolder holder(item.imgfile); // open a
+                // StreamHolder holder(item.imgfile); // open a
                 // storage named "name"
 
                 // load the image
@@ -2258,9 +2258,9 @@ public:
 };
 
 //---------------------------------------------------------------------------
-// TVPTouchImages
+// TouchImages
 //---------------------------------------------------------------------------
-void TVPTouchImages(const std::vector<ttstr> &storages, tjs_int64 limit,
+void TouchImages(const std::vector<ttstr> &storages, tjs_int64 limit,
                     tjs_uint64 timeout) {
     // preload graphic files into the cache.
     // "limit" is a limit memory for preload, in bytes.
@@ -2344,7 +2344,7 @@ void TVPTouchImages(const std::vector<ttstr> &storages, tjs_int64 limit,
 			if (i.IsNull() || !item.main.handler)
             {
                 // not found
-                //TVPThrowExceptionMessage(TVPCannotSuggestGraphicExtension, name);
+                //ThrowExceptionMessage(TVPCannotSuggestGraphicExtension, name);
 				continue;
             }
         } else {
@@ -2473,9 +2473,9 @@ void TVPTouchImages(const std::vector<ttstr> &storages, tjs_int64 limit,
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPSetGraphicCacheLimit
+// SetGraphicCacheLimit
 //---------------------------------------------------------------------------
-void TVPSetGraphicCacheLimit(tjs_uint64 limit) {
+void SetGraphicCacheLimit(tjs_uint64 limit) {
     // set limit of graphic cache by total bytes.
     if(limit == 0) {
         TVPGraphicCacheLimit = limit;
@@ -2496,5 +2496,5 @@ void TVPSetGraphicCacheLimit(tjs_uint64 limit) {
     TVPCheckGraphicCacheLimit();
 }
 //---------------------------------------------------------------------------
-tjs_uint64 TVPGetGraphicCacheLimit() { return TVPGraphicCacheLimit; }
+tjs_uint64 GetGraphicCacheLimit() { return TVPGraphicCacheLimit; }
 //---------------------------------------------------------------------------

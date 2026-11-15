@@ -160,7 +160,7 @@ class GetLister : public tTJSDispatch /** EnumMembers 用 */
 
 public:
     // コンストラクタ
-    GetLister(iTVPStorageLister *lister) : lister(lister) {};
+    GetLister(IStorageLister *lister) : lister(lister) {};
 
     // EnumMember用繰り返し実行部
     // param[0] メンバ名
@@ -189,13 +189,13 @@ public:
     }
 
 private:
-    iTVPStorageLister *lister;
+    IStorageLister *lister;
 };
 
 /**
  * Varストレージ
  */
-class VarStorage : public iTVPStorageMedia {
+class VarStorage : public IStorageMedia {
 
 public:
     /**
@@ -204,7 +204,7 @@ public:
     VarStorage() : refCount(1) {}
 
     // -----------------------------------
-    // iTVPStorageMedia Intefaces
+    // IStorageMedia Intefaces
     // -----------------------------------
 
     virtual void AddRef() { refCount++; };
@@ -254,13 +254,13 @@ public:
             }
         }
         if(!ret) {
-            TVPThrowExceptionMessage(TJS_W("cannot open memfile:%1"), name);
+            ThrowExceptionMessage(TJS_W("cannot open memfile:%1"), name);
         }
         return ret;
     }
 
     // list files at given place
-    virtual void GetListAt(const ttstr &name, iTVPStorageLister *lister) {
+    virtual void GetListAt(const ttstr &name, IStorageLister *lister) {
         tTJSVariant base = getFile(name);
         if(isDirectory(base)) {
             tTJSVariantClosure closure(new GetLister(lister));
@@ -295,14 +295,14 @@ protected:
         if((q = TJS_strchr(p, '/'))) {
             ttstr dname = ttstr(p, q - p);
             if(dname != TJS_W(".")) {
-                TVPThrowExceptionMessage(TJS_W("no such domain:%1"), dname);
+                ThrowExceptionMessage(TJS_W("no such domain:%1"), dname);
             }
         } else {
-            TVPThrowExceptionMessage(TJS_W("invalid path:%1"), name);
+            ThrowExceptionMessage(TJS_W("invalid path:%1"), name);
         }
         // パス名
         ttstr path = ttstr(q + 1);
-        iTJSDispatch2 *global = TVPGetScriptDispatch();
+        iTJSDispatch2 *global = GetScriptDispatch();
         tTJSVariant base(global, global);
         while(path.length() > 0) {
             p = path.c_str();
@@ -375,7 +375,7 @@ static void PreRegistCallback() {
         var = new VarStorage();
         krkr::io::RegisterStorageMedia(var);
 
-        iTJSDispatch2 *global = TVPGetScriptDispatch();
+        iTJSDispatch2 *global = GetScriptDispatch();
         if(global) {
             tTJSVariant loaded(true);
             global->PropSet(TJS_MEMBERENSURE, TJS_W("varfileLoaded"), nullptr,

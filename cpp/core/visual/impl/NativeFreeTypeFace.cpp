@@ -94,7 +94,7 @@ tNativeFreeTypeFace::tNativeFreeTypeFace(const std::wstring &fontname,
         DWORD result = GetFontData(DC, TVP_TT_TABLE_name, 0, nullptr, 0);
         if(result == GDI_ERROR) {
             // エラー; GetFontData では扱えなかった
-            TVPThrowExceptionMessage(TJS_W("Font '%1$s' cannot be used"),
+            ThrowExceptionMessage(TJS_W("Font '%1$s' cannot be used"),
                                      fontname);
         }
 
@@ -109,7 +109,7 @@ tNativeFreeTypeFace::tNativeFreeTypeFace(const std::wstring &fontname,
                              name_content_size);
         if(result == GDI_ERROR) {
             // エラー; メモリに読み込むことが出来なかった
-            TVPThrowExceptionMessage(TJS_W("Font '%1$s' cannot be used"),
+            ThrowExceptionMessage(TJS_W("Font '%1$s' cannot be used"),
                                      fontname);
         }
 
@@ -139,7 +139,7 @@ tNativeFreeTypeFace::tNativeFreeTypeFace(const std::wstring &fontname,
 
         if(result == GDI_ERROR) {
             // エラー; GetFontData では扱えなかった
-            TVPThrowExceptionMessage(TJS_W("Font '%1$s' cannot be used"),
+            ThrowExceptionMessage(TJS_W("Font '%1$s' cannot be used"),
                                      fontname);
         }
         fontsize = result;
@@ -159,7 +159,7 @@ tNativeFreeTypeFace::tNativeFreeTypeFace(const std::wstring &fontname,
         // (この時点で開くことが出来なければ例外を発生させる)
         int index = 0;
         if(!OpenFaceByIndex(index)) {
-            TVPThrowExceptionMessage(TJS_W("Font '%1$s' cannot be used"),
+            ThrowExceptionMessage(TJS_W("Font '%1$s' cannot be used"),
                                      fontname);
         }
 
@@ -174,7 +174,7 @@ tNativeFreeTypeFace::tNativeFreeTypeFace(const std::wstring &fontname,
             FT_Error err =
                 FT_Load_Sfnt_Table(Face, TTAG_name, 0, nullptr, &length);
             if(err) {
-                TVPThrowExceptionMessage(TJS_W("Font '%1$s' cannot be used"),
+                ThrowExceptionMessage(TJS_W("Font '%1$s' cannot be used"),
                                          fontname);
             }
 
@@ -185,7 +185,7 @@ tNativeFreeTypeFace::tNativeFreeTypeFace(const std::wstring &fontname,
                 err = FT_Load_Sfnt_Table(Face, TTAG_name, 0, name_content_ft,
                                          &length);
                 if(err) {
-                    TVPThrowExceptionMessage(
+                    ThrowExceptionMessage(
                         TJS_W("Font '%1$s' cannot be used"), fontname);
                 }
                 // FreeType から読み込んだ name タグの内容と、Windows
@@ -208,7 +208,7 @@ tNativeFreeTypeFace::tNativeFreeTypeFace(const std::wstring &fontname,
                 // に設定してその index を開き、ループを抜ける
                 index = 0;
                 if(!OpenFaceByIndex(index)) {
-                    TVPThrowExceptionMessage(
+                    ThrowExceptionMessage(
                         TJS_W("Font '%1$s' cannot be used"), fontname);
                 }
                 break;

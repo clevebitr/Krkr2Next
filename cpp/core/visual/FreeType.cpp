@@ -110,7 +110,7 @@ tGenericFreeTypeFace::tGenericFreeTypeFace(const ttstr &fontname,
         // ファイルを開く
         File = TVPCreateFontStream(fontname);
         if(File == nullptr) {
-            TVPThrowExceptionMessage(TVPCannotOpenFontFile, fontname);
+            ThrowExceptionMessage(TVPCannotOpenFontFile, fontname);
         }
 
         // FT_StreamRec の各フィールドを埋める
@@ -147,7 +147,7 @@ tGenericFreeTypeFace::tGenericFreeTypeFace(const ttstr &fontname,
         tjs_uint index = TVP_GET_FACE_INDEX_FROM_OPTIONS(options);
         if(!OpenFaceByIndex(index, Face)) {
             // フォントを開けなかった
-            TVPThrowExceptionMessage(TVPFontCannotBeUsed, fontname);
+            ThrowExceptionMessage(TVPFontCannotBeUsed, fontname);
         }
     } catch(...) {
         throw;

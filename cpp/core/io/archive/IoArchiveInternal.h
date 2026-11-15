@@ -11,13 +11,13 @@
 // 定义始终在同一个 namespace。
 namespace krkr::io {
 
-tTVPArchive *OpenZIPArchive(const ttstr &name, tTJSBinaryStream *st,
+Archive *OpenZIPArchive(const ttstr &name, tTJSBinaryStream *st,
                                bool normalizeFileName);
 
-tTVPArchive *Open7ZArchive(const ttstr &name, tTJSBinaryStream *st,
+Archive *Open7ZArchive(const ttstr &name, tTJSBinaryStream *st,
                               bool normalizeFileName);
 
-tTVPArchive *OpenTARArchive(const ttstr &name, tTJSBinaryStream *st,
+Archive *OpenTARArchive(const ttstr &name, tTJSBinaryStream *st,
                                bool normalizeFileName);
 
 void FreeArchiveHandlePoolByPointer(void *pointer);

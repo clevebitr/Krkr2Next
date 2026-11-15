@@ -44,7 +44,7 @@ static void UninitMIDIOut() {
         midiOutClose(midiOutHandle), midiOutHandle = nullptr;
 }
 //---------------------------------------------------------------------------
-static tTVPAtExit UninitMIDIOutAtExit(KRKR_ATEXIT_PRI_RELEASE,
+static AtExit UninitMIDIOutAtExit(KRKR_ATEXIT_PRI_RELEASE,
                                          UninitMIDIOut);
 //---------------------------------------------------------------------------
 static void CheckMIDIDelay() {
@@ -104,7 +104,7 @@ void MIDIOutData(const tjs_uint8 *data, int len) {
         if(!(data[i] & 0x80)) {
             // running status
             if(!prevevent)
-                TVPThrowExceptionMessage(TVPMalformedMIDIMessage);
+                ThrowExceptionMessage(TVPMalformedMIDIMessage);
             ev = prevevent;
         } else {
             ev = data[i++];
@@ -119,17 +119,17 @@ void MIDIOutData(const tjs_uint8 *data, int len) {
                 case 0xe:
                 case 0xb:
                     if(i >= len)
-                        TVPThrowExceptionMessage(TVPMalformedMIDIMessage);
+                        ThrowExceptionMessage(TVPMalformedMIDIMessage);
                     b1 = data[i++];
                     if(i >= len)
-                        TVPThrowExceptionMessage(TVPMalformedMIDIMessage);
+                        ThrowExceptionMessage(TVPMalformedMIDIMessage);
                     b2 = data[i++];
                     break;
 
                 case 0xc:
                 case 0xd:
                     if(i >= len)
-                        TVPThrowExceptionMessage(TVPMalformedMIDIMessage);
+                        ThrowExceptionMessage(TVPMalformedMIDIMessage);
                     b1 = data[i++];
                     break;
             }
@@ -142,24 +142,24 @@ void MIDIOutData(const tjs_uint8 *data, int len) {
                 case 0x1: // f1
                 case 0x3: // f3
                     if(i >= len)
-                        TVPThrowExceptionMessage(TVPMalformedMIDIMessage);
+                        ThrowExceptionMessage(TVPMalformedMIDIMessage);
                     b1 = data[i++];
                     MIDIOut(ev, b1, 0);
                     break;
 
                 case 0x2: // f2
                     if(i >= len)
-                        TVPThrowExceptionMessage(TVPMalformedMIDIMessage);
+                        ThrowExceptionMessage(TVPMalformedMIDIMessage);
                     b1 = data[i++];
                     if(i >= len)
-                        TVPThrowExceptionMessage(TVPMalformedMIDIMessage);
+                        ThrowExceptionMessage(TVPMalformedMIDIMessage);
                     b2 = data[i++];
                     MIDIOut(ev, b1, b2);
                     break;
 
                 case 0xf: // ff
                     if(i >= len)
-                        TVPThrowExceptionMessage(TVPMalformedMIDIMessage);
+                        ThrowExceptionMessage(TVPMalformedMIDIMessage);
                     b1 = data[i++];
                     if(b1 == 0x00) {
                         // 50ms wait
@@ -182,7 +182,7 @@ void MIDIOutData(const tjs_uint8 *data, int len) {
                             break;
                     }
                     if(j == len)
-                        TVPThrowExceptionMessage(
+                        ThrowExceptionMessage(
                             TVPMalformedMIDIMessage); // EOX not found
                     tjs_uint8 *sex = new tjs_uint8[count];
                     memcpy(sex, data + i - 1, count);
@@ -255,7 +255,7 @@ static void DeleteMIDIThread() {
         delete midiThread, midiThread = nullptr;
 }
 //---------------------------------------------------------------------------
-static tTVPAtExit DeleteMIDIThreadAtExit(KRKR_ATEXIT_PRI_SHUTDOWN,
+static AtExit DeleteMIDIThreadAtExit(KRKR_ATEXIT_PRI_SHUTDOWN,
                                             DeleteMIDIThread);
 //---------------------------------------------------------------------------
 static void AddMIDIBuffer(tTJSNI_MIDISoundBuffer *buf) {
@@ -766,7 +766,7 @@ bool tTJSNI_MIDISoundBuffer::OnTimer() {
 //---------------------------------------------------------------------------
 void tTJSNI_MIDISoundBuffer::Open(const ttstr &name) {
     // open a stream
-    tTVPStreamHolder stream(name);
+    StreamHolder stream(name);
 
     Stop();
 
@@ -775,7 +775,7 @@ void tTJSNI_MIDISoundBuffer::Open(const ttstr &name) {
         tjs_uint8 buf[16];
         stream->ReadBuffer(buf, 4);
         if(memcmp(buf, "MThd", 4))
-            TVPThrowExceptionMessage(TVPInvalidSMF, TJS_W("MThd not found"));
+            ThrowExceptionMessage(TVPInvalidSMF, TJS_W("MThd not found"));
 
         tjs_uint32 headerlen;
         tjs_int format;
@@ -786,7 +786,7 @@ void tTJSNI_MIDISoundBuffer::Open(const ttstr &name) {
 
         format = GetSMFInt16(pb);
         if(format != 0 && format != 1)
-            TVPThrowExceptionMessage(TVPInvalidSMF,
+            ThrowExceptionMessage(TVPInvalidSMF,
                                      TJS_W("Format must be 0 or 1"));
 
         // clear tracks
@@ -804,7 +804,7 @@ void tTJSNI_MIDISoundBuffer::Open(const ttstr &name) {
 
         Division = GetSMFInt16(pb);
         if(Division < 0)
-            TVPThrowExceptionMessage(TVPInvalidSMF, TJS_W("Invalid division"));
+            ThrowExceptionMessage(TVPInvalidSMF, TJS_W("Invalid division"));
 
         // read each track
         stream->SetPosition(headerlen + 8);
@@ -812,7 +812,7 @@ void tTJSNI_MIDISoundBuffer::Open(const ttstr &name) {
         for(tjs_int i = 0; i < trackcount; i++) {
             stream->ReadBuffer(buf, 8);
             if(memcmp(buf, "MTrk", 4))
-                TVPThrowExceptionMessage(TVPInvalidSMF,
+                ThrowExceptionMessage(TVPInvalidSMF,
                                          TJS_W("MTrk not found"));
             pb = buf + 4;
             tjs_uint32 len = GetSMFInt32(pb);

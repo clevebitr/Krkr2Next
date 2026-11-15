@@ -363,9 +363,9 @@ namespace SimpleBinder {
             }
             static tjs_error Trap(const FuncName name, const Message message) {
                 if(name)
-                    TVPThrowExceptionMessage(message->c_str(), name);
+                    ThrowExceptionMessage(message->c_str(), name);
                 else
-                    TVPThrowExceptionMessage(message->c_str());
+                    ThrowExceptionMessage(message->c_str());
                 return TJS_E_FAIL;
             }
 
@@ -476,7 +476,7 @@ namespace SimpleBinder {
                 const tjs_char *p = name.c_str();
                 const tjs_char *r = p;
                 if(!target) {
-                    target = TVPGetScriptDispatch();
+                    target = GetScriptDispatch();
                     if(!target)
                         return NULL;
                     target->Release(); // NoAddRef.
@@ -1052,7 +1052,7 @@ namespace SimpleBinder {
         public:
             BindUtil(bool link) :
                 _link(link), _error(false), _store(0), _context(0) {
-                _store = TVPGetScriptDispatch();
+                _store = GetScriptDispatch();
                 if(_store)
                     _store->Release(); // NoAddRef.
                 else

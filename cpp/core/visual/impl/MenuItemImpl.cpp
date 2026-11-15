@@ -37,7 +37,7 @@ iTJSDispatch2 *TVPGetMenuDispatch(tTVInteger hWnd) {
 }
 static void DelMenuDispatch(tTVInteger hWnd) { MENU_LIST.erase(hWnd); }
 static bool _IsWindow(tTVInteger hWnd) {
-    tjs_int count = TVPGetWindowCount();
+    tjs_int count = GetWindowCount();
     for(tjs_int i = 0; i < count; ++i) {
         if(TVPGetWindowListAt(i) == (tTJSNI_Window *)(hWnd))
             return true;
@@ -139,7 +139,7 @@ void tTJSNI_MenuItem::Invalidate() {
 void tTJSNI_MenuItem::MenuItemClick() {
     // VCL event handler
     // post to the event queue
-    TVPPostInputEvent(new tTVPOnMenuItemClickInputEvent(this));
+    krkr::base::PostInputEvent(new tTVPOnMenuItemClickInputEvent(this));
 }
 //---------------------------------------------------------------------------
 bool tTJSNI_MenuItem::CanDeliverEvents() const {
@@ -185,7 +185,7 @@ void tTJSNI_MenuItem::Remove(tTJSNI_MenuItem *item) {
     // 	{
     // 		int index = MenuItem->IndexOf(item->MenuItem);
     // 		if(index == -1)
-    // TVPThrowExceptionMessage(TVPNotChildMenuItem);
+    // ThrowExceptionMessage(TVPNotChildMenuItem);
     //
     // 		MenuItem->Delete(index);
     RemoveChild(item);
@@ -400,9 +400,9 @@ tTJSNativeInstance *tTJSNC_MenuItem::CreateNativeInstance() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCreateNativeClass_MenuItem
+// CreateNativeClass_MenuItem
 //---------------------------------------------------------------------------
-tTJSNativeClass *TVPCreateNativeClass_MenuItem() {
+tTJSNativeClass *CreateNativeClass_MenuItem() {
     tTJSNativeClass *cls = new tTJSNC_MenuItem();
     static tjs_uint32 TJS_NCM_CLASSID;
     TJS_NCM_CLASSID = tTJSNC_MenuItem::ClassID;
@@ -447,7 +447,7 @@ TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, keycodeToText)
 //
 //        tTJSVariant val;
 //
-//        iTJSDispatch2 * global = TVPGetScriptDispatch();
+//        iTJSDispatch2 * global = GetScriptDispatch();
 //
 //        {
 //            gWindowMenuProperty = new WindowMenuProperty();
@@ -464,7 +464,7 @@ TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, keycodeToText)
 //
 //            //-----------------------------------------------------------------------
 //            iTJSDispatch2 * tjsclass =
-//            TVPCreateNativeClass_MenuItem(); val =
+//            CreateNativeClass_MenuItem(); val =
 //            tTJSVariant(tjsclass); tjsclass->Release();
 //            global->PropSet(TJS_MEMBERENSURE, TJS_W("MenuItem"),
 //            nullptr, &val, global);
@@ -548,10 +548,10 @@ void TVPSerializeMainWindowMenu(std::string &out) {
 //---------------------------------------------------------------------------
 bool TVPInvokeMainWindowMenuItem(const std::string &id) {
     // **绝不能直接调 item->OnClick()**：那会在 engine_tick 里同步跑脚本 onClick，
-    // 脚本一抛异常，TVPShowScriptException 就会 `throw EAbort`；而 EAbort 只在
+    // 脚本一抛异常，ShowScriptException 就会 `throw EAbort`；而 EAbort 只在
     // `Application::Run()` 的 try 里被接住（Application.cpp）。从 engine_tick 直接调
     // 会让异常穿过 JNI 边界 → std::terminate → SIGABRT（真机 NEKOPARA 实测：
-    // TVPShowScriptException ← TVPPostEvent ← OnClick ← TVPInvokeMainWindowMenuItem
+    // ShowScriptException ← krkr::base::PostTJSEvent ← OnClick ← TVPInvokeMainWindowMenuItem
     // ← engine_tick）。
     // 改为投一个菜单点击输入事件，交给引擎自己的事件派发（在 Run() 的 try 内）执行。
     try {
@@ -585,7 +585,7 @@ bool TVPInvokeMainWindowMenuItem(const std::string &id) {
         auto *item = dynamic_cast<tTJSNI_MenuItem *>(current);
         if(!item || !item->GetEnabled())
             return false;
-        TVPPostInputEvent(new tTVPOnMenuItemClickInputEvent(item));
+        krkr::base::PostInputEvent(new tTVPOnMenuItemClickInputEvent(item));
         return true;
     } catch(...) {
         // 菜单查找/投递失败不该把 engine_tick 拖下水。

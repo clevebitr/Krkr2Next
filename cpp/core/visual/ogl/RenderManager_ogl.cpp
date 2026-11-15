@@ -1415,7 +1415,7 @@ public:
         } else if(Bitmap->Is8bit()) {
             return ((uint8_t *)Bitmap->GetScanLine(y))[x];
         } else {
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("Unsupported texture format[RGB] for getting "
                       "point color."));
             return 0;
@@ -1423,10 +1423,10 @@ public:
     }
     void Update(const void *pixel, TVPTextureFormat::e format, int pitch,
                 const tTVPRect &rc) override {
-        TVPThrowExceptionMessage(TJS_W("Static texture cannot update data."));
+        ThrowExceptionMessage(TJS_W("Static texture cannot update data."));
     }
     void SetPoint(int x, int y, uint32_t clr) override {
-        TVPThrowExceptionMessage(
+        ThrowExceptionMessage(
             TJS_W("Static texture cannot set point color."));
     }
     bool IsStatic() override { return true; }
@@ -2154,7 +2154,7 @@ static GLenum CompileShader(GLint shadertype, const std::string &src) {
         glGetShaderInfoLog(shader, length, nullptr, info);
         ttstr _info(info);
         delete[] info;
-        TVPThrowExceptionMessage(TJS_W("Failed to compile shader: %1"), _info);
+        ThrowExceptionMessage(TJS_W("Failed to compile shader: %1"), _info);
         return 0;
     } else {
         return shader;
@@ -2177,7 +2177,7 @@ static GLenum CombineProgram(GLenum vert, GLenum frag) {
         char *info = new char[length + 1];
         info[length] = 0;
         glGetProgramInfoLog(program, length, nullptr, info);
-        TVPThrowExceptionMessage(TJS_W("Failed to link shader program:\n%1"),
+        ThrowExceptionMessage(TJS_W("Failed to link shader program:\n%1"),
                                  info);
         delete[] info;
         return -1;
@@ -3287,7 +3287,7 @@ protected:
             // SourceSample "FBO incomplete 0x8cd6" +
             // BlackScreen）。这里清空图形缓存， 让这些纹理在下一个 context
             // 里按需重新上传为有效 GL id。
-            TVPClearGraphicCache();
+            ClearGraphicCache();
         });
         krkr::environ::SetPostUpdateEvent(_RestoreGLStatues);
     }
@@ -4440,7 +4440,7 @@ public:
                     blksize = 16;
                     break;
                 default:
-                    TVPThrowExceptionMessage(
+                    ThrowExceptionMessage(
                         TJS_W("Unsupported compressed texture format "
                               "[%1]"),
                         (tjs_int)(format - TVPTextureFormat::Compressed));
@@ -4468,7 +4468,7 @@ public:
                                                blkh);
                     break;
                 default:
-                    TVPThrowExceptionMessage(
+                    ThrowExceptionMessage(
                         TJS_W("Unsupported compressed texture format "
                               "[%1]"),
                         (tjs_int)(format - TVPTextureFormat::Compressed));

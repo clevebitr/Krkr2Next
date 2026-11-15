@@ -15,7 +15,7 @@
 extern void TVPResampleImage(const tTVPRect &cliprect, iTVPBaseBitmap *dest,
                              const tTVPRect &destrect,
                              const iTVPBaseBitmap *src, const tTVPRect &srcrect,
-                             tTVPBBStretchType type, tjs_real typeopt,
+                             BBStretchType type, tjs_real typeopt,
                              tTVPBBBltMethod method, tjs_int opa, bool hda);
 
 #endif // __RESAMPLE_IMAGE_H__

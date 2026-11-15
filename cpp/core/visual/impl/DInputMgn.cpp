@@ -736,7 +736,7 @@ static void TVPUninitDirectInput()
 	Application->FreeDirectInputDeviceForWindows();
 }
 //---------------------------------------------------------------------------
-static tTVPAtExit
+static AtExit
 	TVPUninitDirectInputAtExit(KRKR_ATEXIT_PRI_RELEASE, TVPUninitDirectInput);
 //---------------------------------------------------------------------------
 

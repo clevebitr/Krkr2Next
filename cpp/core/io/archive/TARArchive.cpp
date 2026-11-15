@@ -13,7 +13,7 @@ void storeFilename(ttstr &name, const char *narrowName, const ttstr &filename) {
     if(len == -1) {
         ttstr msg("Filename is not encoded in UTF8 in archive:\n");
         ShowSimpleMessageBox(msg + filename, TJS_W("Error"));
-        TVPThrowExceptionMessage(TJS_W("Invalid archive entry name"));
+        ThrowExceptionMessage(TJS_W("Invalid archive entry name"));
     }
     tjs_char *p = name.AllocBuffer(len);
     p[TJS_narrowtowide(p, narrowName, len)] = 0;
@@ -34,7 +34,7 @@ tjs_uint64 parseOctNum(const char *oct, int length) {
     return num;
 }
 
-class TARArchive : public tTVPArchive {
+class TARArchive : public Archive {
     struct EntryInfo {
         ttstr filename;
         tjs_uint64 offset{};
@@ -45,7 +45,7 @@ class TARArchive : public tTVPArchive {
     friend class TARArchiveStream;
 
 public:
-    TARArchive(const ttstr &arcname) : tTVPArchive(arcname) {}
+    TARArchive(const ttstr &arcname) : Archive(arcname) {}
 
     ~TARArchive() override { FreeArchiveHandlePoolByPointer(this); }
 
@@ -132,7 +132,7 @@ tTJSBinaryStream *TARArchive::CreateStreamByIndex(tjs_uint idx) {
     return new TArchiveStream(this, info.offset, info.size);
 }
 
-tTVPArchive *OpenTARArchive(const ttstr &name, tTJSBinaryStream *st,
+Archive *OpenTARArchive(const ttstr &name, tTJSBinaryStream *st,
                                bool normalizeFileName) {
     auto *arc = new TARArchive(name);
     if(!arc->init(st, normalizeFileName)) {

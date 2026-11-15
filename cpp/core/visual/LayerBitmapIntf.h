@@ -23,7 +23,7 @@
 
 /*[*/
 //---------------------------------------------------------------------------
-// tTVPBBBltMethod and tTVPBBStretchType
+// tTVPBBBltMethod and BBStretchType
 //---------------------------------------------------------------------------
 enum tTVPBBBltMethod {
     bmCopy,
@@ -60,7 +60,7 @@ enum tTVPBBBltMethod {
     bmPsExclusion
 };
 
-enum tTVPBBStretchType {
+enum BBStretchType {
     stNearest = 0, // primal method; nearest neighbor method
     stFastLinear = 1, // fast linear interpolation (does not have so
                       // much precision)
@@ -130,7 +130,7 @@ struct t2DAffineMatrix {
 
 //---------------------------------------------------------------------------
 extern tTVPGLGammaAdjustData TVPIntactGammaAdjustData;
-extern tjs_int TVPDrawThreadNum;
+extern tjs_int DrawThreadNum;
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -199,21 +199,21 @@ public:
     bool StretchBlt(tTVPRect cliprect, tTVPRect destrect,
                     const iTVPBaseBitmap *ref, tTVPRect refrect,
                     tTVPBBBltMethod method, tjs_int opa, bool hda = true,
-                    tTVPBBStretchType mode = stNearest, tjs_real typeopt = 0.0);
+                    BBStretchType mode = stNearest, tjs_real typeopt = 0.0);
 
 public:
     bool AffineBlt(tTVPRect destrect, const iTVPBaseBitmap *ref,
                    tTVPRect refrect, const tTVPPointD *points,
                    tTVPBBBltMethod method, tjs_int opa,
                    tTVPRect *updaterect = nullptr, bool hda = true,
-                   tTVPBBStretchType mode = stNearest, bool clear = false,
+                   BBStretchType mode = stNearest, bool clear = false,
                    tjs_uint32 clearcolor = 0);
 
     bool AffineBlt(tTVPRect destrect, const iTVPBaseBitmap *ref,
                    tTVPRect refrect, const t2DAffineMatrix &matrix,
                    tTVPBBBltMethod method, tjs_int opa,
                    tTVPRect *updaterect = nullptr, bool hda = true,
-                   tTVPBBStretchType type = stNearest, bool clear = false,
+                   BBStretchType type = stNearest, bool clear = false,
                    tjs_uint32 clearcolor = 0);
 
 private:

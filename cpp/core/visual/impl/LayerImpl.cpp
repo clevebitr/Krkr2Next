@@ -18,7 +18,7 @@
 //---------------------------------------------------------------------------
 //  convert color identifier or TVP system color to/from actual color
 //---------------------------------------------------------------------------
-tjs_uint32 TVPToActualColor(tjs_uint32 color) {
+tjs_uint32 ToActualColor(tjs_uint32 color) {
     if(color & 0xff000000) {
         color = ColorToRGB(color); // system color to RGB
         // convert byte order to 0xRRGGBB since ColorToRGB's return
@@ -82,7 +82,7 @@ HRGN tTJSNI_Layer::CreateMaskRgn(tjs_uint threshold)
 	std::vector<HRGN> RgnList;
 	tRegionData Data;
 
-	if(!MainImage) TVPThrowExceptionMessage(TVPNotDrawableLayerType);
+	if(!MainImage) ThrowExceptionMessage(TVPNotDrawableLayerType);
 
 	w = MainImage->GetWidth(); h = MainImage->GetHeight();
 
@@ -172,9 +172,9 @@ tTJSNativeInstance *tTJSNC_Layer::CreateNativeInstance() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCreateNativeClass_Layer
+// CreateNativeClass_Layer
 //---------------------------------------------------------------------------
-tTJSNativeClass *TVPCreateNativeClass_Layer() { return new tTJSNC_Layer(); }
+tTJSNativeClass *CreateNativeClass_Layer() { return new tTJSNC_Layer(); }
 //---------------------------------------------------------------------------
 
 // utility functions for custom plugins
@@ -188,7 +188,7 @@ tTJSNI_Layer *tTJSNI_Layer::FromObject(iTJSDispatch2 *obj) {
         if(TJS_FAILED(obj->NativeInstanceSupport(TJS_NIS_GETINSTANCE,
                                                  tTJSNC_Layer::ClassID,
                                                  (iTJSNativeInstance **)&lay)))
-            TVPThrowExceptionMessage(TVPSpecifyLayer);
+            ThrowExceptionMessage(TVPSpecifyLayer);
     }
     return lay;
 }

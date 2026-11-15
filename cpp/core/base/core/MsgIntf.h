@@ -35,33 +35,33 @@
 //---------------------------------------------------------------------------
 namespace krkr::base {
 
-TJS_EXP_FUNC_DEF(ttstr, TVPFormatMessage,
+TJS_EXP_FUNC_DEF(ttstr, FormatMessage,
                  (const tjs_char *msg, const ttstr &p1));
 
-TJS_EXP_FUNC_DEF(ttstr, TVPFormatMessage,
+TJS_EXP_FUNC_DEF(ttstr, FormatMessage,
                  (const tjs_char *msg, const ttstr &p1, const ttstr &p2));
 
-TJS_EXP_FUNC_DEF(void, TVPThrowExceptionMessage, (const tjs_char *msg));
+TJS_EXP_FUNC_DEF(void, ThrowExceptionMessage, (const tjs_char *msg));
 
-TJS_EXP_FUNC_DEF(void, TVPThrowExceptionMessage,
+TJS_EXP_FUNC_DEF(void, ThrowExceptionMessage,
                  (const tjs_char *msg, const ttstr &p1, tjs_int num));
 
-TJS_EXP_FUNC_DEF(void, TVPThrowExceptionMessage,
+TJS_EXP_FUNC_DEF(void, ThrowExceptionMessage,
                  (const tjs_char *msg, const ttstr &p1));
 
-TJS_EXP_FUNC_DEF(void, TVPThrowExceptionMessage,
+TJS_EXP_FUNC_DEF(void, ThrowExceptionMessage,
                  (const tjs_char *msg, const ttstr &p1, const ttstr &p2));
 
-TJS_EXP_FUNC_DEF(ttstr, TVPGetAboutString, ());
+TJS_EXP_FUNC_DEF(ttstr, GetAboutString, ());
 
-TJS_EXP_FUNC_DEF(ttstr, TVPGetVersionInformation, ());
+TJS_EXP_FUNC_DEF(ttstr, GetVersionInformation, ());
 
-TJS_EXP_FUNC_DEF(ttstr, TVPGetVersionString, ());
+TJS_EXP_FUNC_DEF(ttstr, GetVersionString, ());
 
 } // namespace krkr::base
 
-#define TVPThrowInternalError                                                  \
-    TVPThrowExceptionMessage(TVPInternalError, __FILE__, __LINE__)
+#define KRKR_THROW_INTERNAL_ERROR                                                  \
+    ThrowExceptionMessage(TVPInternalError, __FILE__, __LINE__)
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -69,41 +69,29 @@ TJS_EXP_FUNC_DEF(ttstr, TVPGetVersionString, ());
 //---------------------------------------------------------------------------
 namespace krkr::base {
 
-extern tjs_int TVPVersionMajor;
-extern tjs_int TVPVersionMinor;
-extern tjs_int TVPVersionRelease;
-extern tjs_int TVPVersionBuild;
+extern tjs_int VersionMajor;
+extern tjs_int VersionMinor;
+extern tjs_int VersionRelease;
+extern tjs_int VersionBuild;
 
 //---------------------------------------------------------------------------
-extern void TVPGetVersion();
+extern void GetVersion();
 /*
         implement in each platforms;
         fill these four version field.
 */
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(void, TVPGetSystemVersion,
+TJS_EXP_FUNC_DEF(void, GetSystemVersion,
                  (tjs_int & major, tjs_int &minor, tjs_int &release,
                   tjs_int &build));
 
-TJS_EXP_FUNC_DEF(void, TVPGetTJSVersion,
+TJS_EXP_FUNC_DEF(void, GetTJSVersion,
                  (tjs_int & major, tjs_int &minor, tjs_int &release));
 //---------------------------------------------------------------------------
 
 } // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::base::TVPFormatMessage;
-using krkr::base::TVPThrowExceptionMessage;
-using krkr::base::TVPGetAboutString;
-using krkr::base::TVPGetVersionInformation;
-using krkr::base::TVPGetVersionString;
-using krkr::base::TVPVersionMajor;
-using krkr::base::TVPVersionMinor;
-using krkr::base::TVPVersionRelease;
-using krkr::base::TVPVersionBuild;
-using krkr::base::TVPGetVersion;
-using krkr::base::TVPGetSystemVersion;
-using krkr::base::TVPGetTJSVersion;
 
 // 消息目录（MsgIntfInc.h 的 151 条 + impl/MsgImpl.h 的 192 条 tTJSMessageHolder）
 // 刻意留在全局：两个文件都是 `gentext.pl Messages.xlsx` 的生成文件，

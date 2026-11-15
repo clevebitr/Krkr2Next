@@ -27,7 +27,7 @@ bool TVPAcceptSaveAsJPG(void *formatdata, const ttstr &type,
     // progressive : boolean
     if(result && dic) {
         tTJSVariant result;
-        TVPExecuteExpression(
+        ExecuteExpression(
             TJS_W("(const)%[") TJS_W("\"quality\"=>(const)%[\"type\"="
                                      ">\"range\",\"min\"=>1,"
                                      "\"max\"=>100,\"desc\"=>\"100 "
@@ -145,7 +145,7 @@ struct my_error_mgr {
 };
 //---------------------------------------------------------------------------
 static void my_error_exit(j_common_ptr cinfo) {
-    TVPThrowExceptionMessage(TVPJPEGLoadError,
+    ThrowExceptionMessage(TVPJPEGLoadError,
                              ttstr(TVPErrorCode) + ttstr(cinfo->err->msg_code));
 }
 //---------------------------------------------------------------------------
@@ -247,7 +247,7 @@ void TVPLoadJPEG(void *formatdata, void *callbackdata,
                  tTJSBinaryStream *src, tjs_int keyidx,
                  tTVPGraphicLoadMode mode) {
     if(mode == glmPalettized)
-        TVPThrowExceptionMessage(TVPJPEGLoadError,
+        ThrowExceptionMessage(TVPJPEGLoadError,
                                  ttstr(TVPUnsupportedJpegPalette));
 
     jpeg_decompress_struct cinfo;
@@ -465,7 +465,7 @@ void TVPSaveAsJPG(void *formatdata, tTJSBinaryStream *dst,
     tjs_uint height = image->GetHeight();
     tjs_uint width = image->GetWidth();
     if(height == 0 || width == 0)
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
 
     // open stream
     tTJSBinaryStream *stream = dst;
@@ -474,7 +474,7 @@ void TVPSaveAsJPG(void *formatdata, tTJSBinaryStream *dst,
     size_t buff_size = width * height * sizeof(tjs_uint32);
     tjs_uint8 *dest_buf = new tjs_uint8[buff_size];
     try {
-        TVPClearGraphicCache();
+        ClearGraphicCache();
 
         struct jpeg_error_mgr jerr;
         cinfo.err = jpeg_std_error(&jerr);

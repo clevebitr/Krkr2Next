@@ -66,7 +66,7 @@ namespace PSB {
             0.0; // timeline subdivision (fallback) / 时间线细分（兜底）
     };
 
-    class PSBMedia : public iTVPStorageMedia {
+    class PSBMedia : public IStorageMedia {
     public:
         PSBMedia();
 
@@ -91,7 +91,7 @@ namespace PSB {
 
         tTJSBinaryStream *Open(const ttstr &name, tjs_uint32 flags) override;
 
-        void GetListAt(const ttstr &name, iTVPStorageLister *lister) override;
+        void GetListAt(const ttstr &name, IStorageLister *lister) override;
 
         void GetLocallyAccessibleName(ttstr &name) override;
 

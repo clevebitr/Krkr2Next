@@ -28,22 +28,22 @@
 #include <fmt/format.h>
 #include "ThreadIntf.h"
 
-extern bool TVPStartupSuccess;
+extern bool StartupSuccess;
 
 namespace krkr::base {
 
 //---------------------------------------------------------------------------
-// TVPFireOnApplicationActivateEvent
+// FireOnApplicationActivateEvent
 //---------------------------------------------------------------------------
-void TVPFireOnApplicationActivateEvent(bool activate_or_deactivate) {
+void FireOnApplicationActivateEvent(bool activate_or_deactivate) {
     // get the script engine
-    tTJS *engine = TVPGetScriptEngine();
+    tTJS *engine = GetScriptEngine();
     if(!engine)
         return; // the script engine had been shutdown
 
     // get System.onActivate or System.onDeactivate
     // and call it.
-    iTJSDispatch2 *global = TVPGetScriptEngine()->GetGlobalNoAddRef();
+    iTJSDispatch2 *global = GetScriptEngine()->GetGlobalNoAddRef();
     if(!global)
         return;
 
@@ -79,7 +79,7 @@ void TVPFireOnApplicationActivateEvent(bool activate_or_deactivate) {
     } catch(const eTJS &e) {
         // the system should not throw exceptions during retrieving
         // the function
-        krkr::utils::AddLog(TVPFormatMessage(
+        krkr::utils::AddLog(FormatMessage(
             TVPErrorInRetrievingSystemOnActivateOnDeactivate, e.GetMessage()));
         return;
     }
@@ -112,10 +112,10 @@ tTJSNC_System::tTJSNC_System() : inherited(TJS_W("System")) {
     //----------------------------------------------------------------------
     TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ terminate) {
         int code = numparams > 0 ? param[0]->AsInteger() : 0;
-        if(!TVPStartupSuccess) {
+        if(!StartupSuccess) {
             ;
         } else {
-            TVPTerminateAsync(code);
+            TerminateAsync(code);
         }
 
         return TJS_S_OK;
@@ -126,7 +126,7 @@ tTJSNC_System::tTJSNC_System() : inherited(TJS_W("System")) {
         // this method does not return
 
         int code = numparams > 0 ? param[0]->AsInteger() : 0;
-        if(!TVPStartupSuccess) {
+        if(!StartupSuccess) {
             ;
         } else {
             krkr::base::TerminateSync(code);
@@ -142,7 +142,7 @@ tTJSNC_System::tTJSNC_System() : inherited(TJS_W("System")) {
 
         ttstr value = *param[2];
 
-        //	bool b = TVPInputQuery(*param[0], *param[1], value);
+        //	bool b = InputQuery(*param[0], *param[1], value);
 
         ttstr caption = *param[0], prompt = *param[1];
         // this shows a dialog box which let user to input a string.
@@ -176,7 +176,7 @@ tTJSNC_System::tTJSNC_System() : inherited(TJS_W("System")) {
 
         tTJSVariantClosure clo = param[0]->AsObjectClosureNoAddRef();
 
-        TVPAddContinuousHandler(clo);
+        AddContinuousHandler(clo);
 
         return TJS_S_OK;
     }
@@ -192,7 +192,7 @@ tTJSNC_System::tTJSNC_System() : inherited(TJS_W("System")) {
 
         tTJSVariantClosure clo = param[0]->AsObjectClosureNoAddRef();
 
-        TVPRemoveContinuousHandler(clo);
+        RemoveContinuousHandler(clo);
 
         return TJS_S_OK;
     }
@@ -207,7 +207,7 @@ tTJSNC_System::tTJSNC_System() : inherited(TJS_W("System")) {
 
         if(result) {
             tjs_uint32 color = (tjs_int)(*param[0]);
-            color = TVPToActualColor(color);
+            color = ToActualColor(color);
             *result = (tjs_int)color;
         }
 
@@ -217,7 +217,7 @@ tTJSNC_System::tTJSNC_System() : inherited(TJS_W("System")) {
     //---------------------------------------------------------------------------
     TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ clearGraphicCache) {
         // clear graphic cache
-        TVPClearGraphicCache();
+        ClearGraphicCache();
 
         return TJS_S_OK;
     }
@@ -253,7 +253,7 @@ tTJSNC_System::tTJSNC_System() : inherited(TJS_W("System")) {
         if(numparams >= 3 && param[2]->Type() != tvtVoid)
             timeout = (tjs_int64)*param[2];
 
-        TVPTouchImages(storages, limit, timeout);
+        TouchImages(storages, limit, timeout);
 
         return TJS_S_OK;
     }
@@ -314,7 +314,7 @@ tTJSNC_System::tTJSNC_System() : inherited(TJS_W("System")) {
         if(numparams >= 1 && param[0]->Type() != tvtVoid)
             level = (tjs_int)*param[0];
 
-        TVPDeliverCompactEvent(level);
+        DeliverCompactEvent(level);
 
         return TJS_S_OK;
     }
@@ -325,7 +325,7 @@ tTJSNC_System::tTJSNC_System() : inherited(TJS_W("System")) {
 
     //----------------------------------------------------------------------
     TJS_BEGIN_NATIVE_PROP_DECL(versionString){
-        TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetVersionString();
+        TJS_BEGIN_NATIVE_PROP_GETTER{ *result = GetVersionString();
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -335,7 +335,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL(versionString)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(versionInformation){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetVersionInformation();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = GetVersionInformation();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -345,13 +345,13 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL(versionInformation)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(eventDisabled){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetSystemEventDisabledState();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = GetSystemEventDisabledState();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
 
 TJS_BEGIN_NATIVE_PROP_SETTER {
-    TVPSetSystemEventDisabledState(param->operator bool());
+    SetSystemEventDisabledState(param->operator bool());
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER
@@ -359,13 +359,13 @@ TJS_END_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL(eventDisabled)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(graphicCacheLimit){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = (tjs_int)TVPGetGraphicCacheLimit();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = (tjs_int)GetGraphicCacheLimit();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
 
 TJS_BEGIN_NATIVE_PROP_SETTER {
-    TVPSetGraphicCacheLimit((tjs_int)*param);
+    SetGraphicCacheLimit((tjs_int)*param);
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER
@@ -407,13 +407,13 @@ TJS_END_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL(exitOnWindowClose)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(drawThreadNum){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPDrawThreadNum;
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = DrawThreadNum;
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
 
 TJS_BEGIN_NATIVE_PROP_SETTER {
-    TVPDrawThreadNum = (tjs_int)*param;
+    DrawThreadNum = (tjs_int)*param;
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER
@@ -445,7 +445,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL(exeBits)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(osBits){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetOSBits();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = GetOSBits();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -482,7 +482,7 @@ PropSet(TJS_MEMBERENSURE, TJS_W("onDeactivate"), nullptr, &val, this);
 //---------------------------------------------------------------------------
 tTJSNativeInstance *tTJSNC_System::CreateNativeInstance() {
     // this class cannot create an instance
-    TVPThrowExceptionMessage(TVPCannotCreateInstance);
+    ThrowExceptionMessage(TVPCannotCreateInstance);
 
     return nullptr;
 }

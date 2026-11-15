@@ -133,7 +133,7 @@ void TVPDeallocateRegionRect(tTVPRegionRect *rect) {
     // TVPAllocateRegionRect().
 
     // Append to TVPRegionFreeRects
-    //	if(!TVPRegionFreeRects) TVPThrowInternalError();
+    //	if(!TVPRegionFreeRects) KRKR_THROW_INTERNAL_ERROR();
     ////-----------------
     // geee
     TVPRegionFreeRects->push_back(rect);

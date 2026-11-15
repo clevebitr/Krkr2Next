@@ -363,12 +363,12 @@ public:
                 in->Release();
             } else {
                 in->Release();
-                TVPThrowExceptionMessage(
+                ThrowExceptionMessage(
                     (ttstr(TJS_W("cannot open storefile: ")) + storename)
                         .c_str());
             }
         } else {
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 (ttstr(TJS_W("cannot open readfile: ")) + filename).c_str());
         }
     }
@@ -519,7 +519,7 @@ private:
         dir = krkr::io::NormalizeStorageName(dir);
 
         if(dir.GetLastChar() != TJS_W('/')) {
-            TVPThrowExceptionMessage(TJS_W(
+            ThrowExceptionMessage(TJS_W(
                 "'/' must be specified at the end of given directory name."));
         }
         krkr::io::GetLocalPath(dir);
@@ -530,7 +530,7 @@ private:
         try {
             fs::path path(dir.c_str());
             if(!fs::exists(path) || !fs::is_directory(path)) {
-                TVPThrowExceptionMessage(TJS_W("Directory not found."));
+                ThrowExceptionMessage(TJS_W("Directory not found."));
             }
 
             tjs_int count = 0;
@@ -632,7 +632,7 @@ public:
     static bool removeDirectory(ttstr dir) {
 
         if(dir.GetLastChar() != TJS_W('/')) {
-            TVPThrowExceptionMessage(TJS_W(
+            ThrowExceptionMessage(TJS_W(
                 "'/' must be specified at the end of given directory name."));
         }
 
@@ -655,7 +655,7 @@ public:
      */
     static bool createDirectory(ttstr dir) {
         if(dir.GetLastChar() != TJS_W('/')) {
-            TVPThrowExceptionMessage(TJS_W(
+            ThrowExceptionMessage(TJS_W(
                 "'/' must be specified at the end of given directory name."));
         }
         dir = krkr::io::NormalizeStorageName(dir);
@@ -675,7 +675,7 @@ public:
      */
     static bool createDirectoryNoNormalize(ttstr dir) {
         if(dir.GetLastChar() != TJS_W('/')) {
-            TVPThrowExceptionMessage(TJS_W(
+            ThrowExceptionMessage(TJS_W(
                 "'/' must be specified at the end of given directory name."));
         }
         krkr::io::GetLocalPath(dir);
@@ -694,7 +694,7 @@ public:
      */
     static bool changeDirectory(ttstr dir) {
         if(dir.GetLastChar() != TJS_W('/')) {
-            TVPThrowExceptionMessage(TJS_W(
+            ThrowExceptionMessage(TJS_W(
                 "'/' must be specified at the end of given directory name."));
         }
         dir = krkr::io::NormalizeStorageName(dir);
@@ -768,7 +768,7 @@ public:
      */
     static int isExistentDirectory(ttstr dir) {
         if(dir.GetLastChar() != TJS_W('/')) {
-            TVPThrowExceptionMessage(TJS_W(
+            ThrowExceptionMessage(TJS_W(
                 "'/' must be specified at the end of given directory name."));
         }
         dir = krkr::io::NormalizeStorageName(dir);
@@ -857,7 +857,7 @@ public:
         const ttstr &filename = krkr::io::GetPlacedPath(*param[0]);
         IStream *in = krkr::io::CreateIStream(filename, TJS_BS_READ);
         if(!in)
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 (ttstr(TJS_W("cannot open : ")) + param[0]->GetString())
                     .c_str());
 
@@ -1007,16 +1007,16 @@ NCB_REGISTER_CLASS(TemporaryFiles) {
  */
 static void PostRegistCallback() {
     tTJSVariant var;
-    TVPExecuteExpression(TJS_W("Date"), &var);
+    ExecuteExpression(TJS_W("Date"), &var);
     dateClass = var.AsObject();
     var.Clear();
-    TVPExecuteExpression(TJS_W("Date.setTime"), &var);
+    ExecuteExpression(TJS_W("Date.setTime"), &var);
     dateSetTime = var.AsObject();
     var.Clear();
-    TVPExecuteExpression(TJS_W("Date.getTime"), &var);
+    ExecuteExpression(TJS_W("Date.getTime"), &var);
     dateGetTime = var.AsObject();
     var.Clear();
-    TVPExecuteExpression(StoragesFstatPreScript);
+    ExecuteExpression(StoragesFstatPreScript);
 }
 
 #define RELEASE(name)                                                          \

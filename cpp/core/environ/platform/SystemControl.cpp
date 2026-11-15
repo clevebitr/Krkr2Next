@@ -55,7 +55,7 @@ void RegisterPSBCacheInfoCallback(bool (*cb)(size_t &, size_t &)) {
     g_GetPSBCacheInfo = cb;
 }
 
-SystemControl *GetSystemControl;
+SystemControl *systemControl;
 bool systemControlAlive = false;
 
 //---------------------------------------------------------------------------
@@ -96,7 +96,7 @@ namespace {
     }
 
     tjs_int GetSystemTotalMemoryMB() {
-        TVPMemoryInfo meminfo{};
+        MemoryInfo meminfo{};
         GetMemoryInfo(meminfo);
         if(meminfo.MemTotal == 0)
             return 0;
@@ -190,8 +190,8 @@ void SystemControl::RunMemoryGovernor(uint32_t tick) {
 
     const tjs_uint64 target_graphic_bytes =
         static_cast<tjs_uint64>(target_graphic_limit_mb) * 1024ULL * 1024ULL;
-    if(TVPGetGraphicCacheLimit() != target_graphic_bytes)
-        TVPSetGraphicCacheLimit(target_graphic_bytes);
+    if(GetGraphicCacheLimit() != target_graphic_bytes)
+        SetGraphicCacheLimit(target_graphic_bytes);
 
     tjs_uint archive_limit = MemoryProfile ? 48 : 128;
     if(budget_mb > 2500)
@@ -237,7 +237,7 @@ void SystemControl::RunMemoryGovernor(uint32_t tick) {
     if(pressure == 0 && tick - LastIdleCompactTick >= idle_compact_interval) {
         LastIdleCompactTick = tick;
         krkr::stall::MarkStage("内存清理: DEACTIVATE（压力 0）");
-        TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_DEACTIVATE);
+        DeliverCompactEvent(TVP_COMPACT_LEVEL_DEACTIVATE);
 #ifdef __APPLE__
         malloc_zone_pressure_relief(nullptr, 0);
 #endif
@@ -246,7 +246,7 @@ void SystemControl::RunMemoryGovernor(uint32_t tick) {
     if(pressure >= 1 && tick - LastDeepCompactedTick >= deep_compact_interval) {
         LastDeepCompactedTick = tick;
         krkr::stall::MarkStage("内存清理: MINIMIZE（压力 1 深度清理）");
-        TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MINIMIZE);
+        DeliverCompactEvent(TVP_COMPACT_LEVEL_MINIMIZE);
 #ifdef __APPLE__
         malloc_zone_pressure_relief(nullptr, 0);
 #endif
@@ -261,7 +261,7 @@ void SystemControl::RunMemoryGovernor(uint32_t tick) {
         krkr::stall::MarkStage("内存清理: XP3 段缓存（压力 2 激进清理）");
         krkr::io::ClearXP3SegmentCache();
         krkr::stall::MarkStage("内存清理: MINIMIZE（压力 2 激进清理）");
-        TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MINIMIZE);
+        DeliverCompactEvent(TVP_COMPACT_LEVEL_MINIMIZE);
         const auto aggressiveMs =
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - aggressiveStart)
@@ -294,7 +294,7 @@ void SystemControl::RunMemoryGovernor(uint32_t tick) {
         const auto afterSeg = std::chrono::steady_clock::now();
         krkr::stall::MarkStage(
             "内存清理: COMPACT_MAX + TJS GC（压力 3，渲染线程内同步）");
-        TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
+        DeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
         const auto afterCompact = std::chrono::steady_clock::now();
         const auto segMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                                afterSeg - compactStart)
@@ -330,7 +330,7 @@ void SystemControl::RunMemoryGovernor(uint32_t tick) {
                          "forcing full cleanup",
                          heap_in_use_mb, heap_ceiling_mb);
             krkr::io::ClearXP3SegmentCache();
-            TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
+            DeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
             malloc_zone_pressure_relief(nullptr, 0);
         }
     }
@@ -345,7 +345,7 @@ void SystemControl::RunMemoryGovernor(uint32_t tick) {
         const tjs_int graphic_used_mb = static_cast<tjs_int>(
             TVPGetGraphicCacheTotalBytes() / (1024ULL * 1024ULL));
         const tjs_int graphic_limit_mb = static_cast<tjs_int>(
-            TVPGetGraphicCacheLimit() / (1024ULL * 1024ULL));
+            GetGraphicCacheLimit() / (1024ULL * 1024ULL));
         const tjs_int xp3_seg_mb = static_cast<tjs_int>(
             krkr::io::GetXP3SegmentCacheTotalBytes() / (1024ULL * 1024ULL));
 
@@ -538,11 +538,11 @@ bool SystemControl::ApplicationIdle() {
 
 void SystemControl::DeliverEvents() {
     if(ContinuousEventCalling)
-        TVPProcessContinuousHandlerEventFlag = true; // set flag
+        ProcessContinuousHandlerEventFlag = true; // set flag
 
     if(EventEnable) {
         krkr::stall::MarkStage("定时器: TVPDeliverAllEvents（执行排队事件）");
-        TVPDeliverAllEvents();
+        krkr::base::DeliverAllEvents();
     }
 }
 
@@ -595,7 +595,7 @@ void SystemControl::SystemWatchTimerTimer() {
 
     // call TickBeat
     krkr::stall::MarkStage("定时器: TickBeat（窗口节拍）");
-    tjs_int count = TVPGetWindowCount();
+    tjs_int count = GetWindowCount();
     for(tjs_int i = 0; i < count; i++) {
         tTJSNI_Window *win = TVPGetWindowListAt(i);
         win->TickBeat();
@@ -607,11 +607,11 @@ void SystemControl::SystemWatchTimerTimer() {
 
         // fire compact event
         krkr::stall::MarkStage("定时器: COMPACT_IDLE（空闲清理，渲染线程内同步）");
-        TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_IDLE);
+        DeliverCompactEvent(TVP_COMPACT_LEVEL_IDLE);
     } else if(ContinuousEventCalling && tick - LastCompactedTick > 10000) {
         LastCompactedTick = tick;
         krkr::stall::MarkStage("定时器: COMPACT_IDLE（连续事件期，同步）");
-        TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_IDLE);
+        DeliverCompactEvent(TVP_COMPACT_LEVEL_IDLE);
     }
 
     krkr::stall::MarkStage("定时器: RunMemoryGovernor（含同步清理）");

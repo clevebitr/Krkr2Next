@@ -32,14 +32,14 @@ extern void TVPResampleImageAVX2(const tTVPResampleClipping &clip,
                                  iTVPBaseBitmap *dest, const tTVPRect &destrect,
                                  const iTVPBaseBitmap *src,
                                  const tTVPRect &srcrect,
-                                 tTVPBBStretchType type, tjs_real typeopt);
+                                 BBStretchType type, tjs_real typeopt);
 
 extern void TVPResampleImageSSE2(const tTVPResampleClipping &clip,
                                  const tTVPImageCopyFuncBase *blendfunc,
                                  iTVPBaseBitmap *dest, const tTVPRect &destrect,
                                  const iTVPBaseBitmap *src,
                                  const tTVPRect &srcrect,
-                                 tTVPBBStretchType type, tjs_real typeopt);
+                                 BBStretchType type, tjs_real typeopt);
 
 void tTVPBlendParameter::setFunctionFromParam() {
 #define TVP_BLEND_4(basename) /* blend for 4 types (normal, opacity,           \
@@ -798,7 +798,7 @@ void TVPWeightResample(const tTVPResampleClipping &clip,
  */
 void TVPResampleImage(const tTVPRect &cliprect, iTVPBaseBitmap *dest,
                       const tTVPRect &destrect, const iTVPBaseBitmap *src,
-                      const tTVPRect &srcrect, tTVPBBStretchType type,
+                      const tTVPRect &srcrect, BBStretchType type,
                       tjs_real typeopt, tTVPBBBltMethod method, tjs_int opa,
                       bool hda) {
     // クリッピング処理

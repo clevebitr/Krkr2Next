@@ -16,11 +16,10 @@
 
 namespace krkr::base {
 
-extern bool TVPSelectFile(iTJSDispatch2 *params);
+extern bool SelectFile(iTJSDispatch2 *params);
 
 } // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::base::TVPSelectFile;
 
 #endif

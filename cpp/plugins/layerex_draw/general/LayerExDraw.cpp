@@ -569,7 +569,7 @@ BrushBase *createBrush(tTJSVariant colorOrBrush) {
                 std::vector<PointFClass> points;
                 getPoints(info, TJS_W("points"), points);
                 if((int)points.size() == 0)
-                    TVPThrowExceptionMessage(TJS_W("must set poins"));
+                    ThrowExceptionMessage(TJS_W("must set poins"));
                 auto wrapMode =
                     (WrapMode)info.getIntValue(TJS_W("wrapMode"), WrapModeTile);
                 pbrush = new PathGradientBrush{ &points[0], (int)points.size(),
@@ -641,7 +641,7 @@ BrushBase *createBrush(tTJSVariant colorOrBrush) {
                         };
                     }
                 } else {
-                    TVPThrowExceptionMessage(
+                    ThrowExceptionMessage(
                         TJS_W("must set point1,2 or rect"));
                 }
 
@@ -655,7 +655,7 @@ BrushBase *createBrush(tTJSVariant colorOrBrush) {
                 brush = lbrush;
             } break;
             default:
-                TVPThrowExceptionMessage(TJS_W("invalid brush type"));
+                ThrowExceptionMessage(TJS_W("invalid brush type"));
                 break;
         }
     }
@@ -2336,7 +2336,7 @@ tjs_error LayerExDraw::saveImage(tTJSVariant *result, tjs_int numparams,
     }
     CLSID clsid;
     if(!getEncoder(type.c_str(), &clsid)) {
-        TVPThrowExceptionMessage(TJS_W("unknown format:%1"), type);
+        ThrowExceptionMessage(TJS_W("unknown format:%1"), type);
     }
 
     auto *caller = new EncoderParameterGetter();

@@ -32,7 +32,7 @@ static tjs_uint32 typeHint;
 
 static iTJSDispatch2 *getLayerClass(void) {
     tTJSVariant var;
-    TVPExecuteExpression(TJS_W("Layer"), &var);
+    ExecuteExpression(TJS_W("Layer"), &var);
     return var.AsObjectNoAddRef();
 }
 
@@ -196,7 +196,7 @@ static tjs_error TJS_INTF_METHOD copyRightBlueToLeftAlpha(tTJSVariant *result,
     WrtRefT dbuf = 0;
     tjs_int32 dw, dh, dpitch;
     if(!GetLayerBufferAndSize(lay, dw, dh, dbuf, dpitch))
-        TVPThrowExceptionMessage(TJS_W("dest must be Layer."));
+        ThrowExceptionMessage(TJS_W("dest must be Layer."));
 
     dw /= 2;
     WrtRefT sbuf = dbuf + dw * 4;
@@ -226,7 +226,7 @@ static tjs_error TJS_INTF_METHOD copyBottomBlueToTopAlpha(tTJSVariant *result,
     WrtRefT dbuf = 0;
     tjs_int32 dw, dh, dpitch;
     if(!GetLayerBufferAndSize(lay, dw, dh, dbuf, dpitch))
-        TVPThrowExceptionMessage(TJS_W("dest must be Layer."));
+        ThrowExceptionMessage(TJS_W("dest must be Layer."));
 
     dh /= 2;
     WrtRefT sbuf = dbuf + dh * dpitch;
@@ -256,7 +256,7 @@ static tjs_error TJS_INTF_METHOD fillAlpha(tTJSVariant *result,
     WrtRefT dbuf = 0;
     tjs_int32 l, t, dw, dh, dpitch;
     if(!GetClipBufferAndSize(lay, l, t, dw, dh, dbuf, dpitch))
-        TVPThrowExceptionMessage(TJS_W("dest must be Layer."));
+        ThrowExceptionMessage(TJS_W("dest must be Layer."));
 
     dbuf += 3;
     for(int i = 0; i < dh; i++) {
@@ -292,13 +292,13 @@ static tjs_error TJS_INTF_METHOD copyAlphaToProvince(tTJSVariant *result,
         otherwise = (tjs_int32)(param[2]->AsInteger());
 
     if(!GetClipSize(lay, l, t, w, h, spitch))
-        TVPThrowExceptionMessage(TJS_W("src must be Layer."));
+        ThrowExceptionMessage(TJS_W("src must be Layer."));
 
     tTJSVariant val;
     if(TJS_FAILED(layerClass->PropGet(0, TJS_W("mainImageBuffer"),
                                       &mainImageBufferHint, &val, lay)) ||
        (sbuf = reinterpret_cast<ReadRefT>(val.AsInteger())) == NULL)
-        TVPThrowExceptionMessage(TJS_W("src has no image."));
+        ThrowExceptionMessage(TJS_W("src has no image."));
     sbuf += spitch * t + l * 4;
 
     val.Clear();
@@ -306,13 +306,13 @@ static tjs_error TJS_INTF_METHOD copyAlphaToProvince(tTJSVariant *result,
                                       &provinceImageBufferForWriteHint, &val,
                                       lay)) ||
        (dbuf = reinterpret_cast<WrtRefT>(val.AsInteger())) == NULL)
-        TVPThrowExceptionMessage(TJS_W("dst has no province image."));
+        ThrowExceptionMessage(TJS_W("dst has no province image."));
     val.Clear();
     if(TJS_FAILED(layerClass->PropGet(0, TJS_W("provinceImageBufferPitch"),
                                       &provinceImageBufferPitchHint, &val,
                                       lay)) ||
        (dpitch = (tjs_int32)val.AsInteger()) == 0)
-        TVPThrowExceptionMessage(TJS_W("dst has no province pitch."));
+        ThrowExceptionMessage(TJS_W("dst has no province pitch."));
     dbuf += dpitch * t + l;
 
     sbuf += 3;
@@ -437,9 +437,9 @@ GetSrcDstLayerInfo(iTJSDispatch2 *src, tjs_int32 &siw, tjs_int32 &sih,
     tTJSVariant val;
 
     if(!GetClipSize(dst, dl, dt, diw, dih, dpitch))
-        TVPThrowExceptionMessage(TJS_W("dest must be Layer."));
+        ThrowExceptionMessage(TJS_W("dest must be Layer."));
     if(!GetLayerSize(src, siw, sih, spitch))
-        TVPThrowExceptionMessage(TJS_W("src must be Layer."));
+        ThrowExceptionMessage(TJS_W("src must be Layer."));
 
     if(TJS_FAILED(layerClass->PropGet(0, TJS_W("mainImageBuffer"),
                                       &mainImageBufferHint, &val, src)))
@@ -454,11 +454,11 @@ GetSrcDstLayerInfo(iTJSDispatch2 *src, tjs_int32 &siw, tjs_int32 &sih,
         dbuf = reinterpret_cast<WrtRefT>(val.AsInteger());
 
     if(!sbuf || !dbuf)
-        TVPThrowExceptionMessage(TJS_W("Layer has no images."));
+        ThrowExceptionMessage(TJS_W("Layer has no images."));
 
     if(TJS_FAILED(layerClass->PropGet(0, TJS_W("mainImageBufferPitch"),
                                       &mainImageBufferPitchHint, &val, dst)))
-        TVPThrowExceptionMessage(TJS_W("dest has no pitch."));
+        ThrowExceptionMessage(TJS_W("dest has no pitch."));
     dpitch = (tjs_int32)val.AsInteger();
 
     return layerClass;
@@ -707,7 +707,7 @@ static tjs_error TJS_INTF_METHOD fillByProvince(tTJSVariant *result,
     WrtRefT dbuf = 0;
     tjs_int32 l, t, dw, dh, dpitch;
     if(!GetClipBufferAndSize(lay, l, t, dw, dh, dbuf, dpitch))
-        TVPThrowExceptionMessage(TJS_W("must be Layer."));
+        ThrowExceptionMessage(TJS_W("must be Layer."));
 
     ReadRefT sbuf = 0;
     tjs_int32 spitch;
@@ -717,12 +717,12 @@ static tjs_error TJS_INTF_METHOD fillByProvince(tTJSVariant *result,
                                           &provinceImageBufferHint, &val,
                                           lay)) ||
            (sbuf = reinterpret_cast<ReadRefT>(val.AsInteger())) == NULL)
-            TVPThrowExceptionMessage(TJS_W("no province image."));
+            ThrowExceptionMessage(TJS_W("no province image."));
         if(TJS_FAILED(layerClass->PropGet(0, TJS_W("provinceImageBufferPitch"),
                                           &provinceImageBufferPitchHint, &val,
                                           lay)) ||
            (spitch = (tjs_int32)val.AsInteger()) == 0)
-            TVPThrowExceptionMessage(TJS_W("no province pitch."));
+            ThrowExceptionMessage(TJS_W("no province pitch."));
     }
     sbuf += t * spitch + l;
 
@@ -764,13 +764,13 @@ static tjs_error TJS_INTF_METHOD fillToProvince(tTJSVariant *result,
     ReadRefT sbuf = 0;
     tjs_int32 l, t, dw, dh, spitch;
     if(!GetClipSize(lay, l, t, dw, dh, spitch))
-        TVPThrowExceptionMessage(TJS_W("src must be Layer."));
+        ThrowExceptionMessage(TJS_W("src must be Layer."));
 
     tTJSVariant val;
     if(TJS_FAILED(layerClass->PropGet(0, TJS_W("mainImageBuffer"),
                                       &mainImageBufferHint, &val, lay)) ||
        (sbuf = reinterpret_cast<ReadRefT>(val.AsInteger())) == NULL)
-        TVPThrowExceptionMessage(TJS_W("src has no image."));
+        ThrowExceptionMessage(TJS_W("src has no image."));
     sbuf += spitch * t + l * 4;
 
     WrtRefT dbuf = 0;
@@ -780,13 +780,13 @@ static tjs_error TJS_INTF_METHOD fillToProvince(tTJSVariant *result,
                                       &provinceImageBufferForWriteHint, &val,
                                       lay)) ||
        (dbuf = reinterpret_cast<WrtRefT>(val.AsInteger())) == NULL)
-        TVPThrowExceptionMessage(TJS_W("dst has no province image."));
+        ThrowExceptionMessage(TJS_W("dst has no province image."));
     val.Clear();
     if(TJS_FAILED(layerClass->PropGet(0, TJS_W("provinceImageBufferPitch"),
                                       &provinceImageBufferPitchHint, &val,
                                       lay)) ||
        (dpitch = (tjs_int32)val.AsInteger()) == 0)
-        TVPThrowExceptionMessage(TJS_W("dst has no province pitch."));
+        ThrowExceptionMessage(TJS_W("dst has no province pitch."));
     dbuf += dpitch * t + l;
 
     int minx = -1, miny = -1, maxx = -1, maxy = -1;

@@ -26,7 +26,7 @@
 #include "StorageImpl.h"
 #include "StorageIntf.h"
 #include "IoPolicy.h"
-// 这里曾 include "WindowImpl.h"（visual），只为拿 TVPSelectFile；
+// 这里曾 include "WindowImpl.h"（visual），只为拿 krkr::base::SelectFile；
 // 它的声明在 FileSelector.h（krkr::base）里，下面已 include。
 #include "SysInitIntf.h"
 #include "DebugIntf.h"
@@ -84,7 +84,7 @@ namespace krkr::io {
 //---------------------------------------------------------------------------
 // FileMedia
 //---------------------------------------------------------------------------
-class FileMedia : public iTVPStorageMedia {
+class FileMedia : public IStorageMedia {
     tjs_uint RefCount;
 
 public:
@@ -111,7 +111,7 @@ public:
 
     tTJSBinaryStream *Open(const ttstr &name, tjs_uint32 flags) override;
 
-    void GetListAt(const ttstr &name, iTVPStorageLister *lister) override;
+    void GetListAt(const ttstr &name, IStorageLister *lister) override;
 
     void GetLocallyAccessibleName(ttstr &name) override;
 
@@ -185,7 +185,7 @@ tTJSBinaryStream *FileMedia::Open(const ttstr &name, tjs_uint32 flags) {
     // currently only local/network(by OS) storage systems are
     // supported.
     if(name.IsEmpty())
-        TVPThrowExceptionMessage(TVPCannotOpenStorage, TJS_W("\"\""));
+        ThrowExceptionMessage(TVPCannotOpenStorage, TJS_W("\"\""));
 
     ttstr origname = name;
     ttstr _name(name);
@@ -261,7 +261,7 @@ void ListDir(const std::string &u8folder,
 
 void GetLocalFileListAt(
     const ttstr &name,
-    const std::function<void(const ttstr &, tTVPLocalFileInfo *)> &cb) {
+    const std::function<void(const ttstr &, LocalFileInfo *)> &cb) {
     DIR *dirp;
     dirent *direntp;
     tTVP_stat stat_buf;
@@ -286,7 +286,7 @@ void GetLocalFileListAt(
 #if defined(__APPLE__)
             _tjs_normalize_nfc(file);
 #endif
-            tTVPLocalFileInfo info;
+            LocalFileInfo info;
             info.NativeName = direntp->d_name;
             info.Mode = stat_buf.st_mode;
             info.Size = stat_buf.st_size;
@@ -300,11 +300,11 @@ void GetLocalFileListAt(
 }
 
 //---------------------------------------------------------------------------
-void FileMedia::GetListAt(const ttstr &_name, iTVPStorageLister *lister) {
+void FileMedia::GetListAt(const ttstr &_name, IStorageLister *lister) {
     ttstr name(_name);
     GetLocalName(name);
     GetLocalFileListAt(name,
-                          [lister](const ttstr &name, tTVPLocalFileInfo *s) {
+                          [lister](const ttstr &name, LocalFileInfo *s) {
                               if(s->Mode & (S_IFREG)) {
                                   lister->Add(name);
                               }
@@ -518,13 +518,13 @@ void FileMedia::GetLocalName(ttstr &name) {
     ttstr tmp = name;
     GetLocallyAccessibleName(tmp);
     if(tmp.IsEmpty())
-        TVPThrowExceptionMessage(TVPCannotGetLocalName, name);
+        ThrowExceptionMessage(TVPCannotGetLocalName, name);
     name = tmp;
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-iTVPStorageMedia *CreateFileMedia() { return new FileMedia; }
+IStorageMedia *CreateFileMedia() { return new FileMedia; }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -653,7 +653,7 @@ tTJSBinaryStream *krkr::io::OpenStream(const ttstr &_name, tjs_uint32 flags) {
     // currently only local/network(by OS) storage systems are
     // supported.
     if(_name.IsEmpty())
-        TVPThrowExceptionMessage(TVPCannotOpenStorage, TJS_W("\"\""));
+        ThrowExceptionMessage(TVPCannotOpenStorage, TJS_W("\"\""));
 
     const ttstr &origname = _name;
     ttstr name(_name);
@@ -695,7 +695,7 @@ bool CheckExistentLocalFolder(const ttstr &name) {
 }
 //---------------------------------------------------------------------------
 
-static tTVPArchive *(*ArchiveCreators[])(
+static Archive *(*ArchiveCreators[])(
     const ttstr &name, tTJSBinaryStream *st,
     bool normalizeFileName) = { OpenZIPArchive, Open7ZArchive,
                                 OpenTARArchive, XP3Archive::Create };
@@ -703,12 +703,12 @@ static tTVPArchive *(*ArchiveCreators[])(
 //---------------------------------------------------------------------------
 // OpenArchive
 //---------------------------------------------------------------------------
-tTVPArchive *OpenArchive(const ttstr &name, bool normalizeFileName) {
+Archive *OpenArchive(const ttstr &name, bool normalizeFileName) {
     tTJSBinaryStream *st = CreateStream(name);
     if(!st)
         return nullptr;
     for(auto creator : ArchiveCreators) {
-        tTVPArchive *archive = creator(name, st, normalizeFileName);
+        Archive *archive = creator(name, st, normalizeFileName);
         if(archive)
             return archive;
         st->SetPosition(0);
@@ -719,7 +719,7 @@ tTVPArchive *OpenArchive(const ttstr &name, bool normalizeFileName) {
 
 //---------------------------------------------------------------------------
 int CheckArchive(const ttstr &localname) {
-    tTVPArchive *arc = nullptr;
+    Archive *arc = nullptr;
     int validArchive = 2; // archive but no startup.tjs
     try {
         arc = OpenArchive(krkr::io::NormalizeStorageName(localname), false);
@@ -791,7 +791,7 @@ LocalFileStream::LocalFileStream(const ttstr &origname,
             dirpath = dirpath.SubString(0, i);
             if(!CheckExistentLocalFolder(dirpath) &&
                !TVPCreateFolders(dirpath)) {
-                TVPThrowExceptionMessage(TVPCannotOpenStorage, origname);
+                ThrowExceptionMessage(TVPCannotOpenStorage, origname);
             }
             //			_lastFileSystemChanged = true;
         }
@@ -837,7 +837,7 @@ LocalFileStream::LocalFileStream(const ttstr &origname,
             }
         }
         if(!MemBuffer)
-            TVPThrowExceptionMessage(TVPCannotOpenStorage, origname);
+            ThrowExceptionMessage(TVPCannotOpenStorage, origname);
     }
 #else
     tTJSNarrowStringHolder holder(localname.c_str());
@@ -858,7 +858,7 @@ LocalFileStream::LocalFileStream(const ttstr &origname,
             }
         }
         if(!MemBuffer)
-            TVPThrowExceptionMessage(TVPCannotOpenStorage, origname);
+            ThrowExceptionMessage(TVPCannotOpenStorage, origname);
     }
 #endif
     // push current tick as an environment noise
@@ -875,7 +875,7 @@ LocalFileStream::~LocalFileStream() {
             ttstr filename(FileName);
             FileName.~tTJSString();
             free(this);
-            TVPThrowExceptionMessage(TJS_W("File Writing Error: %1"), filename);
+            ThrowExceptionMessage(TJS_W("File Writing Error: %1"), filename);
         }
         delete MemBuffer;
     }
@@ -1260,7 +1260,7 @@ tjs_uint64 BinaryStreamAdapter::Seek(tjs_int64 offset, tjs_int whence) {
         if(orgpossaved) {
             Stream->Seek(orgpos, STREAM_SEEK_SET, &newpos);
         } else {
-            TVPThrowExceptionMessage(TVPSeekError);
+            ThrowExceptionMessage(TVPSeekError);
         }
     }
 
@@ -1307,7 +1307,7 @@ void BinaryStreamAdapter::SetEndOfStorage() {
     pos.QuadPart = GetPosition();
     HRESULT hr = Stream->SetSize(pos);
     if(FAILED(hr))
-        TVPThrowExceptionMessage(TVPTruncateError);
+        ThrowExceptionMessage(TVPTruncateError);
 }
 //---------------------------------------------------------------------------
 
@@ -1320,15 +1320,15 @@ tTJSBinaryStream *CreateBinaryStreamAdapter(IStream *refstream) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPPluginHolder
+// PluginHolder
 //---------------------------------------------------------------------------
-tTVPPluginHolder::tTVPPluginHolder(const ttstr &aname) {
+PluginHolder::PluginHolder(const ttstr &aname) {
     LocalTempStorageHolder = nullptr;
 
     // search in TVP storage system
     ttstr place(GetPlacedPath(aname));
     if(!place.IsEmpty()) {
-        LocalTempStorageHolder = new tTVPLocalTempStorageHolder(place);
+        LocalTempStorageHolder = new LocalTempStorageHolder(place);
     } else {
         // not found in TVP storage system; search exepath,
         // exepath\system, exepath\plugin
@@ -1364,14 +1364,14 @@ tTVPPluginHolder::tTVPPluginHolder(const ttstr &aname) {
 }
 
 //---------------------------------------------------------------------------
-tTVPPluginHolder::~tTVPPluginHolder() {
+PluginHolder::~PluginHolder() {
     if(LocalTempStorageHolder) {
         delete LocalTempStorageHolder;
     }
 }
 
 //---------------------------------------------------------------------------
-const ttstr &tTVPPluginHolder::GetLocalName() const {
+const ttstr &PluginHolder::GetLocalName() const {
     if(LocalTempStorageHolder)
         return LocalTempStorageHolder->GetLocalName();
     return LocalName;
@@ -1407,7 +1407,7 @@ ttstr SearchCD(const ttstr &name) {
 }
 //---------------------------------------------------------------------------
 
-TArchiveStream::TArchiveStream(tTVPArchive *owner, tjs_uint64 off,
+TArchiveStream::TArchiveStream(Archive *owner, tjs_uint64 off,
                                tjs_uint64 len) :
     Owner(owner), StartPos(off), DataLength(len) {
     Owner->AddRef();
@@ -1468,7 +1468,7 @@ tTJSNativeClass *TVPCreateNativeClass_Storages() {
 
         iTJSDispatch2 *dsp = param[0]->AsObjectNoAddRef();
 
-        bool res = TVPSelectFile(dsp);
+        bool res = krkr::base::SelectFile(dsp);
 
         if(result)
             *result = static_cast<tjs_int>(res);
@@ -1606,7 +1606,7 @@ void AutoMountSiblingXP3Archives() {
         ttstr archivePath = parentStoragePath + ttstr(xp3Name.c_str());
         archivePath = krkr::io::NormalizeStorageName(archivePath);
 
-        tTVPArchive *arc = nullptr;
+        Archive *arc = nullptr;
         try {
             arc = OpenArchive(archivePath, true);
         } catch(...) {
@@ -1733,7 +1733,7 @@ void AutoMountProjectXP3Archives() {
         ttstr archivePath = projStorage + ttstr(xp3Name.c_str());
         archivePath = krkr::io::NormalizeStorageName(archivePath);
 
-        tTVPArchive *arc = nullptr;
+        Archive *arc = nullptr;
         try {
             arc = OpenArchive(archivePath, true);
         } catch(...) {

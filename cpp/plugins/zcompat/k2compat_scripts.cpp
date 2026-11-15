@@ -2314,13 +2314,13 @@ void TVPResetK2CompatInstalledForRestart() { s_k2compat_installed = false; }
 static void ExecUtf8Script(tTJS *tjs, const char *utf8, const char *name) {
     if(!utf8 || !*utf8)
         return;
-    tjs_int len = TVPUtf8ToWideCharString(utf8, nullptr);
+    tjs_int len = krkr::base::Utf8ToWideCharString(utf8, nullptr);
     if(len < 0) {
         spdlog::error("K2Compat: invalid UTF-8 in {}", name);
         return;
     }
     std::vector<tjs_char> buf(static_cast<size_t>(len) + 1);
-    TVPUtf8ToWideCharString(utf8, buf.data());
+    krkr::base::Utf8ToWideCharString(utf8, buf.data());
     buf[len] = 0;
     ttstr script(buf.data());
     ttstr scriptname(name);
@@ -2331,7 +2331,7 @@ void TVPInstallK2CompatScripts() {
     if(s_k2compat_installed)
         return;
     s_k2compat_installed = true;
-    tTJS *tjs = TVPGetScriptEngine();
+    tTJS *tjs = krkr::base::GetScriptEngine();
     if(!tjs) {
         spdlog::warn("K2Compat: script engine not ready, skip install");
         return;

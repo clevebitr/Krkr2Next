@@ -116,8 +116,8 @@ void TVPResetTransIntfForRestart();
 //---------------------------------------------------------------------------
 // scroll transition handler
 //---------------------------------------------------------------------------
-enum tTVPScrollTransFrom { sttLeft, sttTop, sttRight, sttBottom };
-enum tTVPScrollTransStay { ststNoStay, ststStayDest, ststStaySrc };
+enum ScrollTransFrom { sttLeft, sttTop, sttRight, sttBottom };
+enum ScrollTransStay { ststNoStay, ststStayDest, ststStaySrc };
 /*]*/
 //---------------------------------------------------------------------------
 

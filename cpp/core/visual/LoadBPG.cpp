@@ -26,7 +26,7 @@ void TVPLoadBPG(void *formatdata, void *callbackdata,
     src->ReadBuffer(data.get(), datasize);
 
     if(bpg_decoder_decode(img.get(), data.get(), datasize) < 0) {
-        TVPThrowExceptionMessage(TJS_W("Invalid BPG image"));
+        ThrowExceptionMessage(TJS_W("Invalid BPG image"));
     }
 
     BPGImageInfo img_info;
@@ -53,7 +53,7 @@ void TVPLoadHeaderBPG(void *formatdata, tTJSBinaryStream *src,
     src->ReadBuffer(data.get(), datasize);
 
     if(bpg_decoder_decode(img.get(), data.get(), datasize) < 0) {
-        TVPThrowExceptionMessage(TJS_W("Invalid BPG image"));
+        ThrowExceptionMessage(TJS_W("Invalid BPG image"));
     }
     BPGImageInfo img_info;
     bpg_decoder_get_info(img.get(), &img_info);

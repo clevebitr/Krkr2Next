@@ -41,10 +41,10 @@ namespace {
     //   2) 只有显式开启引擎选项 `k2compat_scripts=1` 才安装；
     //   3) 安装时机推迟到**框架就绪后的第一帧**（连续事件钩子一次性触发），
     //      而不是注册期 —— 这正是当年缺的那个时机。
-    class K2CompatInstallHook : public tTVPContinuousEventCallbackIntf {
+    class K2CompatInstallHook : public ContinuousEventCallbackIntf {
     public:
         void OnContinuousCallback(tjs_uint64 /*tick*/) override {
-            TVPRemoveContinuousEventHook(this);
+            RemoveContinuousEventHook(this);
             spdlog::info("K2Compat: 框架已就绪，安装内嵌 Krkr2Compat 脚本层");
             TVPInstallK2CompatScripts();
         }
@@ -69,7 +69,7 @@ namespace {
             return;
         }
         spdlog::info("K2Compat: 已开启 k2compat_scripts，等框架就绪后安装脚本层");
-        TVPAddContinuousEventHook(&g_k2compat_install_hook);
+        AddContinuousEventHook(&g_k2compat_install_hook);
     }
 } // namespace
 
@@ -155,7 +155,7 @@ ttstr LzfsInnerPath(const ttstr &name) {
     return path;
 }
 
-class LzfsStorageMedia : public iTVPStorageMedia {
+class LzfsStorageMedia : public IStorageMedia {
 public:
     void AddRef() override { ++ref_count_; }
 
@@ -184,7 +184,7 @@ public:
         return krkr::io::CreateStream(inner, flags);
     }
 
-    void GetListAt(const ttstr &, iTVPStorageLister *) override {}
+    void GetListAt(const ttstr &, IStorageLister *) override {}
 
     void GetLocallyAccessibleName(ttstr &name) override {
         name = krkr::io::GetLocallyAccessiblePath(LzfsInnerPath(name));

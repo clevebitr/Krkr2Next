@@ -1051,14 +1051,14 @@ bool WaveLoopManager::GetString(char *s, LabelStringType &v) {
     // convert utf-8 string s to v
 
     // compute output (unicode) size
-    tjs_int size = TVPUtf8ToWideCharString(s, nullptr);
+    tjs_int size = krkr::base::Utf8ToWideCharString(s, nullptr);
     if(size == -1)
         return false; // not able to convert the string
 
     // allocate output buffer
     tjs_char *us = new tjs_char[size + 1];
     try {
-        TVPUtf8ToWideCharString(s, us);
+        krkr::base::Utf8ToWideCharString(s, us);
         us[size] = TJS_W('\0');
 
 #ifdef TVP_IN_LOOP_TUNER
@@ -1435,12 +1435,12 @@ void WaveLoopManager::PutString(AnsiString &s, LabelStringType v) {
 #endif
 
     // count output bytes
-    int size = TVPWideCharToUtf8String(pi, nullptr);
+    int size = krkr::base::WideCharToUtf8String(pi, nullptr);
 
     char *out = new char[size + 1];
     try {
         // convert the string
-        TVPWideCharToUtf8String(pi, out);
+        krkr::base::WideCharToUtf8String(pi, out);
         out[size] = '\0';
 
         // append the string with quotation

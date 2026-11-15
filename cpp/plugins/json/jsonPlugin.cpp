@@ -8,7 +8,7 @@
 // 是注释状态；AetherKiri 的可用做法是把源文件**直接**加进父目标，本仓库同样处理）。
 // 本仓库旧版 jsonPlugin.cpp 依赖 TVPLoadText/TVPSaveText，而核心并没有这两个函数
 // （CI 实测：use of undeclared identifier）—— 这一版改用
-// TVPCreateTextStreamForRead/Write，依赖全部在核心中已有。
+// krkr::base::CreateTextStreamForRead/Write，依赖全部在核心中已有。
 //---------------------------------------------------------------------------
 #include "ncbind.hpp"
 #include "tp_stub.h"
@@ -34,7 +34,7 @@ public:
         tTJSVariant value = parseValue();
         skipSpace();
         if(*text)
-            TVPThrowExceptionMessage(TJS_W("JSON parse error: trailing input"));
+            ThrowExceptionMessage(TJS_W("JSON parse error: trailing input"));
         return value;
     }
 
@@ -54,7 +54,7 @@ private:
 
     void expect(tjs_char ch) {
         if(!consume(ch))
-            TVPThrowExceptionMessage(TJS_W("JSON parse error: unexpected token"));
+            ThrowExceptionMessage(TJS_W("JSON parse error: unexpected token"));
     }
 
     bool consumeWord(const tjs_char *word) {
@@ -84,7 +84,7 @@ private:
             return tTJSVariant(false);
         if(consumeWord(TJS_W("null")))
             return tTJSVariant();
-        TVPThrowExceptionMessage(TJS_W("JSON parse error: invalid value"));
+        ThrowExceptionMessage(TJS_W("JSON parse error: invalid value"));
         return tTJSVariant();
     }
 
@@ -131,7 +131,7 @@ private:
                         for(int i = 0; i < 4; ++i) {
                             int digit = hexValue(*text++);
                             if(digit < 0)
-                                TVPThrowExceptionMessage(
+                                ThrowExceptionMessage(
                                     TJS_W("JSON parse error: invalid unicode escape"));
                             value = (value << 4) | digit;
                         }
@@ -139,7 +139,7 @@ private:
                         break;
                     }
                     default:
-                        TVPThrowExceptionMessage(
+                        ThrowExceptionMessage(
                             TJS_W("JSON parse error: invalid string escape"));
                 }
             } else {
@@ -201,7 +201,7 @@ private:
             do {
                 skipSpace();
                 if(*text != TJS_W('"'))
-                    TVPThrowExceptionMessage(
+                    ThrowExceptionMessage(
                         TJS_W("JSON parse error: object key must be string"));
                 ttstr key = parseString();
                 expect(TJS_W(':'));
@@ -401,7 +401,7 @@ private:
 
 ttstr loadJsonText(const ttstr &filename, bool utf8) {
     std::unique_ptr<iTJSTextReadStream> stream(
-        TVPCreateTextStreamForRead(krkr::io::GetPlacedPath(filename),
+        krkr::base::CreateTextStreamForRead(krkr::io::GetPlacedPath(filename),
                                    utf8 ? TJS_W("utf-8") : TJS_W("")));
     ttstr text;
     stream->Read(text, 0);
@@ -410,7 +410,7 @@ ttstr loadJsonText(const ttstr &filename, bool utf8) {
 
 void saveJsonText(const ttstr &filename, const ttstr &text, bool utf8) {
     std::unique_ptr<iTJSTextWriteStream> stream(
-        TVPCreateTextStreamForWrite(krkr::io::GetPlacedPath(filename),
+        krkr::base::CreateTextStreamForWrite(krkr::io::GetPlacedPath(filename),
                                     utf8 ? TJS_W("utf-8") : TJS_W("")));
     stream->Write(text);
 }

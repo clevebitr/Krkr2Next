@@ -19,7 +19,7 @@ struct ObjectCache {
     ObjectCache(DispatchT obj, NameT name) : _obj(obj), _cache(0), _name(name) {
 
         tTJSVariant layer;
-        TVPExecuteExpression(TJS_W("Layer"), &layer);
+        ExecuteExpression(TJS_W("Layer"), &layer);
         tTJSVariant var;
         if(TJS_SUCCEEDED(layer.AsObjectNoAddRef()->PropGet(
                TJS_IGNOREPROP, name, nullptr, &var, layer.AsObjectNoAddRef())))
@@ -63,7 +63,7 @@ private:
     DispatchT _obj, _cache;
     NameT _name;
 
-    void _Exception(NameT mes) const { TVPThrowExceptionMessage(mes, _name); }
+    void _Exception(NameT mes) const { ThrowExceptionMessage(mes, _name); }
 };
 
 /**
@@ -87,7 +87,7 @@ struct layerExBase {
             TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID,
             (iTJSNativeInstance **)&_this);
         if(TJS_FAILED(hr))
-            TVPThrowExceptionMessage(TJS_W("Not Layer"));
+            ThrowExceptionMessage(TJS_W("Not Layer"));
     }
 
     virtual ~layerExBase() = default;
@@ -138,7 +138,7 @@ struct layerExBase_GL {
                                         tTJSNC_Layer::ClassID,
                                         (iTJSNativeInstance **)&_this);
         if(TJS_FAILED(hr))
-            TVPThrowExceptionMessage(TJS_W("Not Layer"));
+            ThrowExceptionMessage(TJS_W("Not Layer"));
         _buffer = nullptr;
         _pitch = 0;
         reset();

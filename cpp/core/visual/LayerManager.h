@@ -78,7 +78,7 @@ public:
     //! @param		y		プライマリレイヤ座標上における y 位置
     //! @param		mb		どのマウスボタンか
     //! @param		flags	フラグ(TVP_SS_*定数の組み合わせ)
-    virtual void NotifyMouseDown(tjs_int x, tjs_int y, tTVPMouseButton mb,
+    virtual void NotifyMouseDown(tjs_int x, tjs_int y, MouseButton mb,
                                  tjs_uint32 flags) = 0;
 
     //! @brief		マウスボタンが離された
@@ -86,7 +86,7 @@ public:
     //! @param		y		プライマリレイヤ座標上における y 位置
     //! @param		mb		どのマウスボタンか
     //! @param		flags	フラグ(TVP_SS_*定数の組み合わせ)
-    virtual void NotifyMouseUp(tjs_int x, tjs_int y, tTVPMouseButton mb,
+    virtual void NotifyMouseUp(tjs_int x, tjs_int y, MouseButton mb,
                                tjs_uint32 flags) = 0;
 
     //! @brief		マウスが移動した
@@ -395,11 +395,11 @@ public:
     void NotifyDoubleClick(tjs_int x, tjs_int y) override {
         PrimaryDoubleClick(x, y);
     }
-    void NotifyMouseDown(tjs_int x, tjs_int y, tTVPMouseButton mb,
+    void NotifyMouseDown(tjs_int x, tjs_int y, MouseButton mb,
                          tjs_uint32 flags) override {
         PrimaryMouseDown(x, y, mb, flags);
     }
-    void NotifyMouseUp(tjs_int x, tjs_int y, tTVPMouseButton mb,
+    void NotifyMouseUp(tjs_int x, tjs_int y, MouseButton mb,
                        tjs_uint32 flags) override {
         PrimaryMouseUp(x, y, mb, flags);
     }
@@ -462,9 +462,9 @@ public:
     void PrimaryClick(tjs_int x, tjs_int y);
     void PrimaryDoubleClick(tjs_int x, tjs_int y);
 
-    void PrimaryMouseDown(tjs_int x, tjs_int y, tTVPMouseButton mb,
+    void PrimaryMouseDown(tjs_int x, tjs_int y, MouseButton mb,
                           tjs_uint32 flags);
-    void PrimaryMouseUp(tjs_int x, tjs_int y, tTVPMouseButton mb,
+    void PrimaryMouseUp(tjs_int x, tjs_int y, MouseButton mb,
                         tjs_uint32 flags);
 
     void PrimaryMouseMove(tjs_int x, tjs_int y, tjs_uint32 flags);

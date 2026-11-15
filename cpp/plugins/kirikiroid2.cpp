@@ -48,7 +48,7 @@ namespace {
         if(numparams < 1)
             return TJS_E_BADPARAMCOUNT;
         if(param[0]->Type() == tvtString)
-            TVPSetDefaultReadEncoding(param[0]->AsStringNoAddRef());
+            krkr::base::SetDefaultReadEncoding(param[0]->AsStringNoAddRef());
         return TJS_S_OK;
     }
 

@@ -23,7 +23,7 @@
 #include <malloc/malloc.h>
 #endif
 
-// TVP input event classes + TVPPostInputEvent
+// TVP input event classes + krkr::base::PostInputEvent
 #include "WindowIntf.h"
 #include "WindowImpl.h"
 #include "tvpinputdefs.h"
@@ -234,14 +234,14 @@ void EngineLoop::HandlePointerDown(const EngineInputEvent &event) {
     const tjs_int y = static_cast<tjs_int>(event.y);
     const uint32_t shift = ConvertModifiers(event.modifiers);
 
-    TVPPostInputEvent(new tTVPOnMouseMoveInputEvent(win, x, y, shift));
+    krkr::base::PostInputEvent(new tTVPOnMouseMoveInputEvent(win, x, y, shift));
 
     // Update cached cursor position for Layer.cursorX/cursorY queries
     if(win->GetForm())
         win->GetForm()->UpdateCursorPos(x, y);
 
-    // Map button index: 0=left, 1=right, 2=middle (matches tTVPMouseButton)
-    tTVPMouseButton mb = mbLeft;
+    // Map button index: 0=left, 1=right, 2=middle (matches MouseButton)
+    MouseButton mb = mbLeft;
     if(event.button == 1)
         mb = mbRight;
     else if(event.button == 2)
@@ -285,7 +285,7 @@ void EngineLoop::HandlePointerDown(const EngineInputEvent &event) {
     last_mouse_down_x_ = x;
     last_mouse_down_y_ = y;
 
-    TVPPostInputEvent(new tTVPOnMouseDownInputEvent(win, x, y, mb, flags));
+    krkr::base::PostInputEvent(new tTVPOnMouseDownInputEvent(win, x, y, mb, flags));
 }
 
 void EngineLoop::HandlePointerMove(const EngineInputEvent &event) {
@@ -305,7 +305,7 @@ void EngineLoop::HandlePointerMove(const EngineInputEvent &event) {
     if(win->GetForm())
         win->GetForm()->UpdateCursorPos(x, y);
 
-    TVPPostInputEvent(new tTVPOnMouseMoveInputEvent(win, x, y, shift));
+    krkr::base::PostInputEvent(new tTVPOnMouseMoveInputEvent(win, x, y, shift));
 }
 
 void EngineLoop::HandlePointerUp(const EngineInputEvent &event) {
@@ -325,7 +325,7 @@ void EngineLoop::HandlePointerUp(const EngineInputEvent &event) {
     if(win->GetForm())
         win->GetForm()->UpdateCursorPos(x, y);
 
-    tTVPMouseButton mb = mbLeft;
+    MouseButton mb = mbLeft;
     if(event.button == 1)
         mb = mbRight;
     else if(event.button == 2)
@@ -350,13 +350,13 @@ void EngineLoop::HandlePointerUp(const EngineInputEvent &event) {
         s_scancode[vk] &= ~1; // clear current-pressed, keep was-pressed
     }
 
-    TVPPostInputEvent(new tTVPOnMouseUpInputEvent(win, x, y, mb, shift));
+    krkr::base::PostInputEvent(new tTVPOnMouseUpInputEvent(win, x, y, mb, shift));
 
     // Post click event after mouse-up, matching the original Windows engine
     // which fires OnMouseClick (→ Window.onClick → PrimaryClick) after
     // OnMouseUp.  Uses the stored down position per original behavior.
     if(mb == mbLeft) {
-        TVPPostInputEvent(new tTVPOnClickInputEvent(win, last_mouse_down_x_,
+        krkr::base::PostInputEvent(new tTVPOnClickInputEvent(win, last_mouse_down_x_,
                                                     last_mouse_down_y_));
     }
 }
@@ -379,7 +379,7 @@ void EngineLoop::HandlePointerScroll(const EngineInputEvent &event) {
     const tjs_int delta = static_cast<tjs_int>(event.delta_y * 120.0);
 
     if(delta != 0) {
-        TVPPostInputEvent(
+        krkr::base::PostInputEvent(
             new OnMouseWheelInputEvent(win, shift, delta, x, y));
     }
 }
@@ -407,7 +407,7 @@ void EngineLoop::HandleKeyDown(const EngineInputEvent &event) {
         s_scancode[key] = 0x11; // pressed + was-pressed
     }
 
-    TVPPostInputEvent(new tTVPOnKeyDownInputEvent(win, key, shift));
+    krkr::base::PostInputEvent(new tTVPOnKeyDownInputEvent(win, key, shift));
 }
 
 void EngineLoop::HandleKeyUp(const EngineInputEvent &event) {
@@ -427,7 +427,7 @@ void EngineLoop::HandleKeyUp(const EngineInputEvent &event) {
         s_scancode[key] &= ~1;
     }
 
-    TVPPostInputEvent(new tTVPOnKeyUpInputEvent(win, key, shift));
+    krkr::base::PostInputEvent(new tTVPOnKeyUpInputEvent(win, key, shift));
 }
 
 void EngineLoop::HandleTextInput(const EngineInputEvent &event) {
@@ -441,7 +441,7 @@ void EngineLoop::HandleTextInput(const EngineInputEvent &event) {
 
     if(event.unicode_codepoint > 0 && event.unicode_codepoint <= 0xFFFF) {
         const tjs_char ch = static_cast<tjs_char>(event.unicode_codepoint);
-        TVPPostInputEvent(new tTVPOnKeyPressInputEvent(win, ch));
+        krkr::base::PostInputEvent(new tTVPOnKeyPressInputEvent(win, ch));
     }
 }
 

@@ -262,7 +262,7 @@ engine_result_t engine_destroy(engine_handle_t handle) {
             spdlog::error("engine_destroy: Application::OnDeactivate threw");
         }
         Application->FilterUserMessage(
-            [](std::vector<std::tuple<void *, int, tTVPApplication::tMsg>> &queue) {
+            [](std::vector<std::tuple<void *, int, Application::tMsg>> &queue) {
                 queue.clear();
             });
         spdlog::info("engine_destroy: FilterUserMessage done");
@@ -307,7 +307,7 @@ engine_result_t engine_destroy(engine_handle_t handle) {
 
         try {
             krkr::base::ResetRuntimeForRestart();
-            TVPResetScriptEngineForRestart();
+            krkr::base::ResetScriptEngineForRestart();
             ResetSysInitImplForRestart();
             krkr::environ::ResetApplicationForRestart();
             krkr::io::ResetStorageImplForRestart();
@@ -707,7 +707,7 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
     if (::Application) {
         const auto update_start = std::chrono::steady_clock::now();
         if (TVPMainWindow && HostVideoOverlayFrameActive()) {
-            TVPPostWindowUpdate(TVPMainWindow);
+            krkr::base::PostWindowUpdate(TVPMainWindow);
         }
         krkr::stall::MarkStage("engine_tick: Application::Run（脚本+合成+绘制）");
         ::Application->Run();

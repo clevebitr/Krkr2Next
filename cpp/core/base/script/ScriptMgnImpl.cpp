@@ -56,20 +56,20 @@
 */
 // #if 0
 // //---------------------------------------------------------------------------
-// // tTVPPipeStream to do IPC (used for Object Hash Map)
+// // PipeStream to do IPC (used for Object Hash Map)
 // //---------------------------------------------------------------------------
-// class tTVPPipeStream : public tTJSBinaryStream
+// class PipeStream : public tTJSBinaryStream
 // {
 // private:
 //     HANDLE Handle;
 
 // public:
-//     tTVPPipeStream(HANDLE handle)
+//     PipeStream(HANDLE handle)
 //     {
 //         Handle = handle;
 //     }
 
-//     ~tTVPPipeStream()
+//     ~PipeStream()
 //     {
 //         CloseHandle(Handle);
 //     }
@@ -110,10 +110,10 @@
 // //---------------------------------------------------------------------------
 // // Object Hash Map (memory leak detector) related
 // //---------------------------------------------------------------------------
-// static char TVPObjectHashMapLogStream[sizeof(tTVPPipeStream)];
+// static char ObjectHashMapLogStream[sizeof(PipeStream)];
 
 // //---------------------------------------------------------------------------
-// void TVPStartObjectHashMapLog()
+// void StartObjectHashMapLog()
 // {
 // #ifndef ENABLE_DEBUGGER
 //     if(TJSObjectHashMapEnabled())
@@ -173,10 +173,10 @@
 //         SetStdHandle(STD_INPUT_HANDLE, org_stdin);
 
 //         // create tTJSBinaryStream object in STATIC AREA
-//         ::new (TVPObjectHashMapLogStream) tTVPPipeStream(write);
+//         ::new (ObjectHashMapLogStream) PipeStream(write);
 
 //         // set object hash map log
-//         TJSObjectHashMapSetLog((krkr::io::LocalFileStream*)TVPObjectHashMapLogStream);
+//         TJSObjectHashMapSetLog((krkr::io::LocalFileStream*)ObjectHashMapLogStream);
 
 //         // write all objects to log
 //         TJSWriteAllUnfreedObjectsToLog();
@@ -187,12 +187,12 @@
 // #endif
 // }
 // //---------------------------------------------------------------------------
-// static tTVPAtExit TVPReportUnfreedObjectsAtExit
-//     (KRKR_ATEXIT_PRI_CLEANUP - 1, TVPStartObjectHashMapLog);
+// static AtExit ReportUnfreedObjectsAtExit
+//     (KRKR_ATEXIT_PRI_CLEANUP - 1, StartObjectHashMapLog);
 // //---------------------------------------------------------------------------
 
 // //---------------------------------------------------------------------------
-// bool TVPCheckProcessLog()
+// bool CheckProcessLog()
 // {
 //     // process object hash map log
 //     int argc = Application->ArgC;
@@ -208,7 +208,7 @@
 //             TJSAddRefObjectHashMap();
 
 //             // create pipe object
-//             tTVPPipeStream pipe(GetStdHandle(STD_INPUT_HANDLE));
+//             PipeStream pipe(GetStdHandle(STD_INPUT_HANDLE));
 
 //             // set object hash map log
 //             TJSObjectHashMapSetLog(&pipe);

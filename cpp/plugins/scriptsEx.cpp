@@ -924,7 +924,7 @@ tjs_error ScriptsAdd::safeEvalStorage(tTJSVariant *result, tjs_int numparams,
 
     ttstr shortname(krkr::io::ExtractStorageName(name));
 
-    iTJSTextReadStream *stream = TVPCreateTextStreamForRead(name, modestr);
+    iTJSTextReadStream *stream = krkr::base::CreateTextStreamForRead(name, modestr);
     ttstr buffer;
     try {
         stream->Read(buffer, 0);
@@ -953,7 +953,7 @@ tjs_error ScriptsAdd::safeEvalStorage(tTJSVariant *result, tjs_int numparams,
     // krkr::utils::AddLog(buffer);
 
     tTJSVariant temp;
-    TVPExecuteExpression(buffer, shortname, 0, context, &temp);
+    ExecuteExpression(buffer, shortname, 0, context, &temp);
     if(result) {
         tTJSVariantClosure clo;
         clo = temp.AsObjectClosureNoAddRef();

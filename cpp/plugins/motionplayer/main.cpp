@@ -35,7 +35,7 @@ using namespace TJS;
 // ─────────────────────────────────────────────────────────────────────────────
 namespace {
 
-    class MotionAutoDriveHook : public tTVPContinuousEventCallbackIntf {
+    class MotionAutoDriveHook : public ContinuousEventCallbackIntf {
     public:
         void OnContinuousCallback(tjs_uint64 tick) override;
     };
@@ -66,17 +66,17 @@ namespace {
                 added = true;
             }
             count = g_autoDrivePlayers.size();
-            // **无条件重挂**（新登记或有新玩家时）：TVPRemoveContinuousEventHook
-            // 只把已有条目置空、TVPAddContinuousEventHook 追加一条，派发时会压缩，
+            // **无条件重挂**（新登记或有新玩家时）：RemoveContinuousEventHook
+            // 只把已有条目置空、AddContinuousEventHook 追加一条，派发时会压缩，
             // 结果永远恰好一条活条目。这样即使 g_autoDriveHooked 与实际钩子表
             // 不一致（真机 2026-09-18 13:20:27 之后：登记照常发生，钩子却再没被
             // 回调过，SD 动画 tick 永远是 0），也能重新活过来。
             // **自愈重挂，但要限频**。真机曾出现"钩子登记照常、却再没被回调"，
             // 所以保留重挂能力；但旧条件 `!g_autoDriveHooked || added` 在
             // "游戏每帧先 play/draw（注册）、随后摘除"的节奏下退化成**每帧一次**
-            // TVPRemoveContinuousEventHook + TVPAddContinuousEventHook
+            // RemoveContinuousEventHook + AddContinuousEventHook
             // （真机 NEKOPARA 4 实测：3 分钟重挂 5665 次、摘除 3828 次），而钩子表
-            // 的压缩恰好发生在 TVPDeliverAllEvents 里 —— 那正是每次 `.stall` 记的
+            // 的压缩恰好发生在 krkr::base::DeliverAllEvents 里 —— 那正是每次 `.stall` 记的
             // 卡顿阶段。现在最多每秒重挂一次：模块加载/事件表重建后仍能在 1s 内
             // 自愈，但不再每帧改动引擎的连续事件表。
             const int64_t nowMs =
@@ -86,8 +86,8 @@ namespace {
             if(!g_autoDriveHooked ||
                (nowMs - g_autoDriveHookAtMs.load(std::memory_order_relaxed)) >=
                    1000) {
-                TVPRemoveContinuousEventHook(&g_autoDriveHook);
-                TVPAddContinuousEventHook(&g_autoDriveHook);
+                RemoveContinuousEventHook(&g_autoDriveHook);
+                AddContinuousEventHook(&g_autoDriveHook);
                 g_autoDriveHooked = true;
                 g_autoDriveHookAtMs.store(nowMs, std::memory_order_relaxed);
                 g_autoDriveLastMs = 0; // 下一帧重新取基准，避免停顿时跳一大步
@@ -114,7 +114,7 @@ namespace {
             g_autoDrivePlayers.end());
         // **表空时不再摘钩子**：游戏每帧"注册→摘除"，旧代码于是每帧
         // Remove+Add 一次连续事件钩子（真机 NEKOPARA 4：3 分钟 3828 次），而
-        // 事件派发/压缩就在 TVPDeliverAllEvents 里做——那正是 `.stall` 记的卡顿
+        // 事件派发/压缩就在 krkr::base::DeliverAllEvents 里做——那正是 `.stall` 记的卡顿
         // 阶段。回调本身在表空时立即 return（见 OnContinuousCallback），常驻一条
         // 空条目远比每帧重建事件表便宜；重挂的"自愈"改由 AutoDriveRegister
         // 的每秒限频路径负责。
@@ -127,7 +127,7 @@ namespace {
             players.swap(g_autoDrivePlayers);
         }
         if(g_autoDriveHooked) {
-            TVPRemoveContinuousEventHook(&g_autoDriveHook);
+            RemoveContinuousEventHook(&g_autoDriveHook);
             g_autoDriveHooked = false;
         }
         g_autoDriveLastMs = 0;
@@ -364,7 +364,7 @@ GetSeparateAdaptorRenderTarget(motion::SeparateLayerAdaptor *adaptor) {
         parentObj = parentVar.AsObjectNoAddRef();
     }
 
-    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    iTJSDispatch2 *global = GetScriptDispatch();
     if(!global)
         return owner;
 

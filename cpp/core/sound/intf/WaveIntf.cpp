@@ -517,7 +517,7 @@ public:
 };
 
 //---------------------------------------------------------------------------
-static bool FindRIFFChunk(tTVPStreamHolder &stream, const tjs_uint8 *chunk) {
+static bool FindRIFFChunk(StreamHolder &stream, const tjs_uint8 *chunk) {
     tjs_uint8 buf[4];
     while(true) {
         if(4 != stream->Read(buf, 4))
@@ -540,7 +540,7 @@ WaveDecoder *WDC_RIFFWave::Create(const ttstr &storagename,
     if(extension != TJS_W(".wav"))
         return nullptr;
 
-    tTVPStreamHolder stream(storagename);
+    StreamHolder stream(storagename);
 
     static const tjs_uint8 riff_mark[] = { /*R*/ 0x52, /*I*/ 0x49,
                                            /*F*/ 0x46,
@@ -765,7 +765,7 @@ WaveDecoder *CreateWaveDecoder(const ttstr &storagename) {
             return decoder;
     }
 
-    TVPThrowExceptionMessage(TVPUnknownWaveFormat, storagename);
+    ThrowExceptionMessage(TVPUnknownWaveFormat, storagename);
     return nullptr;
 }
 //---------------------------------------------------------------------------
@@ -898,12 +898,12 @@ void tTJSNI_BaseWaveSoundBuffer::Invalidate() {
 void tTJSNI_BaseWaveSoundBuffer::InvokeLabelEvent(const ttstr &name) {
     // the invoked event is to be delivered asynchronously.
     // the event is to be erased when the SetStatus is called, but
-    // it's ok. ( SetStatus calls TVPCancelSourceEvents(Owner); )
+    // it's ok. ( SetStatus calls krkr::base::CancelSourceEvents(Owner); )
 
     if(Owner && CanDeliverEvents) {
         tTJSVariant param(name);
         static ttstr eventname(TJS_W("onLabel"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_POST, 1, &param);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_POST, 1, &param);
     }
 }
 
@@ -1032,7 +1032,7 @@ iTJSDispatch2 *tTJSNI_BaseWaveSoundBuffer::GetWaveFlagsObjectNoAddRef() {
         return WaveFlagsObject;
 
     if(!Owner)
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
 
     WaveFlagsObject = CreateWaveFlagsObject(Owner);
 
@@ -1654,7 +1654,7 @@ tjs_error tTJSNI_WaveFlags::Construct(tjs_int numparams, tTJSVariant **param,
     if(TJS_FAILED(dsp->NativeInstanceSupport(TJS_NIS_GETINSTANCE,
                                              tTJSNC_WaveSoundBuffer::ClassID,
                                              (iTJSNativeInstance **)&buffer)))
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
 
     Buffer = buffer;
 
@@ -1785,7 +1785,7 @@ iTJSDispatch2 *CreateWaveFlagsObject(iTJSDispatch2 *buffer) {
     tTJSVariant *pparam = &param;
     if(TJS_FAILED(waveflagsclass.Obj->CreateNew(0, nullptr, nullptr, &out, 1,
                                                 &pparam, waveflagsclass.Obj)))
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
 
     return out;
 }

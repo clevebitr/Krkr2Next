@@ -174,14 +174,14 @@ public:
         ttstr source = param[0]->AsStringNoAddRef();
         const ttstr filename = param[1]->AsStringNoAddRef();
         if(filename.IsEmpty())
-            TVPThrowExceptionMessage(TJS_W("no filename"));
+            ThrowExceptionMessage(TJS_W("no filename"));
 
         std::vector<tjs_uint8> decoded =
             decodeString(source.c_str(), static_cast<tjs_int>(source.length()));
 
         tTJSBinaryStream *output = krkr::io::CreateStream(filename, TJS_BS_WRITE);
         if(!output)
-            TVPThrowExceptionMessage((ttstr(TJS_W("can't open writefile: ")) +
+            ThrowExceptionMessage((ttstr(TJS_W("can't open writefile: ")) +
                                       filename)
                                          .c_str());
 

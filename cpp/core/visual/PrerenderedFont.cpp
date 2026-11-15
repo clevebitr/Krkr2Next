@@ -12,28 +12,28 @@ tTVPPrerenderedFont::tTVPPrerenderedFont(const ttstr &storage)
     RefCount = 1;
     Storage = storage;
 
-    tTJSBinaryStream *stream = TVPCreateBinaryStreamForRead(storage, TJS_W(""));
+    tTJSBinaryStream *stream = krkr::base::CreateBinaryStreamForRead(storage, TJS_W(""));
     if(stream == nullptr) {
-        TVPThrowExceptionMessage(TVPCannotOpenStorage, storage);
+        ThrowExceptionMessage(TVPCannotOpenStorage, storage);
     }
 
     Image = nullptr;
     try {
         FileLength = stream->GetSize();
         if(FileLength == 0) {
-            TVPThrowExceptionMessage(TVPPrerenderedFontMappingFailed,
+            ThrowExceptionMessage(TVPPrerenderedFontMappingFailed,
                                      (const tjs_char *)TVPFileSizeIsZero);
         }
         Image = new tjs_uint8[(tjs_uint)FileLength];
         if(Image == nullptr) {
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TVPPrerenderedFontMappingFailed,
                 (const tjs_char *)TVPMemoryAllocationError);
         }
         tjs_uint readsize =
             stream->Read(const_cast<tjs_uint8 *>(Image), (tjs_uint)FileLength);
         if(readsize != FileLength) {
-            TVPThrowExceptionMessage(TVPPrerenderedFontMappingFailed,
+            ThrowExceptionMessage(TVPPrerenderedFontMappingFailed,
                                      (const tjs_char *)TVPFileReadError);
         }
         delete stream;
@@ -41,20 +41,20 @@ tTVPPrerenderedFont::tTVPPrerenderedFont(const ttstr &storage)
 
         // check header
         if(memcmp("TVP pre-rendered font\x1a", Image, 22)) {
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TVPPrerenderedFontMappingFailed,
                 (const tjs_char *)TVPInvalidPrerenderedFontFile);
         }
 
         if(Image[23] != 2) {
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TVPPrerenderedFontMappingFailed,
                 (const tjs_char *)TVPNot16BitUnicodeFontFile);
         }
 
         Version = Image[22];
         if(Version != 0 && Version != 1) {
-            TVPThrowExceptionMessage(TVPPrerenderedFontMappingFailed,
+            ThrowExceptionMessage(TVPPrerenderedFontMappingFailed,
                                      (const tjs_char *)TVPInvalidHeaderVersion);
         }
 

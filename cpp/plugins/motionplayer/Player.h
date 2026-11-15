@@ -4018,7 +4018,7 @@ namespace motion {
 
         iTJSDispatch2 *createChildLayer(const tTJSVariant &windowVar,
                                         const tTJSVariant &parentVar) {
-            iTJSDispatch2 *global = TVPGetScriptDispatch();
+            iTJSDispatch2 *global = GetScriptDispatch();
             if(!global)
                 return nullptr;
 

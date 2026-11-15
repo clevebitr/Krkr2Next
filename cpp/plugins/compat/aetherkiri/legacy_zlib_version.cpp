@@ -91,7 +91,7 @@ public:
                              input.empty() ? nullptr : input.data(),
                              static_cast<uLong>(input.size()), level);
         if(zret != Z_OK)
-            TVPThrowExceptionMessage(TJS_W("zlib compress failed"));
+            ThrowExceptionMessage(TJS_W("zlib compress failed"));
         output.resize(bound);
         setOctetResult(result, output);
         return TJS_S_OK;
@@ -121,11 +121,11 @@ public:
                 return TJS_S_OK;
             }
             if(zret != Z_BUF_ERROR)
-                TVPThrowExceptionMessage(TJS_W("zlib uncompress failed"));
+                ThrowExceptionMessage(TJS_W("zlib uncompress failed"));
             expected *= 2;
         }
 
-        TVPThrowExceptionMessage(TJS_W("zlib output buffer is too large"));
+        ThrowExceptionMessage(TJS_W("zlib output buffer is too large"));
         return TJS_S_OK;
     }
 
@@ -180,8 +180,8 @@ NCB_REGISTER_FUNCTION(zlibVersion, zlibVersionCb);
 //---------------------------------------------------------------------------
 class VersionCompat {
 public:
-    ttstr getString() const { return TVPGetVersionString(); }
-    ttstr getInformation() const { return TVPGetVersionInformation(); }
+    ttstr getString() const { return krkr::base::GetVersionString(); }
+    ttstr getInformation() const { return krkr::base::GetVersionInformation(); }
     ttstr getEngine() const { return ttstr(EngineName()); }
 
     static tjs_error TJS_INTF_METHOD dictionaryCb(tTJSVariant *result, tjs_int,
@@ -199,8 +199,8 @@ public:
             dict->PropSet(TJS_MEMBERENSURE, name, nullptr, &v, dict);
         };
         put(TJS_W("engine"), ttstr(EngineName()));
-        put(TJS_W("versionString"), TVPGetVersionString());
-        put(TJS_W("versionInformation"), TVPGetVersionInformation());
+        put(TJS_W("versionString"), krkr::base::GetVersionString());
+        put(TJS_W("versionInformation"), krkr::base::GetVersionInformation());
         *result = tTJSVariant(dict, dict);
         dict->Release();
         return TJS_S_OK;

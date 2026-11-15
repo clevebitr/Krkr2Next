@@ -15,8 +15,8 @@ tjs_error tTJSNI_ImageFunction::Construct(tjs_int numparams,
 void tTJSNI_ImageFunction::Invalidate() {}
 
 tTVPBBBltMethod
-tTJSNC_ImageFunction::GetBltMethodFromOperationMode(tTVPBlendOperationMode mode,
-                                                    tTVPDrawFace face) {
+tTJSNC_ImageFunction::GetBltMethodFromOperationMode(BlendOperationMode mode,
+                                                    DrawFace face) {
     tTVPBBBltMethod met = bmAlphaOnAlpha;
     switch(mode) {
         case omPsNormal:
@@ -239,15 +239,15 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ operateAffine) {
     if(numparams >= 11 && param[10]->Type() != tvtVoid)
         affine = param[10]->operator bool();
 
-    tTVPBlendOperationMode mode = omAlpha;
+    BlendOperationMode mode = omAlpha;
     if(numparams >= 12 && param[11]->Type() != tvtVoid)
-        mode = (tTVPBlendOperationMode)(tjs_int)(*param[11]);
+        mode = (BlendOperationMode)(tjs_int)(*param[11]);
     if(mode == omAuto)
         mode = omAlpha;
 
-    tTVPDrawFace face = dfAlpha;
+    DrawFace face = dfAlpha;
     if(numparams >= 13 && param[12]->Type() != tvtVoid)
-        face = (tTVPDrawFace)(tjs_int)(*param[12]);
+        face = (DrawFace)(tjs_int)(*param[12]);
     if(face != dfAlpha && face != dfAddAlpha && face != dfOpaque)
         face = dfAlpha;
 
@@ -255,9 +255,9 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ operateAffine) {
     if(numparams >= 14 && param[13]->Type() != tvtVoid)
         opa = (tjs_int)*param[13];
 
-    tTVPBBStretchType type = stNearest;
+    BBStretchType type = stNearest;
     if(numparams >= 15 && param[14]->Type() != tvtVoid)
-        type = (tTVPBBStretchType)(tjs_int)*param[14];
+        type = (BBStretchType)(tjs_int)*param[14];
 
     bool hda = false;
     if(numparams >= 16 && param[15]->Type() != tvtVoid)
@@ -359,16 +359,16 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ operateRect) {
     tjs_int dleft = *param[1];
     tjs_int dtop = *param[2];
 
-    tTVPBlendOperationMode mode = omAlpha;
+    BlendOperationMode mode = omAlpha;
     if(numparams >= 7 && param[6]->Type() != tvtVoid)
-        mode = (tTVPBlendOperationMode)(tjs_int)(*param[6]);
+        mode = (BlendOperationMode)(tjs_int)(*param[6]);
 
     if(mode == omAuto)
         mode = omAlpha;
 
-    tTVPDrawFace face = dfAlpha;
+    DrawFace face = dfAlpha;
     if(numparams >= 8 && param[7]->Type() != tvtVoid)
-        face = (tTVPDrawFace)(tjs_int)(*param[7]);
+        face = (DrawFace)(tjs_int)(*param[7]);
 
     if(face != dfAlpha && face != dfAddAlpha && face != dfOpaque)
         face = dfAlpha;
@@ -470,16 +470,16 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ operateStretch) {
         }
     }
 
-    tTVPBlendOperationMode mode = omAlpha;
+    BlendOperationMode mode = omAlpha;
     if(numparams >= 6 && param[5]->Type() != tvtVoid)
-        mode = (tTVPBlendOperationMode)(tjs_int)(*param[5]);
+        mode = (BlendOperationMode)(tjs_int)(*param[5]);
 
     if(mode == omAuto)
         mode = omAlpha;
 
-    tTVPDrawFace face = dfAlpha;
+    DrawFace face = dfAlpha;
     if(numparams >= 7 && param[6]->Type() != tvtVoid)
-        face = (tTVPDrawFace)(tjs_int)(*param[6]);
+        face = (DrawFace)(tjs_int)(*param[6]);
 
     if(face != dfAlpha && face != dfAddAlpha && face != dfOpaque)
         face = dfAlpha;
@@ -488,9 +488,9 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ operateStretch) {
     if(numparams >= 8 && param[7]->Type() != tvtVoid)
         opa = *param[7];
 
-    tTVPBBStretchType type = stNearest;
+    BBStretchType type = stNearest;
     if(numparams >= 9 && param[8]->Type() != tvtVoid)
-        type = (tTVPBBStretchType)(tjs_int)*param[8];
+        type = (BBStretchType)(tjs_int)*param[8];
 
     bool hda = false;
     if(numparams >= 10 && param[9]->Type() != tvtVoid)
@@ -837,10 +837,10 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ fillRect) {
     if(TVPIntersectRect(&destrect, rect, clipRect)) {
         if(isalpha) {
             color = (color & 0xff000000) +
-                (TVPToActualColor(color & 0xffffff) & 0xffffff);
+                (ToActualColor(color & 0xffffff) & 0xffffff);
             updated = dst->GetBitmap()->Fill(destrect, color);
         } else {
-            color = TVPToActualColor(color);
+            color = ToActualColor(color);
             updated = dst->GetBitmap()->FillColor(destrect, color, 255);
         }
     }
@@ -894,9 +894,9 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ colorRect) {
         }
     }
 
-    tTVPDrawFace face = dfAlpha;
+    DrawFace face = dfAlpha;
     if(numparams >= 5 && param[4]->Type() != tvtVoid)
-        face = (tTVPDrawFace)(tjs_int)(*param[4]);
+        face = (DrawFace)(tjs_int)(*param[4]);
 
     if(face != dfAlpha && face != dfAddAlpha && face != dfOpaque &&
        face != dfMask)
@@ -920,7 +920,7 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ colorRect) {
         switch(face) {
             case dfAlpha:
                 if(opa > 0) {
-                    color = TVPToActualColor(color);
+                    color = ToActualColor(color);
                     updated = dst->GetBitmap()->FillColorOnAlpha(destrect,
                                                                  color, opa);
                 } else {
@@ -930,13 +930,13 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ colorRect) {
                 break;
             case dfAddAlpha:
                 if(opa >= 0) {
-                    color = TVPToActualColor(color);
+                    color = ToActualColor(color);
                     updated = dst->GetBitmap()->FillColorOnAddAlpha(destrect,
                                                                     color, opa);
                 }
                 break;
             case dfOpaque:
-                color = TVPToActualColor(color);
+                color = ToActualColor(color);
                 updated = dst->GetBitmap()->FillColor(destrect, color, opa);
                 // note that tTVPBaseBitmap::FillColor always holds
                 // destination alpha
@@ -1003,8 +1003,8 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ drawText) {
     bool aa = (numparams >= 8 && param[7]->Type() != tvtVoid)
         ? param[7]->operator bool()
         : true;
-    tTVPDrawFace face = (numparams >= 9 && param[8]->Type() != tvtVoid)
-        ? (tTVPDrawFace)(tjs_int)(*param[8])
+    DrawFace face = (numparams >= 9 && param[8]->Type() != tvtVoid)
+        ? (DrawFace)(tjs_int)(*param[8])
         : dfAlpha;
     tjs_int shadowlevel = (numparams >= 10 && param[9]->Type() != tvtVoid)
         ? (tjs_int)*param[9]
@@ -1055,7 +1055,7 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ drawText) {
             met = bmAlphaOnAlpha;
             break;
     }
-    color = TVPToActualColor(color);
+    color = ToActualColor(color);
     tTVPComplexRect r;
     dst->GetBitmap()->SetFont(font->GetFont());
     dst->GetBitmap()->DrawText(clipRect, x, y, text, color, met, opa, hda, aa,
@@ -1105,8 +1105,8 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ drawGlyph) {
     bool aa = (numparams >= 7 && param[6]->Type() != tvtVoid)
         ? param[6]->operator bool()
         : true;
-    tTVPDrawFace face = (numparams >= 8 && param[7]->Type() != tvtVoid)
-        ? (tTVPDrawFace)(tjs_int)(*param[7])
+    DrawFace face = (numparams >= 8 && param[7]->Type() != tvtVoid)
+        ? (DrawFace)(tjs_int)(*param[7])
         : dfAlpha;
     tjs_int shadowlevel = (numparams >= 9 && param[8]->Type() != tvtVoid)
         ? (tjs_int)*param[8]
@@ -1157,7 +1157,7 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ drawGlyph) {
             met = bmAlphaOnAlpha;
             break;
     }
-    color = TVPToActualColor(color);
+    color = ToActualColor(color);
     tTVPComplexRect r;
     dst->GetBitmap()->DrawGlyph(glyph, clipRect, x, y, color, met, opa, hda, aa,
                                 shadowlevel, shadowcolor, shadowwidth,
@@ -1184,7 +1184,7 @@ TJS_END_NATIVE_MEMBERS
 tTJSNativeInstance *tTJSNC_ImageFunction::CreateNativeInstance() {
     return new tTJSNI_ImageFunction();
 }
-tTJSNativeClass *TVPCreateNativeClass_ImageFunction() {
+tTJSNativeClass *CreateNativeClass_ImageFunction() {
     tTJSNativeClass *cls = new tTJSNC_ImageFunction();
     return cls;
 }

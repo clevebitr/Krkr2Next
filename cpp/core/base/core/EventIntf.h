@@ -22,47 +22,47 @@
 //---------------------------------------------------------------------------
 namespace krkr::base {
 
-extern void TVPDeliverAllEvents(); // called from (indirectly) the OS
+extern void DeliverAllEvents(); // called from (indirectly) the OS
 
-extern bool TVPEventDisabled; // do not write to this variable directly
+extern bool EventDisabled; // do not write to this variable directly
 
-extern void TVPInvokeEvents();
+extern void InvokeTJSEvents();
 
 // implement this in each platform,
-// to ensure calling "TVPDeliverAllEvents" when the Application is
+// to ensure calling "DeliverAllEvents" when the Application is
 // ready to deliver the events.
-extern void TVPEventReceived();
+extern void EventReceived();
 // implement this in each platform.
 // notifies that events are delivered and ensure being ready for next
 // event.
 
-extern void TVPCallDeliverAllEventsOnIdle();
+extern void CallDeliverAllTJSEventsOnIdle();
 // implement this in each platform.
-// once return control to OS, and set to call TVPInvokeEvents() after
+// once return control to OS, and set to call InvokeTJSEvents() after
 // it.
 
 //---------------------------------------------------------------------------
 // somewhat public
 
-TJS_EXP_FUNC_DEF(void, TVPBreathe, ());
+TJS_EXP_FUNC_DEF(void, Breathe, ());
 // implement this in each platform
 // to handle OS's message events
 // this should be called when in a long time processing, something
 // like a network access, to reply to user's Windowing message,
-// repainting, etc... in TVPBreathe, TVP events must not be invoked. (
+// repainting, etc... in Breathe, TVP events must not be invoked. (
 // happened events over the long time processing are pending until
 // next timing of message delivering. )
 
-TJS_EXP_FUNC_DEF(bool, TVPGetBreathing,
+TJS_EXP_FUNC_DEF(bool, GetBreathing,
                  ()); // return whether now is in event breathing
 
-TJS_EXP_FUNC_DEF(void, TVPSetSystemEventDisabledState, (bool en));
+TJS_EXP_FUNC_DEF(void, SetSystemEventDisabledState, (bool en));
 /*
     sets whether system overall event handling is enabled.
-    this works distinctly from TVPEventDisabled.
+    this works distinctly from EventDisabled.
 */
 
-TJS_EXP_FUNC_DEF(bool, TVPGetSystemEventDisabledState, ());
+TJS_EXP_FUNC_DEF(bool, GetSystemEventDisabledState, ());
 //---------------------------------------------------------------------------
 
 /*[*/
@@ -100,40 +100,40 @@ TJS_EXP_FUNC_DEF(bool, TVPGetSystemEventDisabledState, ());
 #define TVP_EPT_METHOD_MASK 0x0f
 /*]*/
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(void, TVPPostEvent,
+TJS_EXP_FUNC_DEF(void, PostTJSEvent,
                  (iTJSDispatch2 * source, iTJSDispatch2 *target,
                   ttstr &eventname, tjs_uint32 tag, tjs_uint32 flag,
                   tjs_uint numargs, tTJSVariant *args));
 // posts TVP event. this function itself is thread-safe.
 
-TJS_EXP_FUNC_DEF(tjs_int, TVPCancelEvents,
+TJS_EXP_FUNC_DEF(tjs_int, CancelTJSEvents,
                  (iTJSDispatch2 * source, iTJSDispatch2 *target,
                   const ttstr &eventname, tjs_uint32 tag = 0));
 // removes events that has specified source/target/name/tag.
 // tag == 0 removes all tag from queue.
 // returns count of removed events.
 
-TJS_EXP_FUNC_DEF(bool, TVPAreEventsInQueue,
+TJS_EXP_FUNC_DEF(bool, AreTJSEventsInQueue,
                  (iTJSDispatch2 * source, iTJSDispatch2 *target,
                   const ttstr &eventname, tjs_uint32 tag));
 // returns whether the events are in queue that have specified
 // source/target/name/tag.
 // tag == 0 matches all tag in queue.
 
-TJS_EXP_FUNC_DEF(tjs_int, TVPCountEventsInQueue,
+TJS_EXP_FUNC_DEF(tjs_int, CountEventsInQueue,
                  (iTJSDispatch2 * source, iTJSDispatch2 *target,
                   const ttstr &eventname, tjs_uint32 tag));
 // returns count of the events in queue that have specified
 // source/target/name/tag.
 // tag == 0 matches all tag in queue.
 
-TJS_EXP_FUNC_DEF(void, TVPCancelEventsByTag,
+TJS_EXP_FUNC_DEF(void, CancelEventsByTag,
                  (iTJSDispatch2 * source, iTJSDispatch2 *target,
                   tjs_uint32 tag = 0));
 // removes all events which have the same source/target/tag.
 // tag == 0 removes all tag from queue.
 
-TJS_EXP_FUNC_DEF(void, TVPCancelSourceEvents, (iTJSDispatch2 * source));
+TJS_EXP_FUNC_DEF(void, CancelSourceEvents, (iTJSDispatch2 * source));
 // removes all events that has specified source.
 //---------------------------------------------------------------------------
 
@@ -148,28 +148,28 @@ class tTJSNI_BaseWindow;
 
 namespace krkr::base {
 
-extern void TVPPostWindowUpdate(tTJSNI_BaseWindow *window);
+extern void PostWindowUpdate(tTJSNI_BaseWindow *window);
 
-extern void TVPRemoveWindowUpdate(tTJSNI_BaseWindow *window);
+extern void RemoveWindowUpdate(tTJSNI_BaseWindow *window);
 
-extern void TVPDeliverWindowUpdateEvents();
+extern void DeliverWindowUpdateEvents();
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 // User input event related
 //---------------------------------------------------------------------------
-class tTVPBaseInputEvent // base user input event class
+class BaseInputEvent // base user input event class
 {
     void *Source;
     tjs_int Tag;
 
 public:
-    tTVPBaseInputEvent(void *source, tjs_int tag) {
+    BaseInputEvent(void *source, tjs_int tag) {
         Source = source;
         Tag = tag;
     }
 
-    virtual ~tTVPBaseInputEvent() = default;
+    virtual ~BaseInputEvent() = default;
 
     virtual void Deliver() const = 0;
 
@@ -179,33 +179,33 @@ public:
 };
 
 //---------------------------------------------------------------------------
-extern tjs_int TVPInputEventTagMax;
+extern tjs_int InputEventTagMax;
 
-class tTVPUniqueTagForInputEvent // a class for getting unique tag per
+class UniqueTagForInputEvent // a class for getting unique tag per
                                  // a event class
 {
 public:
     tjs_int Tag;
 
-    tTVPUniqueTagForInputEvent() : Tag(++TVPInputEventTagMax) {}
+    UniqueTagForInputEvent() : Tag(++InputEventTagMax) {}
 
     operator tjs_int() const { return Tag; }
 };
 
 //---------------------------------------------------------------------------
-extern void TVPPostInputEvent(tTVPBaseInputEvent *ev, tjs_uint32 flags = 0);
+extern void PostInputEvent(BaseInputEvent *ev, tjs_uint32 flags = 0);
 
-extern void TVPCancelInputEvents(void *source);
+extern void CancelInputEvents(void *source);
 
-extern void TVPCancelInputEvents(void *source, tjs_int tag);
+extern void CancelInputEvents(void *source, tjs_int tag);
 
-extern tjs_int TVPGetInputEventCount();
+extern tjs_int GetInputEventCount();
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCreateEventObject
+// CreateEventObject
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(iTJSDispatch2 *, TVPCreateEventObject,
+TJS_EXP_FUNC_DEF(iTJSDispatch2 *, CreateEventObject,
                  (const tjs_char *type, iTJSDispatch2 *targthis,
                   iTJSDispatch2 *targ));
 //---------------------------------------------------------------------------
@@ -213,14 +213,14 @@ TJS_EXP_FUNC_DEF(iTJSDispatch2 *, TVPCreateEventObject,
 //---------------------------------------------------------------------------
 // some macros for driving "action" method
 //---------------------------------------------------------------------------
-extern ttstr TVPActionName;
+extern ttstr ActionName;
 #define TVP_ACTION_INVOKE_BEGIN(argnum, name, object)                          \
     {                                                                          \
         if(numparams < (argnum))                                               \
             return TJS_E_BADPARAMCOUNT;                                        \
         tjs_int arg_count = 0;                                                 \
         iTJSDispatch2 *evobj =                                                 \
-            TVPCreateEventObject(TJS_W(name), (object), (object));             \
+            CreateEventObject(TJS_W(name), (object), (object));             \
         tTJSVariant evval(evobj, evobj);                                       \
         evobj->Release();
 
@@ -233,7 +233,7 @@ extern ttstr TVPActionName;
 
 #define TVP_ACTION_INVOKE_END(object)                                          \
     tTJSVariant *pevval = &evval;                                              \
-    (object).FuncCall(0, TVPActionName.c_str(), TVPActionName.GetHint(),       \
+    (object).FuncCall(0, ActionName.c_str(), ActionName.GetHint(),       \
                       result, 1, &pevval, nullptr);                            \
     }
 
@@ -247,7 +247,7 @@ extern ttstr TVPActionName;
 // Continuous Event related
 //---------------------------------------------------------------------------
 /*[*/
-class tTVPContinuousEventCallbackIntf // callback class for continuous
+class ContinuousEventCallbackIntf // callback class for continuous
                                       // event delivering
 {
 public:
@@ -255,30 +255,30 @@ public:
 };
 /*]*/
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(void, TVPAddContinuousEventHook,
-                 (tTVPContinuousEventCallbackIntf * cb));
+TJS_EXP_FUNC_DEF(void, AddContinuousEventHook,
+                 (ContinuousEventCallbackIntf * cb));
 
-TJS_EXP_FUNC_DEF(void, TVPRemoveContinuousEventHook,
-                 (tTVPContinuousEventCallbackIntf * cb));
+TJS_EXP_FUNC_DEF(void, RemoveContinuousEventHook,
+                 (ContinuousEventCallbackIntf * cb));
 
-extern void TVPBeginContinuousEvent();
+extern void BeginContinuousEvent();
 // must be implemented in each platforms
-// this must begin calling TVPDeliverContinuousEvent
+// this must begin calling DeliverContinuousEvent
 
-extern void TVPEndContinuousEvent();
+extern void EndContinuousEvent();
 // must be implemented in each platforms
-// this must stop calling TVPDeliverContinuousEvent
+// this must stop calling DeliverContinuousEvent
 
-extern void TVPDeliverContinuousEvent();
+extern void DeliverContinuousEvent();
 // must be called by each platforms's implementation
 
-extern void TVPAddContinuousHandler(tTJSVariantClosure clo);
+extern void AddContinuousHandler(tTJSVariantClosure clo);
 
 // add callback function written in TJS
-extern void TVPRemoveContinuousHandler(tTJSVariantClosure clo);
-// remove callback function added by TVPAddIdleHandler
+extern void RemoveContinuousHandler(tTJSVariantClosure clo);
+// remove callback function added by AddIdleHandler
 
-extern bool TVPProcessContinuousHandlerEventFlag;
+extern bool ProcessContinuousHandlerEventFlag;
 //---------------------------------------------------------------------------
 
 /*[*/
@@ -291,7 +291,7 @@ extern bool TVPProcessContinuousHandlerEventFlag;
 #define TVP_COMPACT_LEVEL_MAX 100 // strongest level, should clear all caches
 
 //---------------------------------------------------------------------------
-class tTVPCompactEventCallbackIntf // callback class for compact event
+class CompactEventCallbackIntf // callback class for compact event
                                    // delivering
 {
 public:
@@ -299,13 +299,13 @@ public:
 };
 /*]*/
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(void, TVPAddCompactEventHook,
-                 (tTVPCompactEventCallbackIntf * cb));
+TJS_EXP_FUNC_DEF(void, AddCompactEventHook,
+                 (CompactEventCallbackIntf * cb));
 
-TJS_EXP_FUNC_DEF(void, TVPRemoveCompactEventHook,
-                 (tTVPCompactEventCallbackIntf * cb));
+TJS_EXP_FUNC_DEF(void, RemoveCompactEventHook,
+                 (CompactEventCallbackIntf * cb));
 
-extern void TVPDeliverCompactEvent(tjs_int level);
+extern void DeliverCompactEvent(tjs_int level);
 // must be called by each platforms's implementation
 //---------------------------------------------------------------------------
 
@@ -382,54 +382,14 @@ protected:
 };
 
 //---------------------------------------------------------------------------
-extern tTJSNativeClass *TVPCreateNativeClass_AsyncTrigger();
+extern tTJSNativeClass *CreateNativeClass_AsyncTrigger();
 //---------------------------------------------------------------------------
 
 } // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::base::TVPDeliverAllEvents;
-using krkr::base::TVPEventDisabled;
-using krkr::base::TVPInvokeEvents;
-using krkr::base::TVPEventReceived;
-using krkr::base::TVPCallDeliverAllEventsOnIdle;
-using krkr::base::TVPBreathe;
-using krkr::base::TVPGetBreathing;
-using krkr::base::TVPSetSystemEventDisabledState;
-using krkr::base::TVPGetSystemEventDisabledState;
-using krkr::base::TVPPostEvent;
-using krkr::base::TVPCancelEvents;
-using krkr::base::TVPAreEventsInQueue;
-using krkr::base::TVPCountEventsInQueue;
-using krkr::base::TVPCancelEventsByTag;
-using krkr::base::TVPCancelSourceEvents;
-using krkr::base::TVPPostWindowUpdate;
-using krkr::base::TVPRemoveWindowUpdate;
-using krkr::base::TVPDeliverWindowUpdateEvents;
-using krkr::base::tTVPBaseInputEvent;
-using krkr::base::tTVPUniqueTagForInputEvent;
-using krkr::base::TVPInputEventTagMax;
-using krkr::base::TVPPostInputEvent;
-using krkr::base::TVPCancelInputEvents;
-using krkr::base::TVPGetInputEventCount;
-using krkr::base::TVPCreateEventObject;
-using krkr::base::TVPActionName;
-using krkr::base::tTVPContinuousEventCallbackIntf;
-using krkr::base::TVPAddContinuousEventHook;
-using krkr::base::TVPRemoveContinuousEventHook;
-using krkr::base::TVPBeginContinuousEvent;
-using krkr::base::TVPEndContinuousEvent;
-using krkr::base::TVPDeliverContinuousEvent;
-using krkr::base::TVPAddContinuousHandler;
-using krkr::base::TVPRemoveContinuousHandler;
-using krkr::base::TVPProcessContinuousHandlerEventFlag;
-using krkr::base::tTVPCompactEventCallbackIntf;
-using krkr::base::TVPAddCompactEventHook;
-using krkr::base::TVPRemoveCompactEventHook;
-using krkr::base::TVPDeliverCompactEvent;
 using krkr::base::tTJSNI_AsyncTrigger;
 using krkr::base::tTJSNC_AsyncTrigger;
-using krkr::base::TVPCreateNativeClass_AsyncTrigger;
 // krkr::utils::AsyncTriggerMode / atmNormal・atmExclusive・atmAtIdle 的 using 在
 // core/utils/AsyncTriggerMode.h 里（它属于 krkr::utils）。
 

@@ -49,7 +49,7 @@ void SetClipboardText(const ttstr &text) {
             std::string ansistr = text.AsStdString();
             int ansistrlen = (int)((ansistr.length() + 1)*sizeof(char));
             ansihandle = ::GlobalAlloc(GMEM_DDESHARE | GMEM_MOVEABLE, ansistrlen);
-            if( !ansihandle ) TVPThrowExceptionMessage( TVPFaildClipboardCopy );
+            if( !ansihandle ) ThrowExceptionMessage( TVPFaildClipboardCopy );
 
             char *mem = (char*)::GlobalLock(ansihandle);
             if(mem) strncpy_s(mem, ansistrlen, ansistr.c_str(),ansistrlen);
@@ -60,7 +60,7 @@ void SetClipboardText(const ttstr &text) {
 
             // store UNICODE string
             unicodehandle = ::GlobalAlloc(GMEM_DDESHARE | GMEM_MOVEABLE, (text.GetLen() + 1) * sizeof(tjs_char));
-            if(!unicodehandle) TVPThrowExceptionMessage( TVPFaildClipboardCopy );;
+            if(!unicodehandle) ThrowExceptionMessage( TVPFaildClipboardCopy );;
 
             tjs_char *unimem = (tjs_char*)::GlobalLock(unicodehandle);
             if(unimem) TJS_strcpy(unimem, text.c_str());

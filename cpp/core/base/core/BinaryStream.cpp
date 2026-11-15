@@ -26,7 +26,7 @@
 //---------------------------------------------------------------------------
 namespace krkr::base {
 
-tTJSBinaryStream *TVPCreateBinaryStreamForRead(const ttstr &name,
+tTJSBinaryStream *CreateBinaryStreamForRead(const ttstr &name,
                                                const ttstr &modestr) {
     // check o mode
     tTJSBinaryStream *stream = krkr::io::CreateStream(name, TJS_BS_READ);
@@ -51,7 +51,7 @@ tTJSBinaryStream *TVPCreateBinaryStreamForRead(const ttstr &name,
 }
 
 //---------------------------------------------------------------------------
-tTJSBinaryStream *TVPCreateBinaryStreamForWrite(const ttstr &name,
+tTJSBinaryStream *CreateBinaryStreamForWrite(const ttstr &name,
                                                 const ttstr &modestr) {
     tTJSBinaryStream *stream;
     // check o mode

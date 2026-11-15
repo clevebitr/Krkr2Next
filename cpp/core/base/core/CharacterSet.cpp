@@ -17,7 +17,7 @@
 
 namespace krkr::base {
 
-static tjs_int inline TVPWideCharToUtf8(tjs_char in, char *out) {
+static tjs_int inline WideCharToUtf8(tjs_char in, char *out) {
     // convert a wide character 'in' to utf-8 character 'out'
     if(in < (1 << 7)) {
         if(out) {
@@ -40,7 +40,7 @@ static tjs_int inline TVPWideCharToUtf8(tjs_char in, char *out) {
     }
 #if 1
     else {
-        TVPThrowExceptionMessage(
+        ThrowExceptionMessage(
             TJS_W("Out of UTF-16 range conversion from UTF-8 code"));
     }
 #else
@@ -78,20 +78,20 @@ static tjs_int inline TVPWideCharToUtf8(tjs_char in, char *out) {
 }
 
 //---------------------------------------------------------------------------
-tjs_int TVPWideCharToUtf8String(const tjs_char *in, char *out) {
+tjs_int WideCharToUtf8String(const tjs_char *in, char *out) {
     // convert input wide string to output utf-8 string
     int count = 0;
     while(*in) {
         tjs_int n;
         if(out) {
-            n = TVPWideCharToUtf8(*in, out);
+            n = WideCharToUtf8(*in, out);
             out += n;
         } else {
-            n = TVPWideCharToUtf8(*in, nullptr);
+            n = WideCharToUtf8(*in, nullptr);
             /*
                 in this situation, the compiler's inliner
                 will collapse all nullptr check parts in
-                TVPWideCharToUtf8.
+                WideCharToUtf8.
             */
         }
         if(n == -1)
@@ -103,7 +103,7 @@ tjs_int TVPWideCharToUtf8String(const tjs_char *in, char *out) {
 }
 
 //---------------------------------------------------------------------------
-static bool inline TVPUtf8ToWideChar(const char *&in, tjs_char *out) {
+static bool inline Utf8ToWideChar(const char *&in, tjs_char *out) {
     // convert a utf-8 charater from 'in' to wide charater 'out'
     const auto &p = (const unsigned char *&)in;
     if(p[0] < 0x80) {
@@ -183,17 +183,17 @@ static bool inline TVPUtf8ToWideChar(const char *&in, tjs_char *out) {
 }
 
 //---------------------------------------------------------------------------
-tjs_int TVPUtf8ToWideCharString(const char *in, tjs_char *out) {
+tjs_int Utf8ToWideCharString(const char *in, tjs_char *out) {
     // convert input utf-8 string to output wide string
     int count = 0;
     while(*in) {
         tjs_char c;
         if(out) {
-            if(!TVPUtf8ToWideChar(in, &c))
+            if(!Utf8ToWideChar(in, &c))
                 return -1; // invalid character found
             *out++ = c;
         } else {
-            if(!TVPUtf8ToWideChar(in, nullptr))
+            if(!Utf8ToWideChar(in, nullptr))
                 return -1; // invalid character found
         }
         count++;
@@ -202,7 +202,7 @@ tjs_int TVPUtf8ToWideCharString(const char *in, tjs_char *out) {
 }
 
 //---------------------------------------------------------------------------
-tjs_int TVPUtf8ToWideCharString(const char *in, tjs_uint length,
+tjs_int Utf8ToWideCharString(const char *in, tjs_uint length,
                                 tjs_char *out) {
     // convert input utf-8 string to output wide string
     int count = 0;
@@ -237,11 +237,11 @@ tjs_int TVPUtf8ToWideCharString(const char *in, tjs_uint length,
 
         tjs_char c;
         if(out) {
-            if(!TVPUtf8ToWideChar(in, &c))
+            if(!Utf8ToWideChar(in, &c))
                 return -1; // invalid character found
             *out++ = c;
         } else {
-            if(!TVPUtf8ToWideChar(in, nullptr))
+            if(!Utf8ToWideChar(in, nullptr))
                 return -1; // invalid character found
         }
         count++;

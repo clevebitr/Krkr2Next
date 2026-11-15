@@ -291,7 +291,7 @@ protected:
 // 视频呈现 overlay（overlay 模式电影）：连续事件钩子驱动呈现，帧经宿主纹理
 // 共享叠画在场景之上。
 class VideoPresentOverlay : public TVPMoviePlayer,
-                            public tTVPContinuousEventCallbackIntf {
+                            public ContinuousEventCallbackIntf {
 protected:
     OverlayNode *m_pRootNode = nullptr;
     TVPYUVSprite *m_pSprite = nullptr;

@@ -71,5 +71,5 @@ protected:
 
 extern iTJSDispatch2 *TVPCreateRectObject(tjs_int left, tjs_int top,
                                           tjs_int right, tjs_int bottom);
-extern tTJSNativeClass *TVPCreateNativeClass_Rect();
+extern tTJSNativeClass *CreateNativeClass_Rect();
 #endif // RectIntfH

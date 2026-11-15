@@ -218,7 +218,7 @@ protected:
 
 tjs_uint32 tTJSNC_GamepadStub::ClassID = static_cast<tjs_uint32>(-1);
 
-class ProxyStorageMedia : public iTVPStorageMedia {
+class ProxyStorageMedia : public IStorageMedia {
     tjs_uint RefCount = 1;
 
     ttstr ResolveProxy(const ttstr &name) {
@@ -258,7 +258,7 @@ public:
         if(resolved.IsEmpty()) return nullptr;
         return krkr::io::CreateStream(resolved, flags);
     }
-    void GetListAt(const ttstr &, iTVPStorageLister *) override {}
+    void GetListAt(const ttstr &, IStorageLister *) override {}
     void GetLocallyAccessibleName(ttstr &name) override { name.Clear(); }
 };
 
@@ -282,7 +282,7 @@ static void RegisterGamepadStub() {
     if(!stub)
         return;
 
-    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    iTJSDispatch2 *global = GetScriptDispatch();
     if(!global) {
         stub->Release();
         return;
@@ -526,7 +526,7 @@ void TVP_md5_finish(TVP_md5_state_t *pms, tjs_uint8 *digest) {
 bool TVPRegisterGlobalObject(const tjs_char *name, iTJSDispatch2 *dsp) {
     // register given object to global object
     tTJSVariant val(dsp);
-    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    iTJSDispatch2 *global = GetScriptDispatch();
     tjs_error er;
     try {
         er = global->PropSet(TJS_MEMBERENSURE, name, nullptr, &val, global);
@@ -541,7 +541,7 @@ bool TVPRegisterGlobalObject(const tjs_char *name, iTJSDispatch2 *dsp) {
 //---------------------------------------------------------------------------
 bool TVPRemoveGlobalObject(const tjs_char *name) {
     // remove registration of global object
-    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    iTJSDispatch2 *global = GetScriptDispatch();
     if(!global)
         return false;
     tjs_error er;
@@ -700,7 +700,7 @@ tTJSNativeClass *TVPCreateNativeClass_Plugins() {
             LoadPlugin(name);
         } else if(!is_bres_resource) {
             // 非 bres:// 且非插件：按普通脚本资源执行，与 link 的语义对齐
-            TVPExecuteStorage(name);
+            krkr::base::ExecuteStorage(name);
         }
         // bres:// 资源无法解包，直接返回代理对象，让 bootstrap 继续往下走
 

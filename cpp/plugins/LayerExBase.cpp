@@ -9,7 +9,7 @@ static tTJSNI_Layer *GetNativeLayer(iTJSDispatch2 *layerobj) {
     tjs_error hr = layerobj->NativeInstanceSupport(
         TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID, (iTJSNativeInstance **)&ni);
     if(TJS_FAILED(hr) || !ni)
-        TVPThrowExceptionMessage(TJS_W("Not Layer"));
+        ThrowExceptionMessage(TJS_W("Not Layer"));
     return ni;
 }
 

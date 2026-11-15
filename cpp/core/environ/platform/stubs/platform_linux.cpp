@@ -185,7 +185,7 @@ static tjs_int _proc_self_mem(const char *key) {
     return static_cast<tjs_int>(v);
 }
 
-void GetMemoryInfo(TVPMemoryInfo &m) {
+void GetMemoryInfo(MemoryInfo &m) {
     m.MemTotal = _meminfo_value("MemTotal:");
     m.MemFree = _meminfo_value("MemFree:");
     m.SwapTotal = _meminfo_value("SwapTotal:");
@@ -211,7 +211,7 @@ void ForceSwapBuffer() { /* pass */ }
 bool CheckStartupPath(const std::string &) { return true; }
 
 void ExitApplication(int code) {
-    TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
+    DeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
     terminated = true;
     terminateCode = code;
     if(hostSuppressProcessExit) {

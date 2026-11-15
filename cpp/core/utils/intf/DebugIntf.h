@@ -26,9 +26,9 @@ extern bool loggingToFile;
 extern void SetOnLog(void (*func)(const ttstr &line));
 
 // 释放脚本注册的全部日志闭包（tTJSVariantClosure）。
-// 必须在脚本引擎销毁（TVPUninitScriptEngine）之前调用，否则闭包 finalizer
+// 必须在脚本引擎销毁（krkr::base::UninitScriptEngine）之前调用，否则闭包 finalizer
 // 会命中已失效的 TJS 全局态导致退出卡死（runtime-restart）。由
-// tTVPApplication::OnExit 在销毁引擎前调用；DestroyLoggingHandlerVector
+// Application::OnExit 在销毁引擎前调用；DestroyLoggingHandlerVector
 // at-exit handler 仍保留作兜底（届时引擎已死，向量应为空/无闭包）。
 extern void ClearLoggingHandlers();
 

@@ -131,13 +131,13 @@ void TVPLoadPVRv3(void *formatdata, void *callbackdata,
                   tTJSBinaryStream *src, tjs_int keyidx,
                   tTVPGraphicLoadMode mode) {
     if(mode == glmPalettized) {
-        TVPThrowExceptionMessage(
+        ThrowExceptionMessage(
             TJS_W("PVR Load Error/Unsupport palettized image"));
     }
     PVRv3Header hdr;
     src->ReadBuffer(&hdr, sizeof(hdr));
     if(hdr.version != 0x03525650) {
-        TVPThrowExceptionMessage(TJS_W("PVR Load Error/Invalid image"));
+        ThrowExceptionMessage(TJS_W("PVR Load Error/Invalid image"));
     }
 
     tjs_uint64 dataoff = src->GetPosition() + hdr.metadataLength;
@@ -214,7 +214,7 @@ void TVPLoadPVRv3(void *formatdata, void *callbackdata,
             fmt = gpfRGB;
             break;
         default:
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("PVR Load Error/Unsupport format [%1]"),
                 ttstr((tjs_int)hdr.pixelFormat));
     }
@@ -284,7 +284,7 @@ void TVPLoadPVRv3(void *formatdata, void *callbackdata,
         case PVR3TexturePixelFormat::A8:
         case PVR3TexturePixelFormat::LA88:
         default:
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("PVR Load Error/Unsupport format [%1]"),
                 ttstr((tjs_int)hdr.pixelFormat));
             break;
@@ -297,7 +297,7 @@ void TVPLoadHeaderPVRv3(void *formatdata, tTJSBinaryStream *src,
     PVRv3Header hdr;
     src->ReadBuffer(&hdr, sizeof(hdr));
     if(hdr.version != 0x03525650) {
-        TVPThrowExceptionMessage(TJS_W("PVR Load Error/Invalid image"));
+        ThrowExceptionMessage(TJS_W("PVR Load Error/Invalid image"));
     }
     *dic = TJSCreateDictionaryObject();
     tTJSVariant val((tjs_int32)hdr.width);
@@ -324,7 +324,7 @@ void TVPLoadHeaderPVRv3(void *formatdata, tTJSBinaryStream *src,
             bpp = 8;
             break;
         default:
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("PVR Load Error/Unsupport format [%1]"),
                 ttstr((tjs_int)hdr.pixelFormat));
     }

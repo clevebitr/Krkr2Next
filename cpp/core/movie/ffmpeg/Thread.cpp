@@ -20,7 +20,7 @@ CThread::~CThread() {
 
 void CThread::Create() {
     if(m_bRunning.exchange(true)) {
-        TVPThrowExceptionMessage(TJS_W("thread already in running"));
+        ThrowExceptionMessage(TJS_W("thread already in running"));
     }
     m_bStop = false;
     if(m_ThreadId) {

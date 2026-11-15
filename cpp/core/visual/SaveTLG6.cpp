@@ -54,7 +54,7 @@ bool TVPAcceptSaveAsTLG(void *formatdata, const ttstr &type,
         // offs_y : integer
         // offs_unit : select text : pixel
         tTJSVariant result;
-        TVPExecuteExpression(
+        ExecuteExpression(
             TJS_W("(const)%[") TJS_W("\"mode\"=>(const)%[\"type\"=>\"select "
                                      "text\",\"items\"=>")
                 TJS_W("(const)[\"opaque\", "
@@ -153,7 +153,7 @@ public:
             else
                 Buffer = (unsigned char *)TJS_malloc(BufferCapacity);
             if(!Buffer)
-                TVPThrowExceptionMessage(TVPTlgInsufficientMemory);
+                ThrowExceptionMessage(TVPTlgInsufficientMemory);
             memset(Buffer + org_cap, 0, BufferCapacity - org_cap);
         }
 
@@ -1230,7 +1230,7 @@ void SaveTLG6(tTJSBinaryStream *stream, const iTVPBaseBitmap *bmp, bool is24) {
 #endif
                 long bitlength = bs.GetBitLength();
                 if(bitlength & 0xc0000000)
-                    TVPThrowExceptionMessage(TVPTlgTooLargeBitLength);
+                    ThrowExceptionMessage(TVPTlgTooLargeBitLength);
                 // two most significant bits of bitlength are
                 // entropy coding method;
                 // 00 means Golomb method,
@@ -1352,7 +1352,7 @@ void TVPSaveAsTLG(void *formatdata, tTJSBinaryStream *dst,
     tjs_uint height = image->GetHeight();
     tjs_uint width = image->GetWidth();
     if(height == 0 || width == 0)
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
 
     // open stream
     tTJSBinaryStream *stream = dst;

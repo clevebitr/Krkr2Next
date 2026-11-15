@@ -236,7 +236,7 @@ public:
         TSSWaveFormat f;
         if(FAILED(Decoder->GetFormat(&f)))
         {
-            TVPThrowExceptionMessage(TVPPluginError,
+            ThrowExceptionMessage(TVPPluginError,
                 TJS_W("ITSSWaveDecoder::GetFormat failed."));
         }
         format.SamplesPerSec = f.dwSamplesPerSec;
@@ -327,7 +327,7 @@ public:
 
         if(FAILED(Unpacker->GetWaveFormat(&samplespersec, &channels,
                                           &bitspersample))) {
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TVPPluginError, TJS_W("IWaveUnpacker::GetWaveFormat failed."));
         }
         SampleSize = channels * (format.BytesPerSample = bitspersample / 8);
@@ -749,7 +749,7 @@ static BOOL CALLBACK DSoundEnumCallback( GUID* pGUID, const wchar_t * strDesc,
         {
             log += ttstr(driverpath);
             tjs_int major, minor, release, build;
-            if(TVPGetFileVersionOf(driverpath, major, minor, release, build))
+            if(GetFileVersionOf(driverpath, major, minor, release, build))
             {
                 wchar_t tmp[256];
                 TJS_snprintf(tmp, 256, TJS_W(" version %d.%d.%d.%d"), (int)major, (int)minor, (int)release, (int)build);
@@ -787,7 +787,7 @@ static void InitDirectSound()
         directSoundDLL = ::LoadLibrary(TJS_W("dsound.dll"));
         if(!directSoundDLL)
         {
-            TVPThrowExceptionMessage(TVPCannotInitDirectSound,
+            ThrowExceptionMessage(TVPCannotInitDirectSound,
                 TJS_W("Cannot load dsound.dll."));
         }
 
@@ -825,7 +825,7 @@ static void InitDirectSound()
             GetProcAddress(directSoundDLL, "DirectSoundCreate");
         if(!procDirectSoundCreate)
         {
-            TVPThrowExceptionMessage(TVPCannotInitDirectSound,
+            ThrowExceptionMessage(TVPCannotInitDirectSound,
                 TJS_W("Missing DirectSoundCreate in dsound.dll."));
         }
 
@@ -834,7 +834,7 @@ static void InitDirectSound()
         hr = procDirectSoundCreate(nullptr, &directSound, nullptr);
         if(FAILED(hr))
         {
-            TVPThrowExceptionMessage(TVPCannotInitDirectSound,
+            ThrowExceptionMessage(TVPCannotInitDirectSound,
                 ttstr(TJS_W("DirectSoundCreate failed./HR=")) +
                 TJSInt32ToHex((tjs_uint32)hr));
         }
@@ -844,7 +844,7 @@ static void InitDirectSound()
             DSSCL_PRIORITY);
         if(FAILED(hr))
         {
-            TVPThrowExceptionMessage(TVPCannotInitDirectSound,
+            ThrowExceptionMessage(TVPCannotInitDirectSound,
                 ttstr(TJS_W("IDirectSound::SetCooperativeLevel failed./HR="))+
                 TJSInt32ToHex((tjs_uint32)hr));
         }
@@ -886,7 +886,7 @@ static void InitDirectSound()
             if(FAILED(hr))
             {
                 // failed... here assumes this a failure.
-                TVPThrowExceptionMessage(TVPCannotInitDirectSound,
+                ThrowExceptionMessage(TVPCannotInitDirectSound,
                     ttstr(TJS_W("IDirectSound::SetCooperativeLevel failed. ")
                         TJS_W("(after creation of primary buffer failed)/HR="))+
                     TJSInt32ToHex((tjs_uint32)hr));
@@ -899,14 +899,14 @@ static void InitDirectSound()
         if(directSoundUse3D)
         {
             if(!primaryBuffer)
-                TVPThrowExceptionMessage(TVPCannotInitDirectSound,
+                ThrowExceptionMessage(TVPCannotInitDirectSound,
                     TJS_W("Cannot use 3D sounds because the primary buffer is not available."));
 
             hr = primaryBuffer->QueryInterface(IID_IDirectSound3DListener,
                                           (void **)&directSound3DListener);
             if(FAILED(hr))
             {
-                TVPThrowExceptionMessage(TVPCannotInitDirectSound,
+                ThrowExceptionMessage(TVPCannotInitDirectSound,
                     ttstr(TJS_W("Querying interface IDirectSound3DListener failed./HR=") +
                         TJSInt32ToHex((tjs_uint32)hr)));
             }
@@ -1067,7 +1067,7 @@ static void UninitDirectSoundAtExitProc()
     if( primaryDelayedStopperTimer ) delete primaryDelayedStopperTimer, primaryDelayedStopperTimer = nullptr;
     directSoundShutdown = true;
 }
-static tTVPAtExit uninitDirectSoundAtExit
+static AtExit uninitDirectSoundAtExit
     (KRKR_ATEXIT_PRI_RELEASE, UninitDirectSoundAtExitProc);
 //---------------------------------------------------------------------------
 IDirectSound * GetDirectSound()
@@ -1712,14 +1712,14 @@ static void ShutdownWaveSoundBuffers() {
     spdlog::info("at-exit PREPARE: ShutdownWaveSoundBuffers end");
 }
 
-static tTVPAtExit
+static AtExit
     shutdownWaveSoundBuffersAtExit(KRKR_ATEXIT_PRI_PREPARE,
                                       ShutdownWaveSoundBuffers);
 
 //---------------------------------------------------------------------------
 // StopAllWaveSoundsForRestart : runtime-restart 专用声音停止
 //---------------------------------------------------------------------------
-// tTVPAtExit 是一次性的：首次 engine_destroy 的 CauseAtExit 会 delete 置空
+// AtExit 是一次性的：首次 engine_destroy 的 CauseAtExit 会 delete 置空
 // krkr::base::atExitInfos，之后重启的 teardown 不再执行
 // ShutdownWaveSoundBuffers，导致上一游戏 正在播放的 BGM/音效（由
 // waveSoundBufferThread 混音输出）继续响、叠进下一游戏 （真机：切游戏后 BGM
@@ -2007,7 +2007,7 @@ void tTJSNI_WaveSoundBuffer::Invalidate() {
 //---------------------------------------------------------------------------
 void tTJSNI_WaveSoundBuffer::ThrowSoundBufferException(const ttstr &reason) {
 
-    TVPThrowExceptionMessage(
+    ThrowExceptionMessage(
         TVPCannotCreateDSSecondaryBuffer, reason,
         ttstr{ fmt::sprintf("frequency=%d/channels=%d/bits=%d",
                             InputFormat.SamplesPerSec, InputFormat.Channels,
@@ -2227,7 +2227,7 @@ void tTJSNI_WaveSoundBuffer::CreateSoundBuffer() {
             }
 
             if(failed)
-                TVPThrowExceptionMessage(msg.c_str());
+                ThrowExceptionMessage(msg.c_str());
 
 #if 0
             // log
@@ -3094,7 +3094,7 @@ void tTJSNI_WaveSoundBuffer::Open(const ttstr &storagename) {
     // open loop information file
     ttstr sliname = storagename + TJS_W(".sli");
     if(krkr::io::IsExistentStorage(sliname)) {
-        tTVPStreamHolder slistream(sliname);
+        StreamHolder slistream(sliname);
         char *buffer;
         tjs_uint size;
         buffer =
@@ -3104,7 +3104,7 @@ void tTJSNI_WaveSoundBuffer::Open(const ttstr &storagename) {
             buffer[size] = 0;
 
             if(!LoopManager->ReadInformation(buffer))
-                TVPThrowExceptionMessage(TVPInvalidLoopInformation, sliname);
+                ThrowExceptionMessage(TVPInvalidLoopInformation, sliname);
             RecreateWaveLabelsObject();
         } catch(...) {
             delete[] buffer;

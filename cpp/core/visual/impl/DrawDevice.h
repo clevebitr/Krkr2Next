@@ -162,7 +162,7 @@ public:
     //! 位置(描画矩形の左上が原点)
     //! @param		mb		どのマウスボタンか
     //! @param		flags	フラグ(TVP_SS_*定数の組み合わせ)
-    virtual void OnMouseDown(tjs_int x, tjs_int y, tTVPMouseButton mb,
+    virtual void OnMouseDown(tjs_int x, tjs_int y, MouseButton mb,
                              tjs_uint32 flags) = 0;
 
     //! @brief		(Window→DrawDevice) マウスボタンが離された
@@ -172,7 +172,7 @@ public:
     //! 位置(描画矩形の左上が原点)
     //! @param		mb		どのマウスボタンか
     //! @param		flags	フラグ(TVP_SS_*定数の組み合わせ)
-    virtual void OnMouseUp(tjs_int x, tjs_int y, tTVPMouseButton mb,
+    virtual void OnMouseUp(tjs_int x, tjs_int y, MouseButton mb,
                            tjs_uint32 flags) = 0;
 
     //! @brief		(Window→DrawDevice) マウスが移動した
@@ -379,7 +379,7 @@ public:
     //! @brief		(LayerManager→DrawDevice) IMEモードの設定
     //! @param		manager		レイヤマネージャ
     //! @param		mode		IMEモード
-    virtual void SetImeMode(iTVPLayerManager *manager, tTVPImeMode mode) = 0;
+    virtual void SetImeMode(iTVPLayerManager *manager, ImeMode mode) = 0;
 
     //! @brief		(LayerManager→DrawDevice) IMEモードのリセット
     //! @param		manager		レイヤマネージャ
@@ -610,9 +610,9 @@ public:
     // window → drawdevice
     void OnClick(tjs_int x, tjs_int y) override;
     void OnDoubleClick(tjs_int x, tjs_int y) override;
-    void OnMouseDown(tjs_int x, tjs_int y, tTVPMouseButton mb,
+    void OnMouseDown(tjs_int x, tjs_int y, MouseButton mb,
                      tjs_uint32 flags) override;
-    void OnMouseUp(tjs_int x, tjs_int y, tTVPMouseButton mb,
+    void OnMouseUp(tjs_int x, tjs_int y, MouseButton mb,
                    tjs_uint32 flags) override;
     void OnMouseMove(tjs_int x, tjs_int y, tjs_uint32 flags) override;
     void OnReleaseCapture() override;
@@ -650,7 +650,7 @@ public:
     void SetAttentionPoint(iTVPLayerManager *manager, tTJSNI_BaseLayer *layer,
                            tjs_int l, tjs_int t) override;
     void DisableAttentionPoint(iTVPLayerManager *manager) override;
-    void SetImeMode(iTVPLayerManager *manager, tTVPImeMode mode) override;
+    void SetImeMode(iTVPLayerManager *manager, ImeMode mode) override;
     void ResetImeMode(iTVPLayerManager *manager) override;
 
     //---- プライマリレイヤ関連

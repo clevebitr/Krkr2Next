@@ -4,8 +4,8 @@
 #include "Application.h"
 #include "krkr_egl_context.h"
 
-int tTVPScreen::GetWidth() { return 2048; }
-int tTVPScreen::GetHeight() {
+int Screen::GetWidth() { return 2048; }
+int Screen::GetHeight() {
     // Use EGL surface dimensions if available, otherwise fallback to width
     auto &egl = krkr::GetEngineEGLContext();
     if(egl.IsValid()) {
@@ -19,7 +19,7 @@ int tTVPScreen::GetHeight() {
     return GetWidth();
 }
 
-int tTVPScreen::GetDesktopLeft() { return 0; }
-int tTVPScreen::GetDesktopTop() { return 0; }
-int tTVPScreen::GetDesktopWidth() { return GetWidth(); }
-int tTVPScreen::GetDesktopHeight() { return GetHeight(); }
+int Screen::GetDesktopLeft() { return 0; }
+int Screen::GetDesktopTop() { return 0; }
+int Screen::GetDesktopWidth() { return GetWidth(); }
+int Screen::GetDesktopHeight() { return GetHeight(); }

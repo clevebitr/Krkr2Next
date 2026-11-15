@@ -400,7 +400,7 @@ void tTVPLayerManager::PrimaryDoubleClick(tjs_int x, tjs_int y) {
 }
 //---------------------------------------------------------------------------
 void tTVPLayerManager::PrimaryMouseDown(tjs_int x, tjs_int y,
-                                        tTVPMouseButton mb, tjs_uint32 flags) {
+                                        MouseButton mb, tjs_uint32 flags) {
     PrimaryMouseMove(x, y, flags);
     tTJSNI_BaseLayer *l =
         CaptureOwner ? CaptureOwner : GetMostFrontChildAt(x, y);
@@ -434,7 +434,7 @@ void tTVPLayerManager::PrimaryMouseDown(tjs_int x, tjs_int y,
     }
 }
 //---------------------------------------------------------------------------
-void tTVPLayerManager::PrimaryMouseUp(tjs_int x, tjs_int y, tTVPMouseButton mb,
+void tTVPLayerManager::PrimaryMouseUp(tjs_int x, tjs_int y, MouseButton mb,
                                       tjs_uint32 flags) {
     tTJSNI_BaseLayer *l;
 
@@ -812,7 +812,7 @@ bool tTVPLayerManager::SetFocusTo(tTJSNI_BaseLayer *layer, bool direction) {
         return false;
 
     if(FocusChangeLock)
-        TVPThrowExceptionMessage(TVPCannotChangeFocusInProcessingFocus);
+        ThrowExceptionMessage(TVPCannotChangeFocusInProcessingFocus);
     FocusChangeLock = true;
 
     tTJSNI_BaseLayer *org = FocusedLayer;
@@ -877,15 +877,15 @@ void tTVPLayerManager::SetModeTo(tTJSNI_BaseLayer *layer) {
     try {
         tTJSNI_BaseLayer *current = GetCurrentModalLayer();
         if(current && layer->IsAncestorOrSelf(current))
-            TVPThrowExceptionMessage(TVPCannotSetModeToDisabledOrModal);
+            ThrowExceptionMessage(TVPCannotSetModeToDisabledOrModal);
         // cannot set mode to parent layer
         if(!layer->Visible)
             layer->Visible = true;
         if(!layer->GetParentVisible() || !layer->Enabled)
-            TVPThrowExceptionMessage(TVPCannotSetModeToDisabledOrModal);
+            ThrowExceptionMessage(TVPCannotSetModeToDisabledOrModal);
         // cannot set mode to parent layer
         if(layer == current)
-            TVPThrowExceptionMessage(TVPCannotSetModeToDisabledOrModal);
+            ThrowExceptionMessage(TVPCannotSetModeToDisabledOrModal);
         // cannot set mode to already modal layer
 
         SetFocusTo(layer->SearchFirstFocusable(), true);

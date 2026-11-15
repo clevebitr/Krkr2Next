@@ -96,13 +96,13 @@ public:
             Real->OnDoubleClick(x, y);
     }
 
-    void OnMouseDown(tjs_int x, tjs_int y, tTVPMouseButton mb,
+    void OnMouseDown(tjs_int x, tjs_int y, MouseButton mb,
                      tjs_uint32 flags) override {
         if(Real)
             Real->OnMouseDown(x, y, mb, flags);
     }
 
-    void OnMouseUp(tjs_int x, tjs_int y, tTVPMouseButton mb,
+    void OnMouseUp(tjs_int x, tjs_int y, MouseButton mb,
                    tjs_uint32 flags) override {
         if(Real)
             Real->OnMouseUp(x, y, mb, flags);
@@ -234,7 +234,7 @@ public:
             Real->DisableAttentionPoint(manager);
     }
 
-    void SetImeMode(iTVPLayerManager *manager, tTVPImeMode mode) override {
+    void SetImeMode(iTVPLayerManager *manager, ImeMode mode) override {
         if(Real)
             Real->SetImeMode(manager, mode);
     }

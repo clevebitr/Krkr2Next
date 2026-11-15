@@ -21,18 +21,18 @@
 //---------------------------------------------------------------------------
 namespace krkr::base {
 
-void TVPGetVersion() {
+void GetVersion() {
     static bool DoGet = true;
     if(DoGet) {
         DoGet = false;
 
-        TVPVersionMajor = 2;
-        TVPVersionMinor = 32;
-        TVPVersionRelease = 2;
-        TVPVersionBuild = 426;
+        VersionMajor = 2;
+        VersionMinor = 32;
+        VersionRelease = 2;
+        VersionBuild = 426;
 #if 0
-        TVPGetFileVersionOf(ExePath().c_str(), TVPVersionMajor, TVPVersionMinor,
-            TVPVersionRelease, TVPVersionBuild);
+        GetFileVersionOf(ExePath().c_str(), VersionMajor, VersionMinor,
+            VersionRelease, VersionBuild);
 #endif
     }
 }
@@ -40,10 +40,10 @@ void TVPGetVersion() {
 //---------------------------------------------------------------------------
 // about string retrieving
 //---------------------------------------------------------------------------
-extern const tjs_char *TVPCompileDate;
-extern const tjs_char *TVPCompileTime;
+extern const tjs_char *CompileDate;
+extern const tjs_char *CompileTime;
 
-ttstr TVPReadAboutStringFromResource() {
+ttstr ReadAboutStringFromResource() {
     return TJS_W("Kirikiri2 Runtime Core version %1(TJS version %2)");
 #if 0
     HMODULE hModule = ::GetModuleHandle(nullptr);
@@ -60,21 +60,21 @@ ttstr TVPReadAboutStringFromResource() {
     if( buf == nullptr ) ttstr(L"Resource Read Error.");
 
     // UTF-8 to UTF-16
-    size_t len = TVPUtf8ToWideCharString( buf, size, nullptr );
+    size_t len = Utf8ToWideCharString( buf, size, nullptr );
     if( len < 0 ) return ttstr(L"Resource Read Error.");
     wchar_t* tmp = new wchar_t[len+1];
     ttstr ret;
     if( tmp ) {
         try {
-            len = TVPUtf8ToWideCharString( buf, size, tmp );
+            len = Utf8ToWideCharString( buf, size, tmp );
         } catch(...) {
             delete[] tmp;
             throw;
         }
         tmp[len] = 0;
 
-        size_t datelen = TJS_strlen( TVPCompileDate );
-        size_t timelen = TJS_strlen( TVPCompileTime );
+        size_t datelen = TJS_strlen( CompileDate );
+        size_t timelen = TJS_strlen( CompileTime );
 
         // CR to CR-LF, %DATE% and %TIME% to compile data and time
         std::vector<wchar_t> tmp2;
@@ -82,12 +82,12 @@ ttstr TVPReadAboutStringFromResource() {
         for( size_t i = 0; i < len; i++ ) {
             if( tmp[i] == '%' && (i+6) < len && tmp[i+1] == 'D' && tmp[i+2] == 'A' && tmp[i+3] == 'T' && tmp[i+4] == 'E' && tmp[i+5] == '%' ) {
                 for( size_t j = 0; j < datelen; j++ ) {
-                    tmp2.push_back( TVPCompileDate[j] );
+                    tmp2.push_back( CompileDate[j] );
                 }
                 i += 5;
             } else if( tmp[i] == '%' && (i+6) < len && tmp[i+1] == 'T' && tmp[i+2] == 'I' && tmp[i+3] == 'M' && tmp[i+4] == 'E' && tmp[i+5] == '%' ) {
                 for( size_t j = 0; j < timelen; j++ ) {
-                    tmp2.push_back( TVPCompileTime[j] );
+                    tmp2.push_back( CompileTime[j] );
                 }
                 i += 5;
             } else if( tmp[i] != L'\n' ) {

@@ -81,7 +81,7 @@ static void TVPShutdownVideoOverlay() {
         (*i)->Shutdown();
     }
 }
-static tTVPAtExit TVPShutdownVideoOverlayAtExit(KRKR_ATEXIT_PRI_PREPARE,
+static AtExit TVPShutdownVideoOverlayAtExit(KRKR_ATEXIT_PRI_PREPARE,
                                                 TVPShutdownVideoOverlay);
 //---------------------------------------------------------------------------
 // 嵌套内部使用的状态名转换
@@ -103,7 +103,7 @@ static const tjs_char *VideoStatusName(tTVPVideoStatus st) {
             return TJS_W("?");
     }
 }
-static const tjs_char *VideoModeName(tTVPVideoOverlayMode m) {
+static const tjs_char *VideoModeName(VideoOverlayMode m) {
     switch(m) {
         case vomOverlay:
             return TJS_W("overlay");
@@ -142,8 +142,8 @@ std::string tTJSNI_VideoOverlay::DumpDebugStats() {
         const tjs_char *stName = VideoStatusName(st);
         char mbuf[64], sbuf[64];
         mbuf[0] = sbuf[0] = 0;
-        TVPWideCharToUtf8String(modeName, mbuf);
-        TVPWideCharToUtf8String(stName, sbuf);
+        krkr::base::WideCharToUtf8String(modeName, mbuf);
+        krkr::base::WideCharToUtf8String(stName, sbuf);
         char line[256];
         snprintf(line, sizeof(line), " [mode=%s dev=%s status=%s %ldx%ld]",
                  mbuf, hasDev ? "yes" : "no", sbuf, (long)vw, (long)vh);
@@ -217,7 +217,7 @@ void tTJSNI_VideoOverlay::Open(const ttstr &_name) {
 
     // check window
     if(!Window)
-        TVPThrowExceptionMessage(TVPWindowAlreadyMissing);
+        ThrowExceptionMessage(TVPWindowAlreadyMissing);
 
     // open target storage
     ttstr name(_name);
@@ -291,7 +291,7 @@ void tTJSNI_VideoOverlay::Open(const ttstr &_name) {
             VideoOverlay->GetVideoSize(&width, &height);
 
             if(width <= 0 || height <= 0)
-                TVPThrowExceptionMessage(TVPErrorInKrMovieDLL,
+                ThrowExceptionMessage(TVPErrorInKrMovieDLL,
                                          (const tjs_char *)TVPInvalidVideoSize);
 
             size = width * height * 4;
@@ -367,14 +367,14 @@ void tTJSNI_VideoOverlay::Close() {
     }
     krkr::stall::MarkStage("movie: Close→清理临时存储/消息");
     if(LocalTempStorageHolder) {
-        // **绝不在渲染线程上删临时文件**：tTVPLocalTempStorageHolder 的析构会调
+        // **绝不在渲染线程上删临时文件**：LocalTempStorageHolder 的析构会调
         // krkr::io::RemoveFile/krkr::io::RemoveFolder —— 真正的文件系统删除。真机日志定位到的
         // 卡死点正是这里：2026-09-18 15:50:51 播完 CG 视频后最后阶段＝
         // "movie: Close→清理临时存储/消息"，之后 engine.log 一行都不再增长
         // （连卡死看门狗都打不出日志），只能杀进程；此前同一阶段还有过
         // 1.5~2.0s 的停顿。交给后台清理线程，渲染线程立刻返回。
         krkr::utils::DeferredDestroyer<
-            tTVPLocalTempStorageHolder>::Instance().Defer(
+            LocalTempStorageHolder>::Instance().Defer(
             LocalTempStorageHolder);
         LocalTempStorageHolder = nullptr;
     }
@@ -920,7 +920,7 @@ void tTJSNI_VideoOverlay::SetLoop(bool b) {
 }
 void tTJSNI_VideoOverlay::SetLayer1(tTJSNI_BaseLayer *l) { Layer1 = l; }
 void tTJSNI_VideoOverlay::SetLayer2(tTJSNI_BaseLayer *l) { Layer2 = l; }
-void tTJSNI_VideoOverlay::SetMode(tTVPVideoOverlayMode m) {
+void tTJSNI_VideoOverlay::SetMode(VideoOverlayMode m) {
     // ビデオオープン後のモード変更は禁止
     if(!VideoOverlay) {
         Mode = m;
@@ -1304,9 +1304,9 @@ tTJSNativeInstance *tTJSNC_VideoOverlay::CreateNativeInstance() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCreateNativeClass_VideoOverlay
+// CreateNativeClass_VideoOverlay
 //---------------------------------------------------------------------------
-tTJSNativeClass *TVPCreateNativeClass_VideoOverlay() {
+tTJSNativeClass *CreateNativeClass_VideoOverlay() {
     return new tTJSNC_VideoOverlay();
 }
 //---------------------------------------------------------------------------

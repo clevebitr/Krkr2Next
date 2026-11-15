@@ -138,7 +138,7 @@ void tTVPVSyncTimingThread::Proc(NativeEvent &ev) {
 
     // ContinuousHandler を呼ぶ
     // これは十分な時間をとれるよう、vsync 待ちの直後に呼ばれる
-    TVPProcessContinuousHandlerEventFlag =
+    ProcessContinuousHandlerEventFlag =
         true; // set flag to invoke continuous handler on next idle
 }
 //---------------------------------------------------------------------------
@@ -159,7 +159,7 @@ void tTVPVSyncTimingThread::MeasureVSyncInterval() {
     else
         vsync_interval = 0;
 
-    krkr::utils::AddLog(TVPFormatMessage(TVPRoughVsyncIntervalReadFromApi,
+    krkr::utils::AddLog(krkr::base::FormatMessage(TVPRoughVsyncIntervalReadFromApi,
                                ttstr((int)vsync_interval)));
 
     // vsync 周期は適切っぽい？

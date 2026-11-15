@@ -8,7 +8,7 @@
 
 namespace krkr::base {
 
-inline void *TVPMmapAlloc(size_t size) {
+inline void *MmapAlloc(size_t size) {
     static const size_t pageSize = (size_t)sysconf(_SC_PAGESIZE);
     size_t totalSize = size + sizeof(size_t);
     totalSize = (totalSize + pageSize - 1) & ~(pageSize - 1);
@@ -20,7 +20,7 @@ inline void *TVPMmapAlloc(size_t size) {
     return (char *)ptr + sizeof(size_t);
 }
 
-inline void TVPMmapFree(void *mem) {
+inline void MmapFree(void *mem) {
     if(!mem)
         return;
     char *base = (char *)mem - sizeof(size_t);
@@ -31,8 +31,6 @@ inline void TVPMmapFree(void *mem) {
 } // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::base::TVPMmapAlloc;
-using krkr::base::TVPMmapFree;
 
 #define TVP_USE_MMAP_TEMP 1
 #endif

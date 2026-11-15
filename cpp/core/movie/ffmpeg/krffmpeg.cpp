@@ -50,7 +50,7 @@ void TVPInitLibAVCodec() {
     if(!FFInitilalized) {
         /* register all codecs, demux and protocols */
         if(av_lockmgr_register(lockmgr)) {
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("Could not initialize lock manager!"));
         }
         avcodec_register_all();

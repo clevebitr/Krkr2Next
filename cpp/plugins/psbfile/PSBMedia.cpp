@@ -2155,7 +2155,7 @@ namespace PSB {
             std::lock_guard<std::mutex> lock(_mutex);
             _missCount++;
             LOGGER->warn("PSB media cache miss: {}", key);
-            TVPThrowExceptionMessage(TJS_W("%1:cannot open psb resource"),
+            ThrowExceptionMessage(TJS_W("%1:cannot open psb resource"),
                                      name);
             return nullptr;
         }
@@ -2277,7 +2277,7 @@ namespace PSB {
         return tryLazyLoadArchive(archiveKey + "/_probe");
     }
 
-    void PSBMedia::GetListAt(const ttstr &name, iTVPStorageLister *lister) {
+    void PSBMedia::GetListAt(const ttstr &name, IStorageLister *lister) {
         LOGGER->error("TODO: PSBMedia GetListAt");
     }
 

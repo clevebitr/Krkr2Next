@@ -260,7 +260,7 @@ bool FFWaveDecoder::SetPosition(tjs_uint64 samplepos) {
 
 bool FFWaveDecoder::SetStream(const ttstr &url) {
     Clear();
-    InputStream = TVPCreateBinaryStreamForRead(url, TJS_W(""));
+    InputStream = krkr::base::CreateBinaryStreamForRead(url, TJS_W(""));
     if(!InputStream)
         return false;
     int bufSize = 32 * 1024;

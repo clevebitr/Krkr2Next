@@ -19,7 +19,7 @@ namespace krkr::utils {
 // on-error hook
 //---------------------------------------------------------------------------
 void OnErrorHook() {
-    //	if(TVPMainForm) TVPMainForm->NotifySystemError();
+    //	if(MainForm) MainForm->NotifySystemError();
 }
 //---------------------------------------------------------------------------
 
@@ -53,13 +53,13 @@ tTJSNC_Controller::tTJSNC_Controller() : tTJSNativeClass(TJS_W("Controller")) {
 
     //----------------------------------------------------------------------
     TJS_BEGIN_NATIVE_PROP_DECL(visible){
-        TJS_BEGIN_NATIVE_PROP_GETTER{ *result = 0; // TVPMainForm->getVisible();
+        TJS_BEGIN_NATIVE_PROP_GETTER{ *result = 0; // MainForm->getVisible();
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
 
 TJS_BEGIN_NATIVE_PROP_SETTER {
-    // TVPMainForm->setVisible(param->operator bool());
+    // MainForm->setVisible(param->operator bool());
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER
@@ -114,7 +114,7 @@ tTJSNC_Console::tTJSNC_Console() : tTJSNativeClass(TJS_W("Console")) {
 
     //----------------------------------------------------------------------
     TJS_BEGIN_NATIVE_PROP_DECL(visible){ TJS_BEGIN_NATIVE_PROP_GETTER{
-            //		*result = TVPMainForm->GetConsoleVisible();
+            //		*result = MainForm->GetConsoleVisible();
             *result = false;
     return TJS_S_OK;
 }
@@ -122,7 +122,7 @@ TJS_END_NATIVE_PROP_GETTER
 
 TJS_BEGIN_NATIVE_PROP_SETTER {
     bool visible = param->operator bool();
-    //		TVPMainForm->SetConsoleVisible(visible);
+    //		MainForm->SetConsoleVisible(visible);
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER

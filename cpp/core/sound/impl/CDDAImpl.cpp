@@ -43,7 +43,7 @@ void InitCDDAVolumeControlType() {
         else if(str == TJS_W("direct"))
             cddaVolumeControlType = cvctDirect;
         else
-            TVPThrowExceptionMessage(TVPCommandLineParamIgnoredAndDefaultUsed,
+            ThrowExceptionMessage(TVPCommandLineParamIgnoredAndDefaultUsed,
                                      TJS_W("-cdvol"), str);
     }
 
@@ -213,7 +213,7 @@ void RestoreCDVolume() {
     }
 }
 //---------------------------------------------------------------------------
-static tTVPAtExit RestoreCDVolumeAtExit(KRKR_ATEXIT_PRI_RELEASE,
+static AtExit RestoreCDVolumeAtExit(KRKR_ATEXIT_PRI_RELEASE,
                                            RestoreCDVolume);
 //---------------------------------------------------------------------------
 static void SetCDVolume(int v) {
@@ -254,7 +254,7 @@ ttstr GetMCIErrorString(MCIERROR err) {
     return ttstr(msg);
 }
 void ThrowMCIErrorString(MCIERROR err) {
-    TVPThrowExceptionMessage(TVPMCIError, GetMCIErrorString(err));
+    ThrowExceptionMessage(TVPMCIError, GetMCIErrorString(err));
 }
 //---------------------------------------------------------------------------
 #endif // ENABLE_CDDA
@@ -323,7 +323,7 @@ void tTJSNI_CDDASoundBuffer::Open(const ttstr &storage) {
 
         if(!found) {
             SetStatus(ssUnload);
-            TVPThrowExceptionMessage(TVPInvalidCDDADrive);
+            ThrowExceptionMessage(TVPInvalidCDDADrive);
         }
 
         c += 2;
@@ -383,7 +383,7 @@ void tTJSNI_CDDASoundBuffer::Open(const ttstr &storage) {
 
         if(!found) {
             if(firstdr == ' ')
-                TVPThrowExceptionMessage(TVPCDDADriveNotFound);
+                ThrowExceptionMessage(TVPCDDADriveNotFound);
 
             // use default drive
             drive[0] = firstdr;

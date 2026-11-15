@@ -4,7 +4,7 @@
 #include <vector>
 #include <spdlog/spdlog.h>
 
-struct TVPMemoryInfo { // all in kB
+struct MemoryInfo { // all in kB
     unsigned long MemTotal;
     unsigned long MemFree;
     unsigned long SwapTotal;
@@ -13,7 +13,7 @@ struct TVPMemoryInfo { // all in kB
     unsigned long VirtualUsed;
 };
 
-void GetMemoryInfo(TVPMemoryInfo &m);
+void GetMemoryInfo(MemoryInfo &m);
 tjs_int GetSystemFreeMemory(); // in MB
 tjs_int GetSelfUsedMemory(); // in MB
 

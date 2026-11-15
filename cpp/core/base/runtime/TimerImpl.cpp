@@ -49,7 +49,7 @@ class TimerThread : public Thread {
     NativeEventQueue<krkr::utils::TimerThread> EventQueue;
 
 public:
-    tTJSCriticalSection TVPTimerCS;
+    tTJSCriticalSection TimerCS;
 
     krkr::utils::TimerThread();
 
@@ -88,7 +88,7 @@ public:
 
     static void RegisterToPending(tTJSNI_Timer *item);
 
-} static *TVPTimerThread = nullptr;
+} static *timerThread = nullptr;
 
 //---------------------------------------------------------------------------
 TimerThread::TimerThread() :
@@ -116,7 +116,7 @@ void TimerThread::Execute() {
         tjs_uint32 sleeptime;
 
         { // thread-protected
-            tTJSCriticalSectionHolder holder(TVPTimerCS);
+            tTJSCriticalSectionHolder holder(TimerCS);
 
             bool any_triggered = false;
 
@@ -205,7 +205,7 @@ void TimerThread::Proc(NativeEvent &ev) {
     // Window procedure of UtilWindow
     if(ev.Message == TVP_EV_TIMER_THREAD && !GetTerminated()) {
         // pending events occur
-        tTJSCriticalSectionHolder holder(TVPTimerCS); // protect the object
+        tTJSCriticalSectionHolder holder(TimerCS); // protect the object
 
         std::vector<tTJSNI_Timer *>::iterator i;
         for(i = Pending.begin(); i != Pending.end(); i++) {
@@ -222,7 +222,7 @@ void TimerThread::Proc(NativeEvent &ev) {
 
 //---------------------------------------------------------------------------
 void TimerThread::AddItem(tTJSNI_Timer *item) {
-    tTJSCriticalSectionHolder holder(TVPTimerCS);
+    tTJSCriticalSectionHolder holder(TimerCS);
 
     if(std::find(List.begin(), List.end(), item) == List.end())
         List.push_back(item);
@@ -230,7 +230,7 @@ void TimerThread::AddItem(tTJSNI_Timer *item) {
 
 //---------------------------------------------------------------------------
 bool TimerThread::RemoveItem(tTJSNI_Timer *item) {
-    tTJSCriticalSectionHolder holder(TVPTimerCS);
+    tTJSCriticalSectionHolder holder(TimerCS);
 
     std::vector<tTJSNI_Timer *>::iterator i;
 
@@ -271,7 +271,7 @@ void TimerThread::RegisterToPendingItem(tTJSNI_Timer *item) {
 //---------------------------------------------------------------------------
 void TimerThread::SetEnabled(tTJSNI_Timer *item, bool enabled) {
     { // thread-protected
-        tTJSCriticalSectionHolder holder(TVPTimerCS);
+        tTJSCriticalSectionHolder holder(TimerCS);
 
         item->InternalSetEnabled(enabled);
         if(enabled) {
@@ -290,7 +290,7 @@ void TimerThread::SetEnabled(tTJSNI_Timer *item, bool enabled) {
 //---------------------------------------------------------------------------
 void TimerThread::SetInterval(tTJSNI_Timer *item, tjs_uint64 interval) {
     { // thread-protected
-        tTJSCriticalSectionHolder holder(TVPTimerCS);
+        tTJSCriticalSectionHolder holder(TimerCS);
 
         item->InternalSetInterval(interval);
         if(item->GetEnabled()) {
@@ -307,22 +307,22 @@ void TimerThread::SetInterval(tTJSNI_Timer *item, tjs_uint64 interval) {
 
 //---------------------------------------------------------------------------
 void TimerThread::Init() {
-    if(!TVPTimerThread) {
+    if(!timerThread) {
         krkr::utils::StartTickCount(); // in TickCount.cpp
-        TVPTimerThread = new krkr::utils::TimerThread();
+        timerThread = new krkr::utils::TimerThread();
     }
 }
 
 //---------------------------------------------------------------------------
 void TimerThread::Uninit() {
-    if(TVPTimerThread) {
-        delete TVPTimerThread;
-        TVPTimerThread = nullptr;
+    if(timerThread) {
+        delete timerThread;
+        timerThread = nullptr;
     }
 }
 
 //---------------------------------------------------------------------------
-static tTVPAtExit TVPTimerThreadUninitAtExit(KRKR_ATEXIT_PRI_SHUTDOWN,
+static AtExit TimerThreadUninitAtExit(KRKR_ATEXIT_PRI_SHUTDOWN,
                                              TimerThread::Uninit);
 
 //---------------------------------------------------------------------------
@@ -331,28 +331,28 @@ void TimerThread::Add(tTJSNI_Timer *item) {
 
     Init();
 
-    TVPTimerThread->AddItem(item);
+    timerThread->AddItem(item);
 }
 
 //---------------------------------------------------------------------------
 void TimerThread::Remove(tTJSNI_Timer *item) {
-    if(TVPTimerThread) {
-        if(!TVPTimerThread->RemoveItem(item))
+    if(timerThread) {
+        if(!timerThread->RemoveItem(item))
             Uninit();
     }
 }
 
 //---------------------------------------------------------------------------
 void TimerThread::RemoveFromPending(tTJSNI_Timer *item) {
-    if(TVPTimerThread) {
-        TVPTimerThread->RemoveFromPendingItem(item);
+    if(timerThread) {
+        timerThread->RemoveFromPendingItem(item);
     }
 }
 
 //---------------------------------------------------------------------------
 void TimerThread::RegisterToPending(tTJSNI_Timer *item) {
-    if(TVPTimerThread) {
-        TVPTimerThread->RegisterToPendingItem(item);
+    if(timerThread) {
+        timerThread->RegisterToPendingItem(item);
     }
 }
 //---------------------------------------------------------------------------
@@ -386,7 +386,7 @@ void tTJSNI_Timer::Invalidate() {
 
 //---------------------------------------------------------------------------
 void tTJSNI_Timer::SetInterval(tjs_uint64 n) {
-    TVPTimerThread->SetInterval(this, n);
+    timerThread->SetInterval(this, n);
 }
 
 //---------------------------------------------------------------------------
@@ -396,7 +396,7 @@ tjs_uint64 tTJSNI_Timer::GetInterval() const { return Interval; }
 tjs_uint64 tTJSNI_Timer::GetNextTick() const { return NextTick; }
 
 //---------------------------------------------------------------------------
-void tTJSNI_Timer::SetEnabled(bool b) { TVPTimerThread->SetEnabled(this, b); }
+void tTJSNI_Timer::SetEnabled(bool b) { timerThread->SetEnabled(this, b); }
 
 //---------------------------------------------------------------------------
 void tTJSNI_Timer::Trigger(tjs_uint n) {

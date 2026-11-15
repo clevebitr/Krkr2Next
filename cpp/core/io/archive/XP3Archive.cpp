@@ -203,7 +203,7 @@ static void ShutdownArchiveHandleCache() {
 }
 
 //---------------------------------------------------------------------------
-static tTVPAtExit ShutdownArchiveCacheAtExit(KRKR_ATEXIT_PRI_CLEANUP,
+static AtExit ShutdownArchiveCacheAtExit(KRKR_ATEXIT_PRI_CLEANUP,
                                                 ShutdownArchiveHandleCache);
 //---------------------------------------------------------------------------
 
@@ -357,7 +357,7 @@ bool GetXP3ArchiveOffset(tTJSBinaryStream *st, const ttstr name,
         delete[] buffer;
         if(!found) {
             if(raise)
-                TVPThrowExceptionMessage(TVPCannotUnbindXP3EXE, name);
+                ThrowExceptionMessage(TVPCannotUnbindXP3EXE, name);
             else
                 return false;
         }
@@ -381,8 +381,8 @@ bool GetXP3ArchiveOffset(tTJSBinaryStream *st, const ttstr name,
     } else {
         if(raise) {
             ttstr msg(GetMessageByLocale("err_not_xp3_archive"));
-            TVPThrowExceptionMessage(msg.c_str(), name);
-            // TVPThrowExceptionMessage(TVPCannotFindXP3Mark, name);
+            ThrowExceptionMessage(msg.c_str(), name);
+            // ThrowExceptionMessage(TVPCannotFindXP3Mark, name);
         }
         return false;
     }
@@ -392,7 +392,7 @@ bool GetXP3ArchiveOffset(tTJSBinaryStream *st, const ttstr name,
 
 //---------------------------------------------------------------------------
 bool IsXP3Archive(const ttstr &name) {
-    tTVPStreamHolder holder(name);
+    StreamHolder holder(name);
     try {
         tjs_uint64 offset;
         return GetXP3ArchiveOffset(holder.Get(), name, offset, false);
@@ -468,7 +468,7 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
     static const tjs_uint8 cn_adlr[] = { 0x61 /*'a'*/, 0x64 /*'d'*/,
                                          0x6c /*'l'*/, 0x72 /*'r'*/ };
 
-    krkr::utils::AddLog(TVPFormatMessage(
+    krkr::utils::AddLog(krkr::base::FormatMessage(
         TVPInfoTryingToReadXp3VirtualFileSystemInformationFrom, ArchiveName));
 
     int segmentcount = 0;
@@ -501,7 +501,7 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
 
                 if((tjs_uint)compressed_size != compressed_size ||
                    (tjs_uint)r_index_size != r_index_size)
-                    TVPThrowExceptionMessage(TVPReadError);
+                    ThrowExceptionMessage(TVPReadError);
                 // too large to handle, or corrupted
                 index_size = (tjs_int)r_index_size;
                 indexdata = new tjs_uint8[index_size];
@@ -518,7 +518,7 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                                    (unsigned char *)compressed,
                                    (unsigned long)compressed_size);
                     if(result != Z_OK || destlen != (unsigned long)index_size)
-                        TVPThrowExceptionMessage(TVPUncompressionFailed);
+                        ThrowExceptionMessage(TVPUncompressionFailed);
                 } catch(...) {
                     delete[] compressed;
                     throw;
@@ -529,14 +529,14 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                 // uncompressed index
                 tjs_uint64 r_index_size = st->ReadI64LE();
                 if((tjs_uint)r_index_size != r_index_size)
-                    TVPThrowExceptionMessage(TVPReadError);
+                    ThrowExceptionMessage(TVPReadError);
                 // too large to handle or corrupted
                 index_size = (tjs_uint)r_index_size;
                 indexdata = new tjs_uint8[index_size];
                 st->ReadBuffer(indexdata, index_size);
             } else {
                 // unknown encode method
-                TVPThrowExceptionMessage(TVPReadError);
+                ThrowExceptionMessage(TVPReadError);
             }
 
             // read index information from memory
@@ -552,7 +552,7 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                 tjs_uint ch_info_start = ch_file_start;
                 tjs_uint ch_info_size = ch_file_size;
                 if(!FindChunk(indexdata, cn_info, ch_info_start, ch_info_size))
-                    TVPThrowExceptionMessage(TVPReadError);
+                    ThrowExceptionMessage(TVPReadError);
 
                 // read info sub-chunk
                 // 'info' 布局：flags(4) + orgSize(8) + arcSize(8) + nameLen(2)
@@ -560,7 +560,7 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                 // 缓冲区之内，但还要确认它装得下头部与名字本身——nameLen 直接
                 // 来自文件（最大 32767），照着它去读名字会越界最多 64KB。
                 if(ch_info_size < 22)
-                    TVPThrowExceptionMessage(TVPReadError);
+                    ThrowExceptionMessage(TVPReadError);
 
                 tArchiveItem item;
                 tjs_uint32 flags =
@@ -568,7 +568,7 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                 item.Flags = flags;
                 if(!allowExtractProtectedStorage &&
                    (flags & KRKR_XP3_FILE_PROTECTED))
-                    TVPThrowExceptionMessage(
+                    ThrowExceptionMessage(
                         TVPSpecifiedStorageHadBeenProtected);
                 item.OrgSize = ReadI64FromMem(indexdata + ch_info_start + 4);
                 item.ArcSize = ReadI64FromMem(indexdata + ch_info_start + 12);
@@ -576,7 +576,7 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                 tjs_int len = ReadI16FromMem(indexdata + ch_info_start + 20);
                 // len 是有符号 16 位，负值同样非法
                 if(len < 0 || ch_info_size < 22 + (tjs_uint)len * 2)
-                    TVPThrowExceptionMessage(TVPReadError);
+                    ThrowExceptionMessage(TVPReadError);
                 ttstr name = StringFromBMPUnicode(
                     (const tjs_uint16 *)(indexdata + ch_info_start + 22), len);
                 item.Name = name;
@@ -592,7 +592,7 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                 tjs_uint ch_segm_start = ch_file_start;
                 tjs_uint ch_segm_size = ch_file_size;
                 if(!FindChunk(indexdata, cn_segm, ch_segm_start, ch_segm_size))
-                    TVPThrowExceptionMessage(TVPReadError);
+                    ThrowExceptionMessage(TVPReadError);
 
                 // read segm sub-chunk
                 tjs_int segment_count = ch_segm_size / 28;
@@ -609,7 +609,7 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                             KRKR_XP3_SEGM_ENCODE_ZLIB)
                         seg.IsCompressed = true;
                     else
-                        TVPThrowExceptionMessage(
+                        ThrowExceptionMessage(
                             TVPReadError); // unknown encode method
 
                     seg.Start =
@@ -629,7 +629,7 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                     // 能由伪造的包触发，直接判损坏。
                     if(seg.OrgSize > 0xFFFFFFFFull ||
                        seg.ArcSize > 0xFFFFFFFFull)
-                        TVPThrowExceptionMessage(TVPReadError);
+                        ThrowExceptionMessage(TVPReadError);
                     item.Segments.push_back(seg);
                     offset_in_archive += seg.OrgSize;
                     segmentcount++;
@@ -639,11 +639,11 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
                 tjs_uint ch_adlr_start = ch_file_start;
                 tjs_uint ch_adlr_size = ch_file_size;
                 if(!FindChunk(indexdata, cn_adlr, ch_adlr_start, ch_adlr_size))
-                    TVPThrowExceptionMessage(TVPReadError);
+                    ThrowExceptionMessage(TVPReadError);
 
                 // read 'aldr' sub-chunk
                 if(ch_adlr_size < 4)
-                    TVPThrowExceptionMessage(TVPReadError);
+                    ThrowExceptionMessage(TVPReadError);
                 item.FileHash = ReadI32FromMem(indexdata + ch_adlr_start);
 
                 // push information
@@ -688,7 +688,7 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
             break;
         }
 
-        // sort item vector by its name (required for tTVPArchive
+        // sort item vector by its name (required for Archive
         // specification)
         if(normalizeName)
             std::stable_sort(ItemVector.begin(), ItemVector.end());
@@ -703,14 +703,14 @@ void XP3Archive::Init(tTJSBinaryStream *st, tjs_int64 off,
         delete[] indexdata;
     delete st;
 
-    krkr::utils::AddLog(TVPFormatMessage(TVPInfoDoneWithContains, ttstr(Count),
+    krkr::utils::AddLog(krkr::base::FormatMessage(TVPInfoDoneWithContains, ttstr(Count),
                                ttstr(segmentcount)));
 }
 
 //---------------------------------------------------------------------------
 XP3Archive::XP3Archive(const ttstr &name, tTJSBinaryStream *st,
                                tjs_int64 offset, bool normalizeFileName) :
-    tTVPArchive(name) {
+    Archive(name) {
     if(!st)
         st = CreateStream(name);
     Init(st, offset, normalizeFileName);
@@ -719,7 +719,7 @@ XP3Archive::XP3Archive(const ttstr &name, tTJSBinaryStream *st,
 //---------------------------------------------------------------------------
 XP3Archive::~XP3Archive() { FreeArchiveHandlePoolByPointer(this); }
 
-tTVPArchive *XP3Archive::Create(const ttstr &name, tTJSBinaryStream *st,
+Archive *XP3Archive::Create(const ttstr &name, tTJSBinaryStream *st,
                                     bool normalizeFileName) {
     bool refStream = st;
     if(!st) {
@@ -737,7 +737,7 @@ tTVPArchive *XP3Archive::Create(const ttstr &name, tTJSBinaryStream *st,
 //---------------------------------------------------------------------------
 tTJSBinaryStream *XP3Archive::CreateStreamByIndex(tjs_uint idx) {
     if(idx >= ItemVector.size())
-        TVPThrowExceptionMessage(TVPReadError);
+        ThrowExceptionMessage(TVPReadError);
 
     tArchiveItem &item = ItemVector[idx];
 
@@ -797,7 +797,7 @@ bool XP3Archive::FindChunk(const tjs_uint8 *data, const tjs_uint8 *name,
         start += 8;
         tjs_uint size_chunk = (tjs_uint)r_size;
         if(size_chunk != r_size)
-            TVPThrowExceptionMessage(TVPReadError);
+            ThrowExceptionMessage(TVPReadError);
         if(size_chunk > size - pos - 4 - 8)
             break; // 损坏的 chunk 长度：停止搜索
         if(found) {
@@ -887,7 +887,7 @@ public:
     ~SegmentData() {
         if(Data) {
 #ifdef TVP_USE_MMAP_TEMP
-            TVPMmapFree(Data);
+            MmapFree(Data);
 #else
             delete[] Data;
 #endif
@@ -897,7 +897,7 @@ public:
     void SetData(unsigned long outsize, tTJSBinaryStream *instream,
                  unsigned long insize) {
 #ifdef TVP_USE_MMAP_TEMP
-        tjs_uint8 *indata = (tjs_uint8 *)TVPMmapAlloc(insize);
+        tjs_uint8 *indata = (tjs_uint8 *)MmapAlloc(insize);
 #else
         tjs_uint8 *indata = new tjs_uint8[insize];
 #endif
@@ -905,7 +905,7 @@ public:
             instream->Read(indata, insize);
 
 #ifdef TVP_USE_MMAP_TEMP
-            Data = (tjs_uint8 *)TVPMmapAlloc(outsize);
+            Data = (tjs_uint8 *)MmapAlloc(outsize);
 #else
             Data = new tjs_uint8[outsize];
 #endif
@@ -913,18 +913,18 @@ public:
             int result = uncompress((unsigned char *)Data, &outsize,
                                     (unsigned char *)indata, insize);
             if(result != Z_OK || destlen != outsize)
-                TVPThrowExceptionMessage(TVPUncompressionFailed);
+                ThrowExceptionMessage(TVPUncompressionFailed);
             Size = outsize;
         } catch(...) {
 #ifdef TVP_USE_MMAP_TEMP
-            TVPMmapFree(indata);
+            MmapFree(indata);
 #else
             delete[] indata;
 #endif
             throw;
         }
 #ifdef TVP_USE_MMAP_TEMP
-        TVPMmapFree(indata);
+        MmapFree(indata);
 #else
         delete[] indata;
 #endif
@@ -992,7 +992,7 @@ tjs_uint GetXP3SegmentCacheTotalBytes() {
 }
 
 //---------------------------------------------------------------------------
-struct ClearSegmentCacheCallback : public tTVPCompactEventCallbackIntf {
+struct ClearSegmentCacheCallback : public CompactEventCallbackIntf {
     void OnCompact(tjs_int level) override {
         if(level >= TVP_COMPACT_LEVEL_DEACTIVATE) {
             // clear the segment cache on application deactivate
@@ -1025,7 +1025,7 @@ SearchFromSegmentCache(const SegmentCacheSearchData &sdata,
 static void PushToSegmentCache(const SegmentCacheSearchData &sdata,
                                   tjs_uint32 hash, SegmentData *data) {
     if(!clearSegmentCacheCallbackInit) {
-        TVPAddCompactEventHook(&clearSegmentCacheCallback);
+        AddCompactEventHook(&clearSegmentCacheCallback);
         clearSegmentCacheCallbackInit = true;
     }
 

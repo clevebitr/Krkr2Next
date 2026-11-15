@@ -79,7 +79,7 @@ public:
 	}
 };
 #endif
-class tTVPApplication {
+class Application {
     //	std::vector<class TTVPWindowForm*> windows_list_;
     ttstr title_;
 
@@ -102,8 +102,8 @@ private:
     void Initialize() {}
 
 public:
-    tTVPApplication();
-    ~tTVPApplication();
+    Application();
+    ~Application();
     bool StartApplication(ttstr path);
     void Reset();
     void Run();
@@ -228,12 +228,12 @@ std::vector<std::string> *LoadLinesFromFile(const ttstr &path);
 using krkr::environ::eTVPActiveEvent;
 using krkr::environ::AcceleratorKey;
 using krkr::environ::AcceleratorKeyTable;
-using krkr::environ::tTVPApplication;
+using krkr::environ::Application;
 
 // inline HINSTANCE GetHInstance() { return
 // ((HINSTANCE)GetModuleHandle(0)); }
 // 指针本身是进程级全局（宿主与 movie 侧直接访问），因此留 namespace 外。
-extern krkr::environ::tTVPApplication *Application;
+extern krkr::environ::Application *Application;
 
 // 引擎主线程（= 运行 Application->Run() / engine_tick 的那条线程）。
 // 它在 Application.cpp 里以 dlopen 时的线程做初值，但宿主从非 UI 线程驱动引擎

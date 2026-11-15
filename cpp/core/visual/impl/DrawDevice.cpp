@@ -257,7 +257,7 @@ void tTVPDrawDevice::RemoveLayerManager(iTVPLayerManager *manager) {
     std::vector<iTVPLayerManager *>::iterator i =
         std::find(Managers.begin(), Managers.end(), manager);
     if(i == Managers.end())
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
     (*i)->Release();
     Managers.erase(i);
 }
@@ -341,7 +341,7 @@ void tTVPDrawDevice::OnDoubleClick(tjs_int x, tjs_int y) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void tTVPDrawDevice::OnMouseDown(tjs_int x, tjs_int y, tTVPMouseButton mb,
+void tTVPDrawDevice::OnMouseDown(tjs_int x, tjs_int y, MouseButton mb,
                                  tjs_uint32 flags) {
     if(!TransformToPrimaryLayerManager(x, y))
         return;
@@ -354,7 +354,7 @@ void tTVPDrawDevice::OnMouseDown(tjs_int x, tjs_int y, tTVPMouseButton mb,
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void tTVPDrawDevice::OnMouseUp(tjs_int x, tjs_int y, tTVPMouseButton mb,
+void tTVPDrawDevice::OnMouseUp(tjs_int x, tjs_int y, MouseButton mb,
                                tjs_uint32 flags) {
     if(!TransformToPrimaryLayerManager(x, y))
         return;
@@ -638,7 +638,7 @@ void tTVPDrawDevice::DisableAttentionPoint(iTVPLayerManager *manager) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void tTVPDrawDevice::SetImeMode(iTVPLayerManager *manager, tTVPImeMode mode) {
+void tTVPDrawDevice::SetImeMode(iTVPLayerManager *manager, ImeMode mode) {
     iTVPLayerManager *primary_manager =
         GetLayerManagerAt(PrimaryLayerManagerIndex);
     if(!primary_manager)
@@ -783,7 +783,7 @@ bool tTVPDrawDevice::SwitchToFullScreen(int window, tjs_uint w, tjs_uint h,
  		krkr::utils::AddLog( (const tjs_char*)TVPChangeDisplaySettingsFailedDispChangeNotUpdated );
 		break;
 	default:
-		krkr::utils::AddLog( TVPFormatMessage(TVPChangeDisplaySettingsFailedUnknownReason,ttstr((tjs_int)ret)) );
+		krkr::utils::AddLog( krkr::base::FormatMessage(TVPChangeDisplaySettingsFailedUnknownReason,ttstr((tjs_int)ret)) );
 		break;
 	}
 	return success;

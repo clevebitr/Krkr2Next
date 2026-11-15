@@ -44,9 +44,9 @@
 #define TVP_CPU_FAMILY_MASK 0x0000000f
 
 #ifdef __cplusplus
-extern "C" unsigned int TVPCPUFeatures;
+extern "C" unsigned int CPUFeatures;
 #else
-extern unsigned int TVPCPUFeatures;
+extern unsigned int CPUFeatures;
 #endif
 
 // ;;[emit_c_h_equ_end]

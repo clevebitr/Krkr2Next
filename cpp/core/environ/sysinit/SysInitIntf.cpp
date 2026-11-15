@@ -60,7 +60,7 @@ void SystemInit() {
 
     BeforeSystemInit();
 
-    TVPInitScriptEngine();
+    krkr::base::InitScriptEngine();
 
     TVPInitTVPGL();
     //	GL_C_Init();
@@ -86,7 +86,7 @@ void SystemUninit() {
     TVPUninitTVPGL();
 
     try {
-        TVPUninitScriptEngine();
+        krkr::base::UninitScriptEngine();
     } catch(...) {
         // ignore errors
     }
@@ -137,7 +137,7 @@ void AddAtExitHandler(tjs_int pri, void (*handler)()) {
 
 //---------------------------------------------------------------------------
 static void CauseAtExit() {
-    // 修正 runtime-restart：tTVPAtExit 文件级 static 对象只在进程启动注册一次，
+    // 修正 runtime-restart：AtExit 文件级 static 对象只在进程启动注册一次，
     // 首次 engine_destroy 的 CauseAtExit 已把 atExitInfos delete
     // 置空；二次 engine_destroy（ResetRuntimeForRestart
     // 复位后会再次进入）时为空，不能解引用。
@@ -184,13 +184,13 @@ void ResetRuntimeForRestart() {
     atExitInfos = nullptr;
     projectDir.Clear();
     dataPath.Clear();
-    // TVPScenarioCache 以场景短名（如 "first.ks"）为 key 的进程级缓存，restart
+    // scenarioCache 以场景短名（如 "first.ks"）为 key 的进程级缓存，restart
     // 不随 VM 销毁； 换游戏后下一个游戏 kag.loadScenario
     // 会命中前一个游戏的内容（跨游戏同名场景碰撞），
     // 此处清空。同游戏复开重读缓存为空后正常重建，仅损失一次解压。
-    TVPClearScnearioCache();
+    ClearScnearioCache();
 
-    // tTVPAtExit 一次性、首次已消费 → 重启不再执行
+    // AtExit 一次性、首次已消费 → 重启不再执行
     // ShutdownWaveSoundBuffers，上一游戏的 BGM/音效由 krkr::sound::waveSoundBufferThread
     // 继续混音输出、叠进下一游戏。这里显式停掉。 （实现见
     // cpp/core/sound/impl/WaveImpl.cpp krkr::sound::StopAllWaveSoundsForRestart）

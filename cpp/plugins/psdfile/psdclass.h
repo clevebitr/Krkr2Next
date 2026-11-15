@@ -210,7 +210,7 @@ protected:
      * @param pathname パス名
      * @param lister リスト取得用インターフェース
      */
-    void GetListAt(const ttstr &pathname, iTVPStorageLister *lister);
+    void GetListAt(const ttstr &pathname, IStorageLister *lister);
 
     /*
      * 指定した名前のレイヤの画像ファイルをストリームで返す

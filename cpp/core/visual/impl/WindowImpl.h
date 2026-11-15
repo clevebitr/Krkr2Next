@@ -107,7 +107,7 @@ TJS_EXP_FUNC_DEF(tjs_uint32, TVPGetCurrentShiftKeyState, ());
 TJS_EXP_FUNC_DEF(void, RegisterAcceleratorKey, (HWND hWnd, char virt, short key, short cmd) );
 TJS_EXP_FUNC_DEF(void, UnregisterAcceleratorKey, (HWND hWnd, short cmd));
 TJS_EXP_FUNC_DEF(void, DeleteAcceleratorKeyTable, (HWND hWnd));
-HWND TVPGetModalWindowOwnerHandle();
+HWND GetModalWindowOwnerHandle();
 //---------------------------------------------------------------------------
 
 
@@ -271,9 +271,9 @@ public:
     void SetAttentionPoint(tTJSNI_BaseLayer *layer, tjs_int l,
                            tjs_int t) override;
     void DisableAttentionPoint() override;
-    void SetImeMode(tTVPImeMode mode) override;
-    void SetDefaultImeMode(tTVPImeMode mode);
-    [[nodiscard]] tTVPImeMode GetDefaultImeMode() const override;
+    void SetImeMode(ImeMode mode) override;
+    void SetDefaultImeMode(ImeMode mode);
+    [[nodiscard]] ImeMode GetDefaultImeMode() const override;
     void ResetImeMode() override;
 
     //-- update managment
@@ -310,7 +310,7 @@ public:
 #endif
 
     void BringToFront();
-    void Update(tTVPUpdateType);
+    void Update(UpdateType);
 
     void ShowModal();
 
@@ -388,8 +388,8 @@ public:
     void SetMaskRegion(tjs_int threshold);
     void RemoveMaskRegion();
 
-    void SetMouseCursorState(tTVPMouseCursorState mcs);
-    [[nodiscard]] tTVPMouseCursorState GetMouseCursorState() const;
+    void SetMouseCursorState(MouseCursorState mcs);
+    [[nodiscard]] MouseCursorState GetMouseCursorState() const;
 
     void SetFocusable(bool b);
     bool GetFocusable();
@@ -461,7 +461,7 @@ public: // for iTVPLayerTreeOwner
     void DisableAttentionPoint(iTVPLayerManager *manager) override;
 
     void SetImeMode(iTVPLayerManager *manager,
-                    tjs_int mode) override; // mode == tTVPImeMode
+                    tjs_int mode) override; // mode == ImeMode
     void ResetImeMode(iTVPLayerManager *manager) override;
 
 protected:

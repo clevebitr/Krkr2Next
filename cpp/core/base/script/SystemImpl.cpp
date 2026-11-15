@@ -42,8 +42,8 @@
 #endif
 
 //---------------------------------------------------------------------------
-static ttstr TVPAppTitle;
-static bool TVPAppTitleInit = false;
+static ttstr AppTitle;
+static bool AppTitleInit = false;
 //---------------------------------------------------------------------------
 
 namespace krkr::environ {
@@ -56,13 +56,13 @@ using krkr::environ::GetKeyMouseAsyncState;
 using krkr::environ::GetJoyPadAsyncState; // 声明来自 DInputMgn.h
 
 //---------------------------------------------------------------------------
-// TVPGetAsyncKeyState
+// GetAsyncKeyState
 //---------------------------------------------------------------------------
-bool krkr::base::TVPGetAsyncKeyState(tjs_uint keycode, bool getcurrent) {
+bool GetAsyncKeyState(tjs_uint keycode, bool getcurrent) {
     // get keyboard state asynchronously.
     // return current key state if getcurrent is true.
     // otherwise, return whether the key is pushed during previous
-    // call of TVPGetAsyncKeyState at the same keycode.
+    // call of GetAsyncKeyState at the same keycode.
 
     if(keycode >= VK_PAD_FIRST && keycode <= VK_PAD_LAST) {
         // JoyPad related keys are treated in DInputMgn.cpp
@@ -89,15 +89,15 @@ bool krkr::base::TVPGetAsyncKeyState(tjs_uint keycode, bool getcurrent) {
 }
 
 // 声明在 SystemIntf.h（krkr::base）；用限定名定义，节点比包 namespace 小。
-tjs_int krkr::base::TVPGetOSBits() { return sizeof(void *) * 8; }
+tjs_int GetOSBits() { return sizeof(void *) * 8; }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPShellExecute
+// ShellExecute
 //---------------------------------------------------------------------------
-bool krkr::base::TVPShellExecute(const ttstr &target, const ttstr &param) {
+bool ShellExecute(const ttstr &target, const ttstr &param) {
     // open or execute target file
-//	ttstr file = TVPGetNativeName(krkr::io::NormalizeStorageName(target));
+//	ttstr file = GetNativeName(krkr::io::NormalizeStorageName(target));
 #if 0
     return krkr::io::IsExistentStorageNoSearchNoNormalize(target);
     if (::ShellExecute(nullptr, nullptr,
@@ -117,24 +117,24 @@ bool krkr::base::TVPShellExecute(const ttstr &target, const ttstr &param) {
 
 static tTJSVariant RegisterData;
 
-ttstr TVPGetAppDataPath();
+ttstr GetAppDataPath();
 
-// TVPExecuteStorage 的声明由 ScriptMgnIntf.h 提供（已在上面 include）。
+// ExecuteStorage 的声明由 ScriptMgnIntf.h 提供（已在上面 include）。
 
 static void InitRegisterData() {
     static bool dataInited = false;
     if(!dataInited) {
-        ttstr regfile = TVPGetAppDataPath() + TJS_W("RegisterData.tjs");
+        ttstr regfile = GetAppDataPath() + TJS_W("RegisterData.tjs");
         if(krkr::io::IsExistentStorageNoSearch(regfile)) {
-            TVPExecuteStorage(regfile, &RegisterData, true, TJS_W(""));
+            ExecuteStorage(regfile, &RegisterData, true, TJS_W(""));
         }
     }
 }
 
 //---------------------------------------------------------------------------
-// TVPReadRegValue
+// ReadRegValue
 //---------------------------------------------------------------------------
-static void TVPReadRegValue(tTJSVariant &result, const ttstr &key) {
+static void ReadRegValue(tTJSVariant &result, const ttstr &key) {
     // open specified registry key
     if(key.IsEmpty()) {
         result.Clear();
@@ -345,7 +345,7 @@ static void TVPReadRegValue(tTJSVariant &result, const ttstr &key) {
 //---------------------------------------------------------------------------
 // Static function for retrieving special folder path
 //---------------------------------------------------------------------------
-static ttstr TVPGetSpecialFolderPath(int csidl)
+static ttstr GetSpecialFolderPath(int csidl)
 {
     WCHAR path[MAX_PATH+1];
     if(!SHGetSpecialFolderPath(nullptr, path, csidl, false))
@@ -356,18 +356,18 @@ static ttstr TVPGetSpecialFolderPath(int csidl)
 #endif
 
 //---------------------------------------------------------------------------
-// TVPGetPersonalPath
+// GetPersonalPath
 //---------------------------------------------------------------------------
-ttstr TVPGetPersonalPath() {
+ttstr GetPersonalPath() {
 #if 0
     // Retrieve personal directory;
     // This usually refers "My Documents".
     // If this is not exist, returns application data path, then exe path.
     // for windows vista, this refers application data path.
     ttstr path;
-    path = TVPGetSpecialFolderPath(CSIDL_PERSONAL);
+    path = GetSpecialFolderPath(CSIDL_PERSONAL);
     if(path.IsEmpty())
-        path = TVPGetSpecialFolderPath(CSIDL_APPDATA);
+        path = GetSpecialFolderPath(CSIDL_APPDATA);
 
     if(!path.IsEmpty())
     {
@@ -381,14 +381,14 @@ ttstr TVPGetPersonalPath() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPGetAppDataPath
+// GetAppDataPath
 //---------------------------------------------------------------------------
-ttstr TVPGetAppDataPath() {
+ttstr GetAppDataPath() {
 #if 0
     // Retrieve application data directory;
     // If this is not exist, returns application exe path.
 
-    ttstr path = TVPGetSpecialFolderPath(CSIDL_APPDATA);
+    ttstr path = GetSpecialFolderPath(CSIDL_APPDATA);
 
     if(!path.IsEmpty())
     {
@@ -402,9 +402,9 @@ ttstr TVPGetAppDataPath() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPGetSavedGamesPath
+// GetSavedGamesPath
 //---------------------------------------------------------------------------
-ttstr TVPGetSavedGamesPath() {
+ttstr GetSavedGamesPath() {
 #if 0
     ttstr path;
     PWSTR ppszPath = nullptr;
@@ -420,9 +420,9 @@ ttstr TVPGetSavedGamesPath() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCreateAppLock
+// CreateAppLock
 //---------------------------------------------------------------------------
-bool TVPCreateAppLock(const ttstr &lockname) {
+bool CreateAppLock(const ttstr &lockname) {
 #if 0
     // lock application using mutex
     CreateMutex(nullptr, TRUE, lockname.c_str());
@@ -441,7 +441,7 @@ bool TVPCreateAppLock(const ttstr &lockname) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-enum tTVPTouchDevice {
+enum TouchDevice {
     tdNone = 0,
     tdIntegratedTouch = 0x00000001,
     tdExternalTouch = 0x00000002,
@@ -456,7 +456,7 @@ enum tTVPTouchDevice {
 /**
  * タッチデバイス(とマウス)の接続状態を取得する
  **/
-static int TVPGetSupportTouchDevice() {
+static int GetSupportTouchDevice() {
     int result = 0;
 #if 0
     if( procRegisterTouchWindow ) {
@@ -485,39 +485,39 @@ static int TVPGetSupportTouchDevice() {
 //---------------------------------------------------------------------------
 // System.onActivate and System.onDeactivate related
 //---------------------------------------------------------------------------
-static void TVPOnApplicationActivate(bool activate_or_deactivate);
+static void OnApplicationActivate(bool activate_or_deactivate);
 
 //---------------------------------------------------------------------------
-class tTVPOnApplicationActivateEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class OnApplicationActivateEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     bool ActivateOrDeactivate; // true for activate; otherwise
                                // deactivate
 public:
-    tTVPOnApplicationActivateEvent(bool activate_or_deactivate) :
-        tTVPBaseInputEvent(Application, Tag),
+    OnApplicationActivateEvent(bool activate_or_deactivate) :
+        BaseInputEvent(Application, Tag),
         ActivateOrDeactivate(activate_or_deactivate) {};
 
     void Deliver() const override {
-        TVPOnApplicationActivate(ActivateOrDeactivate);
+        OnApplicationActivate(ActivateOrDeactivate);
     }
 };
 
-tTVPUniqueTagForInputEvent tTVPOnApplicationActivateEvent::Tag;
+UniqueTagForInputEvent OnApplicationActivateEvent::Tag;
 
 //---------------------------------------------------------------------------
-void krkr::base::TVPPostApplicationActivateEvent() {
-    TVPPostInputEvent(new tTVPOnApplicationActivateEvent(true),
+void PostApplicationActivateEvent() {
+    PostInputEvent(new OnApplicationActivateEvent(true),
                       TVP_EPT_REMOVE_POST);
 }
 
 //---------------------------------------------------------------------------
-void krkr::base::TVPPostApplicationDeactivateEvent() {
-    TVPPostInputEvent(new tTVPOnApplicationActivateEvent(false),
+void PostApplicationDeactivateEvent() {
+    PostInputEvent(new OnApplicationActivateEvent(false),
                       TVP_EPT_REMOVE_POST);
 }
 
 //---------------------------------------------------------------------------
-static void TVPOnApplicationActivate(bool activate_or_deactivate) {
+static void OnApplicationActivate(bool activate_or_deactivate) {
     // called by event system, to fire System.onActivate or
     // System.onDeactivate event
     if(!krkr::environ::systemControlAlive)
@@ -531,13 +531,13 @@ static void TVPOnApplicationActivate(bool activate_or_deactivate) {
         return;
 
     // fire the event
-    TVPFireOnApplicationActivateEvent(activate_or_deactivate);
+    FireOnApplicationActivateEvent(activate_or_deactivate);
 }
 //---------------------------------------------------------------------------
 
 #if 0
 //---------------------------------------------------------------------------
-static void TVPHeapDump()
+static void HeapDump()
 {
     tjs_char buff[128];
     HANDLE heaps[100];
@@ -616,10 +616,10 @@ static void TVPHeapDump()
 #endif
 bool autoSaveBookMark = false;
 
-extern void krkr::base::TVPDoSaveSystemVariables() {
+extern void DoSaveSystemVariables() {
     try {
         // hack for save system variable
-        iTJSDispatch2 *global = TVPGetScriptDispatch();
+        iTJSDispatch2 *global = GetScriptDispatch();
         if(!global)
             return;
         tTJSVariant var;
@@ -813,14 +813,14 @@ public:
 // Windows 版 KiriKiri 由宿主预置它们；本引擎缺任意一项都会以
 // `Member "xxx" does not exist` 中断启动（实测：先死在 debugWindowEnabled，
 // 补上后死在 kirikiriz）。取值与 Win32 <winuser.h> 对齐。
-// 移植自 AetherKiri 的 TVPRegisterStartupCompatGlobals()。
+// 移植自 AetherKiri 的 RegisterStartupCompatGlobals()。
 //
 // 已知未移植：addFont / AddTrueTypeFont / AddAlias / loadResolutionInfo 这几个
 // 全局兼容函数（依赖字体兼容层 tFontCompatFunctionLocal）。这些游戏不引用它们，
 // 且本仓库已有 System.addFont 的插件实现。
-static void TVPRegisterStartupCompatGlobals() {
+static void RegisterStartupCompatGlobals() {
     // GetGlobal() 内部 AddRef 过，用完必须 Release。
-    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    iTJSDispatch2 *global = GetScriptDispatch();
     if(!global)
         return;
 
@@ -916,7 +916,7 @@ static void TVPRegisterStartupCompatGlobals() {
     // 整合包的启动脚本会 new CompoundStorageMedia，给个不报错的空实现；
     // archiveUniqueKey 带引擎名以免撞车。安装失败不阻断启动。
     try {
-        TVPExecuteScript(
+        ExecuteScript(
             TJS_W("if(typeof CompoundStorageMedia == 'undefined') {\n"
                   "  class CompoundStorageMedia {\n"
                   "    function addArchive() { return true; }\n"
@@ -940,12 +940,12 @@ static void TVPRegisterStartupCompatGlobals() {
 }
 
 //---------------------------------------------------------------------------
-// TVPCreateNativeClass_System
+// CreateNativeClass_System
 //---------------------------------------------------------------------------
-tTJSNativeClass *krkr::base::TVPCreateNativeClass_System() {
+tTJSNativeClass *CreateNativeClass_System() {
     tTJSNC_System *cls = new tTJSNC_System();
 
-    TVPRegisterStartupCompatGlobals();
+    RegisterStartupCompatGlobals();
 
     // setup some platform-specific members
     //----------------------------------------------------------------------
@@ -1032,7 +1032,7 @@ tTJSNativeClass *krkr::base::TVPCreateNativeClass_System() {
         if(numparams >= 2)
             getcurrent = 0 != (tjs_int)*param[1];
 
-        bool res = TVPGetAsyncKeyState(code, getcurrent);
+        bool res = GetAsyncKeyState(code, getcurrent);
 
         if(result)
             *result = (tjs_int)res;
@@ -1052,7 +1052,7 @@ tTJSNativeClass *krkr::base::TVPCreateNativeClass_System() {
         if(numparams >= 2)
             execparam = *param[1];
 
-        bool res = TVPShellExecute(target, execparam);
+        bool res = ShellExecute(target, execparam);
 
         if(result)
             *result = (tjs_int)res;
@@ -1070,7 +1070,7 @@ tTJSNativeClass *krkr::base::TVPCreateNativeClass_System() {
 
         int ret = 0; // _wsystem(target.c_str());
 
-        TVPDeliverCompactEvent(
+        DeliverCompactEvent(
             TVP_COMPACT_LEVEL_MAX); // this should clear all caches
 
         if(result)
@@ -1127,7 +1127,7 @@ tTJSNativeClass *krkr::base::TVPCreateNativeClass_System() {
 
         ttstr key = *param[0];
 
-        TVPReadRegValue(*result, key);
+        ReadRegValue(*result, key);
 
         return TJS_S_OK;
     }
@@ -1161,7 +1161,7 @@ tTJSNativeClass *krkr::base::TVPCreateNativeClass_System() {
         ttstr name = *param[0];
         ttstr value = *param[1];
 
-        TVPSetCommandLine(name.c_str(), value);
+        SetCommandLine(name.c_str(), value);
 
         return TJS_S_OK;
     }
@@ -1177,7 +1177,7 @@ tTJSNativeClass *krkr::base::TVPCreateNativeClass_System() {
 
         ttstr lockname = *param[0];
 
-        bool res = TVPCreateAppLock(lockname);
+        bool res = CreateAppLock(lockname);
 
         if(result)
             *result = (tjs_int)res;
@@ -1189,7 +1189,7 @@ tTJSNativeClass *krkr::base::TVPCreateNativeClass_System() {
         /*func. name*/ createAppLock)
     //----------------------------------------------------------------------
     TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ dumpHeap) {
-        //	TVPHeapDump();
+        //	HeapDump();
         return TJS_S_OK;
     }
     TJS_END_NATIVE_STATIC_METHOD_DECL_OUTER(
@@ -1211,7 +1211,7 @@ tTJSNativeClass *krkr::base::TVPCreateNativeClass_System() {
         /*func. name*/ nullpo)
     //----------------------------------------------------------------------
     TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ showVersion) {
-        //	TVPShowVersionForm();
+        //	ShowVersionForm();
         return TJS_S_OK;
     }
     TJS_END_NATIVE_STATIC_METHOD_DECL_OUTER(
@@ -1247,7 +1247,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, exePath)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(personalPath){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetPersonalPath();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = GetPersonalPath();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -1257,7 +1257,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, personalPath)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(appDataPath){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetAppDataPath();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = GetAppDataPath();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -1288,7 +1288,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, exeName)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(savedGamesPath){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetSavedGamesPath();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = GetSavedGamesPath();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -1298,17 +1298,17 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, savedGamesPath)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(title){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ if(!TVPAppTitleInit){ TVPAppTitleInit = true;
-TVPAppTitle = Application->GetTitle();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ if(!AppTitleInit){ AppTitleInit = true;
+AppTitle = Application->GetTitle();
 }
-*result = TVPAppTitle;
+*result = AppTitle;
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
 
 TJS_BEGIN_NATIVE_PROP_SETTER {
-    TVPAppTitle = *param;
-    Application->SetTitle(TVPAppTitle.AsStdString());
+    AppTitle = *param;
+    Application->SetTitle(AppTitle.AsStdString());
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER
@@ -1316,7 +1316,7 @@ TJS_END_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, title)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(screenWidth){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = tTVPScreen::GetWidth();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = Screen::GetWidth();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -1326,7 +1326,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, screenWidth)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(screenHeight){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = tTVPScreen::GetHeight();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = Screen::GetHeight();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -1336,7 +1336,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, screenHeight)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(desktopLeft){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = tTVPScreen::GetDesktopLeft();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = Screen::GetDesktopLeft();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -1346,7 +1346,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, desktopLeft)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(desktopTop){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = tTVPScreen::GetDesktopTop();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = Screen::GetDesktopTop();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -1356,7 +1356,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, desktopTop)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(desktopWidth){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = tTVPScreen::GetDesktopWidth();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = Screen::GetDesktopWidth();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -1366,7 +1366,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, desktopWidth)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(desktopHeight){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = tTVPScreen::GetDesktopHeight();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = Screen::GetDesktopHeight();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -1376,7 +1376,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, desktopHeight)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(touchDevice){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetSupportTouchDevice();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = GetSupportTouchDevice();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER

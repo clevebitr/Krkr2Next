@@ -20,76 +20,76 @@
 namespace krkr::utils {
     // 64bit may enough to hold usual time count.
     // ( 32bit is clearly insufficient )
-    static tjs_uint64 TVPTickCountBias = 0;
-    static DWORD TVPWatchLastTick;
-    static tTJSCriticalSection TVPTickWatchCS;
+    static tjs_uint64 TickCountBias = 0;
+    static DWORD WatchLastTick;
+    static tTJSCriticalSection TickWatchCS;
 
-    static DWORD TVPCheckTickOverflow() {
+    static DWORD CheckTickOverflow() {
         DWORD curtick;
         { // thread-protected
-            tTJSCriticalSectionHolder holder(TVPTickWatchCS);
+            tTJSCriticalSectionHolder holder(TickWatchCS);
 
             curtick = krkr::utils::GetRoughTickCount32();
-            if(curtick < TVPWatchLastTick) {
+            if(curtick < WatchLastTick) {
                 // timeGetTime() was overflowed
-                TVPTickCountBias += 0x100000000L; // add 1<<32
+                TickCountBias += 0x100000000L; // add 1<<32
             }
-            TVPWatchLastTick = curtick;
+            WatchLastTick = curtick;
         } // end-of-thread-protected
         return curtick;
     }
 
-    class tTVPWatchThread : public Thread {
+    class WatchThread : public Thread {
         // thread which watches overflow of 32bit counter of
         // krkr::utils::GetRoughTickCount32
 
         krkr::utils::ThreadEvent Event;
 
     public:
-        tTVPWatchThread();
+        WatchThread();
 
-        ~tTVPWatchThread() override;
+        ~WatchThread() override;
 
     protected:
         void Execute() override;
 
-    } static *TVPWatchThread = nullptr;
+    } static *watchThread = nullptr;
 
-    static void TVPWatchThreadInit() {
-        if(!TVPWatchThread) {
-            TVPWatchThread = new tTVPWatchThread();
+    static void WatchThreadInit() {
+        if(!watchThread) {
+            watchThread = new WatchThread();
         }
     }
 
-    static void TVPWatchThreadUninit() {
-        if(TVPWatchThread) {
-            delete TVPWatchThread;
-            TVPWatchThread = nullptr;
+    static void WatchThreadUninit() {
+        if(watchThread) {
+            delete watchThread;
+            watchThread = nullptr;
         }
     }
 
-    static tTVPAtExit TVPWatchThreadUninitAtExit(KRKR_ATEXIT_PRI_SHUTDOWN,
-                                                 TVPWatchThreadUninit);
+    static AtExit WatchThreadUninitAtExit(KRKR_ATEXIT_PRI_SHUTDOWN,
+                                                 WatchThreadUninit);
 
     // krkr::utils::StartTickCount
-    void StartTickCount() { TVPWatchThreadInit(); }
+    void StartTickCount() { WatchThreadInit(); }
 
-    tTVPWatchThread::tTVPWatchThread() : Thread(true) {
-        TVPWatchLastTick = krkr::utils::GetRoughTickCount32();
+    WatchThread::WatchThread() : Thread(true) {
+        WatchLastTick = krkr::utils::GetRoughTickCount32();
         SetPriority(ttpNormal);
         Resume();
     }
 
-    tTVPWatchThread::~tTVPWatchThread() {
+    WatchThread::~WatchThread() {
         Terminate();
         Resume();
         Event.Set();
         WaitFor();
     }
 
-    void tTVPWatchThread::Execute() {
+    void WatchThread::Execute() {
         while(!GetTerminated()) {
-            TVPCheckTickOverflow();
+            CheckTickOverflow();
 
             Event.WaitFor(0x10000000);
             // 0x10000000 will be enough to watch timeGetTime()'s counter
@@ -99,11 +99,11 @@ namespace krkr::utils {
 
     // krkr::utils::GetTickCount
     tjs_uint64 GetTickCount() {
-        TVPWatchThreadInit();
+        WatchThreadInit();
 
-        DWORD curtick = TVPCheckTickOverflow();
+        DWORD curtick = CheckTickOverflow();
 
-        return curtick + TVPTickCountBias;
+        return curtick + TickCountBias;
     }
 
 } // namespace krkr::utils

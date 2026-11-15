@@ -20,7 +20,7 @@
 //---------------------------------------------------------------------------
 // tTVPPeriodEventType : event type in onPeriod event
 //---------------------------------------------------------------------------
-enum tTVPPeriodEventReason {
+enum PeriodEventReason {
     perLoop, // the event is by loop rewind
     perPeriod, // the event is by period point specified by the user
     perPrepare, // the event is by prepare() method
@@ -53,14 +53,14 @@ protected:
     void SetStatus(krkr::sound::SoundStatus s);
     void SetStatusAsync(krkr::sound::SoundStatus s);
     void FireCallbackCommand(const ttstr &command, const ttstr &argument);
-    void FirePeriodEvent(tTVPPeriodEventReason reason);
+    void FirePeriodEvent(PeriodEventReason reason);
     void FireFrameUpdateEvent(tjs_int frame);
 
 public:
     virtual void Disconnect() = 0; // called from Window object's invalidation
     [[nodiscard]] virtual bool GetVisible() const = 0;
     [[nodiscard]] virtual const tTVPRect &GetBounds() const = 0;
-    [[nodiscard]] virtual tTVPVideoOverlayMode GetMode() const = 0;
+    [[nodiscard]] virtual VideoOverlayMode GetMode() const = 0;
     virtual bool GetVideoSize(tjs_int &w, tjs_int &h) const = 0;
 
     [[nodiscard]] tTJSVariantClosure GetActionOwnerNoAddRef() const {
@@ -85,6 +85,6 @@ protected:
     tTJSNativeInstance *CreateNativeInstance() override;
 };
 //---------------------------------------------------------------------------
-extern tTJSNativeClass *TVPCreateNativeClass_VideoOverlay();
+extern tTJSNativeClass *CreateNativeClass_VideoOverlay();
 //---------------------------------------------------------------------------
 #endif

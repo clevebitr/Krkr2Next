@@ -68,7 +68,7 @@ private:
 public:
     void SystemWatchTimerTimer();
 };
-extern SystemControl *GetSystemControl;
+extern SystemControl *systemControl;
 extern bool systemControlAlive;
 
 void RegisterPSBCacheInfoCallback(bool (*cb)(size_t &usedBytes,

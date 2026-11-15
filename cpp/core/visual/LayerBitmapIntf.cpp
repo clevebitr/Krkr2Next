@@ -165,7 +165,7 @@ void iTVPBaseBitmap::SetSizeWithFill(tjs_uint w, tjs_uint h,
 tjs_uint32 iTVPBaseBitmap::GetPoint(tjs_int x, tjs_int y) const {
     // get specified point's color or color index
     if(x < 0 || y < 0 || x >= (tjs_int)GetWidth() || y >= (tjs_int)GetHeight())
-        TVPThrowExceptionMessage(TVPOutOfRectangle);
+        ThrowExceptionMessage(TVPOutOfRectangle);
 
     return Bitmap->GetPoint(x, y);
 #if 0
@@ -179,7 +179,7 @@ tjs_uint32 iTVPBaseBitmap::GetPoint(tjs_int x, tjs_int y) const {
 bool iTVPBaseBitmap::SetPoint(tjs_int x, tjs_int y, tjs_uint32 value) {
     // set specified point's color(and opacity) or color index
     if(x < 0 || y < 0 || x >= (tjs_int)GetWidth() || y >= (tjs_int)GetHeight())
-        TVPThrowExceptionMessage(TVPOutOfRectangle);
+        ThrowExceptionMessage(TVPOutOfRectangle);
 
     Bitmap->SetPoint(x, y, TVP_REVRGB(value));
 #if 0
@@ -195,10 +195,10 @@ bool iTVPBaseBitmap::SetPointMain(tjs_int x, tjs_int y, tjs_uint32 color) {
     // set specified point's color (mask is not touched)
     // for 32bpp
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     if(x < 0 || y < 0 || x >= (tjs_int)GetWidth() || y >= (tjs_int)GetHeight())
-        TVPThrowExceptionMessage(TVPOutOfRectangle);
+        ThrowExceptionMessage(TVPOutOfRectangle);
 
     tjs_uint32 clr = Bitmap->GetPoint(x, y);
     clr &= 0xff000000;
@@ -212,10 +212,10 @@ bool iTVPBaseBitmap::SetPointMask(tjs_int x, tjs_int y, tjs_int mask) {
     // set specified point's mask (color is not touched)
     // for 32bpp
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     if(x < 0 || y < 0 || x >= (tjs_int)GetWidth() || y >= (tjs_int)GetHeight())
-        TVPThrowExceptionMessage(TVPOutOfRectangle);
+        ThrowExceptionMessage(TVPOutOfRectangle);
 
     tjs_uint32 clr = Bitmap->GetPoint(x, y);
     clr &= 0x00ffffff;
@@ -372,7 +372,7 @@ bool iTVPBaseBitmap::FillColor(tTVPRect rect, tjs_uint32 color, tjs_int opa) {
     BOUND_CHECK(false);
 
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     if(opa == 0)
         return false; // no action
@@ -480,7 +480,7 @@ bool iTVPBaseBitmap::BlendColor(tTVPRect rect, tjs_uint32 color, tjs_int opa,
     BOUND_CHECK(false);
 
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     if(opa == 0)
         return false; // no action
@@ -633,7 +633,7 @@ bool iTVPBaseBitmap::RemoveConstOpacity(tTVPRect rect, tjs_int level) {
     BOUND_CHECK(false);
 
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     if(level == 0)
         return false; // no action
@@ -732,7 +732,7 @@ bool iTVPBaseBitmap::FillMask(tTVPRect rect, tjs_int value) {
     BOUND_CHECK(false);
 
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     static iTVPRenderMethod *method =
         TVPGetRenderManager()->GetRenderMethod("FillMask");
@@ -1433,7 +1433,7 @@ bool iTVPBaseBitmap::Blt(tjs_int x, tjs_int y, const iTVPBaseBitmap *ref,
     }
 
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     if(opa == 0)
         return false; // opacity==0 has no action
@@ -2318,7 +2318,7 @@ void tTVPBaseBitmap::TVPDoBiLinearStretchLoop(
 bool iTVPBaseBitmap::StretchBlt(tTVPRect cliprect, tTVPRect destrect,
                                 const iTVPBaseBitmap *ref, tTVPRect refrect,
                                 tTVPBBBltMethod method, tjs_int opa, bool hda,
-                                tTVPBBStretchType mode, tjs_real typeopt) {
+                                BBStretchType mode, tjs_real typeopt) {
     // do stretch blt
     // stFastLinear is enabled only in following condition:
     // -------TODO: write corresponding condition--------
@@ -2341,12 +2341,12 @@ bool iTVPBaseBitmap::StretchBlt(tTVPRect cliprect, tTVPRect destrect,
     }
 
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     // check for special case noticed above
 
     //--- extract stretch type
-    auto type = (tTVPBBStretchType)(mode & stTypeMask);
+    auto type = (BBStretchType)(mode & stTypeMask);
 
     //--- pull the dimension
     tjs_int w = GetWidth();
@@ -2445,7 +2445,7 @@ bool iTVPBaseBitmap::StretchBlt(tTVPRect cliprect, tTVPRect destrect,
 
 #if 0
 	// extract stretch type
-	tTVPBBStretchType type = (tTVPBBStretchType)(mode & stTypeMask);
+	BBStretchType type = (BBStretchType)(mode & stTypeMask);
 
 	// compute pitch, step, etc. needed for stretching copy/blt
 	tjs_int w = GetWidth();
@@ -2490,7 +2490,7 @@ bool iTVPBaseBitmap::StretchBlt(tTVPRect cliprect, tTVPRect destrect,
 		refrect.top >= refrect.bottom) return false;
 	if(refrect.left < 0 || refrect.right > refw ||
 		refrect.top < 0 || refrect.bottom > refh)
-		TVPThrowExceptionMessage(TVPSrcRectOutOfBitmap);
+		ThrowExceptionMessage(TVPSrcRectOutOfBitmap);
 
 	// make srccliprect
 	tTVPRect srccliprect;
@@ -3247,7 +3247,7 @@ int tTVPBaseBitmap::InternalAffineBlt(tTVPRect destrect, const tTVPBaseBitmap *r
 		tTVPRect refrect, const tTVPPointD * points_in,
 			tTVPBBBltMethod method, tjs_int opa,
 			tTVPRect * updaterect,
-			bool hda, tTVPBBStretchType mode, bool clear, tjs_uint32 clearcolor)
+			bool hda, BBStretchType mode, bool clear, tjs_uint32 clearcolor)
 {
 	// unlike other drawing methods, 'destrect' is the clip rectangle of the
 	// destination bitmap.
@@ -3265,7 +3265,7 @@ int tTVPBaseBitmap::InternalAffineBlt(tTVPRect destrect, const tTVPBaseBitmap *r
 	// otherwise returns 2
 
 	// extract stretch type
-	tTVPBBStretchType type = (tTVPBBStretchType)(mode & stTypeMask);
+	BBStretchType type = (BBStretchType)(mode & stTypeMask);
 
 	// check source rectangle
 	if(refrect.left >= refrect.right ||
@@ -3273,7 +3273,7 @@ int tTVPBaseBitmap::InternalAffineBlt(tTVPRect destrect, const tTVPBaseBitmap *r
 	if(refrect.left < 0 || refrect.top < 0 ||
 		refrect.right > (tjs_int)ref->GetWidth() ||
 		refrect.bottom > (tjs_int)ref->GetHeight())
-		TVPThrowExceptionMessage(TVPOutOfRectangle);
+		ThrowExceptionMessage(TVPOutOfRectangle);
 
 	// multiply source rectangle points by 65536 (16.16 fixed-point)
 	// note that each pixel has actually 1.0 x 1.0 size
@@ -3559,7 +3559,7 @@ void tTVPBaseBitmap::PartialAffineBlt(PartialAffineBltParam *param)
   const tTVPBBBltMethod method = param->method;
   const tjs_int opa = param->opa;
   const bool hda = param->hda;
-  const tTVPBBStretchType type = param->type;
+  const BBStretchType type = param->type;
   const bool clear = param->clear;
   const tjs_uint32 clearcolor = param->clearcolor;
   const tjs_uint8 *const src  = param->src;
@@ -4024,7 +4024,7 @@ bool iTVPBaseBitmap::AffineBlt(tTVPRect destrect, const iTVPBaseBitmap *ref,
                                tTVPRect refrect, const tTVPPointD *points_in,
                                tTVPBBBltMethod method, tjs_int opa,
                                tTVPRect *updaterect, bool hda,
-                               tTVPBBStretchType mode, bool clear,
+                               BBStretchType mode, bool clear,
                                tjs_uint32 clearcolor) {
     // check source rectangle
     if(refrect.left >= refrect.right || refrect.top >= refrect.bottom)
@@ -4032,7 +4032,7 @@ bool iTVPBaseBitmap::AffineBlt(tTVPRect destrect, const iTVPBaseBitmap *ref,
     if(refrect.left < 0 || refrect.top < 0 ||
        refrect.right > (tjs_int)ref->GetWidth() ||
        refrect.bottom > (tjs_int)ref->GetHeight())
-        TVPThrowExceptionMessage(TVPOutOfRectangle);
+        ThrowExceptionMessage(TVPOutOfRectangle);
 
     // create point list in fixed point real format
 
@@ -4075,7 +4075,7 @@ bool iTVPBaseBitmap::AffineBlt(tTVPRect destrect, const iTVPBaseBitmap *ref,
         { (double)refrect.right, (double)refrect.bottom },
     };
 
-    auto type = (tTVPBBStretchType)(mode & stTypeMask);
+    auto type = (BBStretchType)(mode & stTypeMask);
     // Always use this bitmap's own render manager. Do NOT fall back to
     // software when source uses a different render manager, because the
     // target textures (created by this->GetRenderManager()) would be
@@ -4150,7 +4150,7 @@ bool iTVPBaseBitmap::AffineBlt(tTVPRect destrect, const iTVPBaseBitmap *ref,
                                tTVPRect refrect, const t2DAffineMatrix &matrix,
                                tTVPBBBltMethod method, tjs_int opa,
                                tTVPRect *updaterect, bool hda,
-                               tTVPBBStretchType type, bool clear,
+                               BBStretchType type, bool clear,
                                tjs_uint32 clearcolor) {
     // do transformation using 2D affine matrix.
     //  x' =  ax + cy + tx
@@ -4518,7 +4518,7 @@ bool iTVPBaseBitmap::InternalDoBoxBlur(tTVPRect rect, tTVPRect area,
         return false; // no conversion occurs
 
     if(area.left > 0 || area.right < 0 || area.top > 0 || area.bottom < 0)
-        TVPThrowExceptionMessage(TVPBoxBlurAreaMustContainCenterPixel);
+        ThrowExceptionMessage(TVPBoxBlurAreaMustContainCenterPixel);
 
 #if 0
 	tjs_uint64 area_size = (tjs_uint64)
@@ -4538,7 +4538,7 @@ bool iTVPBaseBitmap::InternalDoBoxBlur(tTVPRect rect, tTVPRect area,
 			DoBoxBlurLoop<tTVPARGB_AA<tjs_uint32> >(rect, area);
 	}
 	else
-		TVPThrowExceptionMessage(TVPBoxBlurAreaMustBeSmallerThan16Million);
+		ThrowExceptionMessage(TVPBoxBlurAreaMustBeSmallerThan16Million);
 
 #endif
     iTVPRenderMethod *method;
@@ -4602,7 +4602,7 @@ void tTVPBaseBitmap::UDFlip(const tTVPRect &rect) {
 
     if(rect.left < 0 || rect.top < 0 || rect.right > (tjs_int)GetWidth() ||
        rect.bottom > (tjs_int)GetHeight())
-        TVPThrowExceptionMessage(TVPSrcRectOutOfBitmap);
+        ThrowExceptionMessage(TVPSrcRectOutOfBitmap);
 
     tjs_int h = (rect.bottom - rect.top) / 2;
     tjs_int w = rect.right - rect.left;
@@ -4636,7 +4636,7 @@ void iTVPBaseBitmap::UDFlip(const tTVPRect &rect) {
 
     if(rect.left < 0 || rect.top < 0 || rect.right > (tjs_int)GetWidth() ||
        rect.bottom > (tjs_int)GetHeight())
-        TVPThrowExceptionMessage(TVPSrcRectOutOfBitmap);
+        ThrowExceptionMessage(TVPSrcRectOutOfBitmap);
 
     iTVPTexture2D *reftex = GetTexture();
     tRenderTexRectArray::Element src_tex[] = { tRenderTexRectArray::Element(
@@ -4652,7 +4652,7 @@ void tTVPBaseBitmap::LRFlip(const tTVPRect &rect) {
     // left-right flip
     if(rect.left < 0 || rect.top < 0 || rect.right > (tjs_int)GetWidth() ||
        rect.bottom > (tjs_int)GetHeight())
-        TVPThrowExceptionMessage(TVPSrcRectOutOfBitmap);
+        ThrowExceptionMessage(TVPSrcRectOutOfBitmap);
 
     tjs_int h = rect.bottom - rect.top;
     tjs_int w = rect.right - rect.left;
@@ -4681,7 +4681,7 @@ void iTVPBaseBitmap::LRFlip(const tTVPRect &rect) {
     // left-right flip
     if(rect.left < 0 || rect.top < 0 || rect.right > (tjs_int)GetWidth() ||
        rect.bottom > (tjs_int)GetHeight())
-        TVPThrowExceptionMessage(TVPSrcRectOutOfBitmap);
+        ThrowExceptionMessage(TVPSrcRectOutOfBitmap);
 
     iTVPTexture2D *reftex = GetTexture();
     tRenderTexRectArray::Element src_tex[] = { tRenderTexRectArray::Element(
@@ -4724,7 +4724,7 @@ void iTVPBaseBitmap::DoGrayScale(tTVPRect rect) {
 void iTVPBaseBitmap::AdjustGamma(tTVPRect rect,
                                  const tTVPGLGammaAdjustData &data) {
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     BOUND_CHECK(RET_VOID);
 
@@ -4772,7 +4772,7 @@ void iTVPBaseBitmap::AdjustGamma(tTVPRect rect,
 void iTVPBaseBitmap::AdjustGammaForAdditiveAlpha(
     tTVPRect rect, const tTVPGLGammaAdjustData &data) {
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     BOUND_CHECK(RET_VOID);
 
@@ -4821,7 +4821,7 @@ void iTVPBaseBitmap::ConvertAddAlphaToAlpha() {
     // convert additive alpha representation to alpha representation
 
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     tjs_int w = GetWidth();
     tjs_int h = GetHeight();
@@ -4848,7 +4848,7 @@ void iTVPBaseBitmap::ConvertAlphaToAddAlpha() {
     // convert additive alpha representation to alpha representation
 
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     tjs_int w = GetWidth();
     tjs_int h = GetHeight();

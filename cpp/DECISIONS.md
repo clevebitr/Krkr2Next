@@ -1440,3 +1440,62 @@ environ 的 log/text 里有 23 处提到被改名的函数（`"TVPShowSimpleMess
 2. `base/runtime/*.cpp` 里有 ~30 个 `namespace krkr::utils` 的内部 **static**（见决策 #28），
    它们既不能进 `kind=global`（static 不能限定）也不能进 utils 的 map（owner 不是它们）——
    只能用 `--roots cpp/core/base` + owner 指到 `cpp/core/base` 的单张 map 手工跑。
+
+## 2026-11-15 — 命名统一第 8 轮：base（305 符号 / 3274 处），8 个模块全部收口
+
+\## 结果
+
+`base` 遗留 **321 → 30**（合计 489 → **132**）。两批 305 个符号 / 3274 处替换 / 256 个文件：
+
+| map | qualify | 符号 | 内容 |
+|---|---|---:|---|
+| `base.tsv` | `krkr::base` | 65 | 声明在 `namespace krkr::base` 头里的（`TVPThrowExceptionMessage`、`TVPPostEvent`、`TVPExecuteScript`…） |
+| `base-globals.tsv` | `kind=global` | 240 | 名字活在全局作用域（`TVPScriptEngine`→`scriptEngine`、`TVPEventQueue`→`eventQueue`、`tTVPArchive`→`Archive`…） |
+
+余下 30 个：`TVPCreateNativeClass_*`（§4 注册表族）、插件 ABI 宏族、visual/environ/movie 的符号、
+以及 4 个"-include/注释/日志串"残留（`TVPScreen` 是文件名、`TVPArchive` 是注释）。
+
+\## 决策：消息符号之外还有一类"假符号"——`#include "TVPScreen.h"`
+
+`check_naming.py` 的符号扫描把 `#include "TVPScreen.h"` 里的 `TVPScreen` 当成遗留符号计数，
+于是 `base` / `environ` 里各有一两个永远清不掉的"符号"。本轮给扫描加了 `INCLUDE_LINE_RE`
+（跳过 include 行；文件名归 N2 的文件名检查管）。base 321（不是 322）、environ 96（不是 98）。
+
+\## 决策：11 组「类型 `tTVPX` + 实例变量 `TVPX`」按 N7 分道
+
+draft 的机械去前缀会让两类撞成同一个名字（`tTVPScenarioCache` 与 `TVPScenarioCache` 都想叫
+`ScenarioCache`）。按 N4/N7：类型 `UpperCamelCase`、变量 `lowerCamelCase`：
+
+```
+tTVPScenarioCache -> ScenarioCache         TVPScenarioCache -> scenarioCache
+tTVPArchive       -> Archive               TVPArchive       -> archive
+tTVPScreen        -> Screen（visual）       TVPScreen        -> screen
+tTVPWatchThread   -> WatchThread           TVPWatchThread   -> watchThread
+…（共 11 组：HandlerCallLimitThread / LogStreamHolder / CompiledScenarioLabelResolver /
+   ClearScenarioCacheCallback / TJS2ConsoleOutputGateway / TJS2DumpOutputGateway / TJSGCCallback）
+```
+
+\## 决策：5 个事件函数避开同名成员（这轮第二次遇到"真撞名"）
+
+`TVPInvokeEvents` / `TVPPostEvent` / `TVPAreEventsInQueue` /
+`TVPCallDeliverAllEventsOnIdle` / `TVPCancelEvents` 与
+`SystemControl` / `NativeEventQueue` / `Timer` 的**同名成员**冲突；不带限定的调用会静默落到成员上。
+改名成 `InvokeTJSEvents` / `PostTJSEvent` / `AreTJSEventsInQueue` /
+`CallDeliverAllTJSEventsOnIdle` / `CancelTJSEvents`（它们收的参数就是 `iTJSDispatch2*`，加 `TJS` 更准确）。
+
+\## 顺带修掉上一轮的一个命名口径错误
+
+`TVPSystemControl` 是**指针变量**（`extern SystemControl *…`），第 7 轮误按函数命名成
+`GetSystemControl`（读起来像函数）。本轮按 N7 改成 `systemControl`（与 `systemControlAlive` 一致）。
+
+\## 数据
+
+| 轮次 | 模块 | 符号 | 替换 | 文件 | 耗时 |
+|---|---|---:|---:|---:|---|
+| 7 | environ | 133 | 836 | 76 | ~90 min |
+| 8 | base | 305 | 3274 | 256 | ~100 min |
+
+`check_naming.py` 合计遗留：693 → 492 → **132**。桥接 345 → **228**。
+
+至此 **8 个模块全部收口**（余项全部是 §4 例外或尚未动的 visual/movie/plugins）。
+下一步不是改名，而是**编译验证**：这 8 轮共改了 6000+ 处、没有任何一次完整编译。

@@ -82,12 +82,12 @@ public:
     }
 };
 
-class SevenZipArchive : public tTVPArchive, public SevenZipStreamWrap {
+class SevenZipArchive : public Archive, public SevenZipStreamWrap {
     std::vector<std::pair<ttstr, tjs_uint>> filelist;
 
 public:
     SevenZipArchive(const ttstr &name, tTJSBinaryStream *st) :
-        tTVPArchive(name), SevenZipStreamWrap(st) {}
+        Archive(name), SevenZipStreamWrap(st) {}
 
     ~SevenZipArchive() override {}
 
@@ -201,7 +201,7 @@ public:
     }
 };
 
-tTVPArchive *Open7ZArchive(const ttstr &name, tTJSBinaryStream *st,
+Archive *Open7ZArchive(const ttstr &name, tTJSBinaryStream *st,
                               bool normalizeFileName) {
     tjs_uint64 pos = st->GetPosition();
     bool checkZIP = st->ReadI16LE() == 0x7A37; // '7z'

@@ -97,7 +97,7 @@ engine_result_t engine_set_option(engine_handle_t handle, const engine_option_t 
         }
     }
 
-    TVPSetCommandLine(ttstr(option->key_utf8).c_str(), ttstr(option->value_utf8));
+    krkr::base::SetCommandLine(ttstr(option->key_utf8).c_str(), ttstr(option->value_utf8));
 
     if (key == ENGINE_OPTION_ARCHIVE_CACHE_COUNT) {
         const int count = std::atoi(option->value_utf8);

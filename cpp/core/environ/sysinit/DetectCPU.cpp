@@ -26,7 +26,7 @@
 //---------------------------------------------------------------------------
 extern "C" {
 tjs_uint32 TVPCPUType = 0; // CPU type
-tjs_uint32 TVPCPUFeatures = 0;
+tjs_uint32 CPUFeatures = 0;
 }
 
 namespace krkr::base {
@@ -39,7 +39,7 @@ static bool cpuChecked = false;
 //---------------------------------------------------------------------------
 static void GetCPUTypeForOne() {
     try {
-        TVPCPUFeatures = 0;
+        CPUFeatures = 0;
 
         // TVPCheckCPU(); // in detect_cpu.nas
     } catch(... /*EXCEPTION_EXECUTE_HANDLER*/) {
@@ -48,7 +48,7 @@ static void GetCPUTypeForOne() {
     }
 
     // check OSFXSR
-    // 	if(TVPCPUFeatures & TVP_CPU_HAS_SSE)
+    // 	if(CPUFeatures & TVP_CPU_HAS_SSE)
     // 	{
     // 		__try
     // 		{
@@ -58,8 +58,8 @@ static void GetCPUTypeForOne() {
     // 		{
     // 			// exception had been ocured
     // 			// execution of 'xorps' is failed (XMM registers not
-    // available) 			TVPCPUFeatures &=~ TVP_CPU_HAS_SSE;
-    // TVPCPUFeatures
+    // available) 			CPUFeatures &=~ TVP_CPU_HAS_SSE;
+    // CPUFeatures
     // &=~ TVP_CPU_HAS_SSE2;
     // 		}
     // 	}
@@ -89,9 +89,9 @@ static ttstr DumpCPUInfo(tjs_int cpu_num) {
     // dump detected cpu type
     ttstr features(TJS_W("(info) CPU #") + ttstr(cpu_num) + TJS_W(" : "));
 
-    features += DumpCPUFeatures(TVPCPUFeatures);
+    features += DumpCPUFeatures(CPUFeatures);
 
-    tjs_uint32 vendor = TVPCPUFeatures & TVP_CPU_VENDOR_MASK;
+    tjs_uint32 vendor = CPUFeatures & TVP_CPU_VENDOR_MASK;
 
     // #undef TVP_DUMP_CPU
     // #define TVP_DUMP_CPU(x, n) { \
@@ -144,11 +144,11 @@ void DetectCPU() {
 
 #ifdef __APPLE__
     // must be iOS
-    TVPCPUFeatures |= TVP_CPU_FAMILY_ARM | TVP_CPU_HAS_NEON;
+    CPUFeatures |= TVP_CPU_FAMILY_ARM | TVP_CPU_HAS_NEON;
 #endif
 
     tjs_uint32 features = 0;
-    features = (TVPCPUFeatures & TVP_CPU_FEATURE_MASK);
+    features = (CPUFeatures & TVP_CPU_FEATURE_MASK);
     TVPCPUType &= ~TVP_CPU_FEATURE_MASK;
     TVPCPUType |= features;
 

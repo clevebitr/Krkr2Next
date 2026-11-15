@@ -37,14 +37,14 @@ tjs_error tTJSNI_BaseVideoOverlay::Construct(tjs_int numparams,
 
     tTJSVariantClosure clo = param[0]->AsObjectClosureNoAddRef();
     if(clo.Object == nullptr)
-        TVPThrowExceptionMessage(TVPSpecifyWindow);
+        ThrowExceptionMessage(TVPSpecifyWindow);
     tTJSNI_Window *win = nullptr;
     if(TJS_FAILED(clo.Object->NativeInstanceSupport(
            TJS_NIS_GETINSTANCE, tTJSNC_Window::ClassID,
            (iTJSNativeInstance **)&win)))
-        TVPThrowExceptionMessage(TVPSpecifyWindow);
+        ThrowExceptionMessage(TVPSpecifyWindow);
     if(!win)
-        TVPThrowExceptionMessage(TVPSpecifyWindow);
+        ThrowExceptionMessage(TVPSpecifyWindow);
     Window = win;
 
     Window->RegisterVideoOverlayObject(this);
@@ -96,14 +96,14 @@ void tTJSNI_BaseVideoOverlay::SetStatus(krkr::sound::SoundStatus s) {
 
         if(Owner) {
             // Cancel Previous un-delivered Events
-            TVPCancelSourceEvents(Owner);
+            krkr::base::CancelSourceEvents(Owner);
 
             // fire
             if(CanDeliverEvents) {
                 // fire onStatusChanged event
                 tTJSVariant param(GetStatusString());
                 static ttstr eventname(TJS_W("onStatusChanged"));
-                TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 1,
+                krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 1,
                              &param);
             }
         }
@@ -118,14 +118,14 @@ void tTJSNI_BaseVideoOverlay::SetStatusAsync(krkr::sound::SoundStatus s) {
 
         if(Owner) {
             // Cancel Previous un-delivered Events
-            TVPCancelSourceEvents(Owner);
+            krkr::base::CancelSourceEvents(Owner);
 
             // fire
             if(CanDeliverEvents) {
                 // fire onStatusChanged event
                 tTJSVariant param(GetStatusString());
                 static ttstr eventname(TJS_W("onStatusChanged"));
-                TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_POST, 1,
+                krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_POST, 1,
                              &param);
             }
         }
@@ -142,13 +142,13 @@ void tTJSNI_BaseVideoOverlay::FireCallbackCommand(const ttstr &command,
             // fire onStatusChanged event
             tTJSVariant param[2] = { command, argument };
             static ttstr eventname(TJS_W("onCallbackCommand"));
-            TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 2,
+            krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 2,
                          param);
         }
     }
 }
 //---------------------------------------------------------------------------
-void tTJSNI_BaseVideoOverlay::FirePeriodEvent(tTVPPeriodEventReason reason) {
+void tTJSNI_BaseVideoOverlay::FirePeriodEvent(PeriodEventReason reason) {
     // fire onPeriod event
     // this is always synchronized event.
 
@@ -158,7 +158,7 @@ void tTJSNI_BaseVideoOverlay::FirePeriodEvent(tTVPPeriodEventReason reason) {
             // fire onPeriod event
             tTJSVariant param[1] = { (tjs_int)reason };
             static ttstr eventname(TJS_W("onPeriod"));
-            TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 1,
+            krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 1,
                          param);
         }
     }
@@ -174,7 +174,7 @@ void tTJSNI_BaseVideoOverlay::FireFrameUpdateEvent(tjs_int frame) {
             // fire onPeriod event
             tTJSVariant param[1] = { frame };
             static ttstr eventname(TJS_W("onFrameUpdate"));
-            TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 1,
+            krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 1,
                          param);
         }
     }
@@ -392,9 +392,9 @@ tTJSNC_VideoOverlay::tTJSNC_VideoOverlay() :
             if(TJS_FAILED(clo.Object->NativeInstanceSupport(
                    TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID,
                    (iTJSNativeInstance **)&src)))
-                TVPThrowExceptionMessage(TVPSpecifyLayer);
+                ThrowExceptionMessage(TVPSpecifyLayer);
             if(!src)
-                TVPThrowExceptionMessage(TVPSpecifyLayer);
+                ThrowExceptionMessage(TVPSpecifyLayer);
         }
         _this->SetMixingLayer(src);
 
@@ -759,10 +759,10 @@ TJS_BEGIN_NATIVE_PROP_SETTER {
         if(TJS_FAILED(clo.Object->NativeInstanceSupport(
                TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID,
                (iTJSNativeInstance **)&src)))
-            TVPThrowExceptionMessage(TVPSpecifyLayer);
+            ThrowExceptionMessage(TVPSpecifyLayer);
 
         if(!src)
-            TVPThrowExceptionMessage(TVPSpecifyLayer);
+            ThrowExceptionMessage(TVPSpecifyLayer);
     }
 
     _this->SetLayer1(src);
@@ -799,10 +799,10 @@ TJS_BEGIN_NATIVE_PROP_SETTER {
         if(TJS_FAILED(clo.Object->NativeInstanceSupport(
                TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID,
                (iTJSNativeInstance **)&src)))
-            TVPThrowExceptionMessage(TVPSpecifyLayer);
+            ThrowExceptionMessage(TVPSpecifyLayer);
 
         if(!src)
-            TVPThrowExceptionMessage(TVPSpecifyLayer);
+            ThrowExceptionMessage(TVPSpecifyLayer);
     }
 
     _this->SetLayer2(src);
@@ -825,7 +825,7 @@ TJS_BEGIN_NATIVE_PROP_SETTER {
     TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
                             /*var. type*/ tTJSNI_VideoOverlay);
 
-    _this->SetMode((tTVPVideoOverlayMode)(tjs_int)*param);
+    _this->SetMode((VideoOverlayMode)(tjs_int)*param);
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER

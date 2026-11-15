@@ -398,14 +398,14 @@ engine_result_t engine_get_memory_stats(engine_handle_t handle,
 
     std::memset(out_stats, 0, sizeof(*out_stats));
     out_stats->struct_size = sizeof(engine_memory_stats_t);
-    TVPMemoryInfo meminfo{};
+    MemoryInfo meminfo{};
     GetMemoryInfo(meminfo);
     out_stats->self_used_mb = static_cast<uint32_t>(std::max<tjs_int>(0, GetSelfUsedMemory()));
     out_stats->system_free_mb =
         static_cast<uint32_t>(std::max<tjs_int>(0, GetSystemFreeMemory()));
     out_stats->system_total_mb = static_cast<uint32_t>(meminfo.MemTotal / 1024);
     out_stats->graphic_cache_bytes = TVPGetGraphicCacheTotalBytes();
-    out_stats->graphic_cache_limit_bytes = TVPGetGraphicCacheLimit();
+    out_stats->graphic_cache_limit_bytes = GetGraphicCacheLimit();
     out_stats->xp3_segment_cache_bytes = krkr::io::GetXP3SegmentCacheTotalBytes();
     out_stats->archive_cache_entries = krkr::io::GetArchiveCacheCount();
     out_stats->archive_cache_limit = krkr::io::GetArchiveCacheLimit();

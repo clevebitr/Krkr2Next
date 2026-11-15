@@ -47,7 +47,7 @@ tjs_error tTJSNI_BaseSoundBuffer::Construct(tjs_int numparams,
 //---------------------------------------------------------------------------
 void tTJSNI_BaseSoundBuffer::Invalidate() {
     CanDeliverEvents = false;
-    TVPCancelSourceEvents(Owner);
+    krkr::base::CancelSourceEvents(Owner);
     Owner = nullptr;
 
     ActionOwner.Release();
@@ -82,14 +82,14 @@ void tTJSNI_BaseSoundBuffer::SetStatus(SoundStatus s) {
 
         if(Owner) {
             // Cancel Previous un-delivered Events
-            TVPCancelSourceEvents(Owner);
+            krkr::base::CancelSourceEvents(Owner);
 
             // fire
             if(CanDeliverEvents) {
                 // fire onStatusChanged event
                 tTJSVariant param(GetStatusString());
                 static ttstr eventname(TJS_W("onStatusChanged"));
-                TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 1,
+                krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 1,
                              &param);
             }
         }
@@ -109,7 +109,7 @@ void tTJSNI_BaseSoundBuffer::SetStatusAsync(SoundStatus s) {
             if(Owner) {
                 tTJSVariant param(GetStatusString());
                 static ttstr eventname(TJS_W("onStatusChanged"));
-                TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_POST, 1,
+                krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_POST, 1,
                              &param);
             }
         }
@@ -155,7 +155,7 @@ void tTJSNI_BaseSoundBuffer::Fade(tjs_int to, tjs_int time, tjs_int blanktime) {
         return;
 
     if(time <= 0 || blanktime < 0) {
-        TVPThrowExceptionMessage(TVPInvalidParam);
+        ThrowExceptionMessage(TVPInvalidParam);
     }
 
     // stop current fade
@@ -188,7 +188,7 @@ void tTJSNI_BaseSoundBuffer::StopFade(bool async, bool settargetvol) {
         // post "onFadeCompleted" event to the owner
         if(CanDeliverEvents) {
             static ttstr eventname(TJS_W("onFadeCompleted"));
-            TVPPostEvent(Owner, Owner, eventname, 0,
+            krkr::base::PostTJSEvent(Owner, Owner, eventname, 0,
                          async ? TVP_EPT_POST : TVP_EPT_IMMEDIATE, 0, nullptr);
         }
     }

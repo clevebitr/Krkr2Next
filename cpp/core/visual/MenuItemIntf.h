@@ -134,7 +134,7 @@ protected:
     */
 };
 //---------------------------------------------------------------------------
-extern tTJSNativeClass *TVPCreateNativeClass_MenuItem();
+extern tTJSNativeClass *CreateNativeClass_MenuItem();
 /*
     implement this in each platform.
     this must return a proper instance of tTJSNC_MenuItem.
@@ -149,12 +149,12 @@ extern iTJSDispatch2 *TVPCreateMenuItemObject(iTJSDispatch2 *window);
 //---------------------------------------------------------------------------
 // tTVPMenuItemOnClickInputEvent : onClick input event class
 //---------------------------------------------------------------------------
-class tTVPOnMenuItemClickInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnMenuItemClickInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
 
 public:
     tTVPOnMenuItemClickInputEvent(tTJSNI_BaseMenuItem *menu) :
-        tTVPBaseInputEvent(menu, Tag) {};
+        BaseInputEvent(menu, Tag) {};
     void Deliver() const override {
         ((tTJSNI_BaseMenuItem *)GetSource())->OnClick();
     }

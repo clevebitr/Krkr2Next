@@ -95,7 +95,7 @@ void TVPUninitializeFontRasterizers() {
     TVPFontRasterizersInit = false;
     TVPCurrentFontRasterizers = FONT_RASTER_FREE_TYPE;
 }
-static tTVPAtExit TVPUninitializeFontRaster(KRKR_ATEXIT_PRI_RELEASE,
+static AtExit TVPUninitializeFontRaster(KRKR_ATEXIT_PRI_RELEASE,
                                             TVPUninitializeFontRasterizers);
 
 void TVPSetFontRasterizer(tjs_int index) {
@@ -203,7 +203,7 @@ static void TVPUnmapAllPrerenderedFonts() {
     TVPGlobalFontStateMagic++; // increase magic number
 }
 //---------------------------------------------------------------------------
-static tTVPAtExit
+static AtExit
     TVPUnmapAllPrerenderedFontsAtExit(KRKR_ATEXIT_PRI_PREPARE,
                                       TVPUnmapAllPrerenderedFonts);
 //---------------------------------------------------------------------------
@@ -240,7 +240,7 @@ void TVPSetFontCacheForLowMem() {
 //---------------------------------------------------------------------------
 void TVPClearFontCache() { TVPFontCache.Clear(); }
 //---------------------------------------------------------------------------
-struct tTVPClearFontCacheCallback : public tTVPCompactEventCallbackIntf {
+struct tTVPClearFontCacheCallback : public CompactEventCallbackIntf {
     void OnCompact(tjs_int level) override {
         // Font cache has built-in LRU eviction via tTJSHashCache.
         // Aggressive clearing causes repeated glyph rasterization
@@ -268,7 +268,7 @@ static tTVPCharacterData *TVPGetCharacter(const tTVPFontAndCharacterData &font,
 
     // compact interface initialization
     if(!TVPClearFontCacheCallbackInit) {
-        TVPAddCompactEventHook(&TVPClearFontCacheCallback);
+        AddCompactEventHook(&TVPClearFontCacheCallback);
         TVPClearFontCacheCallbackInit = true;
     }
 
@@ -461,7 +461,7 @@ void tTVPBitmap::Allocate(tjs_uint width, tjs_uint height, tjs_uint bpp) {
 //---------------------------------------------------------------------------
 void *tTVPBitmap::GetScanLine(tjs_uint l) const {
     if((tjs_int)l >= BitmapInfo->GetHeight()) {
-        TVPThrowExceptionMessage(TVPScanLineRangeOver, ttstr((tjs_int)l),
+        ThrowExceptionMessage(TVPScanLineRangeOver, ttstr((tjs_int)l),
                                  ttstr((tjs_int)BitmapInfo->GetHeight() - 1));
     }
 
@@ -470,9 +470,9 @@ void *tTVPBitmap::GetScanLine(tjs_uint l) const {
 //---------------------------------------------------------------------------
 void tTVPBitmap::SetPaletteCount(tjs_uint count) {
     if(!Is8bit())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor32BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor32BPP);
     if(count >= DEFAULT_PALETTE_COUNT)
-        TVPThrowExceptionMessage(TJSRangeError);
+        ThrowExceptionMessage(TJSRangeError);
 
     ActualPalCount = count;
 }
@@ -710,15 +710,15 @@ void tTVPNativeBaseBitmap::CompactGPUCache() {
 #if 0
 //---------------------------------------------------------------------------
 tjs_uint tTVPNativeBaseBitmap::GetPalette( tjs_uint index ) const {
-	if( !Is8BPP() ) TVPThrowExceptionMessage(TVPInvalidOperationFor32BPP);
+	if( !Is8BPP() ) ThrowExceptionMessage(TVPInvalidOperationFor32BPP);
 	if( index >= Bitmap->GetPaletteCount() )
-		TVPThrowExceptionMessage(TJSRangeError);
+		ThrowExceptionMessage(TJSRangeError);
 
 	return Bitmap->GetPalette()[index];
 }
 //---------------------------------------------------------------------------
 void tTVPNativeBaseBitmap::SetPalette( tjs_uint index, tjs_uint color ) {
-	if( !Is8BPP() ) TVPThrowExceptionMessage(TVPInvalidOperationFor32BPP);
+	if( !Is8BPP() ) ThrowExceptionMessage(TVPInvalidOperationFor32BPP);
 	if( index >= Bitmap->GetPaletteCount() ) {
 		Bitmap->SetPaletteCount( index+1 );
 	}
@@ -983,7 +983,7 @@ void tTVPNativeBaseBitmap::DrawGlyph(
     bool aa, tjs_int shlevel, tjs_uint32 shadowcolor, tjs_int shwidth,
     tjs_int shofsx, tjs_int shofsy, tTVPComplexRect *updaterects) {
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     if(bltmode == bmAlphaOnAlpha) {
         if(opa < -255)
@@ -1009,7 +1009,7 @@ void tTVPNativeBaseBitmap::DrawGlyph(
         itemcount = 0;
 
     if(itemcount < 8)
-        TVPThrowExceptionMessage(TVPFaildGlyphForDrawGlyph);
+        ThrowExceptionMessage(TVPFaildGlyphForDrawGlyph);
 
     enum {
         GLYPH_WIDTH,
@@ -1026,19 +1026,19 @@ void tTVPNativeBaseBitmap::DrawGlyph(
     tjs_int glyphitem[7];
     for(tjs_int i = 0; i < 7; i++) {
         if(TJS_FAILED(glyph->PropGetByNum(TJS_MEMBERMUSTEXIST, i, &tmp, glyph)))
-            TVPThrowExceptionMessage(TVPFaildGlyphForDrawGlyph);
+            ThrowExceptionMessage(TVPFaildGlyphForDrawGlyph);
         glyphitem[i] = tmp;
     }
 
     if(TJS_FAILED(
            glyph->PropGetByNum(TJS_MEMBERMUSTEXIST, GLYPH_BITMAP, &tmp, glyph)))
-        TVPThrowExceptionMessage(TVPFaildGlyphForDrawGlyph);
+        ThrowExceptionMessage(TVPFaildGlyphForDrawGlyph);
 
     tjs_int numcolor = 256;
     if(itemcount >= 9) {
         if(TJS_FAILED(glyph->PropGetByNum(TJS_MEMBERMUSTEXIST, GLYPH_COLORS,
                                           &tmp, glyph)))
-            TVPThrowExceptionMessage(TVPFaildGlyphForDrawGlyph);
+            ThrowExceptionMessage(TVPFaildGlyphForDrawGlyph);
         numcolor = tmp;
     }
     tTJSVariantOctet *o = tmp.AsOctetNoAddRef();
@@ -1239,7 +1239,7 @@ void tTVPNativeBaseBitmap::DrawTextVerticalGradient(
     tjs_int opa, bool holdalpha, bool aa, tjs_int gradientHeight,
     tTVPComplexRect *updaterects) {
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     if(bltmode == bmAlphaOnAlpha) {
         if(opa < -255)
@@ -1310,7 +1310,7 @@ void tTVPNativeBaseBitmap::DrawTextSingle(
     // text drawing function for single character
 
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     if(bltmode == bmAlphaOnAlpha) {
         if(opa < -255)
@@ -1482,7 +1482,7 @@ void tTVPNativeBaseBitmap::DrawTextMultiple(
     // text drawing function for multiple characters
 
     if(!Is32BPP())
-        TVPThrowExceptionMessage(TVPInvalidOperationFor8BPP);
+        ThrowExceptionMessage(TVPInvalidOperationFor8BPP);
 
     if(bltmode == bmAlphaOnAlpha) {
         if(opa < -255)

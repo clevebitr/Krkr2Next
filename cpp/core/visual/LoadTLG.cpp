@@ -61,7 +61,7 @@ void TVPLoadTLG5(void *formatdata, void *callbackdata,
                  tTVPGraphicLoadMode mode) {
     // load TLG v5.0 lossless compressed graphic
     if(mode != glmNormal)
-        TVPThrowExceptionMessage(
+        ThrowExceptionMessage(
             TVPTLGLoadError,
             (const tjs_char *)TVPTlgUnsupportedUniversalTransitionRule);
 
@@ -74,7 +74,7 @@ void TVPLoadTLG5(void *formatdata, void *callbackdata,
     blockheight = src->ReadI32LE();
 
     if(colors != 3 && colors != 4)
-        TVPThrowExceptionMessage(TVPTLGLoadError,
+        ThrowExceptionMessage(TVPTLGLoadError,
                                  (const tjs_char *)TVPUnsupportedColorType);
 
     int blockcount = (int)((height - 1) / blockheight) + 1;
@@ -224,7 +224,7 @@ void TVPLoadTLG6(void *formatdata, void *callbackdata,
     // load TLG v6.0 lossless/near-lossless compressed graphic
 #if 0
 	if(palettized)
-		TVPThrowExceptionMessage(TVPTLGLoadError, (const tjs_char*)TVPTlgUnsupportedUniversalTransitionRule );
+		ThrowExceptionMessage(TVPTLGLoadError, (const tjs_char*)TVPTlgUnsupportedUniversalTransitionRule );
 #endif
     unsigned char buf[12];
 
@@ -233,21 +233,21 @@ void TVPLoadTLG6(void *formatdata, void *callbackdata,
     tjs_int colors = buf[0]; // color component count
 
     if(colors != 1 && colors != 4 && colors != 3)
-        TVPThrowExceptionMessage(TVPTLGLoadError,
+        ThrowExceptionMessage(TVPTLGLoadError,
                                  ttstr(TVPUnsupportedColorCount) +
                                      ttstr((int)colors));
 
     if(buf[1] != 0) // data flag
-        TVPThrowExceptionMessage(TVPTLGLoadError,
+        ThrowExceptionMessage(TVPTLGLoadError,
                                  (const tjs_char *)TVPDataFlagMustBeZero);
 
     if(buf[2] != 0) // color type  (currently always zero)
-        TVPThrowExceptionMessage(TVPTLGLoadError,
+        ThrowExceptionMessage(TVPTLGLoadError,
                                  ttstr(TVPUnsupportedColorTypeColon) +
                                      ttstr((int)buf[1]));
 
     if(buf[3] != 0) // external golomb table (currently always zero)
-        TVPThrowExceptionMessage(
+        ThrowExceptionMessage(
             TVPTLGLoadError,
             (const tjs_char *)TVPUnsupportedExternalGolombBitLengthTable);
 
@@ -363,7 +363,7 @@ void TVPLoadTLG6(void *formatdata, void *callbackdata,
                                                       pixel_count, bit_pool);
                         break;
                     default:
-                        TVPThrowExceptionMessage(
+                        ThrowExceptionMessage(
                             TVPTLGLoadError,
                             (const tjs_char *)
                                 TVPUnsupportedEntropyCodingMethod);
@@ -477,7 +477,7 @@ static void TVPInternalLoadTLG(void *formatdata, void *callbackdata,
         TVPLoadTLG6(formatdata, callbackdata, sizecallback, scanlinecallback,
                     src, keyidx, mode != glmNormal);
     } else {
-        TVPThrowExceptionMessage(
+        ThrowExceptionMessage(
             TVPTLGLoadError, (const tjs_char *)TVPInvalidTlgHeaderOrVersion);
     }
 }
@@ -538,7 +538,7 @@ void TVPLoadTLG(void *formatdata, void *callbackdata,
                             while(*tagp >= '0' && *tagp <= '9')
                                 namelen = namelen * 10 + *tagp - '0', tagp++;
                             if(*tagp != ':')
-                                TVPThrowExceptionMessage(
+                                ThrowExceptionMessage(
                                     TVPTLGLoadError,
                                     (const tjs_char *)
                                         TVPTlgMalformedTagMissionColonAfterNameLength);
@@ -548,7 +548,7 @@ void TVPLoadTLG(void *formatdata, void *callbackdata,
                             name[namelen] = '\0';
                             tagp += namelen;
                             if(*tagp != '=')
-                                TVPThrowExceptionMessage(
+                                ThrowExceptionMessage(
                                     TVPTLGLoadError,
                                     (const tjs_char *)
                                         TVPTlgMalformedTagMissionEqualsAfterName);
@@ -557,7 +557,7 @@ void TVPLoadTLG(void *formatdata, void *callbackdata,
                             while(*tagp >= '0' && *tagp <= '9')
                                 valuelen = valuelen * 10 + *tagp - '0', tagp++;
                             if(*tagp != ':')
-                                TVPThrowExceptionMessage(
+                                ThrowExceptionMessage(
                                     TVPTLGLoadError,
                                     (const tjs_char *)
                                         TVPTlgMalformedTagMissionColonAfterVaueLength);
@@ -567,7 +567,7 @@ void TVPLoadTLG(void *formatdata, void *callbackdata,
                             value[valuelen] = '\0';
                             tagp += valuelen;
                             if(*tagp != ',')
-                                TVPThrowExceptionMessage(
+                                ThrowExceptionMessage(
                                     TVPTLGLoadError,
                                     (const tjs_char *)
                                         TVPTlgMalformedTagMissionCommaAfterTag);
@@ -642,7 +642,7 @@ void TVPLoadHeaderTLG(void *formatdata, tTJSBinaryStream *src,
             width = src->ReadI32LE();
             height = src->ReadI32LE();
         } else {
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TVPTLGLoadError,
                 (const tjs_char *)TVPInvalidTlgHeaderOrVersion);
         }
@@ -657,7 +657,7 @@ void TVPLoadHeaderTLG(void *formatdata, tTJSBinaryStream *src,
         width = src->ReadI32LE();
         height = src->ReadI32LE();
     } else {
-        TVPThrowExceptionMessage(
+        ThrowExceptionMessage(
             TVPTLGLoadError, (const tjs_char *)TVPInvalidTlgHeaderOrVersion);
     }
     tjs_int bpp = colors * 8;

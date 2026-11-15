@@ -182,7 +182,7 @@ static tjs_int _proc_self_mem(const char *key) {
     return static_cast<tjs_int>(v);
 }
 
-void GetMemoryInfo(TVPMemoryInfo &m) {
+void GetMemoryInfo(MemoryInfo &m) {
     m.MemTotal = _meminfo_value("MemTotal:");
     m.MemFree = _meminfo_value("MemFree:");
     m.SwapTotal = _meminfo_value("SwapTotal:");
@@ -400,7 +400,7 @@ public:
         if((uf = unzOpen(filename)) == nullptr) {
             ttstr msg = filename;
             msg += TJS_W(" can't open.");
-            TVPThrowExceptionMessage(msg.c_str());
+            ThrowExceptionMessage(msg.c_str());
             return false;
         }
         // UTF8¤Ê¥Õ¥¡¥¤¥ëÃû¤«¤É¤¦¤«¤ÎÅÐ¶¨¡£×î³õ¤Î¥Õ¥¡¥¤¥ë¤Ç›Q¤á¤ë
@@ -1158,7 +1158,7 @@ void ExitApplication(int code) {
     // 不会置位，engine_tick 就永远看不到终止（宿主既不退出、画面也不再更新）。
     terminated = true;
     terminateCode = code;
-    TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
+    DeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
     // Guard: only recycle textures if the render manager was already
     // initialised.  Calling TVPIsSoftwareRenderManager() when no
     // render manager exists would trigger OpenGL init (which needs a

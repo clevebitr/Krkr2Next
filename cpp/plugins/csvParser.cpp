@@ -90,7 +90,7 @@ static iTJSDispatch2 *getMember(iTJSDispatch2 *dispatch, const tjs_char *name) {
            dispatch->PropGet(TJS_IGNOREPROP, name, nullptr, &val, dispatch))) {
         ttstr msg = TJS_W("can't get member:");
         msg += name;
-        TVPThrowExceptionMessage(msg.c_str());
+        ThrowExceptionMessage(msg.c_str());
     }
     return val.AsObject();
 }
@@ -280,7 +280,7 @@ public:
             delete pStream;
         } else {
             iTJSTextReadStream *pStream =
-                TVPCreateTextStreamForRead(filename, TJS_W(""));
+                krkr::base::CreateTextStreamForRead(filename, TJS_W(""));
             pStream->Read(text, 0);
             delete pStream;
         }
@@ -429,14 +429,14 @@ return classobj;
 
 void InitPlugin_CSVParser() {
     // TJS のグローバルオブジェクトを取得する
-    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    iTJSDispatch2 *global = GetScriptDispatch();
 
     if(global) {
 
         // Arary クラスメンバー取得
         {
             tTJSVariant varScripts;
-            TVPExecuteExpression(TJS_W("Array"), &varScripts);
+            ExecuteExpression(TJS_W("Array"), &varScripts);
             iTJSDispatch2 *dispatch = varScripts.AsObjectNoAddRef();
             // メンバ取得
             ArrayClearMethod = getMember(dispatch, TJS_W("clear"));
@@ -450,7 +450,7 @@ void InitPlugin_CSVParser() {
 // extern "C" __declspec(dllexport) HRESULT _stdcall V2Unlink()
 // {
 // 	// - まず、TJS のグローバルオブジェクトを取得する
-// 	iTJSDispatch2 * global = TVPGetScriptDispatch();
+// 	iTJSDispatch2 * global = GetScriptDispatch();
 //
 // 	// - global の DeleteMember メソッドを用い、オブジェクトを削除する
 // 	if (global)	{

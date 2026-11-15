@@ -27,7 +27,7 @@ void tTVPGraphicHandlerType::Load(void *formatdata, void *callbackdata,
                                   tTJSBinaryStream *src, tjs_int32 keyidx,
                                   tTVPGraphicLoadMode mode) {
     if(LoadHandler == nullptr)
-        TVPThrowExceptionMessage(TVPUnknownGraphicFormat, TJS_W("unknown"));
+        ThrowExceptionMessage(TVPUnknownGraphicFormat, TJS_W("unknown"));
 #if 0
 	if( IsPlugin )
 	{
@@ -54,7 +54,7 @@ void tTVPGraphicHandlerType::Save(const ttstr &storagename, const ttstr &mode,
                                   const iTVPBaseBitmap *image,
                                   iTJSDispatch2 *meta) {
     if(SaveHandler == nullptr)
-        TVPThrowExceptionMessage(TVPUnknownGraphicFormat, mode);
+        ThrowExceptionMessage(TVPUnknownGraphicFormat, mode);
 
     tTJSBinaryStream *stream =
         krkr::io::CreateStream(krkr::io::NormalizeStorageName(storagename), TJS_BS_WRITE);
@@ -87,7 +87,7 @@ void tTVPGraphicHandlerType::Save(const ttstr &storagename, const ttstr &mode,
 void tTVPGraphicHandlerType::Header(tTJSBinaryStream *src,
                                     iTJSDispatch2 **dic) {
     if(HeaderHandler == nullptr)
-        TVPThrowExceptionMessage(TVPUnknownGraphicFormat, TJS_W("unknown"));
+        ThrowExceptionMessage(TVPUnknownGraphicFormat, TJS_W("unknown"));
 #if 0
 	if( IsPlugin )
 	{
@@ -132,16 +132,16 @@ tTVPSusiePlugin::tTVPSusiePlugin(HINSTANCE inst, const char *api)
 	if(!memcmp(api, "00IN", 4))
 	{
 		if(!GetPluginInfo || !IsSupported || !GetPicture)
-			TVPThrowExceptionMessage(TVPNotSusiePlugin);
+			ThrowExceptionMessage(TVPNotSusiePlugin);
 	}
 	else if(!memcmp(api, "00AM", 4))
 	{
 		if(!GetPluginInfo || !IsSupported || !GetArchiveInfo || !GetFile)
-			TVPThrowExceptionMessage(TVPNotSusiePlugin);
+			ThrowExceptionMessage(TVPNotSusiePlugin);
 	}
 	else
 	{
-		TVPThrowInternalError;
+		KRKR_THROW_INTERNAL_ERROR;
 	}
 
 	// check API version and dump copyright information
@@ -151,16 +151,16 @@ tTVPSusiePlugin::tTVPSusiePlugin(HINSTANCE inst, const char *api)
 	if(GetPluginInfo(0, buffer, 255) >= 4)
 	{
 		if(memcmp(buffer, api, 4))
-			TVPThrowExceptionMessage(TVPNotSusiePlugin);
+			ThrowExceptionMessage(TVPNotSusiePlugin);
 	}
 	else
 	{
-		TVPThrowExceptionMessage(TVPNotSusiePlugin);
+		ThrowExceptionMessage(TVPNotSusiePlugin);
 	}
 
 	memset(buffer, 0, 256);
 	GetPluginInfo(1, buffer, 255);
-	if(buffer[0]) krkr::utils::AddImportantLog( TVPFormatMessage(TVPInfoSusiePluginInfo,ttstr(buffer)) );
+	if(buffer[0]) krkr::utils::AddImportantLog( krkr::base::FormatMessage(TVPInfoSusiePluginInfo,ttstr(buffer)) );
 
 	// retrieve format information
 	tjs_int i;
@@ -254,7 +254,7 @@ void tTVPSusiePicturePlugin::Load(void *callbackdata,
 		// call GetPicture
 		int r = GetPicture((LPSTR)source, (long)size, 0x01, &info, &bitmap,
 			(FARPROC)ProgressCallback, 0);
-		if((r&0xff) != 0) TVPThrowExceptionMessage(TVPSusiePluginError, ttstr(r));
+		if((r&0xff) != 0) ThrowExceptionMessage(TVPSusiePluginError, ttstr(r));
 
 		// setup bitmapinfoheader
 		TVP_WIN_BITMAPINFOHEADER bi;
@@ -294,7 +294,7 @@ void tTVPSusiePicturePlugin::Load(void *callbackdata,
 		else
 		{
 			// not supported bitmap format
-			TVPThrowExceptionMessage(TVPImageLoadError, (const tjs_char*)TVPSusiePluginUnsupportedBitmapHeader );
+			ThrowExceptionMessage(TVPImageLoadError, (const tjs_char*)TVPSusiePluginUnsupportedBitmapHeader );
 
 		}
 
@@ -344,7 +344,7 @@ static void TVPDestroySusiePluginList()
 		delete i.GetValue();
 	}
 }
-static tTVPAtExit TVPDestroySusiePluginListAtExit
+static AtExit TVPDestroySusiePluginListAtExit
 	(KRKR_ATEXIT_PRI_CLEANUP, TVPDestroySusiePluginList);
 
 //---------------------------------------------------------------------------
@@ -395,7 +395,7 @@ void TVPUnloadPictureSPI(HINSTANCE inst)
 	tTVPSusiePicturePlugin** p = TVPSusiePluginList.Find(inst);
 
 	if(!p)
-		TVPThrowExceptionMessage(TVPNotLoadedPlugin);
+		ThrowExceptionMessage(TVPNotLoadedPlugin);
 
 	const std::vector<ttstr> & exts = (*p)->GetExtensions();
 	std::vector<ttstr>::const_iterator i;

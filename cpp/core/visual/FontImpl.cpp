@@ -50,7 +50,7 @@ const FT_Library TVPGetFontLibrary() {
     if(!TVPFontLibrary) {
         FT_Error error = FT_Init_FreeType(&TVPFontLibrary);
         if(error)
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 (ttstr(TJS_W("Initialize FreeType failed, error = ")) +
                  TJSIntegerToString((tjs_int)error))
                     .c_str());
@@ -191,7 +191,7 @@ tTJSBinaryStream *TVPCreateFontStream(const ttstr &fontname) {
     if(info->Getter) {
         return info->Getter(info);
     }
-    return TVPCreateBinaryStreamForRead(info->Path, TJS_W(""));
+    return krkr::base::CreateBinaryStreamForRead(info->Path, TJS_W(""));
 }
 
 //---------------------------------------------------------------------------
@@ -395,7 +395,7 @@ void TVPInitFontNames() {
     // check exePath + "/fonts/*.ttf"
     {
         std::vector<ttstr> list;
-        auto lister = [&](const ttstr &name, tTVPLocalFileInfo *s) {
+        auto lister = [&](const ttstr &name, LocalFileInfo *s) {
             if(s->Mode & (S_IFREG | S_IFDIR)) {
                 list.emplace_back(name);
             }

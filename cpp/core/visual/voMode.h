@@ -16,9 +16,9 @@
 
 /*[*/
 //---------------------------------------------------------------------------
-// tTVPVideoOverlayMode
+// VideoOverlayMode
 //---------------------------------------------------------------------------
-enum tTVPVideoOverlayMode {
+enum VideoOverlayMode {
     vomOverlay, // Overlay
     vomLayer, // Draw Layer
     vomMixer, // VMR

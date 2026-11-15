@@ -1329,7 +1329,7 @@ struct AlphaMovieReadyFrame
 };
 
 class tTJSNI_AlphaMovie : public tTJSNativeInstance,
-                          public tTVPContinuousEventCallbackIntf
+                          public ContinuousEventCallbackIntf
 {
 public:
     tTJSNI_AlphaMovie();
@@ -1479,7 +1479,7 @@ void tTJSNI_AlphaMovie::removeAmvOpenCallback()
 {
     if (!amvOpenCallbackRegistered_)
         return;
-    TVPRemoveContinuousEventHook(this);
+    RemoveContinuousEventHook(this);
     amvOpenCallbackRegistered_ = false;
 }
 
@@ -2904,7 +2904,7 @@ tjs_int tTJSNI_AlphaMovie::showNextImage(tTJSVariant layer)
         pendingAmvLayer_ = layer;
         if (!amvOpenCallbackRegistered_)
         {
-            TVPAddContinuousEventHook(this);
+            AddContinuousEventHook(this);
             amvOpenCallbackRegistered_ = true;
         }
         return _frame;
@@ -2916,10 +2916,10 @@ tjs_int tTJSNI_AlphaMovie::showNextImage(tTJSVariant layer)
     {
         if (TJS_FAILED(clo.Object->NativeInstanceSupport(TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID,
                                                          (iTJSNativeInstance**)&src)))
-            TVPThrowExceptionMessage(TVPSpecifyLayer);
+            ThrowExceptionMessage(TVPSpecifyLayer);
 
         if (!src)
-            TVPThrowExceptionMessage(TVPSpecifyLayer);
+            ThrowExceptionMessage(TVPSpecifyLayer);
     }
     if (!src)
         return 0;
@@ -3544,7 +3544,7 @@ tTJSNativeClass* TVPCreateNativeClass_AlphaMovie()
 
 void InitPlugin_AlphaMovie()
 {
-    iTJSDispatch2* global = TVPGetScriptDispatch();
+    iTJSDispatch2* global = GetScriptDispatch();
     if (global)
     {
         tTJSVariant val;

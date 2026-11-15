@@ -12,7 +12,7 @@
 /**
  * PSDストレージ
  */
-class PSDStorage : public iTVPStorageMedia, tTVPCompactEventCallbackIntf {
+class PSDStorage : public IStorageMedia, CompactEventCallbackIntf {
 public:
     /**
      * コンストラクタ
@@ -53,7 +53,7 @@ public:
 
 public:
     // -----------------------------------
-    // iTVPStorageMedia Intefaces
+    // IStorageMedia Intefaces
     // -----------------------------------
 
     virtual void AddRef() { refCount++; };
@@ -111,12 +111,12 @@ public:
                 }
             }
         }
-        TVPThrowExceptionMessage(TJS_W("%1:cannot open psdfile"), name);
+        ThrowExceptionMessage(TJS_W("%1:cannot open psdfile"), name);
         return nullptr;
     }
 
     // list files at given place
-    virtual void GetListAt(const ttstr &name, iTVPStorageLister *lister) {
+    virtual void GetListAt(const ttstr &name, IStorageLister *lister) {
         ttstr fname;
         PSD *psd = getPSD(name, fname);
         if(psd) {
@@ -132,7 +132,7 @@ public:
 
 public:
     // -----------------------------------
-    // tTVPCompactEventCallbackIntf
+    // CompactEventCallbackIntf
     // -----------------------------------
     virtual void OnCompact(tjs_int level) {
         if(level > TVP_COMPACT_LEVEL_MINIMIZE) {
@@ -158,7 +158,7 @@ protected:
             dname = ttstr(p, q - p);
             fname = ttstr(q + 1);
         } else {
-            TVPThrowExceptionMessage(TJS_W("invalid path:%1"), name);
+            ThrowExceptionMessage(TJS_W("invalid path:%1"), name);
         }
 
         PSD *psd = 0;
@@ -180,7 +180,7 @@ protected:
         }
 
         // 自分でopenしてそのままキャッシュとして持つ
-        TVPExecuteExpression(TJS_W("new PSD()"), &cache);
+        ExecuteExpression(TJS_W("new PSD()"), &cache);
         psd = ncbInstanceAdaptor<PSD>::GetNativeInstance(
             cache.AsObjectNoAddRef());
         if(psd) {
@@ -243,13 +243,13 @@ void initStorage() {
     if(psdStorage == nullptr) {
         psdStorage = new PSDStorage();
         krkr::io::RegisterStorageMedia(psdStorage);
-        TVPAddCompactEventHook((tTVPCompactEventCallbackIntf *)psdStorage);
+        AddCompactEventHook((CompactEventCallbackIntf *)psdStorage);
     }
 }
 
 void doneStorage() {
     if(psdStorage != nullptr) {
-        TVPRemoveCompactEventHook((tTVPCompactEventCallbackIntf *)psdStorage);
+        RemoveCompactEventHook((CompactEventCallbackIntf *)psdStorage);
         krkr::io::UnregisterStorageMedia(psdStorage);
         psdStorage->Release();
         psdStorage = nullptr;

@@ -172,7 +172,7 @@ static tjs_error PerspectiveCopy_GL(tTJSVariant *result, tjs_int numparams,
         if(TJS_FAILED(clo.Object->NativeInstanceSupport(
                TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID,
                (iTJSNativeInstance **)&src)))
-            TVPThrowExceptionMessage(TVPSpecifyLayer);
+            ThrowExceptionMessage(TVPSpecifyLayer);
     }
 
     double g_x1 = param[1]->AsReal();
@@ -265,11 +265,11 @@ void InitPlugin_Perspective() {
     //
     // 	    {
     // 		    // TJS のグローバルオブジェクトを取得する
-    // 		    iTJSDispatch2 * global = TVPGetScriptDispatch();
+    // 		    iTJSDispatch2 * global = GetScriptDispatch();
     //
     // 		    // Layer クラスオブジェクトを取得
     // 		    tTJSVariant varScripts;
-    // 		    TVPExecuteExpression(TJS_W("Layer"), &varScripts);
+    // 		    ExecuteExpression(TJS_W("Layer"), &varScripts);
     // 		    iTJSDispatch2 *dispatch =
     // varScripts.AsObjectNoAddRef(); 		    if (dispatch) {
     // 			    // プロパティ初期化
@@ -283,7 +283,7 @@ void InitPlugin_Perspective() {
     // 		    global->Release();
     // 	    }
     //     } else {
-    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    iTJSDispatch2 *global = GetScriptDispatch();
     tTJSVariant varScripts;
     global->PropGet(0, TJS_W("Layer"), nullptr, &varScripts, global);
     iTJSDispatch2 *dispatch = varScripts.AsObjectNoAddRef();

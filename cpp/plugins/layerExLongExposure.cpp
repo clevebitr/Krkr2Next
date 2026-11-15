@@ -19,7 +19,7 @@ struct LongExposure {
     void init() {
         term();
         if(!GetLayerSize(self, width, height))
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("LongExposure.init: invalid layer image"));
         size_t len = width * height * 4;
         buffer = new DWORD[len];
@@ -28,14 +28,14 @@ struct LongExposure {
 
     void snap() {
         if(!buffer)
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("LongExposure.snap: not initialized"));
         size_t curw = 0, curh = 0;
         if(!GetLayerSize(self, curw, curh))
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("LongExposure.snap: invalid layer image"));
         if(curw != width || curh != height)
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("LongExposure.snap: invalid layer size"));
 
         const BYTE *ptr = 0;
@@ -110,12 +110,12 @@ struct LongExposure {
 
     tTJSVariant stat() {
         if(!buffer)
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("LongExposure.stat: not initialized"));
 
         MinMaxRGBA m;
         if(!_stat(m))
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("LongExposure.stat: invalid layer image"));
 
         ncbDictionaryAccessor rdic;
@@ -136,27 +136,27 @@ struct LongExposure {
 
     void copy(tTJSVariant v) {
         if(!buffer)
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("LongExposure.copy: not initialized"));
         size_t curw = 0, curh = 0;
         if(!GetLayerSize(self, curw, curh))
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("LongExposure.copy: invalid layer image"));
         if(curw != width || curh != height)
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("LongExposure.copy: invalid layer size"));
 
         BYTE *ptr = 0;
         long pitch = 0;
         if(!GetLayerImageForWrite(self, ptr, pitch))
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("LongExposure.copy: invalid layer image"));
 
         MinMaxRGBA m;
         switch(v.Type()) {
             case tvtVoid:
                 if(!_stat(m))
-                    TVPThrowExceptionMessage(
+                    ThrowExceptionMessage(
                         TJS_W("LongExposure.copy: stat failed"));
                 break;
             case tvtObject: {
@@ -249,7 +249,7 @@ private:
                                    tTVInteger defval = 0) {
         if(!LayerClass) {
             tTJSVariant var;
-            TVPExecuteExpression(TJS_W("Layer"), &var);
+            ExecuteExpression(TJS_W("Layer"), &var);
             LayerClass = var.AsObjectNoAddRef();
         }
         tTJSVariant val;

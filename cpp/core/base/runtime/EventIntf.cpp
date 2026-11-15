@@ -23,13 +23,13 @@
 #include <spdlog/spdlog.h>
 
 //---------------------------------------------------------------------------
-// tTVPEvent  : script event class
+// Event  : script event class
 //---------------------------------------------------------------------------
 namespace krkr::base {
 
-extern tjs_uint64 TVPEventSequenceNumber;
+extern tjs_uint64 EventSequenceNumber;
 
-class tTVPEvent {
+class Event {
     iTJSDispatch2 *Target;
     iTJSDispatch2 *Source;
     ttstr EventName;
@@ -40,7 +40,7 @@ class tTVPEvent {
     tjs_uint64 Sequence;
 
 public:
-    tTVPEvent(iTJSDispatch2 *target, iTJSDispatch2 *source, ttstr &eventname,
+    Event(iTJSDispatch2 *target, iTJSDispatch2 *source, ttstr &eventname,
               tjs_uint32 tag, tjs_uint numargs, tTJSVariant *args,
               tjs_uint32 flags) {
         // constructor
@@ -52,7 +52,7 @@ public:
         Target = nullptr;
         Source = nullptr;
 
-        Sequence = TVPEventSequenceNumber;
+        Sequence = EventSequenceNumber;
         EventName = eventname;
         NumArgs = numargs;
         Args = new tTJSVariant[NumArgs];
@@ -68,7 +68,7 @@ public:
             Source->AddRef();
     }
 
-    tTVPEvent(const tTVPEvent &ref) {
+    Event(const Event &ref) {
         // copy constructor
         Args = nullptr;
         Target = nullptr;
@@ -88,7 +88,7 @@ public:
             Source->AddRef();
     }
 
-    ~tTVPEvent() {
+    ~Event() {
         if(Args)
             delete[] Args;
         if(Target)
@@ -127,21 +127,21 @@ public:
 };
 
 //---------------------------------------------------------------------------
-tjs_uint64 tTVPEvent::GetSequence() const { return Sequence; }
+tjs_uint64 Event::GetSequence() const { return Sequence; }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPWinUpdateEvent : window update event class
+// WinUpdateEvent : window update event class
 //---------------------------------------------------------------------------
-class tTVPWinUpdateEvent {
+class WinUpdateEvent {
     tTJSNI_BaseWindow *Window;
 
 public:
-    tTVPWinUpdateEvent(tTJSNI_BaseWindow *window) { Window = window; }
+    WinUpdateEvent(tTJSNI_BaseWindow *window) { Window = window; }
 
-    tTVPWinUpdateEvent(const tTVPWinUpdateEvent &ref) { Window = ref.Window; }
+    WinUpdateEvent(const WinUpdateEvent &ref) { Window = ref.Window; }
 
-    ~tTVPWinUpdateEvent() = default;
+    ~WinUpdateEvent() = default;
 
     void Deliver() const {
         if(static_cast<tTJSNI_Window *>(Window)->GetVisible())
@@ -160,45 +160,45 @@ public:
 // global/static definitions
 //---------------------------------------------------------------------------
 // event queue must be a globally sequential queue
-std::vector<tTVPBaseInputEvent *> TVPInputEventQueue;
-std::vector<tTVPEvent *> TVPEventQueue;
-std::vector<tTVPWinUpdateEvent> TVPWinUpdateEventQueue;
-bool TVPExclusiveEventPosted = false; // true if exclusive event is posted
-tjs_uint64 TVPEventSequenceNumber = 0; // event sequence number
-tjs_uint64 TVPEventSequenceNumberToProcess = 0;
+std::vector<BaseInputEvent *> InputEventQueue;
+std::vector<Event *> EventQueue;
+std::vector<WinUpdateEvent> WinUpdateEventQueue;
+bool ExclusiveEventPosted = false; // true if exclusive event is posted
+tjs_uint64 EventSequenceNumber = 0; // event sequence number
+tjs_uint64 EventSequenceNumberToProcess = 0;
 // current event sequence which must be processed
 
-static void TVPDestroyEventQueue() {
+static void DestroyEventQueue() {
     spdlog::info("at-exit PREPARE[1/4]: DestroyEventQueue begin");
     // delete all event objects
     // deletion of event object may cause other deletion of event
     // objects.
     {
-        std::vector<tTVPEvent *>::iterator i;
-        while(TVPEventQueue.size()) {
-            i = TVPEventQueue.end() - 1;
-            tTVPEvent *ev = *i;
-            TVPEventQueue.erase(i);
+        std::vector<Event *>::iterator i;
+        while(EventQueue.size()) {
+            i = EventQueue.end() - 1;
+            Event *ev = *i;
+            EventQueue.erase(i);
             delete ev;
         }
     }
     //--
     {
-        std::vector<tTVPBaseInputEvent *>::iterator i;
-        while(TVPInputEventQueue.size()) {
-            i = TVPInputEventQueue.end() - 1;
-            tTVPBaseInputEvent *ev = *i;
-            TVPInputEventQueue.erase(i);
+        std::vector<BaseInputEvent *>::iterator i;
+        while(InputEventQueue.size()) {
+            i = InputEventQueue.end() - 1;
+            BaseInputEvent *ev = *i;
+            InputEventQueue.erase(i);
             delete ev;
         }
     }
 }
 
-static tTVPAtExit TVPDestroyEventQueueAtExit(KRKR_ATEXIT_PRI_PREPARE,
-                                             TVPDestroyEventQueue);
+static AtExit DestroyEventQueueAtExit(KRKR_ATEXIT_PRI_PREPARE,
+                                             DestroyEventQueue);
 
-bool TVPEventDisabled = false;
-bool TVPEventInterrupting = false;
+bool EventDisabled = false;
+bool EventInterrupting = false;
 
 // #define TVP_EVENT_TASK_RETURN_TICK 100000
 /* TVP event system once returns to Operation system when
@@ -206,14 +206,14 @@ bool TVPEventInterrupting = false;
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPPostEvent
+// PostTJSEvent
 //---------------------------------------------------------------------------
-void TVPPostEvent(iTJSDispatch2 *source, iTJSDispatch2 *target,
+void PostTJSEvent(iTJSDispatch2 *source, iTJSDispatch2 *target,
                   ttstr &eventname, tjs_uint32 tag, tjs_uint32 flag,
                   tjs_uint numargs, tTJSVariant *args) {
-    bool evdisabled = TVPEventDisabled || TVPGetSystemEventDisabledState();
+    bool evdisabled = EventDisabled || GetSystemEventDisabledState();
 
-    if((flag & TVP_EPT_DISCARDABLE) && (TVPEventInterrupting || evdisabled))
+    if((flag & TVP_EPT_DISCARDABLE) && (EventInterrupting || evdisabled))
         return;
 
     tjs_int method = flag & TVP_EPT_METHOD_MASK;
@@ -226,7 +226,7 @@ void TVPPostEvent(iTJSDispatch2 *source, iTJSDispatch2 *target,
 
         try {
             try {
-                tTVPEvent(target, source, eventname, tag, numargs, args, flag)
+                Event(target, source, eventname, tag, numargs, args, flag)
                     .Deliver();
             }
             TJS_CONVERT_TO_TJS_EXCEPTION
@@ -239,16 +239,16 @@ void TVPPostEvent(iTJSDispatch2 *source, iTJSDispatch2 *target,
     if(method == TVP_EPT_REMOVE_POST) {
         // events in queue that have same target/source/name/tag are
         // to be removed
-        std::vector<tTVPEvent *>::iterator i;
-        i = TVPEventQueue.begin();
-        while(/*TVPEventQueue.size() &&*/ i != TVPEventQueue.end()) {
+        std::vector<Event *>::iterator i;
+        i = EventQueue.begin();
+        while(/*EventQueue.size() &&*/ i != EventQueue.end()) {
             if(source == (*i)->GetSourceNoAddRef() &&
                target == (*i)->GetTargetNoAddRef() &&
                eventname == (*i)->GetEventName() &&
                ((tag == 0) ? true : (tag == (*i)->GetTag()))) {
-                tTVPEvent *ev = *i;
-                TVPEventQueue.erase(i);
-                i = TVPEventQueue.begin();
+                Event *ev = *i;
+                EventQueue.erase(i);
+                i = EventQueue.begin();
                 delete ev;
             } else {
                 i++;
@@ -257,34 +257,34 @@ void TVPPostEvent(iTJSDispatch2 *source, iTJSDispatch2 *target,
     }
 
     // put into queue
-    TVPEventQueue.push_back(
-        new tTVPEvent(target, source, eventname, tag, numargs, args, flag));
+    EventQueue.push_back(
+        new Event(target, source, eventname, tag, numargs, args, flag));
 
     // is exclusive?
     if((flag & TVP_EPT_PRIO_MASK) == TVP_EPT_EXCLUSIVE)
-        TVPExclusiveEventPosted = true;
+        ExclusiveEventPosted = true;
 
     // make sure that the event is to be delivered.
-    TVPInvokeEvents();
+    InvokeTJSEvents();
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCancelEvents
+// CancelTJSEvents
 //---------------------------------------------------------------------------
-tjs_int TVPCancelEvents(iTJSDispatch2 *source, iTJSDispatch2 *target,
+tjs_int CancelTJSEvents(iTJSDispatch2 *source, iTJSDispatch2 *target,
                         const ttstr &eventname, tjs_uint32 tag) {
     tjs_int count = 0;
-    std::vector<tTVPEvent *>::iterator i;
-    i = TVPEventQueue.begin();
-    while(/*TVPEventQueue.size() &&*/ i != TVPEventQueue.end()) {
+    std::vector<Event *>::iterator i;
+    i = EventQueue.begin();
+    while(/*EventQueue.size() &&*/ i != EventQueue.end()) {
         if(source == (*i)->GetSourceNoAddRef() &&
            target == (*i)->GetTargetNoAddRef() &&
            eventname == (*i)->GetEventName() &&
            ((tag == 0) ? true : (tag == (*i)->GetTag()))) {
-            tTVPEvent *ev = *i;
-            TVPEventQueue.erase(i);
-            i = TVPEventQueue.begin();
+            Event *ev = *i;
+            EventQueue.erase(i);
+            i = EventQueue.begin();
             delete ev;
             count++;
         } else {
@@ -296,13 +296,13 @@ tjs_int TVPCancelEvents(iTJSDispatch2 *source, iTJSDispatch2 *target,
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPAreEventsInQueue
+// AreTJSEventsInQueue
 //---------------------------------------------------------------------------
-bool TVPAreEventsInQueue(iTJSDispatch2 *source, iTJSDispatch2 *target,
+bool AreTJSEventsInQueue(iTJSDispatch2 *source, iTJSDispatch2 *target,
                          const ttstr &eventname, tjs_uint32 tag) {
-    std::vector<tTVPEvent *>::iterator i;
-    i = TVPEventQueue.begin();
-    while(/*TVPEventQueue.size() &&*/ i != TVPEventQueue.end()) {
+    std::vector<Event *>::iterator i;
+    i = EventQueue.begin();
+    while(/*EventQueue.size() &&*/ i != EventQueue.end()) {
         if(source == (*i)->GetSourceNoAddRef() &&
            target == (*i)->GetTargetNoAddRef() &&
            eventname == (*i)->GetEventName() &&
@@ -315,14 +315,14 @@ bool TVPAreEventsInQueue(iTJSDispatch2 *source, iTJSDispatch2 *target,
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCountEventsInQueue
+// CountEventsInQueue
 //---------------------------------------------------------------------------
-tjs_int TVPCountEventsInQueue(iTJSDispatch2 *source, iTJSDispatch2 *target,
+tjs_int CountEventsInQueue(iTJSDispatch2 *source, iTJSDispatch2 *target,
                               const ttstr &eventname, tjs_uint32 tag) {
     tjs_int count = 0;
-    std::vector<tTVPEvent *>::iterator i;
-    i = TVPEventQueue.begin();
-    while(/*TVPEventQueue.size() &&*/ i != TVPEventQueue.end()) {
+    std::vector<Event *>::iterator i;
+    i = EventQueue.begin();
+    while(/*EventQueue.size() &&*/ i != EventQueue.end()) {
         if(source == (*i)->GetSourceNoAddRef() &&
            target == (*i)->GetTargetNoAddRef() &&
            eventname == (*i)->GetEventName() &&
@@ -335,19 +335,19 @@ tjs_int TVPCountEventsInQueue(iTJSDispatch2 *source, iTJSDispatch2 *target,
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCancelEventByTag
+// CancelEventByTag
 //---------------------------------------------------------------------------
-void TVPCancelEventsByTag(iTJSDispatch2 *source, iTJSDispatch2 *target,
+void CancelEventsByTag(iTJSDispatch2 *source, iTJSDispatch2 *target,
                           tjs_uint32 tag) {
-    std::vector<tTVPEvent *>::iterator i;
-    i = TVPEventQueue.begin();
-    while(/*TVPEventQueue.size() &&*/ i != TVPEventQueue.end()) {
+    std::vector<Event *>::iterator i;
+    i = EventQueue.begin();
+    while(/*EventQueue.size() &&*/ i != EventQueue.end()) {
         if(source == (*i)->GetSourceNoAddRef() &&
            target == (*i)->GetTargetNoAddRef() &&
            ((tag == 0) ? true : (tag == (*i)->GetTag()))) {
-            tTVPEvent *ev = *i;
-            TVPEventQueue.erase(i);
-            i = TVPEventQueue.begin();
+            Event *ev = *i;
+            EventQueue.erase(i);
+            i = EventQueue.begin();
             delete ev;
         } else {
             i++;
@@ -357,16 +357,16 @@ void TVPCancelEventsByTag(iTJSDispatch2 *source, iTJSDispatch2 *target,
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCancelSourceEvent
+// CancelSourceEvent
 //---------------------------------------------------------------------------
-void TVPCancelSourceEvents(iTJSDispatch2 *source) {
-    std::vector<tTVPEvent *>::iterator i;
-    i = TVPEventQueue.begin();
-    while(/*TVPEventQueue.size() &&*/ i != TVPEventQueue.end()) {
+void CancelSourceEvents(iTJSDispatch2 *source) {
+    std::vector<Event *>::iterator i;
+    i = EventQueue.begin();
+    while(/*EventQueue.size() &&*/ i != EventQueue.end()) {
         if(source == (*i)->GetSourceNoAddRef()) {
-            tTVPEvent *ev = *i;
-            TVPEventQueue.erase(i);
-            i = TVPEventQueue.begin();
+            Event *ev = *i;
+            EventQueue.erase(i);
+            i = EventQueue.begin();
             delete ev;
         } else {
             i++;
@@ -376,16 +376,16 @@ void TVPCancelSourceEvents(iTJSDispatch2 *source) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPDiscardAllDiscardableEvents
+// DiscardAllDiscardableEvents
 //---------------------------------------------------------------------------
-void TVPDiscardAllDiscardableEvents() {
-    std::vector<tTVPEvent *>::iterator i;
-    i = TVPEventQueue.begin();
-    while(/*TVPEventQueue.size() &&*/ i != TVPEventQueue.end()) {
+void DiscardAllDiscardableEvents() {
+    std::vector<Event *>::iterator i;
+    i = EventQueue.begin();
+    while(/*EventQueue.size() &&*/ i != EventQueue.end()) {
         if((*i)->GetFlags() & TVP_EPT_DISCARDABLE) {
-            tTVPEvent *ev = *i;
-            TVPEventQueue.erase(i);
-            i = TVPEventQueue.begin();
+            Event *ev = *i;
+            EventQueue.erase(i);
+            i = EventQueue.begin();
             delete ev;
         } else {
             i++;
@@ -395,26 +395,26 @@ void TVPDiscardAllDiscardableEvents() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPDeliverAllEvents
+// DeliverAllEvents
 //---------------------------------------------------------------------------
 static void _TVPDeliverEventByPrio(tjs_uint prio) {
     while(true) {
-        tTVPEvent *e;
+        Event *e;
 
         // retrieve item to deliver
-        if(TVPEventQueue.size() == 0)
+        if(EventQueue.size() == 0)
             break;
-        std::vector<tTVPEvent *>::iterator i = TVPEventQueue.begin();
-        while(i != TVPEventQueue.end()) {
-            if((*i)->GetSequence() <= TVPEventSequenceNumberToProcess &&
+        std::vector<Event *>::iterator i = EventQueue.begin();
+        while(i != EventQueue.end()) {
+            if((*i)->GetSequence() <= EventSequenceNumberToProcess &&
                (((*i)->GetFlags() & TVP_EPT_PRIO_MASK) == prio))
                 break;
             i++;
         }
-        if(i == TVPEventQueue.end())
+        if(i == EventQueue.end())
             break;
         e = *i;
-        TVPEventQueue.erase(i);
+        EventQueue.erase(i);
 
         // event delivering
         try {
@@ -428,26 +428,26 @@ static void _TVPDeliverEventByPrio(tjs_uint prio) {
 }
 
 static bool _TVPDeliverAllEvents2() {
-    TVPExclusiveEventPosted = false;
+    ExclusiveEventPosted = false;
 
     // process exclusive events
     _TVPDeliverEventByPrio(TVP_EPT_EXCLUSIVE);
 
     // check exclusive events
-    if(TVPExclusiveEventPosted)
+    if(ExclusiveEventPosted)
         return true;
 
     // process input event queue
     while(true) {
-        tTVPBaseInputEvent *e;
+        BaseInputEvent *e;
 
         // retrieve item to deliver
-        if(TVPInputEventQueue.size() == 0)
+        if(InputEventQueue.size() == 0)
             break;
-        std::vector<tTVPBaseInputEvent *>::iterator i =
-            TVPInputEventQueue.begin();
+        std::vector<BaseInputEvent *>::iterator i =
+            InputEventQueue.begin();
         e = *i;
-        TVPInputEventQueue.erase(i);
+        InputEventQueue.erase(i);
 
         // event delivering
         try {
@@ -459,7 +459,7 @@ static bool _TVPDeliverAllEvents2() {
         delete e;
 
         // check exclusive events
-        if(TVPExclusiveEventPosted)
+        if(ExclusiveEventPosted)
             return true;
     }
 
@@ -467,7 +467,7 @@ static bool _TVPDeliverAllEvents2() {
     _TVPDeliverEventByPrio(TVP_EPT_NORMAL);
 
     // check exclusive events
-    if(TVPExclusiveEventPosted)
+    if(ExclusiveEventPosted)
         return true;
 
     return true;
@@ -476,11 +476,11 @@ static bool _TVPDeliverAllEvents2() {
 //---------------------------------------------------------------------------
 static bool _TVPDeliverAllEvents() {
     // deliver all pending events to targets.
-    if(TVPEventDisabled)
+    if(EventDisabled)
         return true;
 
     // event invokation was received...
-    TVPEventReceived();
+    EventReceived();
 
     // for script event objects
 
@@ -492,15 +492,15 @@ static bool _TVPDeliverAllEvents() {
 }
 
 //---------------------------------------------------------------------------
-void TVPDeliverAllEvents() {
+void DeliverAllEvents() {
     bool r;
 
-    if(!TVPEventInterrupting) {
-        TVPEventSequenceNumberToProcess = TVPEventSequenceNumber;
-        TVPEventSequenceNumber++; // increment sequence number
+    if(!EventInterrupting) {
+        EventSequenceNumberToProcess = EventSequenceNumber;
+        EventSequenceNumber++; // increment sequence number
     }
 
-    TVPEventInterrupting = false;
+    EventInterrupting = false;
     try {
         try {
             r = _TVPDeliverAllEvents();
@@ -512,11 +512,11 @@ void TVPDeliverAllEvents() {
     if(!r) {
         // event processing is to be interrupted
         // XXX: currently this is not functional
-        TVPEventInterrupting = true;
-        TVPCallDeliverAllEventsOnIdle();
+        EventInterrupting = true;
+        CallDeliverAllTJSEventsOnIdle();
     }
 
-    if(!TVPExclusiveEventPosted && !TVPEventInterrupting) {
+    if(!ExclusiveEventPosted && !EventInterrupting) {
         try {
             try {
                 // process idle event queue
@@ -527,20 +527,20 @@ void TVPDeliverAllEvents() {
         TVP_CATCH_AND_SHOW_SCRIPT_EXCEPTION(TJS_W("idle event"));
 
         // process continuous events
-        if(TVPProcessContinuousHandlerEventFlag) {
-            TVPProcessContinuousHandlerEventFlag = false; // processed
+        if(ProcessContinuousHandlerEventFlag) {
+            ProcessContinuousHandlerEventFlag = false; // processed
             // XXX: strictly saying, we need something like
             // InterlockedExchange to look/set this flag, because
-            // TVPProcessContinuousHandlerEventFlag may be accessed by
+            // ProcessContinuousHandlerEventFlag may be accessed by
             // another thread. But I have no dought about that no one
             // does care of missing one event in rare race condition.
 
-            TVPDeliverContinuousEvent();
+            DeliverContinuousEvent();
         }
         try {
             try {
                 // for window content updating
-                TVPDeliverWindowUpdateEvents();
+                DeliverWindowUpdateEvents();
             }
             TJS_CONVERT_TO_TJS_EXCEPTION
         }
@@ -548,36 +548,36 @@ void TVPDeliverAllEvents() {
     } else {
     }
 
-    if(TVPEventQueue.size() == 0) {
-        TVPEventSequenceNumber = 0; // reset the number
+    if(EventQueue.size() == 0) {
+        EventSequenceNumber = 0; // reset the number
     }
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPPostWindowUpdate
+// PostWindowUpdate
 //---------------------------------------------------------------------------
-bool TVPWindowUpdateEventsDelivering = false;
+bool WindowUpdateEventsDelivering = false;
 
-void TVPPostWindowUpdate(tTJSNI_BaseWindow *window) {
+void PostWindowUpdate(tTJSNI_BaseWindow *window) {
 
-    if(!TVPWindowUpdateEventsDelivering) {
-        if(TVPWinUpdateEventQueue.size()) {
+    if(!WindowUpdateEventsDelivering) {
+        if(WinUpdateEventQueue.size()) {
             // since duplication is not allowed ...
-            std::vector<tTVPWinUpdateEvent>::const_iterator i;
-            for(i = TVPWinUpdateEventQueue.begin();
-                i != TVPWinUpdateEventQueue.end(); i++) {
+            std::vector<WinUpdateEvent>::const_iterator i;
+            for(i = WinUpdateEventQueue.begin();
+                i != WinUpdateEventQueue.end(); i++) {
                 if(!i->IsEmpty() && window == i->GetWindow())
                     return;
             }
         }
     } else {
-        if(TVPWinUpdateEventQueue.size()) {
+        if(WinUpdateEventQueue.size()) {
             // duplication is allowed up to two
             tjs_int count = 0;
-            std::vector<tTVPWinUpdateEvent>::const_iterator i;
-            for(i = TVPWinUpdateEventQueue.begin();
-                i != TVPWinUpdateEventQueue.end(); i++) {
+            std::vector<WinUpdateEvent>::const_iterator i;
+            for(i = WinUpdateEventQueue.begin();
+                i != WinUpdateEventQueue.end(); i++) {
                 if(!i->IsEmpty() && window == i->GetWindow()) {
                     count++;
                     if(count == 2)
@@ -588,22 +588,22 @@ void TVPPostWindowUpdate(tTJSNI_BaseWindow *window) {
     }
 
     // put into queue.
-    TVPWinUpdateEventQueue.emplace_back(window);
+    WinUpdateEventQueue.emplace_back(window);
 
     // make sure that the event is to be delivered.
-    TVPInvokeEvents();
+    InvokeTJSEvents();
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPRemoveWindowUpdate
+// RemoveWindowUpdate
 //---------------------------------------------------------------------------
-void TVPRemoveWindowUpdate(tTJSNI_BaseWindow *window) {
+void RemoveWindowUpdate(tTJSNI_BaseWindow *window) {
     // removes all window update events from queue.
-    if(TVPWinUpdateEventQueue.size()) {
-        std::vector<tTVPWinUpdateEvent>::iterator i;
-        for(i = TVPWinUpdateEventQueue.begin();
-            i != TVPWinUpdateEventQueue.end(); i++) {
+    if(WinUpdateEventQueue.size()) {
+        std::vector<WinUpdateEvent>::iterator i;
+        for(i = WinUpdateEventQueue.begin();
+            i != WinUpdateEventQueue.end(); i++) {
             if(!i->IsEmpty() && window == i->GetWindow())
                 i->MarkEmpty();
         }
@@ -612,74 +612,74 @@ void TVPRemoveWindowUpdate(tTJSNI_BaseWindow *window) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPDeliverWindowUpdateEvents
+// DeliverWindowUpdateEvents
 //---------------------------------------------------------------------------
-void TVPDeliverWindowUpdateEvents() {
-    if(TVPWindowUpdateEventsDelivering)
+void DeliverWindowUpdateEvents() {
+    if(WindowUpdateEventsDelivering)
         return; // does not allow re-entering
     // ── 重绘调度探针（仅 KRKR_RENDER_PROBE）：
     // 二次打开若此处一直有 non-empty queue 却被投递，但 RTProbe 无 blit
     //   -> win update 在投递、失败在 UpdateContent/Show 段；
     // 若此处始终空/不被调用                        ->
     // 游戏/脚本根本没请求重绘（RequestUpdate 未发生）。
-    TVPWindowUpdateEventsDelivering = true;
+    WindowUpdateEventsDelivering = true;
 
     try {
-        for(tjs_uint i = 0; i < TVPWinUpdateEventQueue.size(); i++) {
-            if(!TVPWinUpdateEventQueue[i].IsEmpty())
-                TVPWinUpdateEventQueue[i].Deliver();
+        for(tjs_uint i = 0; i < WinUpdateEventQueue.size(); i++) {
+            if(!WinUpdateEventQueue[i].IsEmpty())
+                WinUpdateEventQueue[i].Deliver();
         }
     } catch(...) {
-        TVPWinUpdateEventQueue.clear();
-        TVPWindowUpdateEventsDelivering = false;
+        WinUpdateEventQueue.clear();
+        WindowUpdateEventsDelivering = false;
         throw;
     }
-    TVPWinUpdateEventQueue.clear();
-    TVPWindowUpdateEventsDelivering = false;
+    WinUpdateEventQueue.clear();
+    WindowUpdateEventsDelivering = false;
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 // Input Event related
 //---------------------------------------------------------------------------
-tjs_int TVPInputEventTagMax = 0;
+tjs_int InputEventTagMax = 0;
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPPostInputEvent
+// PostInputEvent
 //---------------------------------------------------------------------------
-void TVPPostInputEvent(tTVPBaseInputEvent *ev, tjs_uint32 flags) {
+void PostInputEvent(BaseInputEvent *ev, tjs_uint32 flags) {
     // flag check
     if((flags & TVP_EPT_DISCARDABLE) &&
-       (TVPEventDisabled || TVPGetSystemEventDisabledState())) {
+       (EventDisabled || GetSystemEventDisabledState())) {
         delete ev;
         return;
     }
 
     if(flags & TVP_EPT_REMOVE_POST) {
         // cancel previously posted events
-        TVPCancelInputEvents(ev->GetSource(), ev->GetTag());
+        CancelInputEvents(ev->GetSource(), ev->GetTag());
     }
 
     // push into the event queue
-    TVPInputEventQueue.push_back(ev);
+    InputEventQueue.push_back(ev);
 
     // make sure that the event is to be delivered.
-    TVPInvokeEvents();
+    InvokeTJSEvents();
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCancelInputEvents
+// CancelInputEvents
 //---------------------------------------------------------------------------
-void TVPCancelInputEvents(void *source) {
+void CancelInputEvents(void *source) {
     // removes all evens which have the same source
-    if(TVPInputEventQueue.size()) {
-        std::vector<tTVPBaseInputEvent *>::iterator i;
-        for(i = TVPInputEventQueue.begin(); i != TVPInputEventQueue.end();) {
+    if(InputEventQueue.size()) {
+        std::vector<BaseInputEvent *>::iterator i;
+        for(i = InputEventQueue.begin(); i != InputEventQueue.end();) {
             if(source == (*i)->GetSource()) {
-                tTVPBaseInputEvent *ev = *i;
-                i = TVPInputEventQueue.erase(i);
+                BaseInputEvent *ev = *i;
+                i = InputEventQueue.erase(i);
                 delete ev;
             } else {
                 i++;
@@ -689,14 +689,14 @@ void TVPCancelInputEvents(void *source) {
 }
 
 //---------------------------------------------------------------------------
-void TVPCancelInputEvents(void *source, tjs_int tag) {
+void CancelInputEvents(void *source, tjs_int tag) {
     // removes all evens which have the same source and the same tag
-    if(TVPInputEventQueue.size()) {
-        std::vector<tTVPBaseInputEvent *>::iterator i;
-        for(i = TVPInputEventQueue.begin(); i != TVPInputEventQueue.end();) {
+    if(InputEventQueue.size()) {
+        std::vector<BaseInputEvent *>::iterator i;
+        for(i = InputEventQueue.begin(); i != InputEventQueue.end();) {
             if(source == (*i)->GetSource() && tag == (*i)->GetTag()) {
-                tTVPBaseInputEvent *ev = *i;
-                i = TVPInputEventQueue.erase(i);
+                BaseInputEvent *ev = *i;
+                i = InputEventQueue.erase(i);
                 delete ev;
             } else {
                 i++;
@@ -707,15 +707,15 @@ void TVPCancelInputEvents(void *source, tjs_int tag) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPGetInputEventCount
+// GetInputEventCount
 //---------------------------------------------------------------------------
-tjs_int TVPGetInputEventCount() { return (tjs_int)TVPInputEventQueue.size(); }
+tjs_int GetInputEventCount() { return (tjs_int)InputEventQueue.size(); }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCreateEventObject
+// CreateEventObject
 //---------------------------------------------------------------------------
-iTJSDispatch2 *TVPCreateEventObject(const tjs_char *type,
+iTJSDispatch2 *CreateEventObject(const tjs_char *type,
                                     iTJSDispatch2 *targthis,
                                     iTJSDispatch2 *targ) {
     // create a dictionary object for event dispatching ( to "action"
@@ -730,7 +730,7 @@ iTJSDispatch2 *TVPCreateEventObject(const tjs_char *type,
         if(TJS_FAILED(object->PropSet(TJS_MEMBERENSURE | TJS_IGNOREPROP,
                                       type_name.c_str(), type_name.GetHint(),
                                       &val, object)))
-            TVPThrowInternalError;
+            KRKR_THROW_INTERNAL_ERROR;
     }
 
     {
@@ -738,7 +738,7 @@ iTJSDispatch2 *TVPCreateEventObject(const tjs_char *type,
         if(TJS_FAILED(object->PropSet(TJS_MEMBERENSURE | TJS_IGNOREPROP,
                                       target_name.c_str(),
                                       target_name.GetHint(), &val, object)))
-            TVPThrowInternalError;
+            KRKR_THROW_INTERNAL_ERROR;
     }
 
     return object;
@@ -746,42 +746,42 @@ iTJSDispatch2 *TVPCreateEventObject(const tjs_char *type,
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-ttstr TVPActionName(TJS_W("action"));
+ttstr ActionName(TJS_W("action"));
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 // Continuous Event Delivering related
 //---------------------------------------------------------------------------
-bool TVPProcessContinuousHandlerEventFlag = false;
-static std::vector<tTVPContinuousEventCallbackIntf *> TVPContinuousEventVector;
-static std::vector<tTJSVariantClosure> TVPContinuousHandlerVector;
-static bool TVPContinuousEventProcessing = false;
+bool ProcessContinuousHandlerEventFlag = false;
+static std::vector<ContinuousEventCallbackIntf *> continuousEventVector;
+static std::vector<tTJSVariantClosure> continuousHandlerVector;
+static bool ContinuousEventProcessing = false;
 
-static void TVPDestroyContinuousHandlerVector() {
+static void DestroyContinuousHandlerVector() {
     spdlog::info("at-exit PREPARE[2/4]: DestroyContinuousHandlerVector begin");
     std::vector<tTJSVariantClosure>::iterator i;
-    for(i = TVPContinuousHandlerVector.begin();
-        i != TVPContinuousHandlerVector.end(); i++) {
+    for(i = continuousHandlerVector.begin();
+        i != continuousHandlerVector.end(); i++) {
         i->Release();
     }
-    TVPContinuousHandlerVector.clear();
+    continuousHandlerVector.clear();
 }
 
-static tTVPAtExit
-    TVPDestroyContinuousHandlerVectorAtExit(KRKR_ATEXIT_PRI_PREPARE,
-                                            TVPDestroyContinuousHandlerVector);
+static AtExit
+    DestroyContinuousHandlerVectorAtExit(KRKR_ATEXIT_PRI_PREPARE,
+                                            DestroyContinuousHandlerVector);
 
 //---------------------------------------------------------------------------
-void TVPAddContinuousEventHook(tTVPContinuousEventCallbackIntf *cb) {
-    TVPBeginContinuousEvent();
-    TVPContinuousEventVector.push_back(cb);
+void AddContinuousEventHook(ContinuousEventCallbackIntf *cb) {
+    BeginContinuousEvent();
+    continuousEventVector.push_back(cb);
 }
 
 //---------------------------------------------------------------------------
-void TVPRemoveContinuousEventHook(tTVPContinuousEventCallbackIntf *cb) {
-    std::vector<tTVPContinuousEventCallbackIntf *>::iterator i;
-    for(i = TVPContinuousEventVector.begin();
-        i != TVPContinuousEventVector.end();) {
+void RemoveContinuousEventHook(ContinuousEventCallbackIntf *cb) {
+    std::vector<ContinuousEventCallbackIntf *>::iterator i;
+    for(i = continuousEventVector.begin();
+        i != continuousEventVector.end();) {
         if(cb == *i)
             *i = nullptr; // simply assign a nullptr
         i++;
@@ -794,16 +794,16 @@ static void _TVPDeliverContinuousEvent() // internal
     krkr::utils::StartTickCount();
     tjs_uint64 tick = krkr::utils::GetTickCount();
 
-    if(TVPContinuousEventVector.size()) {
+    if(continuousEventVector.size()) {
         bool emptyflag = false;
-        for(tjs_uint32 i = 0; i < TVPContinuousEventVector.size(); i++) {
+        for(tjs_uint32 i = 0; i < continuousEventVector.size(); i++) {
             // note that the handler can remove itself while the event
-            if(TVPContinuousEventVector[i])
-                TVPContinuousEventVector[i]->OnContinuousCallback(tick);
+            if(continuousEventVector[i])
+                continuousEventVector[i]->OnContinuousCallback(tick);
             else
                 emptyflag = true;
 
-            if(TVPExclusiveEventPosted)
+            if(ExclusiveEventPosted)
                 return; // check exclusive events
         }
 
@@ -811,42 +811,42 @@ static void _TVPDeliverContinuousEvent() // internal
             // the array has empty cell
 
             // eliminate empty
-            std::vector<tTVPContinuousEventCallbackIntf *>::iterator i;
-            for(i = TVPContinuousEventVector.begin();
-                i != TVPContinuousEventVector.end();) {
+            std::vector<ContinuousEventCallbackIntf *>::iterator i;
+            for(i = continuousEventVector.begin();
+                i != continuousEventVector.end();) {
                 if(*i == nullptr)
-                    i = TVPContinuousEventVector.erase(i);
+                    i = continuousEventVector.erase(i);
                 else
                     i++;
             }
         }
     }
 
-    if(!TVPEventDisabled && TVPContinuousHandlerVector.size()) {
+    if(!EventDisabled && continuousHandlerVector.size()) {
         bool emptyflag = false;
         tTJSVariant vtick((tjs_int64)tick);
         tTJSVariant *pvtick = &vtick;
-        for(tjs_uint i = 0; i < TVPContinuousHandlerVector.size(); i++) {
-            if(TVPContinuousHandlerVector[i].Object) {
+        for(tjs_uint i = 0; i < continuousHandlerVector.size(); i++) {
+            if(continuousHandlerVector[i].Object) {
                 tjs_error er;
                 try {
-                    er = TVPContinuousHandlerVector[i].FuncCall(
+                    er = continuousHandlerVector[i].FuncCall(
                         0, nullptr, nullptr, nullptr, 1, &pvtick, nullptr);
                 } catch(...) {
                     // failed
-                    TVPContinuousHandlerVector[i].Release();
-                    TVPContinuousHandlerVector[i].Object =
-                        TVPContinuousHandlerVector[i].ObjThis = nullptr;
+                    continuousHandlerVector[i].Release();
+                    continuousHandlerVector[i].Object =
+                        continuousHandlerVector[i].ObjThis = nullptr;
                     throw;
                 }
                 if(TJS_FAILED(er)) {
                     // failed
-                    TVPContinuousHandlerVector[i].Release();
-                    TVPContinuousHandlerVector[i].Object =
-                        TVPContinuousHandlerVector[i].ObjThis = nullptr;
+                    continuousHandlerVector[i].Release();
+                    continuousHandlerVector[i].Object =
+                        continuousHandlerVector[i].ObjThis = nullptr;
                     emptyflag = true;
                 }
-                if(TVPExclusiveEventPosted)
+                if(ExclusiveEventPosted)
                     return; // check exclusive events
             } else {
                 emptyflag = true;
@@ -858,11 +858,11 @@ static void _TVPDeliverContinuousEvent() // internal
 
             // eliminate empty
             std::vector<tTJSVariantClosure>::iterator i;
-            for(i = TVPContinuousHandlerVector.begin();
-                i != TVPContinuousHandlerVector.end();) {
+            for(i = continuousHandlerVector.begin();
+                i != continuousHandlerVector.end();) {
                 if(!i->Object) {
                     i->Release();
-                    i = TVPContinuousHandlerVector.erase(i);
+                    i = continuousHandlerVector.erase(i);
                 } else {
                     i++;
                 }
@@ -870,25 +870,25 @@ static void _TVPDeliverContinuousEvent() // internal
         }
     }
 
-    if(!TVPContinuousEventVector.size() && !TVPContinuousHandlerVector.size())
-        TVPEndContinuousEvent();
+    if(!continuousEventVector.size() && !continuousHandlerVector.size())
+        EndContinuousEvent();
 }
 
 //---------------------------------------------------------------------------
-void TVPDeliverContinuousEvent() {
-    if(TVPContinuousEventProcessing)
+void DeliverContinuousEvent() {
+    if(ContinuousEventProcessing)
         return;
     // ── 脚本驱动探针（仅
     // KRKR_RENDER_PROBE）：连续处理器/连续事件是否注册并在跑。
     // 二次打开若两向量都空且不再增长 ->
     // 游戏没注册每帧连续驱动（脚本推进/连续重绘未建立）。
-    TVPContinuousEventProcessing = true;
+    ContinuousEventProcessing = true;
     try {
         try {
             try {
                 _TVPDeliverContinuousEvent();
             } catch(...) {
-                TVPContinuousEventProcessing = false;
+                ContinuousEventProcessing = false;
                 throw;
             }
         }
@@ -896,28 +896,28 @@ void TVPDeliverContinuousEvent() {
     }
     TVP_CATCH_AND_SHOW_SCRIPT_EXCEPTION(TJS_W("continuous event"));
 
-    TVPContinuousEventProcessing = false;
+    ContinuousEventProcessing = false;
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void TVPAddContinuousHandler(tTJSVariantClosure clo) {
+void AddContinuousHandler(tTJSVariantClosure clo) {
     std::vector<tTJSVariantClosure>::iterator i;
-    i = std::find(TVPContinuousHandlerVector.begin(),
-                  TVPContinuousHandlerVector.end(), clo);
-    if(i == TVPContinuousHandlerVector.end()) {
-        TVPBeginContinuousEvent();
+    i = std::find(continuousHandlerVector.begin(),
+                  continuousHandlerVector.end(), clo);
+    if(i == continuousHandlerVector.end()) {
+        BeginContinuousEvent();
         clo.AddRef();
-        TVPContinuousHandlerVector.emplace_back(clo);
+        continuousHandlerVector.emplace_back(clo);
     }
 }
 
 //---------------------------------------------------------------------------
-void TVPRemoveContinuousHandler(tTJSVariantClosure clo) {
+void RemoveContinuousHandler(tTJSVariantClosure clo) {
     std::vector<tTJSVariantClosure>::iterator i;
-    i = std::find(TVPContinuousHandlerVector.begin(),
-                  TVPContinuousHandlerVector.end(), clo);
-    if(i != TVPContinuousHandlerVector.end()) {
+    i = std::find(continuousHandlerVector.begin(),
+                  continuousHandlerVector.end(), clo);
+    if(i != continuousHandlerVector.end()) {
         i->Release();
         i->Object = i->ObjThis = nullptr;
     }
@@ -935,18 +935,18 @@ void TVPRemoveContinuousHandler(tTJSVariantClosure clo) {
 // these are to reduce memory usage, like garbage collection, cache
 // cleaning, or etc ...
 //---------------------------------------------------------------------------
-static std::vector<tTVPCompactEventCallbackIntf *> TVPCompactEventVector;
+static std::vector<CompactEventCallbackIntf *> CompactEventVector;
 bool enableGlobalHeapCompaction = false;
 
 //---------------------------------------------------------------------------
-void TVPAddCompactEventHook(tTVPCompactEventCallbackIntf *cb) {
-    TVPCompactEventVector.push_back(cb);
+void AddCompactEventHook(CompactEventCallbackIntf *cb) {
+    CompactEventVector.push_back(cb);
 }
 
 //---------------------------------------------------------------------------
-void TVPRemoveCompactEventHook(tTVPCompactEventCallbackIntf *cb) {
-    std::vector<tTVPCompactEventCallbackIntf *>::iterator i;
-    for(i = TVPCompactEventVector.begin(); i != TVPCompactEventVector.end();) {
+void RemoveCompactEventHook(CompactEventCallbackIntf *cb) {
+    std::vector<CompactEventCallbackIntf *>::iterator i;
+    for(i = CompactEventVector.begin(); i != CompactEventVector.end();) {
         if(cb == *i)
             *i = nullptr; // simply assign a nullptr
         i++;
@@ -954,19 +954,19 @@ void TVPRemoveCompactEventHook(tTVPCompactEventCallbackIntf *cb) {
 }
 
 //---------------------------------------------------------------------------
-// TVPDoSaveSystemVariables 的声明由 SystemImpl.h 提供（已在上面 include）。
+// DoSaveSystemVariables 的声明由 SystemImpl.h 提供（已在上面 include）。
 
-void TVPDeliverCompactEvent(tjs_int level) {
+void DeliverCompactEvent(tjs_int level) {
     // must be called by each platforms's implementation
-    // std::vector<tTVPCompactEventCallbackIntf *>::iterator i;
-    if(TVPCompactEventVector.size()) {
+    // std::vector<CompactEventCallbackIntf *>::iterator i;
+    if(CompactEventVector.size()) {
         bool emptyflag = false;
-        for(tjs_uint i = 0; i < TVPCompactEventVector.size(); i++) {
+        for(tjs_uint i = 0; i < CompactEventVector.size(); i++) {
             // note that the handler can remove itself while the event
             try {
                 try {
-                    if(TVPCompactEventVector[i])
-                        TVPCompactEventVector[i]->OnCompact(level);
+                    if(CompactEventVector[i])
+                        CompactEventVector[i]->OnCompact(level);
                     else
                         emptyflag = true;
                 }
@@ -980,17 +980,17 @@ void TVPDeliverCompactEvent(tjs_int level) {
             // the array has empty cell
 
             // eliminate empty
-            std::vector<tTVPCompactEventCallbackIntf *>::iterator i;
-            for(i = TVPCompactEventVector.begin();
-                i != TVPCompactEventVector.end();) {
+            std::vector<CompactEventCallbackIntf *>::iterator i;
+            for(i = CompactEventVector.begin();
+                i != CompactEventVector.end();) {
                 if(*i == nullptr)
-                    i = TVPCompactEventVector.erase(i);
+                    i = CompactEventVector.erase(i);
                 else
                     i++;
             }
         }
     }
-    TVPDoSaveSystemVariables();
+    DoSaveSystemVariables();
 #if 0
     if( level >= TVP_COMPACT_LEVEL_MAX && enableGlobalHeapCompaction )
     {	// Do compact CRT and Global Heap
@@ -1020,7 +1020,7 @@ tTJSNI_AsyncTrigger::tTJSNI_AsyncTrigger() {
     IdlePendingCount = 0;
     Mode = atmNormal;
     ActionOwner.Object = ActionOwner.ObjThis = nullptr;
-    ActionName = TVPActionName;
+    ActionName = ActionName;
 }
 
 //---------------------------------------------------------------------------
@@ -1044,7 +1044,7 @@ tjs_error tTJSNI_AsyncTrigger::Construct(tjs_int numparams, tTJSVariant **param,
 
 //---------------------------------------------------------------------------
 void tTJSNI_AsyncTrigger::Invalidate() {
-    TVPCancelSourceEvents(Owner);
+    CancelSourceEvents(Owner);
     Owner = nullptr;
 
     ActionOwner.Release();
@@ -1060,7 +1060,7 @@ void tTJSNI_AsyncTrigger::Trigger() {
         if(Cached) {
             // remove undelivered events from queue when "Cached" flag
             // is set
-            TVPCancelSourceEvents(Owner);
+            CancelSourceEvents(Owner);
         }
         static ttstr eventname(TJS_W("onFire"));
 
@@ -1070,7 +1070,7 @@ void tTJSNI_AsyncTrigger::Trigger() {
         if(Mode == atmAtIdle)
             flags |= TVP_EPT_IDLE; // fire idle event
 
-        TVPPostEvent(Owner, Owner, eventname, 0, flags, 0, nullptr);
+        PostTJSEvent(Owner, Owner, eventname, 0, flags, 0, nullptr);
     }
 }
 
@@ -1078,7 +1078,7 @@ void tTJSNI_AsyncTrigger::Trigger() {
 void tTJSNI_AsyncTrigger::Cancel() {
     // cancel event
     if(Owner)
-        TVPCancelSourceEvents(Owner);
+        CancelSourceEvents(Owner);
     IdlePendingCount = 0;
 }
 
@@ -1210,7 +1210,7 @@ tTJSNativeInstance *tTJSNC_AsyncTrigger::CreateNativeInstance() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-tTJSNativeClass *TVPCreateNativeClass_AsyncTrigger() {
+tTJSNativeClass *CreateNativeClass_AsyncTrigger() {
     return new tTJSNC_AsyncTrigger();
 }
 //---------------------------------------------------------------------------

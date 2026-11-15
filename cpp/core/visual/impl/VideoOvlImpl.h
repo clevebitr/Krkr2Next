@@ -33,7 +33,7 @@ class tTJSNI_VideoOverlay : public tTJSNI_BaseVideoOverlay {
 
     iTVPVideoOverlay *VideoOverlay;
     iTVPVideoOverlay *CachedOverlay = nullptr;
-    tTVPVideoOverlayMode CachedOverlayMode;
+    VideoOverlayMode CachedOverlayMode;
     ttstr CachedPlayingFile;
 
     tTVPRect Rect;
@@ -45,10 +45,10 @@ class tTJSNI_VideoOverlay : public tTJSNI_BaseVideoOverlay {
     // overlay object
     NativeEventQueue<tTJSNI_VideoOverlay> EventQueue;
 
-    tTVPLocalTempStorageHolder *LocalTempStorageHolder;
+    LocalTempStorageHolder *LocalTempStorageHolder;
     class tTJSNI_BaseLayer *Layer1;
     class tTJSNI_BaseLayer *Layer2;
-    tTVPVideoOverlayMode
+    VideoOverlayMode
         Mode; //!< Modeの動的な変更は出来ない。open前にセットしておくこと
     bool Loop;
 
@@ -136,8 +136,8 @@ public:
     void SetLayer2(tTJSNI_BaseLayer *l);
     tTJSNI_BaseLayer *GetLayer2() { return Layer2; }
 
-    void SetMode(tTVPVideoOverlayMode m);
-    [[nodiscard]] tTVPVideoOverlayMode GetMode() const override { return Mode; }
+    void SetMode(VideoOverlayMode m);
+    [[nodiscard]] VideoOverlayMode GetMode() const override { return Mode; }
 
     tjs_real GetPlayRate();
     void SetPlayRate(tjs_real r);

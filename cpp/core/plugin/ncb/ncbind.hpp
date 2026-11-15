@@ -161,11 +161,11 @@ public:
 	static AdaptorT *GetAdaptor(iTJSDispatch2 *obj, bool err = false) {
 		iTJSNativeInstance* adp = nullptr;
 		if (!obj) {
-			if (err) TVPThrowExceptionMessage(TJS_W("No instance."));
+			if (err) ThrowExceptionMessage(TJS_W("No instance."));
 			return 0;
 		}
 		if (TJS_FAILED(obj->NativeInstanceSupport(TJS_NIS_GETINSTANCE, ClassInfoT::GetID(), &adp))) {
-			if (err) TVPThrowExceptionMessage(TJS_W("Invalid instance type."));
+			if (err) ThrowExceptionMessage(TJS_W("Invalid instance type."));
 			return 0;
 		}
 		return static_cast<AdaptorT*>(adp);
@@ -191,13 +191,13 @@ public:
 		if (adp) {
 			if (adp->_instance) adp->_deleteInstance();
 		} else if (!(adp = new AdaptorT())) {
-			if (err) TVPThrowExceptionMessage(TJS_W("Create adaptor failed."));
+			if (err) ThrowExceptionMessage(TJS_W("Create adaptor failed."));
 			return false;
 		}
 		adp->_instance = instance;
 		auto *ni = static_cast<iTJSNativeInstance*>(adp);
 		if (TJS_FAILED(obj->NativeInstanceSupport(TJS_NIS_REGISTER, ClassInfoT::GetID(), &ni))) {
-			if (err) TVPThrowExceptionMessage(TJS_W("Adaptor registration failed."));
+			if (err) ThrowExceptionMessage(TJS_W("Adaptor registration failed."));
 			return false;
 		}
 		return true;
@@ -207,18 +207,18 @@ public:
 	static iTJSDispatch2* CreateAdaptor(NativeClassT *inst, bool sticky = false, bool err = false) {
 		typename ClassInfoT::ClassObjectT *clsobj = ClassInfoT::GetClassObject();
 		if (!clsobj) {
-			if (err) TVPThrowExceptionMessage(TJS_W("No class object."));
+			if (err) ThrowExceptionMessage(TJS_W("No class object."));
 			return nullptr;
 		}
 
-		iTJSDispatch2 *global = TVPGetScriptDispatch(), *obj = nullptr;
+		iTJSDispatch2 *global = GetScriptDispatch(), *obj = nullptr;
 		tTJSVariant dummy, *param = &dummy;
 		// 引数が1つでかつvoidであれば実インスタンスをnewしない動作になる
 		tjs_error r = clsobj->CreateNew(0, 0, 0, &obj, 1, &param, global);
 		if (global) global->Release();
 
 		if (TJS_FAILED(r) || !obj) {
-			if (err) TVPThrowExceptionMessage(TJS_W("Can't create instance"));
+			if (err) ThrowExceptionMessage(TJS_W("Can't create instance"));
 			return nullptr;
 		}
 		AdaptorT *adp = GetAdaptor(obj, err);
@@ -624,7 +624,7 @@ struct ncbPropAccessor {
 	}
     ncbPropAccessor(NameT name) {
 	    tTJSVariant val;
-	    iTJSDispatch2 *global = TVPGetScriptDispatch();
+	    iTJSDispatch2 *global = GetScriptDispatch();
 	    if (global) {
 	        global->PropGet(0, name, nullptr, &val, global);
 		}
@@ -1121,7 +1121,7 @@ protected:
 			try {
 				FunctorT fnct(_result, _numparams, _param);
 				if (!(inst = CallerT::Factory(fnct, CallerT::tTypeTag<ClassT>(), CallerT::tTypeTag<typename FunctorT::TraitsT::ArgsT>()))) {
-					TVPThrowExceptionMessage(TJS_W("NativeClassInstance creation faild."));
+					ThrowExceptionMessage(TJS_W("NativeClassInstance creation faild."));
 					return TJS_E_FAIL;
 				}
 				if (!ncbInstanceAdaptor<ClassT>::SetNativeInstance(_objthis, inst)) {
@@ -1140,7 +1140,7 @@ protected:
 			typedef ncbInstanceAdaptor<ClassT> AdaptorT;
 			try {
 				if (!(inst = CallerT::Factory(FunctorT(_result, _numparams, _param, _objthis), m))) {
-					TVPThrowExceptionMessage(TJS_W("NativeClassInstance creation faild."));
+					ThrowExceptionMessage(TJS_W("NativeClassInstance creation faild."));
 					return TJS_E_FAIL;
 				}
 				if (!ncbInstanceAdaptor<ClassT>::SetNativeInstance(_objthis, inst)) {
@@ -1333,7 +1333,7 @@ struct ncbNativeClassMethod : public ncbNativeClassMethodBase {
 
 	/// constructor
 	ncbNativeClassMethod(MethodT m) : ncbNativeClassMethodBase(nitMethod), _method(m) {
-		if (!_method) TVPThrowExceptionMessage(TJS_W("No method pointer."));
+		if (!_method) ThrowExceptionMessage(TJS_W("No method pointer."));
 	} 
 
 	/// FuncCall実装
@@ -1371,7 +1371,7 @@ struct ncbNativeClassConstructor : public ncbNativeClassMethodBase {
 	/// constructor
 	ncbNativeClassConstructor(MethodT m) : ncbNativeClassMethodBase(nitMethod), _method(m) {
 		if (!_method && (int)CommandT::InvokeSelect == (int)doInvokeBase::ivsFactory)
-			TVPThrowExceptionMessage(TJS_W("No factory pointer."));
+			ThrowExceptionMessage(TJS_W("No factory pointer."));
 	}
 
 	/// FuncCall実装
@@ -1405,7 +1405,7 @@ struct ncbNativeClassFactory : public ncbNativeClassMethodBase {
 
 	/// constructor
 	ncbNativeClassFactory(MethodT m) : ncbNativeClassMethodBase(nitMethod), _method(m) {
-		if (!_method) TVPThrowExceptionMessage(TJS_W("No factory pointer."));
+		if (!_method) ThrowExceptionMessage(TJS_W("No factory pointer."));
 	}
 
 	/// FuncCall実装
@@ -1519,7 +1519,7 @@ struct ncbRawCallbackMethod<
 		: ncbNativeClassMethodBase(nitMethod), // TJSオブジェクト的には Function
 		  _callback(m), _flag(f)
 	{
-		if (!_callback) TVPThrowExceptionMessage(TJS_W("No callback pointer."));
+		if (!_callback) ThrowExceptionMessage(TJS_W("No callback pointer."));
 	}
 
 	/// FuncCall実装
@@ -1796,7 +1796,7 @@ public:
 	void SubClass(NAME n, TypeWrap<CLASS>) {
 		typedef ncbSubClassItem<CLASS> SubClassT;
 		if (!SubClassT::Setup(GetName(n), _isRegist))
-			TVPThrowExceptionMessage(TJS_W("SubClass registration failed."));
+			ThrowExceptionMessage(TJS_W("SubClass registration failed."));
 		DoItem(GetName(n), SubClassT::Create(_isRegist));
 	}
 
@@ -1865,7 +1865,7 @@ struct ncbRegistNativeClass : public ncbRegistNativeClassBase {
 
 		// ncbClassInfoに登録
 		if (!ClassInfoT::Set(_className, id, _classobj))
-			TVPThrowExceptionMessage(TJS_W("Already registerd class."));
+			ThrowExceptionMessage(TJS_W("Already registerd class."));
 
 		// クラスオブジェクトにIDを設定
 		TJSNativeClassSetClassID(_classobj, id);
@@ -1896,7 +1896,7 @@ struct ncbRegistNativeClass : public ncbRegistNativeClassBase {
 		_AddDummyConstructor();
 
 		// TJS のグローバルオブジェクトを取得する
-		iTJSDispatch2 *global = TVPGetScriptDispatch();
+		iTJSDispatch2 *global = GetScriptDispatch();
 		if (!global) {
 			NCB_WARN_W("No Global Dispatch, Regist failed.");
 			return;
@@ -1930,7 +1930,7 @@ struct ncbRegistNativeClass : public ncbRegistNativeClassBase {
 
 	/// プラグイン開放時にクラスオブジェクトをリリースする
 	void UnregistEnd() override {
-		iTJSDispatch2 *global = TVPGetScriptDispatch();
+		iTJSDispatch2 *global = GetScriptDispatch();
 		if (global) {
 			global->DeleteMember(0, _className, 0, global);
 			global->Release();
@@ -2020,7 +2020,7 @@ struct ncbAttachTJS2Class : public ncbRegistNativeClassBase {
 	void RegistBegin() override {
 
 		// TJS のグローバルオブジェクトを取得する
-		_global = TVPGetScriptDispatch();
+		_global = GetScriptDispatch();
 		_tjs2ClassObj = GetGlobalObject(_tjs2ClassName, _global);
 
 		// クラスIDを生成
@@ -2028,7 +2028,7 @@ struct ncbAttachTJS2Class : public ncbRegistNativeClassBase {
 
 		// ncbClassInfoに登録
 		if (!ClassInfoT::Set(_className, id, 0)) {
-			TVPThrowExceptionMessage(TJS_W("Already registerd class:"), ttstr(_className));
+			ThrowExceptionMessage(TJS_W("Already registerd class:"), ttstr(_className));
 		}
 	}
 
@@ -2039,7 +2039,7 @@ struct ncbAttachTJS2Class : public ncbRegistNativeClassBase {
 	void RegistItem(NameT name, ItemT item) override {
 		if (!item) return;
 		if (name == _className) {
-			TVPThrowExceptionMessage(TJS_W("Constructor attached: "), ttstr(_className));
+			ThrowExceptionMessage(TJS_W("Constructor attached: "), ttstr(_className));
 		}
 		iTJSDispatch2 *dsp = item->GetDispatch();
 		tTJSVariant val(dsp);
@@ -2057,7 +2057,7 @@ struct ncbAttachTJS2Class : public ncbRegistNativeClassBase {
 
 	void UnregistBegin() override {
 		// クラスオブジェクトを取得
-		iTJSDispatch2 *global = TVPGetScriptDispatch();
+		iTJSDispatch2 *global = GetScriptDispatch();
 		if (global) {
 			_tjs2ClassObj = GetGlobalObject(_tjs2ClassName, global);
 			global->Release();
@@ -2085,7 +2085,7 @@ protected:
 		if (global) global->PropGet(0, name, nullptr, &val, global);
 		else {
 			NCB_WARN_W("No Global Dispatch.");
-			TVPExecuteExpression(name, &val);
+			ExecuteExpression(name, &val);
 		}
 		return val.AsObjectNoAddRef();
 	}
@@ -2236,13 +2236,13 @@ protected:
 	void Regist()   const override {
 		// クラスオブジェクト取得
 		tTJSVariant val;
-		TVPExecuteExpression(ttstr(_expName ? _expName : _className), &val);
+		ExecuteExpression(ttstr(_expName ? _expName : _className), &val);
 		if (val.Type() != tvtObject)
-			TVPThrowExceptionMessage(TJS_W("Require class not found."));
+			ThrowExceptionMessage(TJS_W("Require class not found."));
 
 		// IDとクラスオブジェクトを登録
 		if (!ClassInfoT::Set(_className, TJSFindNativeClassID(_className), val.AsObjectNoAddRef()))
-			TVPThrowExceptionMessage(TJS_W("Already registerd class."));
+			ThrowExceptionMessage(TJS_W("Already registerd class."));
 	}
 	void Unregist() const override {}
 private:
@@ -2370,7 +2370,7 @@ protected:
 private:
 	static iTJSDispatch2* GetDispatch(NameT attach) {
 		iTJSDispatch2 *ret = nullptr;
-		iTJSDispatch2 *global = TVPGetScriptDispatch();
+		iTJSDispatch2 *global = GetScriptDispatch();
 		if (!global) return nullptr;
 		try {
 			if (!attach) {
@@ -2387,7 +2387,7 @@ private:
 				} else {
 					// 複数階層奥の場合は面倒なのでevalで誤魔化す
 					try {
-						TVPExecuteExpression(ttstr(attach), &val);
+						ExecuteExpression(ttstr(attach), &val);
 						er = TJS_S_OK;
 					} catch(...) {
 						er = TJS_E_MEMBERNOTFOUND;

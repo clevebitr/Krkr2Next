@@ -74,6 +74,6 @@ protected:
     tTJSNativeInstance *CreateNativeInstance() override;
 };
 
-extern tTJSNativeClass *TVPCreateNativeClass_Bitmap();
+extern tTJSNativeClass *CreateNativeClass_Bitmap();
 extern iTJSDispatch2 *TVPCreateBitmapObject();
 #endif // BitmapIntfH

@@ -147,7 +147,7 @@ static void *TVPAllocBitmapBits(tjs_uint size, tjs_uint width,
     CheckMemory();
     ptr = ptrorg = (tjs_uint8 *)malloc(allocbytes);
     if(!ptr)
-        TVPThrowExceptionMessage(
+        ThrowExceptionMessage(
             TVPCannotAllocateBitmapBits, TJS_W("at TVPAllocBitmapBits"),
             ttstr((tjs_int)allocbytes) + TJS_W("(") + ttstr((int)width) +
                 TJS_W("x") + ttstr((int)height) + TJS_W(")"));
@@ -202,11 +202,11 @@ static void TVPFreeBitmapBits(void *ptr) {
         // check sentinel
         if(~(*(tjs_uint32 *)(bptr - sizeof(tjs_uint32))) !=
            record->sentinel_backup1)
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("Layer bitmap: Buffer underrun detected. Check your "
                       "drawing code!"));
         if(~(*(tjs_uint32 *)(bptr + record->size)) != record->sentinel_backup2)
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("Layer bitmap: Buffer overrun detected. Check your "
                       "drawing code!"));
 
@@ -272,7 +272,7 @@ void tTVPBitmap::Allocate(tjs_uint width, tjs_uint height, tjs_uint bpp)
 		((bpp == 8) ? sizeof(RGBQUAD)* 256 : 0);
 	BitmapInfo = (_BITMAPINFO*)calloc(1, BitmapInfoSize);
 	//GlobalAlloc(GPTR, BitmapInfoSize);
-	if (!BitmapInfo) TVPThrowExceptionMessage(TVPCannotAllocateBitmapBits,
+	if (!BitmapInfo) ThrowExceptionMessage(TVPCannotAllocateBitmapBits,
 		TJS_W("allocating BITMAPINFOHEADER"), ttstr((tjs_int)BitmapInfoSize));
 
 	Width = width;
@@ -336,7 +336,7 @@ void * tTVPBitmap::GetScanLine(tjs_uint l) const
 {
 	if ((tjs_int)l >= BitmapInfo->bmiHeader.biHeight)
 	{
-		TVPThrowExceptionMessage(TVPScanLineRangeOver, ttstr((tjs_int)l),
+		ThrowExceptionMessage(TVPScanLineRangeOver, ttstr((tjs_int)l),
 			ttstr((tjs_int)BitmapInfo->bmiHeader.biHeight - 1));
 	}
 
@@ -368,7 +368,7 @@ void iTVPTexture2D::RecycleProcess() {
     _toDeleteTextures.clear();
     glFlush();
 }
-static tTVPAtExit TVPReleaseTexture2D(KRKR_ATEXIT_PRI_RELEASE + 500,
+static AtExit TVPReleaseTexture2D(KRKR_ATEXIT_PRI_RELEASE + 500,
                                       iTVPTexture2D::RecycleProcess);
 
 void iTVPTexture2D::Release() {
@@ -447,7 +447,7 @@ static const tjs_uint8 *_empty_line =
     (const tjs_uint8 *)(((intptr_t)(&__empty_line) + 15) & ~15);
 
 class tTVPSoftwareTexture2D_compress : public tTVPSoftwareTexture2D_static,
-                                       public tTVPContinuousEventCallbackIntf {
+                                       public ContinuousEventCallbackIntf {
 protected:
     tjs_int PixelFrameLife = 0;
 
@@ -459,7 +459,7 @@ protected:
         if(BmpData) {
             TVPFreeBitmapBits(BmpData);
             BmpData = nullptr;
-            TVPRemoveContinuousEventHook(this);
+            RemoveContinuousEventHook(this);
         }
     }
 
@@ -490,7 +490,7 @@ public:
             }
         }
         if(PixelFrameLife == 0)
-            TVPAddContinuousEventHook(this);
+            AddContinuousEventHook(this);
         PixelFrameLife = 3; // free pixel if not used in next 3 frames
         return BmpData;
     }
@@ -503,7 +503,7 @@ public:
             BmpData = nullptr;
         }
         PixelFrameLife = 0;
-        TVPRemoveContinuousEventHook(this);
+        RemoveContinuousEventHook(this);
     }
 
     uint32_t GetPoint(int x, int y) override {
@@ -901,7 +901,7 @@ public:
                 BPP = 32;
                 break;
             default:
-                TVPThrowExceptionMessage(TJS_W("unsupported texture format %1"),
+                ThrowExceptionMessage(TJS_W("unsupported texture format %1"),
                                          TJSIntegerToString((int)format));
                 break;
         }
@@ -936,7 +936,7 @@ public:
                 BPP = 32;
                 break;
             default:
-                TVPThrowExceptionMessage(
+                ThrowExceptionMessage(
                     TJS_W("unsupported texture format %1"),
                     TJSIntegerToString((int)tex->GetFormat()));
                 break;
@@ -2397,7 +2397,7 @@ public:
         // pitchBytes); else if (area_size < (1L << 24))
         // Func32::DoBoxBlurLoop(rctar, area, _tar->GetWidth(),
         // _tar->GetHeight(), (tjs_uint32*)line, pitchBytes); else
-        // 			TVPThrowExceptionMessage(TVPBoxBlurAreaMustBeSmallerThan16Million);
+        // 			ThrowExceptionMessage(TVPBoxBlurAreaMustBeSmallerThan16Million);
     }
 };
 
@@ -2710,7 +2710,7 @@ class tTVPSoftwareRenderManager : public iTVPRenderManager {
         };
     };
 
-    tTVPBBStretchType StretchType;
+    BBStretchType StretchType;
 
     struct SwsContext *img_convert_ctx;
     SwsContext *sws_opts;
@@ -3083,9 +3083,9 @@ public:
     void SetParameterInt(int id, int Value) override {
         switch(id) {
             case eParameters::StretchType:
-                StretchType = (tTVPBBStretchType)Value;
+                StretchType = (BBStretchType)Value;
                 if(StretchType > sizeof(cvFlags) / sizeof(cvFlags[0])) {
-                    StretchType = (tTVPBBStretchType)(sizeof(cvFlags) /
+                    StretchType = (BBStretchType)(sizeof(cvFlags) /
                                                           sizeof(cvFlags[0]) -
                                                       1);
                 }
@@ -4310,7 +4310,7 @@ public:
             return 1;
         if(refrect.left < 0 || refrect.top < 0 || refrect.right > sw ||
            refrect.bottom > sh)
-            TVPThrowExceptionMessage(TVPOutOfRectangle);
+            ThrowExceptionMessage(TVPOutOfRectangle);
 
         // multiply source rectangle points by 65536 (16.16
         // fixed-point) note that each pixel has actually 1.0 x 1.0
@@ -4460,8 +4460,8 @@ public:
             return 0;
         }
 
-        tTVPBBStretchType mode = /*param->mode*/ StretchType;
-        tTVPBBStretchType type = (tTVPBBStretchType)(mode & stTypeMask);
+        BBStretchType mode = /*param->mode*/ StretchType;
+        BBStretchType type = (BBStretchType)(mode & stTypeMask);
         // tTVPBBBltMethod method = param->method;
         //  make srccliprect
         tTVPRect srccliprect;
@@ -4934,7 +4934,7 @@ void TVPRegisterRenderManager(const char *name, iTVPRenderManager *(*func)()) {
 iTVPRenderManager *TVPGetRenderManager(const ttstr &name) {
     auto it = _RenderManagerFactory->find(name);
     if(it == _RenderManagerFactory->end()) {
-        TVPThrowExceptionMessage(TJS_W("unsupported renderer %1"), name);
+        ThrowExceptionMessage(TJS_W("unsupported renderer %1"), name);
     }
     if(it->second.second) {
         return it->second.second;

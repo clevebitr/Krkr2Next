@@ -147,7 +147,7 @@ void InitializeBaseSystems() {
     if(load_msgmap) {
         const tjs_char name_msgmap[] = TJS_W("msgmap.tjs");
         if(krkr::io::IsExistentStorage(name_msgmap))
-            TVPExecuteStorage(name_msgmap, nullptr, false, TJS_W(""));
+            krkr::base::ExecuteStorage(name_msgmap, nullptr, false, TJS_W(""));
     }
 }
 
@@ -177,7 +177,7 @@ void BeforeSystemInit() {
 
     // memory usage
     {
-        TVPMemoryInfo meminf;
+        MemoryInfo meminf;
         GetMemoryInfo(meminf);
         krkr::utils::PushEnvironNoise(&meminf, sizeof(meminf));
 
@@ -189,7 +189,7 @@ void BeforeSystemInit() {
             totalPhysMemory /= 2; // use half memory in small memory devices
         }
 
-        krkr::utils::AddImportantLog(TVPFormatMessage(TVPInfoTotalPhysicalMemory,
+        krkr::utils::AddImportantLog(krkr::base::FormatMessage(TVPInfoTotalPhysicalMemory,
                                             tjs_int64(totalPhysMemory)));
         if(totalPhysMemory > 256 * 1024 * 1024) {
             std::string str =
@@ -316,7 +316,7 @@ void AfterSystemInit() {
     if(_val != "software") {
         TVPGraphicSplitOperationType = gsotNone;
     } else {
-        TVPDrawThreadNum =
+        DrawThreadNum =
             IndividualConfigManager::GetInstance()->GetValue<int>(
                 "software_draw_thread", 0);
         if(GetCommandLine(TJS_W("-gsplit"), &opt)) {
@@ -387,7 +387,7 @@ void AfterSystemInit() {
         else
             drawThreadNum = (tjs_int)opt;
     }
-    TVPDrawThreadNum = drawThreadNum;
+    DrawThreadNum = drawThreadNum;
 }
 
 //---------------------------------------------------------------------------
@@ -474,7 +474,7 @@ void ConfirmWindowClose() {
     // 不走 HostWindowLayer::Close()（那会再次撞上闸门）：宿主已经确认，
     // 这里直接按"关窗退出"处理，engine_tick 下一帧会报 WINDOW_CLOSED。
     terminateWindowClosed = true;
-    TVPTerminateAsync(0);
+    krkr::base::TerminateAsync(0);
 }
 
 // 模态对话框的输入泵（见头文件说明）。回调由 engine_api 注册；泵本身不持有
@@ -501,20 +501,20 @@ void PumpModalInput() {
 } // namespace krkr::base
 
 //---------------------------------------------------------------------------
-void krkr::base::TVPTerminateAsync(int code) {
+void krkr::base::TerminateAsync(int code) {
     // do "A"synchronous temination of application
     terminated = true;
     terminateCode = code;
 
     // posting dummy message will prevent "missing WM_QUIT bug" in
     // Direct3D framework.
-    if(GetSystemControl)
-        GetSystemControl->CallDeliverAllEventsOnIdle();
+    if(systemControl)
+        systemControl->CallDeliverAllEventsOnIdle();
 
     Application->Terminate();
 
-    if(GetSystemControl)
-        GetSystemControl->CallDeliverAllEventsOnIdle();
+    if(systemControl)
+        systemControl->CallDeliverAllEventsOnIdle();
 }
 
 //---------------------------------------------------------------------------
@@ -526,7 +526,7 @@ void TerminateSync(int code) {
         // causing undefined behavior (hang/crash) since exit() is suppressed.
         // Instead, mark as terminated and throw EAbort to safely unwind the
         // stack back to Application->Run() which catches EAbort.
-        TVPTerminateAsync(code);
+        krkr::base::TerminateAsync(code);
         throw EAbort(TJS_W("application exit"));
     }
     SystemUninit();
@@ -542,7 +542,7 @@ void MainWindowClosed() {
         // 可被确认闸门拦下）与窗口注销（走这里，窗口已经注销，拦不住）。
         spdlog::debug("MainWindowClosed: 主窗口已注销，按关窗退出处理");
         terminateWindowClosed = true;
-        TVPTerminateAsync();
+        krkr::base::TerminateAsync();
     }
 }
 //---------------------------------------------------------------------------
@@ -603,11 +603,11 @@ void EnsureDataPathDirectory() {
         if(!krkr::io::CheckExistentLocalFolder(nativeDataPath.c_str())) {
             if(TVPCreateFolders(nativeDataPath.c_str()))
                 krkr::utils::AddImportantLog(
-                    TVPFormatMessage(TVPInfoDataPathDoesNotExistTryingToMakeIt,
+                    krkr::base::FormatMessage(TVPInfoDataPathDoesNotExistTryingToMakeIt,
                                      (const tjs_char *)TVPOk));
             else
                 krkr::utils::AddImportantLog(
-                    TVPFormatMessage(TVPInfoDataPathDoesNotExistTryingToMakeIt,
+                    krkr::base::FormatMessage(TVPInfoDataPathDoesNotExistTryingToMakeIt,
                                      (const tjs_char *)TVPFaild));
         }
     }
@@ -689,7 +689,7 @@ static void InitProgramArgumentsAndDataPath(bool stop_after_datapath_got) {
 
         // set data path
         dataPath = krkr::io::NormalizeStorageName(nativeDataPath);
-        krkr::utils::AddImportantLog(TVPFormatMessage(TVPInfoDataPath, dataPath));
+        krkr::utils::AddImportantLog(krkr::base::FormatMessage(TVPInfoDataPath, dataPath));
 
         // set log output directory
         krkr::utils::SetLogLocation(nativeDataPath);
@@ -749,7 +749,7 @@ bool GetCommandLine(const tjs_char *name, tTJSVariant *value) {
 }
 
 //---------------------------------------------------------------------------
-void krkr::base::TVPSetCommandLine(const tjs_char *name, const ttstr &value) {
+void krkr::base::SetCommandLine(const tjs_char *name, const ttstr &value) {
     // If not yet initialized, store in early options to be merged after init
     if(!programArgumentsInit) {
         ttstr nameStr(name);

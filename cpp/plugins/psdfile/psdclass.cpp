@@ -167,10 +167,10 @@ void PSD::clearData() {
  */
 void PSD::checkLayerNo(int no) {
     if(!isLoaded) {
-        TVPThrowExceptionMessage(TJS_W("no data"));
+        ThrowExceptionMessage(TJS_W("no data"));
     }
     if(no < 0 || no >= get_layer_count()) {
-        TVPThrowExceptionMessage(TJS_W("not such layer"));
+        ThrowExceptionMessage(TJS_W("not such layer"));
     }
 }
 
@@ -309,7 +309,7 @@ tTJSVariant PSD::getLayerInfo(int no) {
 void PSD::_getLayerData(tTJSVariant layer, int no, psd::ImageMode imageMode) {
     if(!layer.AsObjectNoAddRef()->IsInstanceOf(0, 0, 0, TJS_W("Layer"),
                                                nullptr)) {
-        TVPThrowExceptionMessage(TJS_W("not layer"));
+        ThrowExceptionMessage(TJS_W("not layer"));
     }
     checkLayerNo(no);
 
@@ -319,7 +319,7 @@ void PSD::_getLayerData(tTJSVariant layer, int no, psd::ImageMode imageMode) {
     if(lay.layerType != psd::LAYER_TYPE_NORMAL &&
        !(lay.layerType == psd::LAYER_TYPE_FOLDER &&
          imageMode == psd::IMAGE_MODE_MASK)) {
-        TVPThrowExceptionMessage(TJS_W("invalid layer type"));
+        ThrowExceptionMessage(TJS_W("invalid layer type"));
     }
 
     int left, top, width, height, opacity, fill_opacity, type;
@@ -418,7 +418,7 @@ void PSD::getLayerDataMask(tTJSVariant layer, int no) {
  */
 tTJSVariant PSD::getSlices() {
     if(!isLoaded)
-        TVPThrowExceptionMessage(TJS_W("no data"));
+        ThrowExceptionMessage(TJS_W("no data"));
     tTJSVariant result;
     ncbDictionaryAccessor dict;
     ncbArrayAccessor arr;
@@ -483,7 +483,7 @@ tTJSVariant PSD::getSlices() {
  */
 tTJSVariant PSD::getGuides() {
     if(!isLoaded)
-        TVPThrowExceptionMessage(TJS_W("no data"));
+        ThrowExceptionMessage(TJS_W("no data"));
     tTJSVariant result;
     ncbDictionaryAccessor dict;
     ncbArrayAccessor vert, horz;
@@ -517,7 +517,7 @@ tTJSVariant PSD::getGuides() {
 bool PSD::getBlend(tTJSVariant layer) {
     if(!layer.AsObjectNoAddRef()->IsInstanceOf(0, 0, 0, TJS_W("Layer"),
                                                nullptr)) {
-        TVPThrowExceptionMessage(TJS_W("not layer"));
+        ThrowExceptionMessage(TJS_W("not layer"));
     }
 
     // 合成結果を生成
@@ -550,7 +550,7 @@ bool PSD::getBlend(tTJSVariant layer) {
  */
 tTJSVariant PSD::getLayerComp() {
     if(!isLoaded)
-        TVPThrowExceptionMessage(TJS_W("no data"));
+        ThrowExceptionMessage(TJS_W("no data"));
     tTJSVariant result;
     ncbDictionaryAccessor dict;
     ncbArrayAccessor arr;
@@ -709,7 +709,7 @@ bool PSD::CheckExistentStorage(const ttstr &filename, int *layerIdxRet) {
  * @param pathname パス名
  * @param lister リスト取得用インターフェース
  */
-void PSD::GetListAt(const ttstr &pathname, iTVPStorageLister *lister) {
+void PSD::GetListAt(const ttstr &pathname, IStorageLister *lister) {
     startStorage();
 
     // ID一覧から名前を生成

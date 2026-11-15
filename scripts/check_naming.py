@@ -80,6 +80,7 @@ FILE_NAME_RE = re.compile(r"^[A-Z][A-Za-z0-9]*\.(h|cpp|hpp|c|inc|mm|in)$")
 
 # N3/N4：遗留符号。要求 TVP 后面紧跟大写字母 —— `TVP_MSG_DEFINE` 这类宏不在此列。
 LEGACY_SYMBOL_RE = re.compile(r"\b(?:i|t)?TVP[A-Z][A-Za-z0-9_]*\b")
+INCLUDE_LINE_RE = re.compile(r"^[ \t]*#[ \t]*include.*$", re.MULTILINE)
 
 BRIDGE_RE = re.compile(r"^using\s+krkr::[\w:]+;", re.MULTILINE)
 MSG_DEFINE_RE = re.compile(r"TVP_MSG_DEFINE\(\s*(\w+)")
@@ -126,6 +127,7 @@ def scan(module: str, messages: set[str], verbose: bool) -> dict:
 
         if rel in EXCEPTION_FILES:
             continue
+        text = INCLUDE_LINE_RE.sub("", text)
         for sym in LEGACY_SYMBOL_RE.findall(text):
             if sym in messages:
                 continue

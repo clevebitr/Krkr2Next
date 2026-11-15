@@ -6,3 +6,7 @@
 TVPSystemControl	GetSystemControl	fn
 TVPSystemControlAlive	systemControlAlive	var
 TVPMainThreadPriorityControlInit	mainThreadPriorityControlInit	var
+
+# 修正语义：`TVPSystemControl` 原是个**指针变量**，上一批误按函数命名成
+# `GetSystemControl`（读起来像函数）。按 N7（变量 lowerCamelCase）改成 `systemControl`。
+GetSystemControl	systemControl	var

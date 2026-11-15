@@ -118,7 +118,7 @@
 | 5 | `compat` | 0 | ✅ 自有符号已是新风格（`--draft` 扫出 0 个），无需改名 |
 | 6 | `sound` | 127 + 64（已应用） | ✅ **收口**：`sound.tsv` 127 符号 / 893 处 / 36 文件 + `sound-residual.tsv` 64 符号 / 434 处 / 9 文件（N7 变量、匿名 struct/enum 实例、多行定义）+ 2 处注释；遗留 211→**20**（全部是 base/environ/movie 的符号 + 4 个例外）。同时修正了消息符号口径：`MsgImpl.h` 里独有的 ~40 个 `tTJSMessageHolder` 以前被当成遗留符号 |
 | 7 | `environ` | 133 + 残项（已应用） | ✅ **收口**：三张 map（按**声明所在的 namespace** 切：`krkr::environ` / `krkr::base` / 全局）+ 残项；遗留 247→**98**（余下全是 base/visual 的符号与 §4 例外）。新增工具能力 `kind=global`：environ 多数符号名字就活在全局作用域，加 `krkr::environ::` 前缀会变成另一个符号 |
-| 8 | `base` | 465（基线） | ⬜ 未起草；先做非消息部分，消息符号永久例外 |
+| 8 | `base` | 65 + 240（已应用） | ✅ **收口**：按**声明所在 namespace** 切两张 map（`base.tsv` `krkr::base` 65 个 / `base-globals.tsv` `kind=global` 240 个）；遗留 465→**30**（余下全是 `TVPCreateNativeClass_*`、插件 ABI、visual/environ/movie 的符号与 §4 例外）。消息符号 153 个永久例外 |
 | 9 | `visual` / `movie` | — | 这两块结构未动；它们的**调用点**会在 1–8 里被 codemod 顺带更新 |
 
 每轮的完成判据（三条都要）：
@@ -195,6 +195,7 @@ tTVPAtInstallClass	AtInstallClass	type
 | 5 | `utils`（含 5b 残项） | 32 + 19 + 1 手工 | 686 + 70 去重限定 | 90 | ~70 min（含新检查脚本） |
 | 6 | `sound`（含 6b 残项） | 127 + 64 + 2 注释 | 1327 | 39 | ~80 min |
 | 7 | `environ`（三张 map + 残项） | 125 + 8 | 836 | 76 | ~90 min（含 `kind=global`） |
+| 8 | `base`（两张 map） | 305 | 3274 | 256 | ~100 min |
 
 **吞吐 ≈ 100~150 符号/小时**（工具成熟后，不含编译回归）。
 
@@ -204,7 +205,7 @@ tTVPAtInstallClass	AtInstallClass	type
 | ~~`utils`~~ | ~~37~~ | ✅ 第 5 轮完成 | — |
 | ~~`sound`~~ | ~~132~~ | ✅ 第 6 轮完成 | — |
 | ~~`environ`~~ | ~~134~~ | ✅ 第 7 轮完成 | — |
-| `base` | ~250（不含 153 个消息例外） | ~3 h | 2~4 天（注册表族要等反转） |
+| ~~`base`~~ | ~~250~~ | ✅ 第 8 轮完成 | — |
 | ~~`io` 残项~~ | ~~13~~ | ✅ 第 4b 轮完成（9 符号 + 11 处注释/日志） | — |
 
 结论：**纯改名还剩 5~7 小时**（再 5 轮左右）；

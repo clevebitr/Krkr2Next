@@ -114,13 +114,13 @@ std::string checkTextEncoding(const void *buf, size_t size,
  *  note: encryption of mode 0 or 1 ( simple crypt ) does never
  *  intend data pretection security.
  */
-class tTVPTextReadStream : public iTJSTextReadStream {
+class TextReadStream : public iTJSTextReadStream {
     std::unique_ptr<tTJSBinaryStream> _stream{};
     std::u16string _buffer; // 全部文本，UTF-16
     size_t _pos = 0; // 当前读取位置
 
 public:
-    tTVPTextReadStream(const ttstr &name, const ttstr &mode) {
+    TextReadStream(const ttstr &name, const ttstr &mode) {
         _stream.reset(krkr::io::CreateStream(name, TJS_BS_READ));
         size_t ofs = parseModeNumber(mode.c_str(), TJS_W('o'), 255, 0).value();
         _stream->SetPosition(ofs);
@@ -160,7 +160,7 @@ public:
             if(m == 2) {
                 // 压缩流
                 if(size < 3 + 2 + 16)
-                    TVPThrowExceptionMessage(TVPUnsupportedCipherMode, name);
+                    ThrowExceptionMessage(TVPUnsupportedCipherMode, name);
 
                 // 读压缩大小和解压大小
                 std::uint8_t *ptr = raw.data() + 5;
@@ -179,7 +179,7 @@ public:
                 int ret = uncompress(uncompBuf.data(), &destLen, compBuf.data(),
                                      static_cast<unsigned long>(compressed));
                 if(ret != Z_OK || destLen != uncompressed)
-                    TVPThrowExceptionMessage(TVPUnsupportedCipherMode, name);
+                    ThrowExceptionMessage(TVPUnsupportedCipherMode, name);
 
                 // 解压得到 UTF-16 数据
                 _buffer.assign(reinterpret_cast<char16_t *>(uncompBuf.data()),
@@ -187,7 +187,7 @@ public:
                                                             uncompressed));
                 return;
             }
-            TVPThrowExceptionMessage(TVPUnsupportedCipherMode, name);
+            ThrowExceptionMessage(TVPUnsupportedCipherMode, name);
         }
         std::uint8_t bomSize = 0;
         std::string encoding = checkTextEncoding(raw.data(), size, bomSize);
@@ -244,11 +244,11 @@ public:
             _buffer = boost::locale::conv::utf_to_utf<char16_t>(wide);
         } catch(const std::exception &e) {
             spdlog::error(e.what());
-            TVPThrowExceptionMessage(TJSNarrowToWideConversionError);
+            ThrowExceptionMessage(TJSNarrowToWideConversionError);
         }
     }
 
-    ~tTVPTextReadStream() override = default;
+    ~TextReadStream() override = default;
 
     tjs_uint Read(tTJSString &targ, tjs_uint size) override {
         static_assert(sizeof(tjs_char) == sizeof(char16_t),
@@ -271,7 +271,7 @@ public:
 };
 
 
-class tTVPTextWriteStream : public iTJSTextWriteStream {
+class TextWriteStream : public iTJSTextWriteStream {
     // TODO: 32bit wchar_t support
 
     static constexpr size_t COMPRESSION_BUFFER_SIZE = 1024 * 1024;
@@ -291,7 +291,7 @@ class tTVPTextWriteStream : public iTJSTextWriteStream {
     bool _compressionFailed{ false };
 
 public:
-    tTVPTextWriteStream(const ttstr &name, const ttstr &mode) {
+    TextWriteStream(const ttstr &name, const ttstr &mode) {
         // mode supports following modes:
         // dN: deflate(compress) at mode N ( currently not implemented
         // ) cN: write in cipher at mode N ( currently n is ignored )
@@ -310,7 +310,7 @@ public:
         }
 
         if(_cryptMode != -1 && _cryptMode != 1 && _cryptMode != 2)
-            TVPThrowExceptionMessage(TVPUnsupportedModeString,
+            ThrowExceptionMessage(TVPUnsupportedModeString,
                                      TJS_W("unsupported cipher mode"));
 
         // check o mode
@@ -343,7 +343,7 @@ public:
             _zStream->opaque = Z_NULL;
             if(deflateInit(_zStream.get(), _compressionLevel) != Z_OK) {
                 _compressionFailed = true;
-                TVPThrowExceptionMessage(TVPCompressionFailed);
+                ThrowExceptionMessage(TVPCompressionFailed);
             }
 
             _zStream->next_in = nullptr;
@@ -359,7 +359,7 @@ public:
         }
     }
 
-    ~tTVPTextWriteStream() override {
+    ~TextWriteStream() override {
         if(_cryptMode == 2) {
 
             if(!_compressionFailed) {
@@ -369,7 +369,7 @@ public:
                     do {
                         result = deflate(_zStream.get(), Z_FINISH);
                         if(result != Z_OK && result != Z_STREAM_END) {
-                            TVPThrowExceptionMessage(TVPCompressionFailed);
+                            ThrowExceptionMessage(TVPCompressionFailed);
                         }
                         _stream->WriteBuffer(_compressionBuffer.data(),
                                              COMPRESSION_BUFFER_SIZE -
@@ -443,7 +443,7 @@ public:
                 int result = deflate(_zStream.get(), Z_NO_FLUSH);
                 if(result != Z_OK) {
                     _compressionFailed = true;
-                    TVPThrowExceptionMessage(TVPCompressionFailed);
+                    ThrowExceptionMessage(TVPCompressionFailed);
                 }
                 if(_zStream->avail_out == 0) {
                     _stream->WriteBuffer(_compressionBuffer.data(),
@@ -460,18 +460,18 @@ public:
     void Destruct() override { delete this; }
 };
 
-iTJSTextReadStream *TVPCreateTextStreamForRead(const ttstr &name,
+iTJSTextReadStream *CreateTextStreamForRead(const ttstr &name,
                                                const ttstr &mode) {
-    return new tTVPTextReadStream(name, mode);
+    return new TextReadStream(name, mode);
 }
 
-iTJSTextWriteStream *TVPCreateTextStreamForWrite(const ttstr &name,
+iTJSTextWriteStream *CreateTextStreamForWrite(const ttstr &name,
                                                  const ttstr &mode) {
-    return new tTVPTextWriteStream(name, mode);
+    return new TextWriteStream(name, mode);
 }
 
 //---------------------------------------------------------------------------
-void TVPSetDefaultReadEncoding(const ttstr &encoding) {
+void SetDefaultReadEncoding(const ttstr &encoding) {
     ttstr codestr = encoding;
     codestr.ToLowerCase();
     if(codestr == TJS_W("sjis") || codestr == TJS_W("shiftjis") ||
@@ -485,7 +485,7 @@ void TVPSetDefaultReadEncoding(const ttstr &encoding) {
 }
 
 //---------------------------------------------------------------------------
-const tjs_char *TVPGetDefaultReadEncoding() {
+const tjs_char *GetDefaultReadEncoding() {
     return ttstr{ G_DefaultReadEncoding }.c_str();
 }
 

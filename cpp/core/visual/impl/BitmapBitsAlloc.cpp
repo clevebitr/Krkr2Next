@@ -19,8 +19,8 @@ public:
 class MmapAllocator : public iTVPMemoryAllocator {
 public:
     MmapAllocator() { krkr::utils::AddLog(TJS_W("(info) Use mmap for Bitmap")); }
-    void *allocate(size_t size) override { return TVPMmapAlloc(size); }
-    void free(void *mem) override { TVPMmapFree(mem); }
+    void *allocate(size_t size) override { return MmapAlloc(size); }
+    void free(void *mem) override { MmapFree(mem); }
 };
 #endif
 #if 0
@@ -143,7 +143,7 @@ void tTVPBitmapBitsAlloc::FreeAllocator() {
 void tTVPBitmapBitsAlloc::ResetForRestart() {
     FreeAllocator();
 } // 对照上游 PR#12
-static tTVPAtExit TVPUninitMessageLoad(KRKR_ATEXIT_PRI_CLEANUP,
+static AtExit TVPUninitMessageLoad(KRKR_ATEXIT_PRI_CLEANUP,
                                        tTVPBitmapBitsAlloc::FreeAllocator);
 
 void *tTVPBitmapBitsAlloc::Alloc(tjs_uint size, tjs_uint width,
@@ -159,7 +159,7 @@ void *tTVPBitmapBitsAlloc::Alloc(tjs_uint size, tjs_uint width,
 
     ptr = ptrorg = (tjs_uint8 *)Allocator->allocate(allocbytes);
     if(!ptr)
-        TVPThrowExceptionMessage(
+        ThrowExceptionMessage(
             TVPCannotAllocateBitmapBits, TJS_W("at TVPAllocBitmapBits"),
             ttstr((tjs_int)allocbytes) + TJS_W("(") + ttstr((int)width) +
                 TJS_W("x") + ttstr((int)height) + TJS_W(")"));
@@ -207,10 +207,10 @@ void tTVPBitmapBitsAlloc::Free(void *ptr) {
         // check sentinel
         if(~(*(tjs_uint32 *)(bptr - sizeof(tjs_uint32))) !=
            record->sentinel_backup1)
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TVPLayerBitmapBufferUnderrunDetectedCheckYourDrawingCode);
         if(~(*(tjs_uint32 *)(bptr + record->size)) != record->sentinel_backup2)
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TVPLayerBitmapBufferOverrunDetectedCheckYourDrawingCode);
 
         Allocator->free(record->alloc_ptr);

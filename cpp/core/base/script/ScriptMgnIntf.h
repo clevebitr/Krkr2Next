@@ -21,104 +21,104 @@
 //---------------------------------------------------------------------------
 namespace krkr::base {
 
-extern ttstr TVPStartupScriptName;
+extern ttstr StartupScriptName;
 
-extern void TVPInitScriptEngine();
+extern void InitScriptEngine();
 
-extern void TVPUninitScriptEngine();
+extern void UninitScriptEngine();
 
-extern void TVPRestartScriptEngine();
+extern void RestartScriptEngine();
 
-extern void TVPResetScriptEngineForRestart();
+extern void ResetScriptEngineForRestart();
 
-extern tTJS *TVPGetScriptEngine();
+extern tTJS *GetScriptEngine();
 
-TJS_EXP_FUNC_DEF(iTJSDispatch2 *, TVPGetScriptDispatch, ());
+TJS_EXP_FUNC_DEF(iTJSDispatch2 *, GetScriptDispatch, ());
 
-TJS_EXP_FUNC_DEF(void, TVPExecuteScript,
+TJS_EXP_FUNC_DEF(void, ExecuteScript,
                  (const ttstr &content, tTJSVariant *result = nullptr));
 
-TJS_EXP_FUNC_DEF(void, TVPExecuteScript,
+TJS_EXP_FUNC_DEF(void, ExecuteScript,
                  (const ttstr &content, iTJSDispatch2 *context,
                   tTJSVariant *result = nullptr));
 
-TJS_EXP_FUNC_DEF(void, TVPExecuteExpression,
+TJS_EXP_FUNC_DEF(void, ExecuteExpression,
                  (const ttstr &content, tTJSVariant *result = nullptr));
 
-TJS_EXP_FUNC_DEF(void, TVPExecuteExpression,
+TJS_EXP_FUNC_DEF(void, ExecuteExpression,
                  (const ttstr &content, iTJSDispatch2 *context,
                   tTJSVariant *result = nullptr));
 
-TJS_EXP_FUNC_DEF(void, TVPExecuteScript,
+TJS_EXP_FUNC_DEF(void, ExecuteScript,
                  (const ttstr &content, const ttstr &name, tjs_int lineofs,
                   tTJSVariant *result = nullptr));
 
-TJS_EXP_FUNC_DEF(void, TVPExecuteScript,
+TJS_EXP_FUNC_DEF(void, ExecuteScript,
                  (const ttstr &content, const ttstr &name, tjs_int lineofs,
                   iTJSDispatch2 *context, tTJSVariant *result = nullptr));
 
-TJS_EXP_FUNC_DEF(void, TVPExecuteExpression,
+TJS_EXP_FUNC_DEF(void, ExecuteExpression,
                  (const ttstr &content, const ttstr &name, tjs_int lineofs,
                   tTJSVariant *result = nullptr));
 
-TJS_EXP_FUNC_DEF(void, TVPExecuteExpression,
+TJS_EXP_FUNC_DEF(void, ExecuteExpression,
                  (const ttstr &content, const ttstr &name, tjs_int lineofs,
                   iTJSDispatch2 *context, tTJSVariant *result = nullptr));
 
-TJS_EXP_FUNC_DEF(void, TVPExecuteStorage,
+TJS_EXP_FUNC_DEF(void, ExecuteStorage,
                  (const ttstr &name, tTJSVariant *result = nullptr,
                   bool isexpression = false,
                   const tjs_char *modestr = nullptr));
 
-TJS_EXP_FUNC_DEF(void, TVPExecuteStorage,
+TJS_EXP_FUNC_DEF(void, ExecuteStorage,
                  (const ttstr &name, iTJSDispatch2 *context,
                   tTJSVariant *result = nullptr, bool isexpression = false,
                   const tjs_char *modestr = nullptr));
 
-TJS_EXP_FUNC_DEF(void, TVPDumpScriptEngine, ());
+TJS_EXP_FUNC_DEF(void, DumpScriptEngine, ());
 
-TJS_EXP_FUNC_DEF(void, TVPExecuteBytecode,
+TJS_EXP_FUNC_DEF(void, ExecuteBytecode,
                  (const tjs_uint8 *content, size_t len, iTJSDispatch2 *context,
                   tTJSVariant *result = nullptr,
                   const tjs_char *name = nullptr));
 
-extern void TVPExecuteStartupScript();
+extern void ExecuteStartupScript();
 
-TJS_EXP_FUNC_DEF(void, TVPCreateMessageMapFile, (const ttstr &filename));
+TJS_EXP_FUNC_DEF(void, CreateMessageMapFile, (const ttstr &filename));
 
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 // implementation in each platform to show script exception message
 //---------------------------------------------------------------------------
-extern void TVPShowScriptException(eTJS &e);
+extern void ShowScriptException(eTJS &e);
 
-extern void TVPShowScriptException(eTJSScriptError &e);
+extern void ShowScriptException(eTJSScriptError &e);
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPBeforeProcessUnhandledException (implementation in each
+// BeforeProcessUnhandledException (implementation in each
 // platform)
 //---------------------------------------------------------------------------
-extern void TVPBeforeProcessUnhandledException();
+extern void BeforeProcessUnhandledException();
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 // unhandled exception handler related macros
 //---------------------------------------------------------------------------
-extern bool TVPProcessUnhandledException(eTJSScriptException &e);
+extern bool ProcessUnhandledException(eTJSScriptException &e);
 
-extern bool TVPProcessUnhandledException(eTJSScriptError &e);
+extern bool ProcessUnhandledException(eTJSScriptError &e);
 
-extern bool TVPProcessUnhandledException(eTJS &e);
+extern bool ProcessUnhandledException(eTJS &e);
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPInitializeStartupScript
+// InitializeStartupScript
 //---------------------------------------------------------------------------
-extern void TVPInitializeStartupScript();
+extern void InitializeStartupScript();
 
-extern bool TVPCheckProcessLog();
+extern bool CheckProcessLog();
 
 //---------------------------------------------------------------------------
 
@@ -127,38 +127,38 @@ extern bool TVPCheckProcessLog();
 //---------------------------------------------------------------------------
 #define TVP_CATCH_AND_SHOW_SCRIPT_EXCEPTION(origin)                            \
     catch(eTJSScriptException & e) {                                           \
-        TVPBeforeProcessUnhandledException();                                  \
+        BeforeProcessUnhandledException();                                  \
         e.AddTrace(ttstr(origin));                                             \
-        if(!TVPProcessUnhandledException(e))                                   \
-            TVPShowScriptException(e);                                         \
+        if(!ProcessUnhandledException(e))                                   \
+            ShowScriptException(e);                                         \
     }                                                                          \
     catch(eTJSScriptError & e) {                                               \
-        TVPBeforeProcessUnhandledException();                                  \
+        BeforeProcessUnhandledException();                                  \
         e.AddTrace(ttstr(origin));                                             \
-        if(!TVPProcessUnhandledException(e))                                   \
-            TVPShowScriptException(e);                                         \
+        if(!ProcessUnhandledException(e))                                   \
+            ShowScriptException(e);                                         \
     }                                                                          \
     catch(eTJS & e) {                                                          \
-        TVPBeforeProcessUnhandledException();                                  \
-        if(!TVPProcessUnhandledException(e))                                   \
-            TVPShowScriptException(e);                                         \
+        BeforeProcessUnhandledException();                                  \
+        if(!ProcessUnhandledException(e))                                   \
+            ShowScriptException(e);                                         \
     }                                                                          \
     catch(...) {                                                               \
-        TVPBeforeProcessUnhandledException();                                  \
+        BeforeProcessUnhandledException();                                  \
         throw;                                                                 \
     }
 #define TVP_CATCH_AND_SHOW_SCRIPT_EXCEPTION_FORCE_SHOW_EXCEPTION(origin)       \
     catch(eTJSScriptError & e) {                                               \
-        TVPBeforeProcessUnhandledException();                                  \
+        BeforeProcessUnhandledException();                                  \
         e.AddTrace(ttstr(origin));                                             \
-        TVPShowScriptException(e);                                             \
+        ShowScriptException(e);                                             \
     }                                                                          \
     catch(eTJS & e) {                                                          \
-        TVPBeforeProcessUnhandledException();                                  \
-        TVPShowScriptException(e);                                             \
+        BeforeProcessUnhandledException();                                  \
+        ShowScriptException(e);                                             \
     }                                                                          \
     catch(...) {                                                               \
-        TVPBeforeProcessUnhandledException();                                  \
+        BeforeProcessUnhandledException();                                  \
         throw;                                                                 \
     }
 //---------------------------------------------------------------------------
@@ -179,32 +179,12 @@ protected:
 };
 
 //---------------------------------------------------------------------------
-extern tTJSNativeClass *TVPCreateNativeClass_Scripts();
+extern tTJSNativeClass *CreateNativeClass_Scripts();
 //---------------------------------------------------------------------------
 
 } // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::base::TVPStartupScriptName;
-using krkr::base::TVPInitScriptEngine;
-using krkr::base::TVPUninitScriptEngine;
-using krkr::base::TVPRestartScriptEngine;
-using krkr::base::TVPResetScriptEngineForRestart;
-using krkr::base::TVPGetScriptEngine;
-using krkr::base::TVPGetScriptDispatch;
-using krkr::base::TVPExecuteScript;
-using krkr::base::TVPExecuteExpression;
-using krkr::base::TVPExecuteStorage;
-using krkr::base::TVPDumpScriptEngine;
-using krkr::base::TVPExecuteBytecode;
-using krkr::base::TVPCreateMessageMapFile;
-using krkr::base::TVPExecuteStartupScript;
-using krkr::base::TVPShowScriptException;
-using krkr::base::TVPBeforeProcessUnhandledException;
-using krkr::base::TVPProcessUnhandledException;
-using krkr::base::TVPInitializeStartupScript;
-using krkr::base::TVPCheckProcessLog;
 using krkr::base::tTJSNC_Scripts;
-using krkr::base::TVPCreateNativeClass_Scripts;
 
 #endif

@@ -33,7 +33,7 @@ tTJSNI_BaseTimer::tTJSNI_BaseTimer() {
     Counter = 0;
     Capacity = TVP_DEFAULT_TIMER_CAPACITY;
     ActionOwner.Object = ActionOwner.ObjThis = nullptr;
-    ActionName = TVPActionName;
+    ActionName = ActionName;
     Mode = atmNormal;
 }
 
@@ -58,7 +58,7 @@ tjs_error tTJSNI_BaseTimer::Construct(tjs_int numparams, tTJSVariant **param,
 
 //---------------------------------------------------------------------------
 void tTJSNI_BaseTimer::Invalidate() {
-    TVPCancelSourceEvents(Owner);
+    CancelSourceEvents(Owner);
     Owner = nullptr;
 
     ActionOwner.Release();
@@ -73,7 +73,7 @@ void tTJSNI_BaseTimer::Fire(tjs_uint n) {
         return;
     static ttstr eventname(TJS_W("onTimer"));
 
-    tjs_int count = TVPCountEventsInQueue(Owner, Owner, eventname, 0);
+    tjs_int count = CountEventsInQueue(Owner, Owner, eventname, 0);
 
     tjs_int cap =
         krkr::utils::limitTimerCapacity ? 1 : (Capacity == 0 ? 65535 : Capacity);
@@ -99,7 +99,7 @@ void tTJSNI_BaseTimer::Fire(tjs_uint n) {
                     break;
             }
             while(n--) {
-                TVPPostEvent(Owner, Owner, eventname, tag, flags, 0, nullptr);
+                PostTJSEvent(Owner, Owner, eventname, tag, flags, 0, nullptr);
             }
         }
 
@@ -112,7 +112,7 @@ void tTJSNI_BaseTimer::CancelEvents() {
     // cancel all events
     if(Owner) {
         static ttstr eventname(TJS_W("onTimer"));
-        TVPCancelEvents(Owner, Owner, eventname, 0);
+        CancelTJSEvents(Owner, Owner, eventname, 0);
     }
 }
 
@@ -122,7 +122,7 @@ bool tTJSNI_BaseTimer::AreEventsInQueue() {
 
     if(Owner) {
         static ttstr eventname(TJS_W("onTimer"));
-        return TVPAreEventsInQueue(Owner, Owner, eventname, 0);
+        return AreTJSEventsInQueue(Owner, Owner, eventname, 0);
     }
     return false;
 }

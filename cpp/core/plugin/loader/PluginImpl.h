@@ -177,7 +177,7 @@ TJS_EXP_FUNC_DEF(void, TVPDoTryBlock,
                   tTVPCatchBlockFunction catchblock,
                   tTVPFinallyBlockFunction finallyblock, void *data));
 
-// TJS_EXP_FUNC_DEF(bool, TVPGetFileVersionOf, (const wchar_t*
+// TJS_EXP_FUNC_DEF(bool, GetFileVersionOf, (const wchar_t*
 // module_filename, tjs_int &major, tjs_int &minor, tjs_int &release,
 // tjs_int &build));
 

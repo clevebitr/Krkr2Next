@@ -752,7 +752,7 @@ struct WindowEx {
     static tjs_int getWindowNotificationNum(ttstr key) {
         tTJSVariant tmp;
         if(!_getNotificationVariant(tmp))
-            TVPThrowExceptionMessage(TJS_W("cache setup failed."));
+            ThrowExceptionMessage(TJS_W("cache setup failed."));
         ncbPropAccessor nf(tmp);
         return nf.getIntValue(key.c_str(), -1);
     }
@@ -760,7 +760,7 @@ struct WindowEx {
     static ttstr getWindowNotificationName(tjs_int num) {
         tTJSVariant tmp;
         if(!_getNotificationVariant(tmp))
-            TVPThrowExceptionMessage(TJS_W("cache setup failed."));
+            ThrowExceptionMessage(TJS_W("cache setup failed."));
         ncbPropAccessor nf(tmp);
         return nf.getStrValue(num);
     }
@@ -782,7 +782,7 @@ protected:
     }
 
     static bool _getNotificationVariant(tTJSVariant &tmp) {
-        iTJSDispatch2 *obj = TVPGetScriptDispatch();
+        iTJSDispatch2 *obj = GetScriptDispatch();
         tmp.Clear();
         bool hasval = TJS_SUCCEEDED(
             obj->PropGet(TJS_MEMBERMUSTEXIST, TJS_W("Window"), 0, &tmp, obj));
@@ -1006,7 +1006,7 @@ struct MenuItemEx {
         if(!obj)
             return nullptr;
         tTJSVariant val;
-        iTJSDispatch2 *global = TVPGetScriptDispatch(), *mi;
+        iTJSDispatch2 *global = GetScriptDispatch(), *mi;
         if(global) {
             global->PropGet(0, TJS_W("MenuItem"), 0, &val, obj);
             mi = val.AsObjectNoAddRef();
@@ -1357,7 +1357,7 @@ struct PadEx {
 
     static HWND GetHWND(iTJSDispatch2 *obj) {
         tTJSVariant val, _uuid;
-        TVPExecuteExpression(TJS_W("System.createUUID()"), &_uuid);
+        ExecuteExpression(TJS_W("System.createUUID()"), &_uuid);
         obj->PropGet(0, TJS_W("title"), 0, &val, obj);
         obj->PropSet(0, TJS_W("title"), 0, &_uuid, obj);
 
@@ -1429,8 +1429,8 @@ struct System {
                                         iTJSDispatch2 *objthis) {
         // Return an array with one monitor entry (primary)
         if(result) {
-            tjs_int w = tTVPScreen::GetDesktopWidth();
-            tjs_int h = tTVPScreen::GetDesktopHeight();
+            tjs_int w = Screen::GetDesktopWidth();
+            tjs_int h = Screen::GetDesktopHeight();
 
             ncbDictionaryAccessor monDict;
             monDict.SetValue(TJS_W("x"), 0);
@@ -1455,8 +1455,8 @@ struct System {
         // Return a dictionary with 'monitor' and 'work' sub-dictionaries
         // On non-Windows platforms, monitor == work (no taskbar deduction)
         if(result) {
-            tjs_int w = tTVPScreen::GetDesktopWidth();
-            tjs_int h = tTVPScreen::GetDesktopHeight();
+            tjs_int w = Screen::GetDesktopWidth();
+            tjs_int h = Screen::GetDesktopHeight();
 
             // Create 'monitor' rect dict
             ncbDictionaryAccessor monDict;
@@ -1510,7 +1510,7 @@ struct System {
         key.ToUpperCase();
 
         tTJSVariant tmp;
-        iTJSDispatch2 *obj = TVPGetScriptDispatch();
+        iTJSDispatch2 *obj = GetScriptDispatch();
         bool hasval = TJS_SUCCEEDED(
             obj->PropGet(TJS_MEMBERMUSTEXIST, TJS_W("System"), 0, &tmp, obj));
         obj->Release();
@@ -1572,10 +1572,10 @@ NCB_ATTACH_FUNCTION(expandEnvString, System, System::expandEnvString);
 NCB_ATTACH_FUNCTION(setApplicationIcon, System, System::setApplicationIcon);
 NCB_ATTACH_FUNCTION(setIconicPreview, System, System::setIconicPreview);
 NCB_ATTACH_FUNCTION(getDoubleClickTime, System, System::getDoubleClickTime);
-NCB_ATTACH_FUNCTION(breathe, System, TVPBreathe);
-NCB_ATTACH_FUNCTION(isBreathing, System, TVPGetBreathing);
-NCB_ATTACH_FUNCTION(clearGraphicCache, System, TVPClearGraphicCache);
-NCB_ATTACH_FUNCTION(getAboutString, System, TVPGetAboutString);
+NCB_ATTACH_FUNCTION(breathe, System, krkr::base::Breathe);
+NCB_ATTACH_FUNCTION(isBreathing, System, krkr::base::GetBreathing);
+NCB_ATTACH_FUNCTION(clearGraphicCache, System, ClearGraphicCache);
+NCB_ATTACH_FUNCTION(getAboutString, System, krkr::base::GetAboutString);
 NCB_ATTACH_FUNCTION(getCPUType, System, krkr::base::GetCPUType);
 
 ////////////////////////////////////////////////////////////////
@@ -1605,14 +1605,14 @@ struct Scripts {
         if(n >= 3)
             lineofs = *p[2];
 
-        TVPExecuteExpression(content, name, lineofs, r);
+        ExecuteExpression(content, name, lineofs, r);
         return TJS_S_OK;
     }
 
     // 元の Scripts.eval を保存・復帰
     static void Regist() {
         tTJSVariant var;
-        TVPExecuteExpression(TJS_W("Scripts.eval"), &var);
+        ExecuteExpression(TJS_W("Scripts.eval"), &var);
         evalOrig = var.AsObject();
     }
 

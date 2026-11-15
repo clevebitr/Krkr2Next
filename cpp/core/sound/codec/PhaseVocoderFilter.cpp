@@ -184,7 +184,7 @@ void tTJSNI_PhaseVocoder::SetWindow(int window) {
         case 32768:
             break;
         default:
-            TVPThrowExceptionMessage(TVPInvalidWindowSizeMustBeIn64to32768);
+            ThrowExceptionMessage(TVPInvalidWindowSizeMustBeIn64to32768);
     }
     Window = window;
 }
@@ -201,7 +201,7 @@ void tTJSNI_PhaseVocoder::SetOverlap(int overlap) {
         case 32:
             break;
         default:
-            TVPThrowExceptionMessage(TVPInvalidOverlapCountMustBeIn2to32);
+            ThrowExceptionMessage(TVPInvalidOverlapCountMustBeIn2to32);
     }
     Overlap = overlap;
 }
@@ -210,7 +210,7 @@ void tTJSNI_PhaseVocoder::SetOverlap(int overlap) {
 SampleAndLabelSource *
 tTJSNI_PhaseVocoder::Recreate(SampleAndLabelSource *source) {
     if(Source)
-        TVPThrowExceptionMessage(TVPCannotConnectMultipleWaveSoundBufferAtOnce);
+        ThrowExceptionMessage(TVPCannotConnectMultipleWaveSoundBufferAtOnce);
 
     if(PhaseVocoder)
         delete PhaseVocoder, PhaseVocoder = nullptr;

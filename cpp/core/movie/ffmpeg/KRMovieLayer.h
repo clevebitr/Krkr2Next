@@ -6,7 +6,7 @@
 NS_KRMOVIE_BEGIN
 
 class VideoPresentLayer : public TVPMoviePlayer,
-                          public tTVPContinuousEventCallbackIntf {
+                          public ContinuousEventCallbackIntf {
 protected:
     tTVPBaseTexture *m_BmpBits[2]{};
     int m_nCurBmpBuff = 0;

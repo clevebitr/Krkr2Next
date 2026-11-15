@@ -62,7 +62,7 @@ namespace {
     }
 
     void registerLayeredWindowCompat() {
-        iTJSDispatch2 *global = TVPGetScriptDispatch();
+        iTJSDispatch2 *global = GetScriptDispatch();
         if(!global)
             return;
 
@@ -78,7 +78,7 @@ namespace {
     }
 
     void unregisterLayeredWindowCompat() {
-        iTJSDispatch2 *global = TVPGetScriptDispatch();
+        iTJSDispatch2 *global = GetScriptDispatch();
         if(!global)
             return;
         global->DeleteMember(0, TJS_W("layeredwindow"), nullptr, global);

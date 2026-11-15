@@ -35,48 +35,48 @@ namespace TJS {
 // #define TJS_strcmp			wcscmp
 // #define TJS_strncpy			wcsncpy_s
 
-const tjs_char *TVPKAGNoLine = TJS_W("Readed scenario file %1 is empty.");
-const tjs_char *TVPKAGCannotOmmitFirstLabelName =
+const tjs_char *KAGNoLine = TJS_W("Readed scenario file %1 is empty.");
+const tjs_char *KAGCannotOmmitFirstLabelName =
     TJS_W("Can not ommit first label name in scenario.");
 // const tjs_char* TVPInternalError = TJS_W("内部エラーが発生しました:
 // at %1 line %2");
-const tjs_char *TVPKAGMalformedSaveData =
+const tjs_char *KAGMalformedSaveData =
     TJS_W("Malformed savedata, data may damaged.");
-const tjs_char *TVPKAGLabelNotFound =
+const tjs_char *KAGLabelNotFound =
     TJS_W("Label %2 not found in scenario file %1.");
-const tjs_char *TVPLabelOrScriptInMacro =
+const tjs_char *LabelOrScriptInMacro =
     TJS_W("Label in macro 'iscript' is illegal.");
-const tjs_char *TVPKAGInlineScriptNotEnd =
+const tjs_char *KAGInlineScriptNotEnd =
     TJS_W("Matched [endscript] or @endscript not found.");
-const tjs_char *TVPKAGSyntaxError =
+const tjs_char *KAGSyntaxError =
     TJS_W("Syntax error.'[' match to ']', \" match to \", 'macro' march to "
           "'endmacro'. Notice space and newline.");
-const tjs_char *TVPKAGCallStackUnderflow =
+const tjs_char *KAGCallStackUnderflow =
     TJS_W("'return' is not matched to any 'call' ( 'return' is "
           "unexpected )");
-const tjs_char *TVPKAGReturnLostSync =
+const tjs_char *KAGReturnLostSync =
     TJS_W("Lost return position due to the scenario file changed.");
-const tjs_char *TVPKAGSpecifyKAGParser =
+const tjs_char *KAGSpecifyKAGParser =
     TJS_W("Please specify KAGParser object.");
-const tjs_char *TVPUnknownMacroName = TJS_W("Unknown macro \"%1\"");
+const tjs_char *UnknownMacroName = TJS_W("Unknown macro \"%1\"");
 
-#define TVPThrowInternalError                                                  \
-    TVPThrowExceptionMessage(TVPInternalError, __FILE__, __LINE__)
+#define KRKR_THROW_INTERNAL_ERROR                                                  \
+    ThrowExceptionMessage(TVPInternalError, __FILE__, __LINE__)
 
 #undef TJS_NATIVE_SET_ClassID
 #define TJS_NATIVE_SET_ClassID ClassID_KAGParser = TJS_NCM_CLASSID;
 static tjs_int32 ClassID_KAGParser = -1;
 
 // 编译场景容错的前置声明：实现在本文件后半（见「编译场景（.scn）标签解析回调」一节），
-// 但 tTVPScenarioCacheItem::LoadScenario 更早用到它。
-static bool TVPHasCompiledScenarioStorage(const ttstr &name);
-static bool TVPCompiledScenarioHasLabel(const ttstr &storage,
+// 但 ScenarioCacheItem::LoadScenario 更早用到它。
+static bool HasCompiledScenarioStorage(const ttstr &name);
+static bool CompiledScenarioHasLabel(const ttstr &storage,
                                         const ttstr &label);
 
 //---------------------------------------------------------------------------
-// tTVPScenarioCacheItem : Scenario Cache Item
+// ScenarioCacheItem : Scenario Cache Item
 //---------------------------------------------------------------------------
-tTVPScenarioCacheItem::tTVPScenarioCacheItem(const ttstr &name, bool isstring) {
+ScenarioCacheItem::ScenarioCacheItem(const ttstr &name, bool isstring) {
     RefCount = 1;
     Lines = nullptr;
     LineCount = 0;
@@ -90,13 +90,13 @@ tTVPScenarioCacheItem::tTVPScenarioCacheItem(const ttstr &name, bool isstring) {
 }
 
 //---------------------------------------------------------------------------
-tTVPScenarioCacheItem::~tTVPScenarioCacheItem() { delete[] Lines; }
+ScenarioCacheItem::~ScenarioCacheItem() { delete[] Lines; }
 
 //---------------------------------------------------------------------------
-void tTVPScenarioCacheItem::AddRef() { RefCount++; }
+void ScenarioCacheItem::AddRef() { RefCount++; }
 
 //---------------------------------------------------------------------------
-void tTVPScenarioCacheItem::Release() {
+void ScenarioCacheItem::Release() {
     if(RefCount == 1)
         delete this;
     else
@@ -104,7 +104,7 @@ void tTVPScenarioCacheItem::Release() {
 }
 
 //---------------------------------------------------------------------------
-void tTVPScenarioCacheItem::LoadScenario(const ttstr &name, bool isstring) {
+void ScenarioCacheItem::LoadScenario(const ttstr &name, bool isstring) {
     // load scenario from file or string to buffer
 
     if(isstring) {
@@ -117,7 +117,7 @@ void tTVPScenarioCacheItem::LoadScenario(const ttstr &name, bool isstring) {
         iTJSTextReadStream *stream = nullptr;
 
         try {
-            stream = TVPCreateTextStreamForRead(name, TJS_W(""));
+            stream = CreateTextStreamForRead(name, TJS_W(""));
             ttstr tmp;
             if(stream) {
                 stream->Read(tmp, 0);
@@ -128,7 +128,7 @@ void tTVPScenarioCacheItem::LoadScenario(const ttstr &name, bool isstring) {
                 stream->Destruct();
             // 编译场景容错：读不到脚本但存在同名 `.scn` 时，用合成的 `*\n` 继续
             // （标签由注册的解析回调提供），而不是直接抛。没有 `.scn` 时行为不变。
-            if(TVPHasCompiledScenarioStorage(name)) {
+            if(HasCompiledScenarioStorage(name)) {
                 Buffer = TJS_W("*\n");
             } else {
                 throw;
@@ -161,7 +161,7 @@ void tTVPScenarioCacheItem::LoadScenario(const ttstr &name, bool isstring) {
     }
 
     if(count == 0)
-        TVPThrowExceptionMessage(TVPKAGNoLine, name);
+        ThrowExceptionMessage(KAGNoLine, name);
 
     Lines = new tLine[count];
     LineCount = count;
@@ -203,7 +203,7 @@ void tTVPScenarioCacheItem::LoadScenario(const ttstr &name, bool isstring) {
 }
 
 //---------------------------------------------------------------------------
-void tTVPScenarioCacheItem::EnsureLabelCache() {
+void ScenarioCacheItem::EnsureLabelCache() {
     // construct label cache
     if(!LabelCached) {
         // make label cache
@@ -226,8 +226,8 @@ void tTVPScenarioCacheItem::EnsureLabelCache() {
 
                 if(!label.c_str()[1]) {
                     if(prevlabel.IsEmpty())
-                        TVPThrowExceptionMessage(
-                            TVPKAGCannotOmmitFirstLabelName);
+                        ThrowExceptionMessage(
+                            KAGCannotOmmitFirstLabelName);
                     label = prevlabel;
                 }
 
@@ -251,58 +251,58 @@ void tTVPScenarioCacheItem::EnsureLabelCache() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPScenarioCache
+// ScenarioCache
 //---------------------------------------------------------------------------
 #define TVP_SCENARIO_MAX_CACHE_SIZE 8
-typedef tTJSRefHolder<tTVPScenarioCacheItem> tTVPScenarioCacheItemHolder;
-typedef tTJSHashCache<ttstr, tTVPScenarioCacheItemHolder, tTJSHashFunc<ttstr>,
+typedef tTJSRefHolder<ScenarioCacheItem> ScenarioCacheItemHolder;
+typedef tTJSHashCache<ttstr, ScenarioCacheItemHolder, tTJSHashFunc<ttstr>,
                       (TVP_SCENARIO_MAX_CACHE_SIZE * 2)>
-    tTVPScenarioCache;
-tTVPScenarioCache TVPScenarioCache(TVP_SCENARIO_MAX_CACHE_SIZE);
+    ScenarioCache;
+ScenarioCache scenarioCache(TVP_SCENARIO_MAX_CACHE_SIZE);
 
 //---------------------------------------------------------------------------
-void TVPClearScnearioCache() { TVPScenarioCache.Clear(); }
+void ClearScnearioCache() { scenarioCache.Clear(); }
 
 //---------------------------------------------------------------------------
-struct tTVPClearScenarioCacheCallback : public tTVPCompactEventCallbackIntf {
+struct ClearScenarioCacheCallback : public CompactEventCallbackIntf {
     void OnCompact(tjs_int level) override {
         // Scenario cache is limited to TVP_SCENARIO_MAX_CACHE_SIZE entries
         // with built-in LRU eviction. Aggressive clearing causes repeated
         // XP3 decompression (e.g. 6MB scenario files) and heap fragmentation.
     }
-} static TVPClearScenarioCacheCallback;
+} static clearScenarioCacheCallback;
 
-static bool TVPClearScenarioCacheCallbackInit = false;
+static bool ClearScenarioCacheCallbackInit = false;
 
 //---------------------------------------------------------------------------
-tTVPScenarioCacheItem *TVPGetScenario(const ttstr &storagename, bool isstring) {
+ScenarioCacheItem *GetScenario(const ttstr &storagename, bool isstring) {
     // compact interface initialization
-    if(!TVPClearScenarioCacheCallbackInit) {
-        TVPAddCompactEventHook(&TVPClearScenarioCacheCallback);
-        TVPClearScenarioCacheCallbackInit = true;
+    if(!ClearScenarioCacheCallbackInit) {
+        AddCompactEventHook(&clearScenarioCacheCallback);
+        ClearScenarioCacheCallbackInit = true;
     }
 
     if(isstring) {
         // we do not cache when the string is passed as a scenario
-        return new tTVPScenarioCacheItem(storagename, true);
+        return new ScenarioCacheItem(storagename, true);
     }
 
     // make hash and search over cache
-    tjs_uint32 hash = tTVPScenarioCache::MakeHash(storagename);
+    tjs_uint32 hash = ScenarioCache::MakeHash(storagename);
 
-    tTVPScenarioCacheItemHolder *ptr =
-        TVPScenarioCache.FindAndTouchWithHash(storagename, hash);
+    ScenarioCacheItemHolder *ptr =
+        scenarioCache.FindAndTouchWithHash(storagename, hash);
     if(ptr) {
         // found in the cache
         return ptr->GetObject();
     }
 
     // not found in the cache
-    tTVPScenarioCacheItem *item = new tTVPScenarioCacheItem(storagename, false);
+    ScenarioCacheItem *item = new ScenarioCacheItem(storagename, false);
     try {
         // push into scenario cache hash
-        tTVPScenarioCacheItemHolder holder(item);
-        TVPScenarioCache.AddWithHash(storagename, hash, holder);
+        ScenarioCacheItemHolder holder(item);
+        scenarioCache.AddWithHash(storagename, hash, holder);
     } catch(...) {
         item->Release();
         throw;
@@ -320,14 +320,14 @@ tTVPScenarioCacheItem *TVPGetScenario(const ttstr &storagename, bool isstring) {
 // psbfile 是编译进来的内置模块、加载时机由引擎决定，这里**不主动拉模块**（避免在解析器里
 // 引入插件加载副作用）。因此未注册回调时就是"没有回调"的行为。
 //---------------------------------------------------------------------------
-static tTVPCompiledScenarioLabelResolver TVPCompiledScenarioLabelResolver = nullptr;
+static CompiledScenarioLabelResolver compiledScenarioLabelResolver = nullptr;
 
-void TVPRegisterCompiledScenarioLabelResolver(
-    tTVPCompiledScenarioLabelResolver resolver) {
-    TVPCompiledScenarioLabelResolver = resolver;
+void RegisterCompiledScenarioLabelResolver(
+    CompiledScenarioLabelResolver resolver) {
+    compiledScenarioLabelResolver = resolver;
 }
 
-static ttstr TVPGetCompiledScenarioStorageName(const ttstr &name) {
+static ttstr GetCompiledScenarioStorageName(const ttstr &name) {
     if(name.IsEmpty())
         return ttstr();
 
@@ -337,18 +337,18 @@ static ttstr TVPGetCompiledScenarioStorageName(const ttstr &name) {
     return path;
 }
 
-static bool TVPHasCompiledScenarioStorage(const ttstr &name) {
-    const ttstr path = TVPGetCompiledScenarioStorageName(name);
+static bool HasCompiledScenarioStorage(const ttstr &name) {
+    const ttstr path = GetCompiledScenarioStorageName(name);
     return !path.IsEmpty() && krkr::io::IsExistentStorage(path);
 }
 
-static bool TVPCompiledScenarioHasLabel(const ttstr &storage,
+static bool CompiledScenarioHasLabel(const ttstr &storage,
                                         const ttstr &label) {
-    if(storage.IsEmpty() || label.IsEmpty() || !TVPCompiledScenarioLabelResolver)
+    if(storage.IsEmpty() || label.IsEmpty() || !compiledScenarioLabelResolver)
         return false;
 
     try {
-        return TVPCompiledScenarioLabelResolver(storage, label);
+        return compiledScenarioLabelResolver(storage, label);
     } catch(...) {
         return false;
     }
@@ -389,12 +389,12 @@ tTJSNI_KAGParser::tTJSNI_KAGParser() {
 
         er = dictclass->PropGet(0, TJS_W("clear"), nullptr, &val, dictclass);
         if(TJS_FAILED(er))
-            TVPThrowInternalError;
+            KRKR_THROW_INTERNAL_ERROR;
         DicClear = val.AsObject();
 
         er = dictclass->PropGet(0, TJS_W("assign"), nullptr, &val, dictclass);
         if(TJS_FAILED(er))
-            TVPThrowInternalError;
+            KRKR_THROW_INTERNAL_ERROR;
         DicAssign = val.AsObject();
 
     } catch(...) {
@@ -862,7 +862,7 @@ void tTJSNI_KAGParser::Restore(iTJSDispatch2 *dic) {
         }
 
         if(MacroArgStackDepth != MacroArgs.size())
-            TVPThrowExceptionMessage(TVPKAGMalformedSaveData);
+            ThrowExceptionMessage(KAGMalformedSaveData);
 
         MacroArgStackBase =
             MacroArgs.size(); // later reset to MacroArgStackBase
@@ -1027,10 +1027,10 @@ void tTJSNI_KAGParser::LoadScenario(const ttstr &name) {
         if(status == TJS_S_OK && result.Type() == tvtString) {
             // when onScenarioLoad returns string;
             // assumes the string is scenario
-            Scenario = TVPGetScenario(ttstr(result), true);
+            Scenario = GetScenario(ttstr(result), true);
         } else {
             // else load from file
-            Scenario = TVPGetScenario(name, false);
+            Scenario = GetScenario(name, false);
         }
 
         Lines = Scenario->GetLines();
@@ -1062,7 +1062,7 @@ void tTJSNI_KAGParser::LoadScenario(const ttstr &name) {
 //---------------------------------------------------------------------------
 void tTJSNI_KAGParser::Clear() {
     // clear all states
-    TVPClearScnearioCache(); // also invalidates the scenario cache
+    ClearScnearioCache(); // also invalidates the scenario cache
     ClearBuffer();
     ClearMacroArgs();
     ClearCallStack();
@@ -1103,7 +1103,7 @@ void tTJSNI_KAGParser::BreakConditionAndMacro() {
 }
 
 //---------------------------------------------------------------------------
-static bool inline TVPIsWS(tjs_char ch) {
+static bool inline IsWS(tjs_char ch) {
     // is white space ?
     return (ch == TJS_W(' ') || ch == TJS_W('\t'));
 }
@@ -1117,7 +1117,7 @@ void tTJSNI_KAGParser::GoToLabel(const ttstr &name) {
 
     Scenario->EnsureLabelCache();
 
-    tTVPScenarioCacheItem::tLabelCacheData *newline;
+    ScenarioCacheItem::tLabelCacheData *newline;
 
     newline = Scenario->GetLabelCache().Find(name);
 
@@ -1134,7 +1134,7 @@ void tTJSNI_KAGParser::GoToLabel(const ttstr &name) {
         CurLine = newline->Line;
         CurPos = 0;
         LineBufferUsing = false;
-    } else if(TVPCompiledScenarioHasLabel(StorageName, name)) {
+    } else if(CompiledScenarioHasLabel(StorageName, name)) {
         // 编译场景：标签不在脚本文本里，但解析回调认得它（见头文件说明）。
         CurLabel = name;
         CurPage.Clear();
@@ -1143,7 +1143,7 @@ void tTJSNI_KAGParser::GoToLabel(const ttstr &name) {
         LineBufferUsing = false;
     } else {
         // not found
-        TVPThrowExceptionMessage(TVPKAGLabelNotFound, StorageName, name);
+        ThrowExceptionMessage(KAGLabelNotFound, StorageName, name);
     }
 
     if(DebugLevel >= tkdlSimple) {
@@ -1195,7 +1195,7 @@ bool tTJSNI_KAGParser::SkipCommentOrLabel() {
         if(p[0] == TJS_W('*')) {
             // label
             if(RecordingMacro)
-                TVPThrowExceptionMessage(TVPLabelOrScriptInMacro);
+                ThrowExceptionMessage(LabelOrScriptInMacro);
 
             tjs_char *vl = TJS_strchr(const_cast<tjs_char *>(p), TJS_W('|'));
             bool pagename;
@@ -1231,7 +1231,7 @@ bool tTJSNI_KAGParser::SkipCommentOrLabel() {
            (p[0] == TJS_W('@') && (!TJS_strcmp(p, TJS_W("@iscript"))))) {
             // inline TJS script
             if(RecordingMacro)
-                TVPThrowExceptionMessage(TVPLabelOrScriptInMacro);
+                ThrowExceptionMessage(LabelOrScriptInMacro);
 
             ttstr script;
             CurLine++;
@@ -1255,7 +1255,7 @@ bool tTJSNI_KAGParser::SkipCommentOrLabel() {
             }
 
             if(CurLine == LineCount)
-                TVPThrowExceptionMessage(TVPKAGInlineScriptNotEnd);
+                ThrowExceptionMessage(KAGInlineScriptNotEnd);
 
             // fire onScript callback event
             if(ExcludeLevel == -1) {
@@ -1299,7 +1299,7 @@ bool tTJSNI_KAGParser::SkipCommentOrLabel() {
 // 所以 taglist 必须在拷贝后显式重设；枚举属性名时也要把 `tagname/taglist/runLine/
 // runLineStr/runCount` 这些解析器运行时成员排除掉。
 //---------------------------------------------------------------------------
-void TVPSetKagTagList(iTJSDispatch2 *tag,
+void SetKagTagList(iTJSDispatch2 *tag,
                       const std::vector<ttstr> &attribute_names) {
     if(!tag)
         return;
@@ -1335,7 +1335,7 @@ void TVPSetKagTagList(iTJSDispatch2 *tag,
 
     array->Release();
 }
-bool TVPHasKagTagList(iTJSDispatch2 *tag) {
+bool HasKagTagList(iTJSDispatch2 *tag) {
     if(!tag)
         return false;
 
@@ -1345,13 +1345,13 @@ bool TVPHasKagTagList(iTJSDispatch2 *tag) {
     return value.Type() != tvtVoid;
 }
 
-bool TVPIsKagRuntimeTagMember(const ttstr &name) {
+bool IsKagRuntimeTagMember(const ttstr &name) {
     return name == TJS_W("tagname") || name == TJS_W("taglist") ||
            name == TJS_W("runLine") || name == TJS_W("runLineStr") ||
            name == TJS_W("runCount");
 }
 
-std::vector<ttstr> TVPGetKagTagListAttributeNames(iTJSDispatch2 *tag) {
+std::vector<ttstr> GetKagTagListAttributeNames(iTJSDispatch2 *tag) {
     std::vector<ttstr> names;
     if(!tag)
         return names;
@@ -1380,7 +1380,7 @@ std::vector<ttstr> TVPGetKagTagListAttributeNames(iTJSDispatch2 *tag) {
             continue;
 
         ttstr name(name_value);
-        if(TVPIsKagRuntimeTagMember(name) ||
+        if(IsKagRuntimeTagMember(name) ||
            std::find(names.begin(), names.end(), name) != names.end())
             continue;
         names.push_back(name);
@@ -1389,9 +1389,9 @@ std::vector<ttstr> TVPGetKagTagListAttributeNames(iTJSDispatch2 *tag) {
     return names;
 }
 
-class TVPKagTagListEnumCaller : public tTJSDispatch {
+class KagTagListEnumCaller : public tTJSDispatch {
 public:
-    explicit TVPKagTagListEnumCaller(std::vector<ttstr> &names)
+    explicit KagTagListEnumCaller(std::vector<ttstr> &names)
         : Names(names) {}
 
     tjs_error FuncCall(tjs_uint32, const tjs_char *, tjs_uint32 *,
@@ -1401,7 +1401,7 @@ public:
             const tTVInteger memberflag = param[1]->AsInteger();
             if(!(memberflag & TJS_HIDDENMEMBER)) {
                 ttstr name(*param[0]);
-                if(!TVPIsKagRuntimeTagMember(name))
+                if(!IsKagRuntimeTagMember(name))
                     Names.push_back(name);
             }
         }
@@ -1414,12 +1414,12 @@ private:
     std::vector<ttstr> &Names;
 };
 
-std::vector<ttstr> TVPCollectKagTagMemberNames(iTJSDispatch2 *tag) {
+std::vector<ttstr> CollectKagTagMemberNames(iTJSDispatch2 *tag) {
     std::vector<ttstr> names;
     if(!tag)
         return names;
 
-    TVPKagTagListEnumCaller *caller = new TVPKagTagListEnumCaller(names);
+    KagTagListEnumCaller *caller = new KagTagListEnumCaller(names);
     tTJSVariantClosure closure(caller);
     tag->EnumMembers(TJS_IGNOREPROP | TJS_ENUM_NO_VALUE, &closure, nullptr);
     caller->Release();
@@ -1438,7 +1438,7 @@ void tTJSNI_KAGParser::PushMacroArgs(iTJSDispatch2 *args) {
         dsp = MacroArgs[MacroArgStackDepth];
     } else {
         if(MacroArgStackDepth > MacroArgs.size())
-            TVPThrowInternalError;
+            KRKR_THROW_INTERNAL_ERROR;
         dsp = TJSCreateDictionaryObject();
         MacroArgs.push_back(dsp);
     }
@@ -1451,8 +1451,8 @@ void tTJSNI_KAGParser::PushMacroArgs(iTJSDispatch2 *args) {
 
     // `Dictionary.assign` 会跳过隐藏成员，而 taglist 正是隐藏的解析器元数据 ——
     // 显式重设一次，`[tag *]` 展开时才拿得到属性顺序（上游同款处理）。
-    if(TVPHasKagTagList(args))
-        TVPSetKagTagList(dsp, TVPGetKagTagListAttributeNames(args));
+    if(HasKagTagList(args))
+        SetKagTagList(dsp, GetKagTagListAttributeNames(args));
 }
 
 
@@ -1502,9 +1502,9 @@ iTJSDispatch2 *tTJSNI_KAGParser::CopyTag(tjs_int numparams,
                               dest);
         }
 
-        if(!TVPHasKagTagList(dest)) {
-            const std::vector<ttstr> names = TVPCollectKagTagMemberNames(dest);
-            TVPSetKagTagList(dest, names);
+        if(!HasKagTagList(dest)) {
+            const std::vector<ttstr> names = CollectKagTagMemberNames(dest);
+            SetKagTagList(dest, names);
         }
     } catch(...) {
         dest->Release();
@@ -1525,7 +1525,7 @@ iTJSDispatch2 *tTJSNI_KAGParser::CloneTag(iTJSDispatch2 *source) {
 //---------------------------------------------------------------------------
 void tTJSNI_KAGParser::PopMacroArgs() {
     if(MacroArgStackDepth == 0)
-        TVPThrowExceptionMessage(TVPKAGSyntaxError);
+        ThrowExceptionMessage(KAGSyntaxError);
     MacroArgStackDepth--;
 }
 
@@ -1600,7 +1600,7 @@ void tTJSNI_KAGParser::PushCallStack() {
 void tTJSNI_KAGParser::PopCallStack(const ttstr &storage, const ttstr &label) {
     // pop call stack information
     if(CallStack.size() == 0)
-        TVPThrowExceptionMessage(TVPKAGCallStackUnderflow);
+        ThrowExceptionMessage(KAGCallStackUnderflow);
 
     // pop macro argument information
     tCallStackData &data = CallStack.back();
@@ -1619,12 +1619,12 @@ void tTJSNI_KAGParser::PopCallStack(const ttstr &storage, const ttstr &label) {
             GoToLabel(data.Label);
         CurLine += data.Offset;
         if(CurLine > LineCount)
-            TVPThrowExceptionMessage(TVPKAGReturnLostSync);
+            ThrowExceptionMessage(KAGReturnLostSync);
         /* CurLine == LineCount is OK (at end of file) */
         if(CurLine < LineCount)
             if(data.OrgLineStr !=
                Lines[CurLine].Start) // check original line information
-                TVPThrowExceptionMessage(TVPKAGReturnLostSync);
+                ThrowExceptionMessage(KAGReturnLostSync);
         if(data.LineBufferUsing) {
             LineBuffer = data.LineBuffer;
             CurLineStr = LineBuffer.c_str();
@@ -1733,7 +1733,7 @@ bool tTJSNI_KAGParser::EntryParam(bool &condition, const ttstr &attribname,
     }
 
     if(entity) {
-        TVPExecuteExpression(value, Owner, &ValueVariant);
+        ExecuteExpression(value, Owner, &ValueVariant);
         if(ValueVariant.Type() != tvtVoid)
             ValueVariant.ToString();
     } else if(macroarg) {
@@ -1758,7 +1758,7 @@ bool tTJSNI_KAGParser::EntryParam(bool &condition, const ttstr &attribname,
 
     if(attribname == TJS_W("cond")) {
         tTJSVariant val;
-        TVPExecuteExpression(ttstr(ValueVariant), Owner, &val);
+        ExecuteExpression(ttstr(ValueVariant), Owner, &val);
         condition = val.operator bool();
         return false;
     }
@@ -1844,7 +1844,7 @@ parse_start:
                                     &true_val, DicObj);
                 // 合成标签也带 taglist（只有标签名本身，无属性）：
                 // `[tag *]` 展开与 copyTag 依赖这份元数据判"哪些成员是属性"。
-                TVPSetKagTagList(DicObj, {});
+                SetKagTagList(DicObj, {});
                 if(RecordingMacro)
                     RecordingMacroStr += TJS_W("[r eol=true]");
                 CurLine++;
@@ -1901,7 +1901,7 @@ parse_start:
                     DicObj->PropSetByVS(TJS_MEMBERENSURE,
                                         text_name.AsVariantStringNoAddRef(),
                                         pCachedVal, DicObj);
-                    TVPSetKagTagList(DicObj, { ttstr(TJS_W("text")) });
+                    SetKagTagList(DicObj, { ttstr(TJS_W("text")) });
 
                     if(RecordingMacro) {
                         if(ch == TJS_W('['))
@@ -1915,7 +1915,7 @@ parse_start:
                     DicObj->PropSetByVS(TJS_MEMBERENSURE,
                                         __tag_name.AsVariantStringNoAddRef(),
                                         &r_val, DicObj);
-                    TVPSetKagTagList(DicObj, {});
+                    SetKagTagList(DicObj, {});
                     if(RecordingMacro)
                         RecordingMacroStr += TJS_W("[r]");
                 }
@@ -1941,20 +1941,20 @@ parse_start:
         CurPos++;
 
         if(CurLineStr[CurPos] == 0)
-            TVPThrowExceptionMessage(TVPKAGSyntaxError);
+            ThrowExceptionMessage(KAGSyntaxError);
 
         // tag name
-        while(TVPIsWS(CurLineStr[CurPos]))
+        while(IsWS(CurLineStr[CurPos]))
             CurPos++;
         if(CurLineStr[CurPos] == 0)
-            TVPThrowExceptionMessage(TVPKAGSyntaxError);
+            ThrowExceptionMessage(KAGSyntaxError);
         const tjs_char *tagnamestart = CurLineStr + CurPos;
-        while(CurLineStr[CurPos] && !TVPIsWS(CurLineStr[CurPos]) &&
+        while(CurLineStr[CurPos] && !IsWS(CurLineStr[CurPos]) &&
               CurLineStr[CurPos] != ldelim)
             CurPos++;
 
         if(tagnamestart == CurLineStr + CurPos)
-            TVPThrowExceptionMessage(TVPKAGSyntaxError);
+            ThrowExceptionMessage(KAGSyntaxError);
 
         ttstr tagname(tagnamestart, CurLineStr + CurPos - tagnamestart);
         tagname.ToLowerCase();
@@ -2049,17 +2049,17 @@ parse_start:
 
         // tag attributes
         while(true) {
-            while(TVPIsWS(CurLineStr[CurPos]))
+            while(IsWS(CurLineStr[CurPos]))
                 CurPos++;
 
             if(MultiLineTagEnabled && CurLineStr[CurPos] == TJS_W('\\') &&
                CurLineStr[CurPos + 1] == 0) {
                 if(CurLine + 1 >= LineCount)
-                    TVPThrowExceptionMessage(TVPKAGSyntaxError);
+                    ThrowExceptionMessage(KAGSyntaxError);
 
                 const tjs_char *next = Lines[CurLine + 1].Start;
                 if(next[0] != TJS_W(';'))
-                    TVPThrowExceptionMessage(TVPKAGSyntaxError);
+                    ThrowExceptionMessage(KAGSyntaxError);
 
                 tjs_int curlen = TJS_strlen(CurLineStr) - 1; // ignore "\"
                 tjs_int nextlen = Lines[CurLine + 1].Length - 1; // ignore ";"
@@ -2087,7 +2087,7 @@ parse_start:
                         // macro recording ended
                         // endmacro
                         if(!RecordingMacro)
-                            TVPThrowExceptionMessage(TVPKAGSyntaxError);
+                            ThrowExceptionMessage(KAGSyntaxError);
                         RecordingMacro = false;
                         if(DebugLevel >= tkdlVerbose) {
                             krkr::utils::AddLog(TJS_W("macro : ") + RecordingMacroName +
@@ -2162,8 +2162,8 @@ parse_start:
                                         __exp_name.GetHint(), &val, DicObj);
                         exp = val;
                         if(exp == TJS_W(""))
-                            TVPThrowExceptionMessage(TVPKAGSyntaxError);
-                        TVPExecuteExpression(exp, Owner, &val);
+                            ThrowExceptionMessage(KAGSyntaxError);
+                        ExecuteExpression(exp, Owner, &val);
 
                         bool cond = val.operator bool();
                         if(tagkind == tag_ignore)
@@ -2191,8 +2191,8 @@ parse_start:
                         exp = val;
                         // const std::string s = exp.AsStdString();
                         if(exp == TJS_W(""))
-                            TVPThrowExceptionMessage(TVPKAGSyntaxError);
-                        TVPExecuteExpression(exp, Owner, &val);
+                            ThrowExceptionMessage(KAGSyntaxError);
+                        ExecuteExpression(exp, Owner, &val);
 
                         bool cond = val.operator bool();
                         if(cond) {
@@ -2263,11 +2263,11 @@ parse_start:
                                         DicObj);
                         ttstr init = val;
                         if(!init.IsEmpty())
-                            TVPExecuteExpression(init, Owner, &val);
+                            ExecuteExpression(init, Owner, &val);
 
                         if(exp.IsEmpty())
-                            TVPThrowExceptionMessage(TVPKAGSyntaxError);
-                        TVPExecuteExpression(exp, Owner, &val);
+                            ThrowExceptionMessage(KAGSyntaxError);
+                        ExecuteExpression(exp, Owner, &val);
                         if(!val.operator bool())
                             ExcludeLevel = IfLevel;
                     }
@@ -2278,7 +2278,7 @@ parse_start:
 
                 if(tagkind == tag_endwhile) {
                     if(WhileStack.empty())
-                        TVPThrowExceptionMessage(TVPKAGSyntaxError);
+                        ThrowExceptionMessage(KAGSyntaxError);
 
                     const tWhileStackData data = WhileStack.back();
                     bool loop_again = false;
@@ -2287,8 +2287,8 @@ parse_start:
                     if(ExcludeLevel == -1 && !data.Exp.IsEmpty()) {
                         tTJSVariant val;
                         if(!data.Each.IsEmpty())
-                            TVPExecuteExpression(data.Each, Owner, &val);
-                        TVPExecuteExpression(data.Exp, Owner, &val);
+                            ExecuteExpression(data.Each, Owner, &val);
+                        ExecuteExpression(data.Exp, Owner, &val);
                         loop_again = val.operator bool();
                     }
 
@@ -2323,9 +2323,9 @@ parse_start:
                         bool loop_again = false;
                         tTJSVariant val;
                         if(!data.Each.IsEmpty())
-                            TVPExecuteExpression(data.Each, Owner, &val);
+                            ExecuteExpression(data.Each, Owner, &val);
                         if(!data.Exp.IsEmpty()) {
-                            TVPExecuteExpression(data.Exp, Owner, &val);
+                            ExecuteExpression(data.Exp, Owner, &val);
                             loop_again = val.operator bool();
                         }
 
@@ -2377,8 +2377,8 @@ parse_start:
                                             __exp_name.GetHint(), &val, DicObj);
                             exp = val;
                             if(exp == TJS_W(""))
-                                TVPThrowExceptionMessage(TVPKAGSyntaxError);
-                            TVPExecuteExpression(exp, Owner, &val);
+                                ThrowExceptionMessage(KAGSyntaxError);
+                            ExecuteExpression(exp, Owner, &val);
                             exp = val;
 
                             bool escape = true;
@@ -2481,7 +2481,7 @@ parse_start:
                             tag_list_names.reserve(parsed_attributes.size());
                             for(const auto &entry : parsed_attributes)
                                 tag_list_names.push_back(entry.Name);
-                            TVPSetKagTagList(DicObj, tag_list_names);
+                            SetKagTagList(DicObj, tag_list_names);
                             PushMacroArgs(DicObj);
                         }
 
@@ -2589,7 +2589,7 @@ parse_start:
                             RecordingMacroName = val;
                             RecordingMacroName.ToLowerCase();
                             if(RecordingMacroName == TJS_W(""))
-                                TVPThrowExceptionMessage(TVPKAGSyntaxError);
+                                ThrowExceptionMessage(KAGSyntaxError);
                             // missing macro name
                             RecordingMacro = true; // start recording macro
                             RecordingMacroStr.Clear();
@@ -2602,7 +2602,7 @@ parse_start:
                             ttstr macroname = val;
                             if(TJS_FAILED(Macros->DeleteMember(
                                    0, macroname.c_str(), 0, Macros)))
-                                TVPThrowExceptionMessage(TVPUnknownMacroName,
+                                ThrowExceptionMessage(UnknownMacroName,
                                                          macroname);
                         } else if(tagkind == tag_pmacro) {
                             tTJSVariant val;
@@ -2611,7 +2611,7 @@ parse_start:
                                             DicObj);
                             ttstr macroname = val;
                             if(macroname.IsEmpty())
-                                TVPThrowExceptionMessage(TVPKAGSyntaxError);
+                                ThrowExceptionMessage(KAGSyntaxError);
 
                             iTJSDispatch2 *array = TJSCreateArrayObject();
                             tjs_int idx = 0;
@@ -2639,7 +2639,7 @@ parse_start:
                             ttstr macroname = val;
                             if(TJS_FAILED(ParamMacros->DeleteMember(
                                    0, macroname.c_str(), 0, ParamMacros)))
-                                TVPThrowExceptionMessage(TVPUnknownMacroName,
+                                ThrowExceptionMessage(UnknownMacroName,
                                                          macroname);
                         }
                     }
@@ -2650,7 +2650,7 @@ parse_start:
             }
 
             if(CurLineStr[CurPos] == 0)
-                TVPThrowExceptionMessage(TVPKAGSyntaxError);
+                ThrowExceptionMessage(KAGSyntaxError);
 
             // attrib name
             if(CurLineStr[CurPos] == TJS_W('*')) {
@@ -2671,9 +2671,9 @@ parse_start:
                         // 名单来自隐藏元数据 taglist；宏字典若没有 taglist（旧存档/
                         // 手写宏），退化为枚举它的可见成员名。上游同款处理。
                         std::vector<ttstr> macro_names =
-                            TVPGetKagTagListAttributeNames(dsp);
-                        if(macro_names.empty() && !TVPHasKagTagList(dsp))
-                            macro_names = TVPCollectKagTagMemberNames(dsp);
+                            GetKagTagListAttributeNames(dsp);
+                        if(macro_names.empty() && !HasKagTagList(dsp))
+                            macro_names = CollectKagTagMemberNames(dsp);
 
                         for(const auto &name : macro_names) {
                             tTJSVariant value;
@@ -2702,13 +2702,13 @@ parse_start:
                 }
 
                 CurPos++;
-                while(CurLineStr[CurPos] && TVPIsWS(CurLineStr[CurPos]))
+                while(CurLineStr[CurPos] && IsWS(CurLineStr[CurPos]))
                     CurPos++;
                 continue;
             }
 
             const tjs_char *attribnamestart = CurLineStr + CurPos;
-            while(CurLineStr[CurPos] && !TVPIsWS(CurLineStr[CurPos]) &&
+            while(CurLineStr[CurPos] && !IsWS(CurLineStr[CurPos]) &&
                   CurLineStr[CurPos] != TJS_W('=') &&
                   CurLineStr[CurPos] != ldelim)
                 CurPos++;
@@ -2719,7 +2719,7 @@ parse_start:
             attribname.ToLowerCase();
 
             // =
-            while(TVPIsWS(CurLineStr[CurPos]))
+            while(IsWS(CurLineStr[CurPos]))
                 CurPos++;
 
             bool entity = false;
@@ -2733,14 +2733,14 @@ parse_start:
                 allowParamMacro = true;
             } else {
                 if(CurLineStr[CurPos] == 0)
-                    TVPThrowExceptionMessage(TVPKAGSyntaxError);
+                    ThrowExceptionMessage(KAGSyntaxError);
                 CurPos++;
                 if(CurLineStr[CurPos] == 0)
-                    TVPThrowExceptionMessage(TVPKAGSyntaxError);
-                while(CurLineStr[CurPos] && TVPIsWS(CurLineStr[CurPos]))
+                    ThrowExceptionMessage(KAGSyntaxError);
+                while(CurLineStr[CurPos] && IsWS(CurLineStr[CurPos]))
                     CurPos++;
                 if(CurLineStr[CurPos] == 0)
-                    TVPThrowExceptionMessage(TVPKAGSyntaxError);
+                    ThrowExceptionMessage(KAGSyntaxError);
 
                 // attrib value
                 tjs_char vdelim = 0; // value delimiter
@@ -2761,18 +2761,18 @@ parse_start:
                 while(CurLineStr[CurPos] &&
                       (vdelim ? (CurLineStr[CurPos] != vdelim)
                               : (CurLineStr[CurPos] != ldelim &&
-                                 !TVPIsWS(CurLineStr[CurPos])))) {
+                                 !IsWS(CurLineStr[CurPos])))) {
                     if(CurLineStr[CurPos] == TJS_W('`')) {
                         // escaped with '`'
                         CurPos++;
                         if(CurLineStr[CurPos] == 0)
-                            TVPThrowExceptionMessage(TVPKAGSyntaxError);
+                            ThrowExceptionMessage(KAGSyntaxError);
                     }
                     CurPos++;
                 }
 
                 if(ldelim != 0 && CurLineStr[CurPos] == 0)
-                    TVPThrowExceptionMessage(TVPKAGSyntaxError);
+                    ThrowExceptionMessage(KAGSyntaxError);
                 const tjs_char *valueend = CurLineStr + CurPos;
 
                 if(vdelim)
@@ -2845,7 +2845,7 @@ static iTJSNativeInstance *Create_NI_KAGParser() {
 //---------------------------------------------------------------------------
 // tTJSNC_KAGParser : KAGParser TJS native class
 //---------------------------------------------------------------------------
-iTJSDispatch2 *TVPCreateNativeClass_KAGParser() {
+iTJSDispatch2 *CreateNativeClass_KAGParser() {
     tTJSNativeClassForPlugin *classobj =
         TJSCreateNativeClassForPlugin(TJS_W("KAGParser"), Create_NI_KAGParser);
     // register native methods/properties
@@ -2943,9 +2943,9 @@ iTJSDispatch2 *TVPCreateNativeClass_KAGParser() {
             if(TJS_FAILED(clo.Object->NativeInstanceSupport(
                    TJS_NIS_GETINSTANCE, ClassID_KAGParser,
                    (iTJSNativeInstance **)&src)))
-                TVPThrowExceptionMessage(TVPKAGSpecifyKAGParser);
+                ThrowExceptionMessage(KAGSpecifyKAGParser);
         } else {
-            TVPThrowExceptionMessage(TVPKAGSpecifyKAGParser);
+            ThrowExceptionMessage(KAGSpecifyKAGParser);
         }
 
         _this->Assign(*src);
@@ -3121,7 +3121,7 @@ TJS_END_NATIVE_PROP_GETTER
 TJS_BEGIN_NATIVE_PROP_SETTER {
     TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
                             /*var. type*/ tTJSNI_KAGParser);
-    _this->SetDebugLevel((tTVPKAGDebugLevel)(tjs_int)(*param));
+    _this->SetDebugLevel((KAGDebugLevel)(tjs_int)(*param));
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER

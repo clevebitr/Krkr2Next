@@ -27,86 +27,86 @@
 namespace krkr::base {
 
 //---------------------------------------------------------------------------
-// TVPInvokeEvents
+// InvokeTJSEvents
 //---------------------------------------------------------------------------
-bool TVPEventInvoked = false;
+bool EventInvoked = false;
 
-void TVPInvokeEvents() {
-    if(TVPEventInvoked)
+void InvokeTJSEvents() {
+    if(EventInvoked)
         return;
-    TVPEventInvoked = true;
-    if(krkr::environ::GetSystemControl) {
-        krkr::environ::GetSystemControl->InvokeEvents();
+    EventInvoked = true;
+    if(krkr::environ::systemControl) {
+        krkr::environ::systemControl->InvokeEvents();
     }
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPEventReceived
+// EventReceived
 //---------------------------------------------------------------------------
-void TVPEventReceived() {
-    TVPEventInvoked = false;
-    if(krkr::environ::GetSystemControl)
-        krkr::environ::GetSystemControl->NotifyEventDelivered();
+void EventReceived() {
+    EventInvoked = false;
+    if(krkr::environ::systemControl)
+        krkr::environ::systemControl->NotifyEventDelivered();
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCallDeliverAllEventsOnIdle
+// CallDeliverAllTJSEventsOnIdle
 //---------------------------------------------------------------------------
-void TVPCallDeliverAllEventsOnIdle() {
-    if(krkr::environ::GetSystemControl) {
-        krkr::environ::GetSystemControl->CallDeliverAllEventsOnIdle();
+void CallDeliverAllTJSEventsOnIdle() {
+    if(krkr::environ::systemControl) {
+        krkr::environ::systemControl->CallDeliverAllEventsOnIdle();
     }
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPBreathe
+// Breathe
 //---------------------------------------------------------------------------
-static bool TVPBreathing = false;
+static bool Breathing = false;
 
-void TVPBreathe() {
-    TVPEventDisabled = true; // not to call TVP events...
-    TVPBreathing = true;
+void Breathe() {
+    EventDisabled = true; // not to call TVP events...
+    Breathing = true;
     try {
         Application->ProcessMessages(); // do Windows message pumping
     } catch(...) {
-        TVPBreathing = false;
-        TVPEventDisabled = false;
+        Breathing = false;
+        EventDisabled = false;
         throw;
     }
 
-    TVPBreathing = false;
-    TVPEventDisabled = false;
+    Breathing = false;
+    EventDisabled = false;
 }
 
 //---------------------------------------------------------------------------
-bool TVPGetBreathing() {
+bool GetBreathing() {
     // return whether now is in event breathing
-    return TVPBreathing;
+    return Breathing;
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPSystemEventDisabledState
+// SystemEventDisabledState
 //---------------------------------------------------------------------------
-void TVPSetSystemEventDisabledState(bool en) {
-    krkr::environ::GetSystemControl->SetEventEnabled(!en);
+void SetSystemEventDisabledState(bool en) {
+    krkr::environ::systemControl->SetEventEnabled(!en);
     if(!en)
-        TVPDeliverAllEvents();
+        DeliverAllEvents();
 }
 
 //---------------------------------------------------------------------------
-bool TVPGetSystemEventDisabledState() {
-    return !krkr::environ::GetSystemControl->GetEventEnabled();
+bool GetSystemEventDisabledState() {
+    return !krkr::environ::systemControl->GetEventEnabled();
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPContinuousHandlerCallLimitThread
+// ContinuousHandlerCallLimitThread
 //---------------------------------------------------------------------------
-class tTVPContinuousHandlerCallLimitThread : public krkr::utils::Thread {
+class ContinuousHandlerCallLimitThread : public krkr::utils::Thread {
     tjs_uint64 NextEventTick;
     tjs_uint64 Interval;
     krkr::utils::ThreadEvent Event;
@@ -114,12 +114,12 @@ class tTVPContinuousHandlerCallLimitThread : public krkr::utils::Thread {
 
     bool Enabled;
 
-    NativeEventQueue<tTVPContinuousHandlerCallLimitThread> EventQueue;
+    NativeEventQueue<ContinuousHandlerCallLimitThread> EventQueue;
 
 public:
-    tTVPContinuousHandlerCallLimitThread();
+    ContinuousHandlerCallLimitThread();
 
-    ~tTVPContinuousHandlerCallLimitThread() override;
+    ~ContinuousHandlerCallLimitThread() override;
 
 protected:
     void Execute() override;
@@ -131,13 +131,13 @@ public:
 
     void SetInterval(tjs_uint64 interval) { Interval = interval; }
 
-} static *TVPContinuousHandlerCallLimitThread = nullptr;
+} static *continuousHandlerCallLimitThread = nullptr;
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-tTVPContinuousHandlerCallLimitThread::tTVPContinuousHandlerCallLimitThread() :
+ContinuousHandlerCallLimitThread::ContinuousHandlerCallLimitThread() :
     krkr::utils::Thread(true),
-    EventQueue(this, &tTVPContinuousHandlerCallLimitThread::WndProc) {
+    EventQueue(this, &ContinuousHandlerCallLimitThread::WndProc) {
     NextEventTick = 0;
     Interval = (1 << KRKR_SUBMILLI_FRAC_BITS) * 1000 / 60; // default 60Hz
     Enabled = false;
@@ -147,7 +147,7 @@ tTVPContinuousHandlerCallLimitThread::tTVPContinuousHandlerCallLimitThread() :
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-tTVPContinuousHandlerCallLimitThread::~tTVPContinuousHandlerCallLimitThread() {
+ContinuousHandlerCallLimitThread::~ContinuousHandlerCallLimitThread() {
     Terminate();
     Resume();
     Event.Set();
@@ -157,7 +157,7 @@ tTVPContinuousHandlerCallLimitThread::~tTVPContinuousHandlerCallLimitThread() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void tTVPContinuousHandlerCallLimitThread::Execute() {
+void ContinuousHandlerCallLimitThread::Execute() {
     while(!GetTerminated()) {
         tjs_uint64 curtick = krkr::utils::GetTickCount() << KRKR_SUBMILLI_FRAC_BITS;
         tjs_uint32 sleeptime;
@@ -167,7 +167,7 @@ void tTVPContinuousHandlerCallLimitThread::Execute() {
 
             if(Enabled) {
                 if(NextEventTick <= curtick) {
-                    TVPProcessContinuousHandlerEventFlag =
+                    ProcessContinuousHandlerEventFlag =
                         true; // set flag to process event on next
                               // idle
                     EventQueue.PostEvent(
@@ -196,7 +196,7 @@ void tTVPContinuousHandlerCallLimitThread::Execute() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void tTVPContinuousHandlerCallLimitThread::SetEnabled(bool enabled) {
+void ContinuousHandlerCallLimitThread::SetEnabled(bool enabled) {
     tTJSCriticalSectionHolder holder(CS);
 
     Enabled = enabled;
@@ -209,10 +209,10 @@ void tTVPContinuousHandlerCallLimitThread::SetEnabled(bool enabled) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-static tjs_int TVPContinousHandlerLimitFrequency = 0;
+static tjs_int ContinousHandlerLimitFrequency = 0;
 
 //---------------------------------------------------------------------------
-void TVPBeginContinuousEvent() {
+void BeginContinuousEvent() {
     // read commandline options
     static tjs_int ArgumentGeneration = 0;
     if(ArgumentGeneration != krkr::base::GetCommandLineArgumentGeneration()) {
@@ -220,57 +220,57 @@ void TVPBeginContinuousEvent() {
 
         tTJSVariant val;
         if(krkr::base::GetCommandLine(TJS_W("-contfreq"), &val)) {
-            TVPContinousHandlerLimitFrequency = (tjs_int)val;
+            ContinousHandlerLimitFrequency = (tjs_int)val;
         }
     }
-    //	if(!TVPIsWaitVSync())
+    //	if(!IsWaitVSync())
     {
-        if(TVPContinousHandlerLimitFrequency == 0) {
+        if(ContinousHandlerLimitFrequency == 0) {
             // no limit
             // this notifies continuous calling of
-            // TVPDeliverAllEvents.
-            if(krkr::environ::GetSystemControl)
-                krkr::environ::GetSystemControl->BeginContinuousEvent();
+            // DeliverAllEvents.
+            if(krkr::environ::systemControl)
+                krkr::environ::systemControl->BeginContinuousEvent();
         } else {
             // has limit
-            if(!TVPContinuousHandlerCallLimitThread)
-                TVPContinuousHandlerCallLimitThread =
-                    new tTVPContinuousHandlerCallLimitThread();
-            TVPContinuousHandlerCallLimitThread->SetInterval(
+            if(!continuousHandlerCallLimitThread)
+                continuousHandlerCallLimitThread =
+                    new ContinuousHandlerCallLimitThread();
+            continuousHandlerCallLimitThread->SetInterval(
                 (1 << KRKR_SUBMILLI_FRAC_BITS) * 1000 /
-                TVPContinousHandlerLimitFrequency);
-            TVPContinuousHandlerCallLimitThread->SetEnabled(true);
+                ContinousHandlerLimitFrequency);
+            continuousHandlerCallLimitThread->SetEnabled(true);
         }
     }
 
-    // TVPEnsureVSyncTimingThread();
+    // EnsureVSyncTimingThread();
     // if we wait vsync, the continuous handler will be executed at
     // the every timing of vsync.
 }
 
 //---------------------------------------------------------------------------
-void TVPEndContinuousEvent() {
+void EndContinuousEvent() {
     // anyway
-    if(TVPContinuousHandlerCallLimitThread)
-        TVPContinuousHandlerCallLimitThread->SetEnabled(false);
+    if(continuousHandlerCallLimitThread)
+        continuousHandlerCallLimitThread->SetEnabled(false);
 
     // anyway
-    if(krkr::environ::GetSystemControl)
-        krkr::environ::GetSystemControl->EndContinuousEvent();
+    if(krkr::environ::systemControl)
+        krkr::environ::systemControl->EndContinuousEvent();
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-static void TVPReleaseContinuousHandlerCallLimitThread() {
-    if(TVPContinuousHandlerCallLimitThread)
-        delete TVPContinuousHandlerCallLimitThread,
-            TVPContinuousHandlerCallLimitThread = nullptr;
+static void ReleaseContinuousHandlerCallLimitThread() {
+    if(continuousHandlerCallLimitThread)
+        delete continuousHandlerCallLimitThread,
+            continuousHandlerCallLimitThread = nullptr;
 }
 
-// to release TVPContinuousHandlerCallLimitThread at exit
-static tTVPAtExit
-    TVPTimerThreadUninitAtExit(KRKR_ATEXIT_PRI_SHUTDOWN,
-                               TVPReleaseContinuousHandlerCallLimitThread);
+// to release continuousHandlerCallLimitThread at exit
+static AtExit
+    TimerThreadUninitAtExit(KRKR_ATEXIT_PRI_SHUTDOWN,
+                               ReleaseContinuousHandlerCallLimitThread);
 //---------------------------------------------------------------------------
 
 } // namespace krkr::base

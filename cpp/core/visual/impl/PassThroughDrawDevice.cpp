@@ -348,7 +348,7 @@ void tTVPPassThroughDrawDevice::AddLayerManager(iTVPLayerManager *manager) {
     if(inherited::Managers.size() > 0) {
         // "Pass Through" デバイスでは２つ以上のLayer
         // Managerを登録できない
-        TVPThrowExceptionMessage(TJS_W("\"passthrough\" device does not "
+        ThrowExceptionMessage(TJS_W("\"passthrough\" device does not "
                                        "support layer manager more than 1"));
         // TODO: i18n
     }

@@ -324,7 +324,7 @@ uint64_t XP3ArchiveRepackAsyncImpl::AddTask(
 
 void XP3ArchiveRepackAsyncImpl::SetXP3Filter(const std::string &xp3filter) {
     ttstr xp3filterScript;
-    iTJSTextReadStream *stream = TVPCreateTextStreamForRead(xp3filter, "");
+    iTJSTextReadStream *stream = krkr::base::CreateTextStreamForRead(xp3filter, "");
     stream->Read(xp3filterScript, 0);
     delete stream;
     SetXP3FilterScript(xp3filterScript);
@@ -668,7 +668,7 @@ void XP3ArchiveRepackAsyncImpl::DoConv() {
                     BmpInfoWithMask *data = (BmpInfoWithMask *)callbackdata;
                     if(data->bmp->GetWidth() != w ||
                        data->bmp->GetHeight() != h)
-                        TVPThrowExceptionMessage(TVPMaskSizeMismatch);
+                        ThrowExceptionMessage(TVPMaskSizeMismatch);
                     if(!data->bmpForMask) {
                         data->bmpForMask = new tTVPBitmap(w, h, 8);
                     }

@@ -47,7 +47,7 @@ public:
     virtual void DisableAttentionPoint(class iTVPLayerManager *manager) = 0;
 
     virtual void SetImeMode(class iTVPLayerManager *manager,
-                            tjs_int mode) = 0; // mode == tTVPImeMode
+                            tjs_int mode) = 0; // mode == ImeMode
     virtual void ResetImeMode(class iTVPLayerManager *manager) = 0;
 
     [[nodiscard]] virtual iTJSDispatch2 *GetOwnerNoAddRef() const = 0;

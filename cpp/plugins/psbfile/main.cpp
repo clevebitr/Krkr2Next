@@ -58,7 +58,7 @@ static bool psbCacheInfoCallback(size_t &usedBytes, size_t &limitBytes) {
 //
 // 移植自 AetherKiri `cpp/plugins/psbfile/main.cpp:84-190`（in-file 片段，见
 // compat/README.md §6）。作用：把 PSB 场景树里的 `*label` / `jumplabels` 收集成集合，
-// 供 `TVPRegisterCompiledScenarioLabelResolver` 注册的回调查询 —— 这类发行版把脚本编译进
+// 供 `RegisterCompiledScenarioLabelResolver` 注册的回调查询 —— 这类发行版把脚本编译进
 // PSB，脚本文本读不到，但 `[jump]`/`[call]` 的目标标签必须仍然能被解析。
 //
 // 缓存：按 `.scn` 存储名缓存标签集合（首次查询时解析一次）。与上游一致，不做失效
@@ -179,12 +179,12 @@ void initPsbFile() {
     psbMedia->Release();
     krkr::environ::RegisterPSBCacheInfoCallback(psbCacheInfoCallback);
     // 让解析器能问"编译场景里有没有这个标签"（见上面 CollectScenarioLabels 一节）。
-    TVPRegisterCompiledScenarioLabelResolver(HasCompiledScenarioLabel);
+    RegisterCompiledScenarioLabelResolver(HasCompiledScenarioLabel);
     LOGGER->info("initPsbFile");
 }
 
 void deInitPsbFile() {
-    TVPRegisterCompiledScenarioLabelResolver(nullptr);
+    RegisterCompiledScenarioLabelResolver(nullptr);
     krkr::environ::RegisterPSBCacheInfoCallback(nullptr);
     if(psbMedia != nullptr) {
         psbMedia->clear();

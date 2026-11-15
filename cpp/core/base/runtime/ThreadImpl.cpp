@@ -28,7 +28,7 @@
 
 #include <thread>
 
-tjs_int TVPDrawThreadNum = 1;
+tjs_int DrawThreadNum = 1;
 
 namespace krkr::utils {
     static tjs_int GetProcesserNum() {
@@ -55,7 +55,7 @@ namespace krkr::utils {
             // pattern that made it impossible to synchronize on thread
             // exit, leading to use-after-free on member mutexes.
         } catch(const std::system_error &) {
-            TVPThrowInternalError;
+            KRKR_THROW_INTERNAL_ERROR;
         }
     }
 
@@ -129,7 +129,7 @@ namespace krkr::utils {
 
     tjs_int GetThreadNum() {
         tjs_int threadNum =
-            TVPDrawThreadNum ? TVPDrawThreadNum : GetProcesserNum();
+            DrawThreadNum ? DrawThreadNum : GetProcesserNum();
         threadNum = std::min(threadNum, krkr::utils::MaxThreadNum);
         return threadNum;
     }
@@ -154,10 +154,10 @@ namespace krkr::utils {
 #endif
 #if 0
     ThreadInfo *threadInfo;
-    threadInfo = TVPThreadList[TVPThreadTaskCount++];
+    threadInfo = ThreadList[ThreadTaskCount++];
     threadInfo->lpStartAddress = func;
     threadInfo->lpParameter = param;
-    InterlockedIncrement(&TVPRunningThreadCount);
+    InterlockedIncrement(&RunningThreadCount);
     while (ResumeThread(threadInfo->thread) == 0)
       Sleep(0);
 #endif

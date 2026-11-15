@@ -29,13 +29,13 @@ protected:
     tTJSNativeInstance *CreateNativeInstance() override;
 
     static tTVPBBBltMethod
-    GetBltMethodFromOperationMode(tTVPBlendOperationMode mode,
-                                  tTVPDrawFace face);
+    GetBltMethodFromOperationMode(BlendOperationMode mode,
+                                  DrawFace face);
     static bool ClipDestPointAndSrcRect(tjs_int &dx, tjs_int &dy,
                                         tTVPRect &srcrectout,
                                         const tTVPRect &srcrect,
                                         const tTVPRect &clipRect);
 };
 
-extern tTJSNativeClass *TVPCreateNativeClass_ImageFunction();
+extern tTJSNativeClass *CreateNativeClass_ImageFunction();
 #endif // ImageFunctionH

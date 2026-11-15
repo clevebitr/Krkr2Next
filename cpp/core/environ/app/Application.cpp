@@ -37,13 +37,13 @@ extern "C" {
 #include "TVPColor.h"
 #include "FontImpl.h"
 
-tTVPApplication *Application = new tTVPApplication;
+Application *Application = new Application;
 std::thread::id TVPMainThreadID = std::this_thread::get_id();
 static tTJSCriticalSection _NoMemCallBackCS;
 static void *_reservedMem = malloc(1024 * 1024 * 4); // 4M reserved mem
 static bool _project_startup = false;
 
-static void _do_compact() { TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MAX); }
+static void _do_compact() { DeliverCompactEvent(TVP_COMPACT_LEVEL_MAX); }
 
 static void _no_memory_cb() {
     tTJSCSH lock(_NoMemCallBackCS);
@@ -266,7 +266,7 @@ int APIENTRY WinMain( _In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 		_argv = __argv;
 
 		MouseCursor::Initialize();
-		Application = new tTVPApplication();
+		Application = new Application();
 		Application->StartApplication( __argc, __argv );
 	
 		// delete application and exit forcely
@@ -290,10 +290,10 @@ void TVPConsoleLog(const ttstr &mes, bool important);
 
 namespace krkr::environ {
 
-tTVPApplication::tTVPApplication() :
+Application::Application() :
     is_attach_console_(false), tarminate_(false), application_activating_(true),
     image_load_thread_(nullptr), has_map_report_process_(false) {}
-tTVPApplication::~tTVPApplication() {
+Application::~Application() {
     // 	while( windows_list_.size() ) {
     // 		std::vector<TTVPWindowForm*>::iterator i =
     // windows_list_.begin(); 		delete (*i);
@@ -304,7 +304,7 @@ tTVPApplication::~tTVPApplication() {
     delete image_load_thread_;
 }
 
-void tTVPApplication::Reset() {
+void Application::Reset() {
     // 复位应用层状态，使 engine_destroy 后二次 StartApplication 干净启动。
     // image_load_thread_ 下次 StartApplication 会重建（Application.cpp:345）。
     delete image_load_thread_;
@@ -333,7 +333,7 @@ void ResetApplicationForRestart() {
         Application->Reset();
 }
 
-bool tTVPApplication::StartApplication(ttstr path) {
+bool Application::StartApplication(ttstr path) {
     //	_set_se_translator(se_translator_function);
 
     ArgC = 0;
@@ -350,7 +350,7 @@ bool tTVPApplication::StartApplication(ttstr path) {
 
     // try starting the program!
     try {
-        //		if(TVPCheckProcessLog()) return true; // sub-process
+        //		if(krkr::base::CheckProcessLog()) return true; // sub-process
         // for
         // processing object hash map log
 
@@ -360,14 +360,14 @@ bool tTVPApplication::StartApplication(ttstr path) {
 
         spdlog::debug("StartApplication: TVPInitScriptEngine...");
         spdlog::default_logger()->flush();
-        TVPInitScriptEngine();
+        krkr::base::InitScriptEngine();
 
         spdlog::debug("StartApplication: TVPInitFontNames...");
         spdlog::default_logger()->flush();
         TVPInitFontNames();
 
         // banner
-        krkr::utils::AddImportantLog(TVPFormatMessage(TVPProgramStartedOn, GetOSName(),
+        krkr::utils::AddImportantLog(krkr::base::FormatMessage(TVPProgramStartedOn, GetOSName(),
                                             GetPlatformName()));
 
         // InitializeBaseSystems
@@ -395,7 +395,7 @@ bool tTVPApplication::StartApplication(ttstr path) {
         // 确保 savedata 目录存在（iOS 沙盒首次启动常缺失该目录，脚本 checkSave
         // 写 savedata/savecheck 时因父目录不存在报
         //   Cannot open storage .../savedata/savecheck
-        // 而在启动脚本(TVPInitializeStartupScript)运行之前先建好，避免存档弹窗。
+        // 而在启动脚本(krkr::base::InitializeStartupScript)运行之前先建好，避免存档弹窗。
         {
             // nativeDataPath 已是 *native*
             // 路径（SysInitImpl::EnsureDataPathDirectory 正是把它直接传给
@@ -422,7 +422,7 @@ bool tTVPApplication::StartApplication(ttstr path) {
             return true; // version information dialog box;
 
         SetTitle(TVPKirikiri.operator const tjs_char *());
-        GetSystemControl = new SystemControl();
+        systemControl = new SystemControl();
         // Check digitizer
         CheckDigitizer();
 
@@ -434,7 +434,7 @@ bool tTVPApplication::StartApplication(ttstr path) {
         // 挂载工程目录自身的 *.xp3（data.xp3/scenario.xp3 等）。
         // krkr::io::AutoMountSiblingXP3Archives 只扫父目录，游戏文件夹内的 xp3
         // 从未被挂载， 这是打包版游戏启动不了的根因；必须在
-        // TVPInitializeStartupScript 之前挂载， 否则 startup.tjs 在包内时
+        // krkr::base::InitializeStartupScript 之前挂载， 否则 startup.tjs 在包内时
         // krkr::io::SearchPlacedPath 找不到。
         krkr::io::AutoMountProjectXP3Archives();
 
@@ -443,7 +443,7 @@ bool tTVPApplication::StartApplication(ttstr path) {
         // 为什么：本仓库的 auto path 表是"先注册者优先"，而挂载顺序里
         // data.xp3 先于 patch.xp3 ⇒ 补丁层压不住原版，补丁包里的
         // startup.tjs / 脚本 / 资源在第一次读取时会被原版抢先命中；
-        // 原来的调用点在 TVPInitializeStartupScript 之后，等于"补丁的启动
+        // 原来的调用点在 krkr::base::InitializeStartupScript 之后，等于"补丁的启动
         // 脚本永远读不到"。真机影响面：汉化/整合包（patch.xp3、patch_appendN.xp3）
         // 的启动脚本与首屏资源。
         //
@@ -454,7 +454,7 @@ bool tTVPApplication::StartApplication(ttstr path) {
 
         spdlog::debug("StartApplication: TVPInitializeStartupScript...");
         spdlog::default_logger()->flush();
-        TVPInitializeStartupScript();
+        krkr::base::InitializeStartupScript();
 
         _project_startup = true;
         spdlog::info("StartApplication: completed successfully");
@@ -505,7 +505,7 @@ bool tTVPApplication::StartApplication(ttstr path) {
 /**
  * コンソールからの起動か確認し、コンソールからの起動の場合は、標準出力を割り当てる
  */
-void tTVPApplication::CheckConsole() {
+void Application::CheckConsole() {
 #ifdef TVP_LOG_TO_COMMANDLINE_CONSOLE
     if(has_map_report_process_)
         return; // 書き出し用子プロセスして起動されていた時はコンソール接続しない
@@ -544,7 +544,7 @@ void tTVPApplication::CheckConsole() {
 #endif
 }
 
-void tTVPApplication::CloseConsole() {
+void Application::CloseConsole() {
 #if 0
 	wchar_t buf[100];
 	DWORD len = TJS_snprintf(buf, 100, TVPExitCode, terminateCode);
@@ -556,18 +556,18 @@ void tTVPApplication::CloseConsole() {
 	}
 #endif
 }
-void tTVPApplication::PrintConsole(const ttstr &mes, bool important) {
+void Application::PrintConsole(const ttstr &mes, bool important) {
     TVPConsoleLog(mes, important);
 }
 #if 0
-HWND tTVPApplication::GetHandle() {
+HWND Application::GetHandle() {
 	if( windows_list_.size() > 0 ) {
 		return windows_list_[0]->GetHandle();
 	} else {
 		return INVALID_HANDLE_VALUE;
 	}
 }
-void tTVPApplication::Minimize() {
+void Application::Minimize() {
 	size_t size = windows_list_.size();
 	for( size_t i = 0; i < size; i++ ) {
 		if( windows_list_[i]->GetVisible() ) {
@@ -575,7 +575,7 @@ void tTVPApplication::Minimize() {
 		}
 	}
 }
-void tTVPApplication::Restore() {
+void Application::Restore() {
 	size_t size = windows_list_.size();
 	for( size_t i = 0; i < size; i++ ) {
 		if( windows_list_[i]->GetVisible() ) {
@@ -583,32 +583,32 @@ void tTVPApplication::Restore() {
 		}
 	}
 }
-void tTVPApplication::BringToFront() {
+void Application::BringToFront() {
 	size_t size = windows_list_.size();
 	for( size_t i = 0; i < size; i++ ) {
 		windows_list_[i]->BringToFront();
 	}
 }
 #endif
-void tTVPApplication::ShowException(const ttstr &e) {
+void Application::ShowException(const ttstr &e) {
     ShowSimpleMessageBox(e, GetErrorDialogTitle());
     SystemUninit();
     ExitApplication(0);
 }
-void tTVPApplication::Run() {
+void Application::Run() {
     try {
         krkr::stall::MarkStage("Application::Run 开始");
         if(terminated) {
             SystemUninit();
             ExitApplication(terminateCode);
         }
-        //	TVPBreathe();
+        //	krkr::base::Breathe();
         ProcessMessages();
         krkr::stall::MarkStage("Application::Run: SystemWatchTimerTimer");
-        if(GetSystemControl)
-            GetSystemControl->SystemWatchTimerTimer();
+        if(systemControl)
+            systemControl->SystemWatchTimerTimer();
         krkr::stall::MarkStage("Application::Run 结束");
-        //		TVPDeliverWindowUpdateEvents(); // from
+        //		krkr::base::DeliverWindowUpdateEvents(); // from
         // SystemWatchTimerTimer
     } catch(const EAbort &) {
         // nothing to do
@@ -654,7 +654,7 @@ void tTVPApplication::Run() {
     }
 }
 
-void tTVPApplication::ProcessMessages() {
+void Application::ProcessMessages() {
     krkr::stall::MarkStage("ProcessMessages: 开始");
     std::vector<std::tuple<void *, int, tMsg>> lstUserMsg;
     {
@@ -669,7 +669,7 @@ void tTVPApplication::ProcessMessages() {
 }
 
 #if 0
-bool tTVPApplication::ProcessMessage( MSG &msg ) {
+bool Application::ProcessMessage( MSG &msg ) {
 	bool result = false;
 	if( ::PeekMessage( &msg, nullptr, 0, 0, PM_NOREMOVE) ) {
 		BOOL msgExists = ::PeekMessage( &msg, nullptr, 0, 0, PM_REMOVE);
@@ -690,25 +690,25 @@ bool tTVPApplication::ProcessMessage( MSG &msg ) {
 	}
 	return result;
 }
-void tTVPApplication::ProcessMessages() {
+void Application::ProcessMessages() {
 	MSG msg = {0};
 	while(ProcessMessage(msg));
 }
-void tTVPApplication::HandleMessage() {
+void Application::HandleMessage() {
 	MSG msg = {0};
 	if( !ProcessMessage(msg) ) {
 		HandleIdle(msg);
 	}
 }
-void tTVPApplication::HandleIdle(MSG &) {
+void Application::HandleIdle(MSG &) {
 	bool done = true;
-	if( GetSystemControl ) {
-		done = GetSystemControl->ApplicationIdle();
+	if( systemControl ) {
+		done = systemControl->ApplicationIdle();
 	}
 	if( done ) ::WaitMessage();
 }
 #endif
-void tTVPApplication::SetTitle(const ttstr &caption) {
+void Application::SetTitle(const ttstr &caption) {
     title_ = caption;
 #if 0
 	if( windows_list_.size() > 0 ) {
@@ -720,31 +720,31 @@ void tTVPApplication::SetTitle(const ttstr &caption) {
 #endif
 }
 
-void tTVPApplication::Terminate() {
+void Application::Terminate() {
     //::PostQuitMessage(0);
     tarminate_ = true;
     terminated = true;
 }
 #if 0
-HWND tTVPApplication::GetMainWindowHandle() const {
+HWND Application::GetMainWindowHandle() const {
 	if( windows_list_.size() > 0 ) {
 		return windows_list_[0]->GetHandle();
 	}
 	return INVALID_HANDLE_VALUE;
 }
 
-void tTVPApplication::RemoveWindow( TTVPWindowForm* win ) {
+void Application::RemoveWindow( TTVPWindowForm* win ) {
 	std::vector<class TTVPWindowForm*>::iterator it = std::remove( windows_list_.begin(), windows_list_.end(), win );
 	if( it != windows_list_.end() ) {
 		windows_list_.erase( it, windows_list_.end() );
 	}
 }
-void tTVPApplication::PostMessageToMainWindow(UINT message, WPARAM wParam, LPARAM lParam) {
+void Application::PostMessageToMainWindow(UINT message, WPARAM wParam, LPARAM lParam) {
 	if( windows_list_.size() > 0 ) {
 		::PostMessage( windows_list_[0]->GetHandle(), message, wParam, lParam );
 	}
 }
-void tTVPApplication::GetDisableWindowList( std::vector<class TTVPWindowForm*>& win ) {
+void Application::GetDisableWindowList( std::vector<class TTVPWindowForm*>& win ) {
 	size_t count = windows_list_.size();
 	for( size_t i = 0; i < count; i++ ) {
 		if( windows_list_[i]->GetEnable() == false ) {
@@ -752,7 +752,7 @@ void tTVPApplication::GetDisableWindowList( std::vector<class TTVPWindowForm*>& 
 		}
 	}
 }
-void tTVPApplication::GetEnableWindowList( std::vector<class TTVPWindowForm*>& win, class TTVPWindowForm* activeWindow ) {
+void Application::GetEnableWindowList( std::vector<class TTVPWindowForm*>& win, class TTVPWindowForm* activeWindow ) {
 	size_t count = windows_list_.size();
 	for( size_t i = 0; i < count; i++ ) {
 		if( activeWindow != windows_list_[i] && windows_list_[i]->GetEnable() ) {
@@ -761,13 +761,13 @@ void tTVPApplication::GetEnableWindowList( std::vector<class TTVPWindowForm*>& w
 	}
 }
 
-void tTVPApplication::DisableWindows() {
+void Application::DisableWindows() {
 	size_t count = windows_list_.size();
 	for( size_t i = 0; i < count; i++ ) {
 		windows_list_[i]->SetEnable( false );
 	}
 }
-void tTVPApplication::EnableWindows( const std::vector<TTVPWindowForm*>& win ) {
+void Application::EnableWindows( const std::vector<TTVPWindowForm*>& win ) {
 	size_t count = win.size();
 	for( size_t i = 0; i < count; i++ ) {
 		win[i]->SetEnable( true );
@@ -783,24 +783,24 @@ void tTVPApplication::EnableWindows( const std::vector<TTVPWindowForm*>& win ) {
 	}
 	*/
 }
-void tTVPApplication::FreeDirectInputDeviceForWindows() {
+void Application::FreeDirectInputDeviceForWindows() {
 	size_t count = windows_list_.size();
 	for( size_t i = 0; i < count; i++ ) {
 		windows_list_[i]->FreeDirectInputDevice();
 	}
 }
 
-void tTVPApplication::RegisterAcceleratorKey(HWND hWnd, char virt, short key, short cmd) {
+void Application::RegisterAcceleratorKey(HWND hWnd, char virt, short key, short cmd) {
 	accel_key_.AddKey( hWnd, cmd, key, virt );
 }
-void tTVPApplication::UnregisterAcceleratorKey(HWND hWnd, short cmd) {
+void Application::UnregisterAcceleratorKey(HWND hWnd, short cmd) {
 	accel_key_.DelKey( hWnd, cmd );
 }
-void tTVPApplication::DeleteAcceleratorKeyTable( HWND hWnd ) {
+void Application::DeleteAcceleratorKeyTable( HWND hWnd ) {
 	accel_key_.DelTable( hWnd );
 }
 #endif
-void tTVPApplication::CheckDigitizer() {
+void Application::CheckDigitizer() {
     // Windows 7 以降でのみ有効
 #if 0
 	OSVERSIONINFOEX ovi;
@@ -835,20 +835,20 @@ void tTVPApplication::CheckDigitizer() {
 #endif
 }
 
-void tTVPApplication::PostUserMessage(const std::function<void()> &func,
+void Application::PostUserMessage(const std::function<void()> &func,
                                       void *host, int msg) {
     std::lock_guard<std::mutex> cs(m_msgQueueLock);
     m_lstUserMsg.emplace_back(host, msg, func);
 }
 
-void tTVPApplication::FilterUserMessage(
+void Application::FilterUserMessage(
     const std::function<void(std::vector<std::tuple<void *, int, tMsg>> &)>
         &func) {
     std::lock_guard<std::mutex> cs(m_msgQueueLock);
     func(m_lstUserMsg);
 }
 
-void tTVPApplication::OnActivate() {
+void Application::OnActivate() {
     application_activating_ = true;
     if(!_project_startup)
         return;
@@ -858,12 +858,12 @@ void tTVPApplication::OnActivate() {
     krkr::sound::UnlockSoundMixer();
 
     // trigger System.onActivate event
-    TVPPostApplicationActivateEvent();
+    krkr::base::PostApplicationActivateEvent();
     for(auto &it : m_activeEvents) {
         it.second(it.first, eTVPActiveEvent::onActive);
     }
 }
-void tTVPApplication::OnDeactivate() {
+void Application::OnDeactivate() {
     application_activating_ = false;
     if(!_project_startup)
         return;
@@ -871,42 +871,42 @@ void tTVPApplication::OnDeactivate() {
     //	TVPMinimizeFullScreenWindowAtInactivation();
 
     // fire compact event
-    TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_DEACTIVATE);
+    DeliverCompactEvent(TVP_COMPACT_LEVEL_DEACTIVATE);
 
     // set sound volume
     krkr::sound::ResetVolumeToAllSoundBuffer();
     krkr::sound::LockSoundMixer();
 
     // trigger System.onDeactivate event
-    TVPPostApplicationDeactivateEvent();
+    krkr::base::PostApplicationDeactivateEvent();
     for(auto &it : m_activeEvents) {
         it.second(it.first, eTVPActiveEvent::onDeactive);
     }
 }
 
-void tTVPApplication::OnExit() {
+void Application::OnExit() {
     // 必须在销毁脚本引擎前释放脚本注册的日志闭包（tTJSVariantClosure）。
     // 若拖到 SystemUninit 的 at-exit
     // handler（krkr::utils::DestroyLoggingHandlerVector） 才释放，此时脚本引擎已被下方
-    // TVPUninitScriptEngine 销毁，闭包 finalizer 命中已失效的 TJS 全局态 →
+    // krkr::base::UninitScriptEngine 销毁，闭包 finalizer 命中已失效的 TJS 全局态 →
     // 退出卡死（runtime-restart）。
     krkr::utils::ClearLoggingHandlers();
 
-    TVPUninitScriptEngine();
+    krkr::base::UninitScriptEngine();
 
-    delete GetSystemControl;
-    GetSystemControl = nullptr;
+    delete systemControl;
+    systemControl = nullptr;
 
     CloseConsole();
 }
 
-void tTVPApplication::OnLowMemory() {
+void Application::OnLowMemory() {
     if(!_project_startup)
         return;
-    TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
+    DeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
 }
 
-bool tTVPApplication::GetNotMinimizing() const {
+bool Application::GetNotMinimizing() const {
     return !application_activating_;
 #if 0
 	HWND hWnd = GetMainWindowHandle();
@@ -917,7 +917,7 @@ bool tTVPApplication::GetNotMinimizing() const {
 #endif
 }
 #if 0
-void tTVPApplication::OnActiveAnyWindow() {
+void Application::OnActiveAnyWindow() {
 	if( modal_window_stack_.empty() != true ) {
 		Window* win = modal_window_stack_.top();
 		if( win->GetVisible() && win->GetEnable() ) {
@@ -925,7 +925,7 @@ void tTVPApplication::OnActiveAnyWindow() {
 		}
 	}
 }
-void tTVPApplication::ModalFinished() {
+void Application::ModalFinished() {
 	modal_window_stack_.pop();
 	if( modal_window_stack_.empty() != true ) {
 		Window* win = modal_window_stack_.top();
@@ -935,7 +935,7 @@ void tTVPApplication::ModalFinished() {
 	}
 }
 #endif
-void tTVPApplication::LoadImageRequest(class iTJSDispatch2 *owner,
+void Application::LoadImageRequest(class iTJSDispatch2 *owner,
                                        class tTJSNI_Bitmap *bmp,
                                        const ttstr &name) {
     if(image_load_thread_) {
@@ -943,7 +943,7 @@ void tTVPApplication::LoadImageRequest(class iTJSDispatch2 *owner,
     }
 }
 
-void tTVPApplication::RegisterActiveEvent(
+void Application::RegisterActiveEvent(
     void *host,
     const std::function<void(void *, eTVPActiveEvent)>
         &func /*empty = unregister*/) {

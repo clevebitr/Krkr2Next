@@ -15,7 +15,7 @@ extern "C" {
 
 NS_KRMOVIE_BEGIN
 
-VideoPresentLayer::~VideoPresentLayer() { TVPRemoveContinuousEventHook(this); }
+VideoPresentLayer::~VideoPresentLayer() { RemoveContinuousEventHook(this); }
 
 tTVPBaseTexture *VideoPresentLayer::GetFrontBuffer() {
     BitmapPicture pic;
@@ -44,7 +44,7 @@ void VideoPresentLayer::SetVideoBuffer(tTVPBaseTexture *buff1,
     m_BmpBits[0] = buff1;
     m_BmpBits[1] = buff2;
     m_nCurBmpBuff = 0;
-    //	TVPAddContinuousEventHook(this);
+    //	AddContinuousEventHook(this);
 }
 
 void VideoPresentLayer::OnContinuousCallback(tjs_uint64 tick) {
@@ -186,7 +186,7 @@ void MoviePlayerLayer::OnPlayEvent(KRMovieEvent msg, void *p) {
 
 void MoviePlayerLayer::Play() {
     inherit::Play();
-    TVPAddContinuousEventHook(this);
+    AddContinuousEventHook(this);
 }
 
 NS_KRMOVIE_END

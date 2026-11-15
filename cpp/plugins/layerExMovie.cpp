@@ -17,7 +17,7 @@
 /*
  * Movie 描画用レイヤ
  */
-struct layerExMovie : public layerExBase_GL, tTVPContinuousEventCallbackIntf {
+struct layerExMovie : public layerExBase_GL, ContinuousEventCallbackIntf {
 protected:
     class VideoLayer : public KRMovie::VideoPresentLayer {
         std::function<void(KRMovieEvent, void *)> m_funcCallback;
@@ -237,7 +237,7 @@ bool layerExMovie::isPlayingMovie() { return playing; }
 
 void layerExMovie::start() {
     stop();
-    TVPAddContinuousEventHook(this);
+    AddContinuousEventHook(this);
     playing = true;
 }
 
@@ -245,7 +245,7 @@ void layerExMovie::start() {
  * Irrlicht 呼び出し処理停止
  */
 void layerExMovie::stop() {
-    TVPRemoveContinuousEventHook(this);
+    RemoveContinuousEventHook(this);
     playing = false;
 }
 

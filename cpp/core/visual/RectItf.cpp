@@ -368,12 +368,12 @@ iTJSDispatch2 *TVPCreateRectObject(tjs_int left, tjs_int top, tjs_int right,
     tjs_error hr = rectclass.Obj->CreateNew(0, nullptr, nullptr, &out, 4,
                                             pparam, rectclass.Obj);
     if(TJS_FAILED(hr))
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
 
     return out;
 }
 
-tTJSNativeClass *TVPCreateNativeClass_Rect() {
+tTJSNativeClass *CreateNativeClass_Rect() {
     tTJSNativeClass *cls = new tTJSNC_Rect();
     return cls;
 }

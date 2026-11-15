@@ -2,4 +2,4 @@
 #include "MsgIntf.h"
 
 #define NCB_MODULE_NAME TJS_W("getabout.dll")
-NCB_ATTACH_FUNCTION(getAboutString, System, TVPGetAboutString);
+NCB_ATTACH_FUNCTION(getAboutString, System, krkr::base::GetAboutString);

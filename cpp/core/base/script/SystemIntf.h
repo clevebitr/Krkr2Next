@@ -31,7 +31,7 @@ protected:
 };
 
 //---------------------------------------------------------------------------
-extern tTJSNativeClass *TVPCreateNativeClass_System();
+extern tTJSNativeClass *CreateNativeClass_System();
 
 } // namespace krkr::base
 
@@ -48,16 +48,13 @@ TJS_EXP_FUNC_DEF(ttstr, GetOSName, ());
 //---------------------------------------------------------------------------
 namespace krkr::base {
 
-extern void TVPFireOnApplicationActivateEvent(bool activate_or_deactivate);
+extern void FireOnApplicationActivateEvent(bool activate_or_deactivate);
 
-extern tjs_int TVPGetOSBits();
+extern tjs_int GetOSBits();
 
 } // namespace krkr::base
 //---------------------------------------------------------------------------
 
 // TODO: 过渡兼容，调用点迁移完成后删除
 using krkr::base::tTJSNC_System;
-using krkr::base::TVPCreateNativeClass_System;
-using krkr::base::TVPFireOnApplicationActivateEvent;
-using krkr::base::TVPGetOSBits;
 #endif

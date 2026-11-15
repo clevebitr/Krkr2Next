@@ -403,7 +403,7 @@ static XP3FilterDecoder *AddXP3Decoder() {
     global->PropSet(TJS_MEMBERENSURE | TJS_IGNOREPROP, TJS_W(#classname),      \
                     nullptr, &val, global);
     REGISTER_OBJECT(Debug, TVPCreateNativeClass_Debug());
-    REGISTER_OBJECT(System, TVPCreateNativeClass_System());
+    REGISTER_OBJECT(System, krkr::base::CreateNativeClass_System());
     tTJSNativeClass *cls = TVPCreateNativeClass_Storages();
     TJSNativeClassRegisterNCM(cls, TJS_W("setXP3ArchiveExtractionFilter"),
                               new XP3FilterRegister(decoder),
@@ -494,7 +494,7 @@ void KRKR_XP3_EXTRACTION_FILTER_CONVENTION
 TVPXP3ArchiveExtractionFilterWrapper(krkr::io::XP3ExtractionFilterInfo *info,
                                      tTJSVariant *ctx) {
     if(info->SizeOfSelf != sizeof(krkr::io::XP3ExtractionFilterInfo))
-        TVPThrowExceptionMessage(
+        ThrowExceptionMessage(
             TJS_W("Incompatible tTVPXP3ExtractionFilterInfo size"));
     XP3FilterDecoder *decoder = FetchXP3Decoder();
     if(decoder->ManagedDecoder.Object) {
@@ -550,7 +550,7 @@ void SetXP3FilterScript(ttstr content) {
 static void PostRegistCallback() {
     ttstr path = krkr::io::GetAppPath() + TJS_W("xp3filter.tjs");
     if(krkr::io::IsExistentStorageNoSearch(path)) {
-        iTJSTextReadStream *stream = TVPCreateTextStreamForRead(path, "");
+        iTJSTextReadStream *stream = krkr::base::CreateTextStreamForRead(path, "");
         try {
             stream->Read(sXP3FilterScript, 0);
         } catch(...) {

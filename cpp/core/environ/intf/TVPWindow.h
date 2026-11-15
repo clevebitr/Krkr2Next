@@ -121,9 +121,9 @@ protected:
 	}
 	inline int GetMouseButtonState() const {
 		int s = 0;
-		if(TVPGetAsyncKeyState(VK_LBUTTON)) s |= ssLeft;
-		if(TVPGetAsyncKeyState(VK_RBUTTON)) s |= ssRight;
-		if(TVPGetAsyncKeyState(VK_MBUTTON)) s |= ssMiddle;
+		if(GetAsyncKeyState(VK_LBUTTON)) s |= ssLeft;
+		if(GetAsyncKeyState(VK_RBUTTON)) s |= ssRight;
+		if(GetAsyncKeyState(VK_MBUTTON)) s |= ssMiddle;
 		return s;
 	}
 	inline bool IsTouchEvent(LPARAM extraInfo) const {
@@ -318,7 +318,7 @@ using OverlayNode = void;
 
 class iWindowLayer {
 protected:
-    tTVPMouseCursorState MouseCursorState = mcsVisible;
+    MouseCursorState MouseCursorState = mcsVisible;
     tjs_int HintDelay = 500;
     tjs_int ZoomDenom = 1; // Zooming factor denominator (setting)
     tjs_int ZoomNumer = 1; // Zooming factor numerator (setting)
@@ -370,10 +370,10 @@ public:
     virtual void OnKeyUp(tjs_uint16 vk, int shift) = 0;
     virtual void OnKeyPress(tjs_uint16 vk, int repeat, bool prevkeystate,
                             bool convertkey) = 0;
-    [[nodiscard]] virtual tTVPImeMode GetDefaultImeMode() const = 0;
-    virtual void SetImeMode(tTVPImeMode mode) = 0;
+    [[nodiscard]] virtual ImeMode GetDefaultImeMode() const = 0;
+    virtual void SetImeMode(ImeMode mode) = 0;
     virtual void ResetImeMode() = 0;
-    virtual void UpdateWindow(tTVPUpdateType type) = 0;
+    virtual void UpdateWindow(UpdateType type) = 0;
     virtual void SetVisibleFromScript(bool b) = 0;
     virtual void SetUseMouseKey(bool b) = 0;
     [[nodiscard]] virtual bool GetUseMouseKey() const = 0;
@@ -420,10 +420,10 @@ public:
     void SetTrapKey(bool b) {}
     [[nodiscard]] bool GetTrapKey() const { return false; }
     void RemoveMaskRegion() {}
-    void SetMouseCursorState(tTVPMouseCursorState mcs) {
+    void SetMouseCursorState(MouseCursorState mcs) {
         MouseCursorState = mcs;
     }
-    [[nodiscard]] tTVPMouseCursorState GetMouseCursorState() const {
+    [[nodiscard]] MouseCursorState GetMouseCursorState() const {
         return MouseCursorState;
     }
     void HideMouseCursor() {}

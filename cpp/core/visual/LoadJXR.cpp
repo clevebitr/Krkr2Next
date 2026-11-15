@@ -44,7 +44,7 @@ bool TVPAcceptSaveAsJXR(void *formatdata, const ttstr &type,
         ]
         */
         tTJSVariant result;
-        TVPExecuteExpression(
+        ExecuteExpression(
             TJS_W("(const)%[") TJS_W("\"quality\"=>(const)%[\"type\"=>"
                                      "\"range\",\"min\"=>1,\"max\"=>255,"
                                      "\"desc\"=>\"1 is lossless, 2 - 255 lossy "
@@ -579,7 +579,7 @@ static ERR JXR_get_pos(struct WMPStream *pWS, size_t *poffPos) {
 
 #define SAFE_CALL(func)                                                        \
     if(Failed(err = (func))) {                                                 \
-        TVPThrowExceptionMessage(TJS_W("JPEG XR read error/%1"),               \
+        ThrowExceptionMessage(TJS_W("JPEG XR read error/%1"),               \
                                  (tjs_int)err);                                \
     }
 //---------------------------------------------------------------------------
@@ -591,7 +591,7 @@ void TVPLoadJXR(void *formatdata, void *callbackdata,
                 tTVPGraphicLoadMode mode) {
     if(glmNormal != mode) {
         // not supprted yet.
-        TVPThrowExceptionMessage(TJS_W("JPEG XR read error/%1"),
+        ThrowExceptionMessage(TJS_W("JPEG XR read error/%1"),
                                  TJS_W("not supprted yet."));
     }
 
@@ -656,7 +656,7 @@ void TVPLoadJXR(void *formatdata, void *callbackdata,
         int height = 0;
         pDecoder->GetSize(pDecoder, &width, &height);
         if(width == 0 || height == 0) {
-            TVPThrowExceptionMessage(TJS_W("JPEG XR read error/%1"),
+            ThrowExceptionMessage(TJS_W("JPEG XR read error/%1"),
                                      TJS_W("width or height is zero."));
         }
         sizecallback(callbackdata, width, height,
@@ -691,7 +691,7 @@ void TVPLoadJXR(void *formatdata, void *callbackdata,
                     scanlinecallback(callbackdata, -1);
                 }
             } else {
-                TVPThrowExceptionMessage(
+                ThrowExceptionMessage(
                     TJS_W("JPEG XR read error/%1"),
                     TJS_W("Not supported this file format yet."));
             }

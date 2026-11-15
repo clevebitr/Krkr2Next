@@ -366,7 +366,7 @@ namespace PSB {
         uint8_t *fileData = nullptr;
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
         if(readSize >= kPSBMmapThreshold) {
-            fileData = (uint8_t *)TVPMmapAlloc(readSize);
+            fileData = (uint8_t *)MmapAlloc(readSize);
             fileDataMmap = true;
         }
 #endif
@@ -378,7 +378,7 @@ namespace PSB {
         auto freeFileData = [&]() {
             if(fileDataMmap) {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
-                TVPMmapFree(fileData);
+                MmapFree(fileData);
 #endif
             } else {
                 delete[] fileData;

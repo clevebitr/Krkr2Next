@@ -58,7 +58,7 @@ extern bool TVPDefaultHoldAlpha;
 //---------------------------------------------------------------------------
 // drawn face types
 //---------------------------------------------------------------------------
-enum tTVPDrawFace {
+enum DrawFace {
     dfBoth = 0,
     dfAlpha = 0,
     dfAddAlpha = 4,
@@ -75,7 +75,7 @@ enum tTVPDrawFace {
 //---------------------------------------------------------------------------
 // alias to blending types
 //---------------------------------------------------------------------------
-enum tTVPBlendOperationMode {
+enum BlendOperationMode {
     omPsNormal = ltPsNormal,
     omPsAdditive = ltPsAdditive,
     omPsSubtractive = ltPsSubtractive,
@@ -112,7 +112,7 @@ enum tTVPBlendOperationMode {
 //---------------------------------------------------------------------------
 // layer hit test type
 //---------------------------------------------------------------------------
-enum tTVPHitType { htMask, htProvince };
+enum HitType { htMask, htProvince };
 //---------------------------------------------------------------------------
 /*]*/
 
@@ -142,9 +142,9 @@ enum tTVPHitType { htMask, htProvince };
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPToActualColor :  convert color identifier to actual color
+// ToActualColor :  convert color identifier to actual color
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(tjs_uint32, TVPToActualColor, (tjs_uint32 col));
+TJS_EXP_FUNC_DEF(tjs_uint32, ToActualColor, (tjs_uint32 col));
 // implement in each platform
 TJS_EXP_FUNC_DEF(tjs_uint32, TVPFromActualColor, (tjs_uint32 col));
 // implement in each platform
@@ -166,7 +166,7 @@ class tTVPBaseBitmap;
 class tTVPLayerManager;
 class tTJSNI_BaseLayer : public tTJSNativeInstance,
                          public tTVPDrawable,
-                         public tTVPCompactEventCallbackIntf {
+                         public CompactEventCallbackIntf {
     friend class tTVPLayerManager;
     friend iTJSDispatch2 *
     TVPGetObjectFrom_NI_BaseLayer(tTJSNI_BaseLayer *layer);
@@ -193,7 +193,7 @@ private:
     bool CompactEventHookInit;
     void RegisterCompactEventHook();
     void OnCompact(
-        tjs_int level) override; // method from tTVPCompactEventCallbackIntf
+        tjs_int level) override; // method from CompactEventCallbackIntf
 
     //----------------------------------------------- interface to
     // manager --
@@ -353,7 +353,7 @@ protected:
 
     void UpdateDrawFace(); // set DrawFace from Face and Type
 public:
-    tTVPBlendOperationMode GetOperationModeFromType() const;
+    BlendOperationMode GetOperationModeFromType() const;
     // returns corresponding blend operation mode from layer type
 
 public:
@@ -362,7 +362,7 @@ public:
 
     const tjs_char *GetTypeNameString();
 
-    void ConvertLayerType(tTVPDrawFace fromtype);
+    void ConvertLayerType(DrawFace fromtype);
 
     //-------------------------------------------- geographical
     // management --
@@ -538,7 +538,7 @@ public:
     //---------------------------------- input event / hit test
     // management --
 private:
-    tTVPHitType HitType;
+    HitType HitType;
     tjs_int HitThreshold;
     bool OnHitTest_Work;
     bool Enabled; // is layer enabled for input?
@@ -552,7 +552,7 @@ private:
     tjs_int AttentionTop;
     tjs_int UseAttention;
 
-    tTVPImeMode ImeMode; // ime mode
+    ImeMode ImeMode; // ime mode
 
     tjs_int Cursor; // mouse cursor
     tjs_int CursorX_Work; // holds x-coordinate in SetCursorX and
@@ -603,8 +603,8 @@ public:
 
 private:
 public:
-    void SetImeMode(tTVPImeMode mode);
-    tTVPImeMode GetImeMode() const { return ImeMode; }
+    void SetImeMode(ImeMode mode);
+    ImeMode GetImeMode() const { return ImeMode; }
 
 public:
     // these mouse cursor position functions are based on layer's
@@ -625,8 +625,8 @@ public:
                                           bool exclude_self = false,
                                           bool get_disabled = false);
 
-    tTVPHitType GetHitType() const { return HitType; }
-    void SetHitType(tTVPHitType type) { HitType = type; }
+    HitType GetHitType() const { return HitType; }
+    void SetHitType(HitType type) { HitType = type; }
 
     tjs_int GetHitThreshold() const { return HitThreshold; }
     void SetHitThreshold(tjs_int t) { HitThreshold = t; }
@@ -634,9 +634,9 @@ public:
 private:
     void FireClick(tjs_int x, tjs_int y);
     void FireDoubleClick(tjs_int x, tjs_int y);
-    void FireMouseDown(tjs_int x, tjs_int y, tTVPMouseButton mb,
+    void FireMouseDown(tjs_int x, tjs_int y, MouseButton mb,
                        tjs_uint32 flags);
-    void FireMouseUp(tjs_int x, tjs_int y, tTVPMouseButton mb,
+    void FireMouseUp(tjs_int x, tjs_int y, MouseButton mb,
                      tjs_uint32 flags);
     void FireMouseMove(tjs_int x, tjs_int y, tjs_uint32 flags);
     void FireMouseEnter();
@@ -756,18 +756,18 @@ public:
     //--------------------------------------------- drawing function
     // stuff --
 protected:
-    tTVPDrawFace DrawFace; // (actual) current drawing layer face
-    tTVPDrawFace Face; // (outward) current drawing layer face
+    DrawFace DrawFace; // (actual) current drawing layer face
+    DrawFace Face; // (outward) current drawing layer face
 
     bool HoldAlpha; // whether the layer alpha channel is to be kept
                     // when the layer type is ltOpaque
 
 public:
-    void SetFace(tTVPDrawFace f) {
+    void SetFace(DrawFace f) {
         Face = f;
         UpdateDrawFace();
     }
-    tTVPDrawFace GetFace() const { return Face; }
+    DrawFace GetFace() const { return Face; }
 
     void SetHoldAlpha(bool b) { HoldAlpha = b; }
     bool GetHoldAlpha() const { return HoldAlpha; }
@@ -794,7 +794,7 @@ private:
 
 private:
     bool GetBltMethodFromOperationModeAndDrawFace(tTVPBBBltMethod &result,
-                                                  tTVPBlendOperationMode mode);
+                                                  BlendOperationMode mode);
 
 public:
     void FillRect(const tTVPRect &rect, tjs_uint32 color);
@@ -829,15 +829,15 @@ public:
     bool Copy9Patch(const iTVPBaseBitmap *src, tTVPRect &margin);
 
     void StretchCopy(const tTVPRect &destrect, iTVPBaseBitmap *src,
-                     const tTVPRect &rect, tTVPBBStretchType mode = stNearest,
+                     const tTVPRect &rect, BBStretchType mode = stNearest,
                      tjs_real typeopt = 0.0);
 
     void AffineCopy(const t2DAffineMatrix &matrix, iTVPBaseBitmap *src,
-                    const tTVPRect &srcrect, tTVPBBStretchType mode = stNearest,
+                    const tTVPRect &srcrect, BBStretchType mode = stNearest,
                     bool clear = false);
 
     void AffineCopy(const tTVPPointD *points, iTVPBaseBitmap *src,
-                    const tTVPRect &srcrect, tTVPBBStretchType mode = stNearest,
+                    const tTVPRect &srcrect, BBStretchType mode = stNearest,
                     bool clear = false);
 
     void PileRect(tjs_int dx, tjs_int dy, tTJSNI_BaseLayer *src,
@@ -847,51 +847,51 @@ public:
                    const tTVPRect &rect, tjs_int opacity = 255);
 
     void OperateRect(tjs_int dx, tjs_int dy, iTVPBaseBitmap *src,
-                     const tTVPRect &rect, tTVPBlendOperationMode mode = omAuto,
+                     const tTVPRect &rect, BlendOperationMode mode = omAuto,
                      tjs_int opacity = 255);
 
     void StretchPile(const tTVPRect &destrect, tTJSNI_BaseLayer *src,
                      const tTVPRect &srcrect, tjs_int opacity = 255,
-                     tTVPBBStretchType type = stNearest);
+                     BBStretchType type = stNearest);
 
     void StretchBlend(const tTVPRect &destrect, tTJSNI_BaseLayer *src,
                       const tTVPRect &srcrect, tjs_int opacity = 255,
-                      tTVPBBStretchType type = stNearest);
+                      BBStretchType type = stNearest);
 
     void OperateStretch(const tTVPRect &destrect, iTVPBaseBitmap *src,
                         const tTVPRect &srcrect,
-                        tTVPBlendOperationMode mode = omAuto,
+                        BlendOperationMode mode = omAuto,
                         tjs_int opacity = 255,
-                        tTVPBBStretchType type = stNearest,
+                        BBStretchType type = stNearest,
                         tjs_real typeopt = 0.0);
 
     void AffinePile(const t2DAffineMatrix &matrix, tTJSNI_BaseLayer *src,
                     const tTVPRect &srcrect, tjs_int opacity = 255,
-                    tTVPBBStretchType type = stNearest);
+                    BBStretchType type = stNearest);
 
     void AffinePile(const tTVPPointD *points, tTJSNI_BaseLayer *src,
                     const tTVPRect &srcrect, tjs_int opacity = 255,
-                    tTVPBBStretchType type = stNearest);
+                    BBStretchType type = stNearest);
 
     void AffineBlend(const t2DAffineMatrix &matrix, tTJSNI_BaseLayer *src,
                      const tTVPRect &srcrect, tjs_int opacity = 255,
-                     tTVPBBStretchType type = stNearest);
+                     BBStretchType type = stNearest);
 
     void AffineBlend(const tTVPPointD *points, tTJSNI_BaseLayer *src,
                      const tTVPRect &srcrect, tjs_int opacity = 255,
-                     tTVPBBStretchType type = stNearest);
+                     BBStretchType type = stNearest);
 
     void OperateAffine(const t2DAffineMatrix &matrix, iTVPBaseBitmap *src,
                        const tTVPRect &srcrect,
-                       tTVPBlendOperationMode mode = omAuto,
+                       BlendOperationMode mode = omAuto,
                        tjs_int opacity = 255,
-                       tTVPBBStretchType type = stNearest);
+                       BBStretchType type = stNearest);
 
     void OperateAffine(const tTVPPointD *points, iTVPBaseBitmap *src,
                        const tTVPRect &srcrect,
-                       tTVPBlendOperationMode mode = omAuto,
+                       BlendOperationMode mode = omAuto,
                        tjs_int opacity = 255,
-                       tTVPBBStretchType type = stNearest);
+                       BBStretchType type = stNearest);
 
     void DoBoxBlur(tjs_int xblur = 1, tjs_int yblur = 1);
 
@@ -1130,7 +1130,7 @@ private:
     } TransDrawable;
     friend struct tTransDrawable;
 
-    struct tTransIdleCallback : public tTVPContinuousEventCallbackIntf {
+    struct tTransIdleCallback : public ContinuousEventCallbackIntf {
         tTJSNI_BaseLayer *Owner;
         void OnContinuousCallback(tjs_uint64 tick) override {
             Owner->InvokeTransition(tick);
@@ -1161,7 +1161,7 @@ protected:
     */
 };
 //---------------------------------------------------------------------------
-extern tTJSNativeClass *TVPCreateNativeClass_Layer();
+extern tTJSNativeClass *CreateNativeClass_Layer();
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -1233,7 +1233,7 @@ protected:
 };
 //---------------------------------------------------------------------------
 iTJSDispatch2 *TVPCreateFontObject(iTJSDispatch2 *layer);
-extern tTJSNativeClass *TVPCreateNativeClass_Font();
+extern tTJSNativeClass *CreateNativeClass_Font();
 //---------------------------------------------------------------------------
 
 #endif

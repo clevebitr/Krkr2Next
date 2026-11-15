@@ -693,7 +693,7 @@ static void read_integer(tTJSString const &str, size_t &i, int &value) {
     bool is_negative = false;
     while(true) {
         if(!readchar(str, i, ch)) {
-            TVPThrowExceptionMessage(
+            ThrowExceptionMessage(
                 TJS_W("TextRenderBase::render() parse error: expected integer "
                       "or ';', found EOF"));
         }
@@ -710,7 +710,7 @@ static void read_integer(tTJSString const &str, size_t &i, int &value) {
                 value = -value;
             return;
         }
-        TVPThrowExceptionMessage(
+        ThrowExceptionMessage(
             TJS_W("TextRenderBase::render() parse error: unexpected char"));
     }
 }
@@ -807,7 +807,7 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
         switch(ch) {
             case '%': {
                 if(!readchar(text, i, ch))
-                    TVPThrowExceptionMessage(
+                    ThrowExceptionMessage(
                         TJS_W("TextRenderBase: parse error after %%"));
 
                 switch(ch) {
@@ -815,7 +815,7 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
                         tjs_ustring fontname;
                         while(true) {
                             if(!readchar(text, i, ch))
-                                TVPThrowExceptionMessage(TJS_W(
+                                ThrowExceptionMessage(TJS_W(
                                     "TextRenderBase: parse error in %%f"));
                             if(ch == ';')
                                 break;
@@ -885,7 +885,7 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
             }
             case '\\': {
                 if(!readchar(text, i, ch))
-                    TVPThrowExceptionMessage(
+                    ThrowExceptionMessage(
                         TJS_W("TextRenderBase: parse error after backslash"));
 
                 switch(ch) {
@@ -918,7 +918,7 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
             case '[': {
                 while(true) {
                     if(!readchar(text, i, ch))
-                        TVPThrowExceptionMessage(
+                        ThrowExceptionMessage(
                             TJS_W("TextRenderBase: parse error in ruby []"));
                     if(ch == ']')
                         break;
@@ -929,7 +929,7 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
                 RgbColor colour = 0x00;
                 while(true) {
                     if(!readchar(text, i, ch))
-                        TVPThrowExceptionMessage(
+                        ThrowExceptionMessage(
                             TJS_W("TextRenderBase: parse error in color #"));
                     if(ch == ';')
                         break;
@@ -949,7 +949,7 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
                 tjs_ustring graph;
                 while(true) {
                     if(!readchar(text, i, ch))
-                        TVPThrowExceptionMessage(
+                        ThrowExceptionMessage(
                             TJS_W("TextRenderBase: parse error in graphic &"));
                     if(ch == ';')
                         break;
@@ -961,7 +961,7 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
             case '$': {
                 while(true) {
                     if(!readchar(text, i, ch))
-                        TVPThrowExceptionMessage(
+                        ThrowExceptionMessage(
                             TJS_W("TextRenderBase: parse error in eval $"));
                     if(ch == ';')
                         break;

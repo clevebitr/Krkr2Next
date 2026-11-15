@@ -1675,7 +1675,7 @@ namespace {
         return renderables;
     }
 
-    class YuzuMotionRenderHook final : public tTVPContinuousEventCallbackIntf {
+    class YuzuMotionRenderHook final : public ContinuousEventCallbackIntf {
     public:
         void Start();
         void Stop();
@@ -1834,14 +1834,14 @@ static tjs_int RenderYuzuMotionRenderables(const char *tag) {
 void YuzuMotionRenderHook::Start() {
     if(registered_)
         return;
-    TVPAddContinuousEventHook(this);
+    AddContinuousEventHook(this);
     registered_ = true;
 }
 
 void YuzuMotionRenderHook::Stop() {
     if(!registered_)
         return;
-    TVPRemoveContinuousEventHook(this);
+    RemoveContinuousEventHook(this);
     registered_ = false;
 }
 
@@ -1873,7 +1873,7 @@ static tTJSNI_BaseLayer *GetNativeLayerObject(iTJSDispatch2 *obj) {
 }
 
 static bool GetBitmapFromObject(iTJSDispatch2 *obj, iTVPBaseBitmap **bitmap,
-                                tTVPBlendOperationMode *mode) {
+                                BlendOperationMode *mode) {
     if(!obj || !bitmap)
         return false;
     if(tTJSNI_BaseLayer *layer = GetNativeLayerObject(obj)) {
@@ -1956,7 +1956,7 @@ static bool DrawLayerNative(tjs_int n, tTJSVariant **p) {
     }
 
     iTVPBaseBitmap *src = nullptr;
-    tTVPBlendOperationMode automode = omAlpha;
+    BlendOperationMode automode = omAlpha;
     if(!GetBitmapFromObject(srcObject, &src, &automode))
         return false;
     const tjs_int firstNumeric =
@@ -2001,7 +2001,7 @@ static bool DrawAffineNative(tjs_int n, tTJSVariant **p) {
     }
 
     iTVPBaseBitmap *src = nullptr;
-    tTVPBlendOperationMode automode = omAlpha;
+    BlendOperationMode automode = omAlpha;
     if(!GetBitmapFromObject(srcObject, &src, &automode))
         return false;
     const tjs_int firstNumeric =
@@ -2018,10 +2018,10 @@ static bool DrawAffineNative(tjs_int n, tTJSVariant **p) {
     if(srcrect.get_width() <= 0 || srcrect.get_height() <= 0)
         return false;
 
-    tTVPBlendOperationMode mode = automode == omAuto ? omAlpha : automode;
+    BlendOperationMode mode = automode == omAuto ? omAlpha : automode;
     tjs_int opa = nums.size() > 13 ? static_cast<tjs_int>(nums[13]) : 255;
-    tTVPBBStretchType type = nums.size() > 14
-        ? static_cast<tTVPBBStretchType>(static_cast<tjs_int>(nums[14]))
+    BBStretchType type = nums.size() > 14
+        ? static_cast<BBStretchType>(static_cast<tjs_int>(nums[14]))
         : stNearest;
 
     try {
@@ -2062,7 +2062,7 @@ namespace { // reopen anonymous namespace
         if(!result || !expr)
             return TJS_E_FAIL;
         try {
-            TVPExecuteExpression(ttstr(expr), result);
+            ExecuteExpression(ttstr(expr), result);
         } catch(...) {
             spdlog::error("krkrgles: {} eval '{}' failed", tag,
                           ttstr(expr).AsStdString());
@@ -2930,8 +2930,8 @@ static constexpr int kKrkrOglAliasTargetCount =
 //
 // 返回是否**真的写进去了**（目标对象或类对象某一方还不存在时为 false，调用方据此重试）。
 static bool KrkrOglAliasOnto(const tjs_char *targetName, const tjs_char *name) {
-    // TVPGetScriptDispatch() 内部 AddRef 过，用完必须 Release。
-    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    // GetScriptDispatch() 内部 AddRef 过，用完必须 Release。
+    iTJSDispatch2 *global = GetScriptDispatch();
     if(!global)
         return false;
 
@@ -2968,7 +2968,7 @@ static int KrkrOglAliasFanOut(const tjs_char *name) {
 
 // 全局对象/类是否已存在（用于判断 KAGWindow 是否构造完成）。
 static bool KrkrOglGlobalExists(const tjs_char *name) {
-    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    iTJSDispatch2 *global = GetScriptDispatch();
     if(!global)
         return false;
     tTJSVariant val;
@@ -3031,7 +3031,7 @@ static bool KrkrOglEnsureOnClosure(const tTJSVariant &targetVal,
 // 在全局对象 targetName 上 ensure 成员。
 static bool KrkrOglEnsureOnto(const tjs_char *targetName, const tjs_char *member,
                               const tTJSVariant &value) {
-    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    iTJSDispatch2 *global = GetScriptDispatch();
     if(!global)
         return false;
     bool ok = false;
@@ -3046,7 +3046,7 @@ static bool KrkrOglEnsureOnto(const tjs_char *targetName, const tjs_char *member
 // 把全局 globalName 的值镜像到 targetName（仅在该目标没有该成员时写）。
 static bool KrkrOglMirrorGlobalOnto(const tjs_char *targetName,
                                     const tjs_char *globalName) {
-    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    iTJSDispatch2 *global = GetScriptDispatch();
     if(!global)
         return false;
     bool ok = false;
@@ -3087,14 +3087,14 @@ static bool KrkrOglAetherKiriContract() {
     tTJSVariant gpuDevice;
     bool haveDevice = false;
     try {
-        TVPExecuteExpression(ttstr(TJS_W("new OGLDrawDevice()")), &gpuDevice);
+        ExecuteExpression(ttstr(TJS_W("new OGLDrawDevice()")), &gpuDevice);
         haveDevice = gpuDevice.Type() == tvtObject;
     } catch(...) {
         haveDevice = false;
     }
     if(!haveDevice) {
         try {
-            TVPExecuteExpression(ttstr(TJS_W("new GLESAdaptor()")),
+            ExecuteExpression(ttstr(TJS_W("new GLESAdaptor()")),
                                  &gpuDevice);
             haveDevice = gpuDevice.Type() == tvtObject;
         } catch(...) {
@@ -3179,7 +3179,7 @@ static const tjs_char *KrkrOglAetherKiriScript() {
 // 与脚本加载完成要等到插件注册后 ~9.5 秒，上限不能太小。
 static constexpr int kKrkrOglAetherKiriInstallMaxTicks = 600;
 
-class KrkrOglAetherKiriInstallHook : public tTVPContinuousEventCallbackIntf {
+class KrkrOglAetherKiriInstallHook : public ContinuousEventCallbackIntf {
 public:
     void OnContinuousCallback(tjs_uint64 /*tick*/) override {
         ++ticks_;
@@ -3191,7 +3191,7 @@ public:
 
         if(kagReady && !scriptInstalled_) {
             try {
-                TVPExecuteExpression(ttstr(KrkrOglAetherKiriScript()));
+                ExecuteExpression(ttstr(KrkrOglAetherKiriScript()));
                 scriptInstalled_ = true;
             } catch(...) {
                 scriptInstalled_ = false; // 下一帧再试
@@ -3209,7 +3209,7 @@ public:
         }
         if((scriptInstalled_ && aliasesDone && contractInstalled_) ||
            ticks_ >= kKrkrOglAetherKiriInstallMaxTicks) {
-            TVPRemoveContinuousEventHook(this);
+            RemoveContinuousEventHook(this);
             const auto waited_ms =
                 std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - registeredAt_)
@@ -3262,7 +3262,7 @@ static void KrkrGlesPostRegist() {
         KrkrOglAliasFanOut(TJS_W("GLESAdaptor"));
         g_krkrOglAetherKiriInstallHook.MarkRegistered(true);
         if(!KrkrOglGlobalExists(TJS_W("KAGWindow"))) {
-            TVPAddContinuousEventHook(&g_krkrOglAetherKiriInstallHook);
+            AddContinuousEventHook(&g_krkrOglAetherKiriInstallHook);
             spdlog::info("krkrgles: AetherKiri 层就绪，KAGWindow_createDrawDevice 与"
                          "别名将在 KAGWindow 构造完成后接管（每帧重试，上限 {} 帧）",
                          kKrkrOglAetherKiriInstallMaxTicks);
@@ -3317,7 +3317,7 @@ static void KrkrGlesPreUnregist() {
     }
     // Kag 接管钩子：重启后旧钩子若还在队列里，会对已销毁的 world 执行脚本/写别名。
     // 这里摘钩并复位状态（**不**去 DeleteMember：world 正在销毁，碰脚本对象只会更危险）。
-    TVPRemoveContinuousEventHook(&g_krkrOglAetherKiriInstallHook);
+    RemoveContinuousEventHook(&g_krkrOglAetherKiriInstallHook);
     g_krkrOglAetherKiriInstallHook.Reset();
     g_captureActive = false;
     g_captureCount = 0;

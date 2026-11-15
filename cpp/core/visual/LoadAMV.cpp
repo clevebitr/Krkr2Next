@@ -157,7 +157,7 @@ static bool DecodeJpegWithQT(const unsigned char *jpegData, size_t jpegSize,
 // ---------------------------------------------------------------------------
 static void ReadExact(tTJSBinaryStream *src, void *buf, tjs_uint len) {
     if(src->Read(buf, len) != len)
-        TVPThrowExceptionMessage(TJS_W("AMV: read error"));
+        ThrowExceptionMessage(TJS_W("AMV: read error"));
 }
 
 // ---------------------------------------------------------------------------
@@ -170,20 +170,20 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
                 tTJSBinaryStream *src, tjs_int32 keyidx,
                 tTVPGraphicLoadMode mode) {
     if(mode == glmPalettized)
-        TVPThrowExceptionMessage(TJS_W("AMV does not support palettized mode"));
+        ThrowExceptionMessage(TJS_W("AMV does not support palettized mode"));
 
     // --- Read & validate header ---
     AMVHeader hdr;
     ReadExact(src, &hdr, sizeof(hdr));
     if(hdr.magic != AMV_MAGIC)
-        TVPThrowExceptionMessage(TJS_W("AMV: invalid magic"));
+        ThrowExceptionMessage(TJS_W("AMV: invalid magic"));
     if(hdr.frame_cnt == 0)
-        TVPThrowExceptionMessage(TJS_W("AMV: zero frames"));
+        ThrowExceptionMessage(TJS_W("AMV: zero frames"));
 
     int imgW = hdr.width;
     int imgH = hdr.height;
     if(imgW <= 0 || imgH <= 0)
-        TVPThrowExceptionMessage(TJS_W("AMV: invalid dimensions"));
+        ThrowExceptionMessage(TJS_W("AMV: invalid dimensions"));
 
     bool isZlibMode = (hdr.alpha_decode_attr == 2);
     size_t qtSize = hdr.qt_size_plus_hdr - sizeof(AMVHeader);
@@ -223,7 +223,7 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
         AMVZlibFrameHeader fh;
         ReadExact(src, &fh, sizeof(fh));
         if(fh.magic != FRAM_MAGIC)
-            TVPThrowExceptionMessage(TJS_W("AMV: invalid frame magic"));
+            ThrowExceptionMessage(TJS_W("AMV: invalid frame magic"));
         sizeOfFrame = fh.size_of_frame;
         frameLeft = fh.frame_left;
         frameTop = fh.frame_top;
@@ -235,7 +235,7 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
         AMVJpegFrameHeader fh;
         ReadExact(src, &fh, sizeof(fh));
         if(fh.magic != FRAM_MAGIC)
-            TVPThrowExceptionMessage(TJS_W("AMV: invalid frame magic"));
+            ThrowExceptionMessage(TJS_W("AMV: invalid frame magic"));
         sizeOfFrame = fh.size_of_frame;
         frameLeft = fh.frame_left;
         frameTop = fh.frame_top;
@@ -245,7 +245,7 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
     }
 
     if(sizeOfFrame < extraHdr)
-        TVPThrowExceptionMessage(TJS_W("AMV: frame data too small"));
+        ThrowExceptionMessage(TJS_W("AMV: frame data too small"));
 
     size_t payloadLen = sizeOfFrame - extraHdr;
 
@@ -260,7 +260,7 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
 
     if(isZlibMode) {
         if(rgbBufSize > payloadLen)
-            TVPThrowExceptionMessage(TJS_W("AMV: rgb_buffer_size overflow"));
+            ThrowExceptionMessage(TJS_W("AMV: rgb_buffer_size overflow"));
 
         int colorW = frameW > 0 ? frameW : imgW;
         int colorH = frameH > 0 ? frameH : imgH;
@@ -339,7 +339,7 @@ void TVPLoadAMV(void *formatdata, void *callbackdata,
         std::vector<unsigned char> rgbPixels;
         if(!DecodeJpegWithQT(payloadStart, colorSize, dqtSeg, TJPF_RGBA, 4,
                              decW, decH, rgbPixels)) {
-            TVPThrowExceptionMessage(TJS_W("AMV: color JPEG decode failed"));
+            ThrowExceptionMessage(TJS_W("AMV: color JPEG decode failed"));
         }
 
         int copyW = std::min(decW, imgW);

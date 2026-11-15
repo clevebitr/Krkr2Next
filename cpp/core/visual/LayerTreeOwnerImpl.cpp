@@ -100,7 +100,7 @@ void tTVPLayerTreeOwner::UnregisterLayerManager(
     // Managers から manager を削除する。Releaseする。
     auto i = std::find(Managers.begin(), Managers.end(), manager);
     if(i == Managers.end())
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
     (*i)->Release();
     Managers.erase(i);
 }
@@ -241,7 +241,7 @@ void tTVPLayerTreeOwner::FireDoubleClick(tjs_int x, tjs_int y) {
         return;
     manager->NotifyDoubleClick(x, y);
 }
-void tTVPLayerTreeOwner::FireMouseDown(tjs_int x, tjs_int y, tTVPMouseButton mb,
+void tTVPLayerTreeOwner::FireMouseDown(tjs_int x, tjs_int y, MouseButton mb,
                                        tjs_uint32 flags) {
     if(!TransformToPrimaryLayerManager(x, y))
         return;
@@ -250,7 +250,7 @@ void tTVPLayerTreeOwner::FireMouseDown(tjs_int x, tjs_int y, tTVPMouseButton mb,
         return;
     manager->NotifyMouseDown(x, y, mb, flags);
 }
-void tTVPLayerTreeOwner::FireMouseUp(tjs_int x, tjs_int y, tTVPMouseButton mb,
+void tTVPLayerTreeOwner::FireMouseUp(tjs_int x, tjs_int y, MouseButton mb,
                                      tjs_uint32 flags) {
     if(!TransformToPrimaryLayerManager(x, y))
         return;

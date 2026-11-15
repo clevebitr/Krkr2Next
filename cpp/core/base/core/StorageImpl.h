@@ -25,7 +25,7 @@ struct IStream;
 
 namespace krkr::io {
 
-struct tTVPLocalFileInfo {
+struct LocalFileInfo {
     const char *NativeName;
     unsigned short Mode; // S_IFMT
     tjs_uint64 Size;
@@ -36,7 +36,7 @@ struct tTVPLocalFileInfo {
 
 void GetLocalFileListAt(
     const ttstr &name,
-    const std::function<void(const ttstr &, tTVPLocalFileInfo *)> &cb);
+    const std::function<void(const ttstr &, LocalFileInfo *)> &cb);
 
 //---------------------------------------------------------------------------
 // krkr::io::LocalFileStream
@@ -164,22 +164,22 @@ TJS_EXP_FUNC_DEF(tTJSBinaryStream *, CreateBinaryStreamAdapter,
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPPluginHolder
+// PluginHolder
 //---------------------------------------------------------------------------
 /*
-        tTVPPluginHolder holds plug-in. if the plug-in is not a local
+        PluginHolder holds plug-in. if the plug-in is not a local
    storage, plug-in is to be extracted to temporary directory and be
    held until the program done using it.
 */
-class tTVPPluginHolder {
+class PluginHolder {
 private:
     ttstr LocalName;
-    tTVPLocalTempStorageHolder *LocalTempStorageHolder;
+    LocalTempStorageHolder *LocalTempStorageHolder;
 
 public:
-    tTVPPluginHolder(const ttstr &aname);
+    PluginHolder(const ttstr &aname);
 
-    ~tTVPPluginHolder();
+    ~PluginHolder();
 
     [[nodiscard]] const ttstr &GetLocalName() const;
 };
@@ -197,7 +197,7 @@ void ResetStorageImplForRestart();
 } // namespace krkr::io
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::io::tTVPLocalFileInfo;
+using krkr::io::LocalFileInfo;
 using krkr::io::GetLocalFileListAt;
 using krkr::io::LocalFileStream;
 using krkr::io::CheckExistentLocalFolder;
@@ -206,7 +206,7 @@ using krkr::io::TVPCreateFolders;
 using krkr::io::CreateIStream;
 using krkr::io::BinaryStreamAdapter;
 using krkr::io::CreateBinaryStreamAdapter;
-using krkr::io::tTVPPluginHolder;
+using krkr::io::PluginHolder;
 using krkr::io::ListDir;
 using krkr::io::SaveStreamToFile;
 using krkr::io::ResetStorageImplForRestart;

@@ -18,19 +18,17 @@
 
 namespace krkr::base {
 
-TJS_EXP_FUNC_DEF(tjs_int, TVPWideCharToUtf8String,
+TJS_EXP_FUNC_DEF(tjs_int, WideCharToUtf8String,
                  (const tjs_char *in, char *out));
 
-TJS_EXP_FUNC_DEF(tjs_int, TVPUtf8ToWideCharString,
+TJS_EXP_FUNC_DEF(tjs_int, Utf8ToWideCharString,
                  (const char *in, tjs_char *out));
 
-extern tjs_int TVPUtf8ToWideCharString(const char *in, tjs_uint length,
+extern tjs_int Utf8ToWideCharString(const char *in, tjs_uint length,
                                        tjs_char *out);
 
 } // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::base::TVPWideCharToUtf8String;
-using krkr::base::TVPUtf8ToWideCharString;
 
 #endif

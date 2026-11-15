@@ -88,7 +88,7 @@ static void TVPUnregisterWindowToList(tTJSNI_Window *window) {
 //---------------------------------------------------------------------------
 tTJSNI_Window *TVPGetWindowListAt(tjs_int idx) { return TVPWindowVector[idx]; }
 //---------------------------------------------------------------------------
-tjs_int TVPGetWindowCount() { return (tjs_int)TVPWindowVector.size(); }
+tjs_int GetWindowCount() { return (tjs_int)TVPWindowVector.size(); }
 //---------------------------------------------------------------------------
 bool TVPIsWindowRegistered(const tTJSNI_Window *window) {
     return std::find(TVPWindowVector.begin(), TVPWindowVector.end(),
@@ -110,7 +110,7 @@ void TVPResetWindowListForRestart() { // 对照上游 PR#12
 
 #if 0
 //---------------------------------------------------------------------------
-bool TVPIsWaitVSync()
+bool IsWaitVSync()
 {
 	bool result = false;
 	std::vector<tTJSNI_Window*>::iterator i;
@@ -127,32 +127,32 @@ bool TVPIsWaitVSync()
 // Input Events
 //---------------------------------------------------------------------------
 // For each input event tag
-tTVPUniqueTagForInputEvent tTVPOnCloseInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnResizeInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnClickInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnDoubleClickInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnMouseDownInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnMouseUpInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnMouseMoveInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnReleaseCaptureInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnMouseOutOfWindowInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnMouseEnterInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnMouseLeaveInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnKeyDownInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnKeyUpInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnKeyPressInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnFileDropInputEvent ::Tag;
-tTVPUniqueTagForInputEvent OnMouseWheelInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnPopupHideInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnWindowActivateEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnTouchDownInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnTouchUpInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnTouchMoveInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnTouchScalingInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnTouchRotateInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnMultiTouchInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnHintChangeInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnDisplayRotateInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnCloseInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnResizeInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnClickInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnDoubleClickInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnMouseDownInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnMouseUpInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnMouseMoveInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnReleaseCaptureInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnMouseOutOfWindowInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnMouseEnterInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnMouseLeaveInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnKeyDownInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnKeyUpInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnKeyPressInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnFileDropInputEvent ::Tag;
+UniqueTagForInputEvent OnMouseWheelInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnPopupHideInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnWindowActivateEvent ::Tag;
+UniqueTagForInputEvent tTVPOnTouchDownInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnTouchUpInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnTouchMoveInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnTouchScalingInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnTouchRotateInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnMultiTouchInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnHintChangeInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnDisplayRotateInputEvent ::Tag;
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -185,7 +185,7 @@ tjs_error tTJSNI_BaseWindow::Construct(tjs_int numparams, tTJSVariant **param,
             cls = new tTJSNC_BasicDrawDevice();
             if(TJS_FAILED(cls->CreateNew(0, nullptr, nullptr, &newobj, 0,
                                          nullptr, cls)))
-                TVPThrowExceptionMessage(TVPInternalError,
+                ThrowExceptionMessage(TVPInternalError,
                                          TJS_W("tTJSNI_Window::Construct"));
             SetDrawDeviceObject(tTJSVariant(newobj, newobj));
         } catch(...) {
@@ -209,11 +209,11 @@ void tTJSNI_BaseWindow::Invalidate() {
     TVPUnregisterWindowToList(static_cast<tTJSNI_Window *>(this));
 
     // remove all events
-    TVPCancelSourceEvents(Owner);
-    TVPCancelInputEvents(this);
+    krkr::base::CancelSourceEvents(Owner);
+    krkr::base::CancelInputEvents(this);
 
     // clear all window update events
-    TVPRemoveWindowUpdate((tTJSNI_Window *)this);
+    krkr::base::RemoveWindowUpdate((tTJSNI_Window *)this);
 
     // sever the primarylayer
     //	if(LayerManager) LayerManager->DetachPrimary();
@@ -253,14 +253,14 @@ void tTJSNI_BaseWindow::Invalidate() {
     }
 
     // remove all events (again)
-    TVPCancelSourceEvents(Owner);
-    TVPCancelInputEvents(this);
+    krkr::base::CancelSourceEvents(Owner);
+    krkr::base::CancelInputEvents(this);
 
     // notify that the window is no longer available
     //	if(LayerManager) LayerManager->SetWindow(nullptr);
 
     // clear all window update events (again)
-    TVPRemoveWindowUpdate((tTJSNI_Window *)this);
+    krkr::base::RemoveWindowUpdate((tTJSNI_Window *)this);
 
     // release draw device
     SetDrawDeviceObject(tTJSVariant());
@@ -278,7 +278,7 @@ bool tTJSNI_BaseWindow::IsMainWindow() const {
 //---------------------------------------------------------------------------
 void tTJSNI_BaseWindow::FireOnActivate(bool activate_or_deactivate) {
     // fire Window.onActivate or Window.onDeactivate event
-    TVPPostInputEvent(
+    krkr::base::PostInputEvent(
         new tTVPOnWindowActivateEvent(this, activate_or_deactivate),
         TVP_EPT_REMOVE_POST // to discard redundant events
     );
@@ -293,14 +293,14 @@ void tTJSNI_BaseWindow::SetDrawDeviceObject(const tTJSVariant &val) {
         if(TJS_FAILED(clo.PropGet(0, TJS_W("interface"), nullptr, &iface_v,
                                   nullptr))) {
             // Log the error or handle it as needed
-            TVPThrowExceptionMessage(TVPCannotRetriveInterfaceFromDrawDevice);
+            ThrowExceptionMessage(TVPCannotRetriveInterfaceFromDrawDevice);
             // Do not set DrawDevice if there is an error
             return; // Exit the function or handle the error as needed
         }
         auto *tmpDrawDevice = reinterpret_cast<iTVPDrawDevice *>(
             (tjs_intptr_t)(tjs_int64)iface_v);
         if(!tmpDrawDevice) {
-            TVPThrowExceptionMessage(TVPCannotRetriveInterfaceFromDrawDevice);
+            ThrowExceptionMessage(TVPCannotRetriveInterfaceFromDrawDevice);
             return; // Exit the function or handle the error as needed
         }
         if(tmpDrawDevice == DrawDevice) {
@@ -349,7 +349,7 @@ void tTJSNI_BaseWindow::OnClose() {
     if(Owner) {
         tTJSVariant arg[1] = { true };
         static ttstr eventname(TJS_W("onCloseQuery"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 1, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 1, arg);
     }
 }
 //---------------------------------------------------------------------------
@@ -358,7 +358,7 @@ void tTJSNI_BaseWindow::OnResize() {
         return;
     if(Owner) {
         static ttstr eventname(TJS_W("onResize"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 0, nullptr);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 0, nullptr);
     }
 }
 //---------------------------------------------------------------------------
@@ -368,7 +368,7 @@ void tTJSNI_BaseWindow::OnClick(tjs_int x, tjs_int y) {
     if(Owner) {
         tTJSVariant arg[2] = { x, y };
         static ttstr eventname(TJS_W("onClick"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 2, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 2, arg);
     }
     if(DrawDevice)
         DrawDevice->OnClick(x, y);
@@ -380,33 +380,33 @@ void tTJSNI_BaseWindow::OnDoubleClick(tjs_int x, tjs_int y) {
     if(Owner) {
         tTJSVariant arg[2] = { x, y };
         static ttstr eventname(TJS_W("onDoubleClick"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 2, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 2, arg);
     }
     if(DrawDevice)
         DrawDevice->OnDoubleClick(x, y);
 }
 //---------------------------------------------------------------------------
-void tTJSNI_BaseWindow::OnMouseDown(tjs_int x, tjs_int y, tTVPMouseButton mb,
+void tTJSNI_BaseWindow::OnMouseDown(tjs_int x, tjs_int y, MouseButton mb,
                                     tjs_uint32 flags) {
     if(!CanDeliverEvents())
         return;
     if(Owner) {
         tTJSVariant arg[4] = { x, y, (tjs_int64)mb, (tjs_int64)flags };
         static ttstr eventname(TJS_W("onMouseDown"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 4, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 4, arg);
     }
     if(DrawDevice)
         DrawDevice->OnMouseDown(x, y, mb, flags);
 }
 //---------------------------------------------------------------------------
-void tTJSNI_BaseWindow::OnMouseUp(tjs_int x, tjs_int y, tTVPMouseButton mb,
+void tTJSNI_BaseWindow::OnMouseUp(tjs_int x, tjs_int y, MouseButton mb,
                                   tjs_uint32 flags) {
     if(!CanDeliverEvents())
         return;
     if(Owner) {
         tTJSVariant arg[4] = { x, y, (tjs_int)mb, (tjs_int)flags };
         static ttstr eventname(TJS_W("onMouseUp"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 4, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 4, arg);
     }
     if(DrawDevice)
         DrawDevice->OnMouseUp(x, y, mb, flags);
@@ -418,7 +418,7 @@ void tTJSNI_BaseWindow::OnMouseMove(tjs_int x, tjs_int y, tjs_uint32 flags) {
     if(Owner) {
         static ttstr eventname(TJS_W("onMouseMove"));
         tTJSVariant arg[3] = { x, y, (tjs_int64)flags };
-        TVPPostEvent(Owner, Owner, eventname, 0,
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0,
                      TVP_EPT_DISCARDABLE | TVP_EPT_IMMEDIATE
                      /*discardable!!*/,
                      3, arg);
@@ -434,7 +434,7 @@ void tTJSNI_BaseWindow::OnTouchDown(tjs_real x, tjs_real y, tjs_real cx,
     if(Owner) {
         tTJSVariant arg[5] = { x, y, cx, cy, (tjs_int64)id };
         static ttstr eventname(TJS_W("onTouchDown"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 5, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 5, arg);
     }
     if(DrawDevice)
         DrawDevice->OnTouchDown(x, y, cx, cy, id);
@@ -447,7 +447,7 @@ void tTJSNI_BaseWindow::OnTouchUp(tjs_real x, tjs_real y, tjs_real cx,
     if(Owner) {
         tTJSVariant arg[5] = { x, y, cx, cy, (tjs_int64)id };
         static ttstr eventname(TJS_W("onTouchUp"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 5, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 5, arg);
     }
     if(DrawDevice)
         DrawDevice->OnTouchUp(x, y, cx, cy, id);
@@ -460,7 +460,7 @@ void tTJSNI_BaseWindow::OnTouchMove(tjs_real x, tjs_real y, tjs_real cx,
     if(Owner) {
         tTJSVariant arg[5] = { x, y, cx, cy, (tjs_int64)id };
         static ttstr eventname(TJS_W("onTouchMove"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 5, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 5, arg);
     }
     if(DrawDevice)
         DrawDevice->OnTouchMove(x, y, cx, cy, id);
@@ -473,7 +473,7 @@ void tTJSNI_BaseWindow::OnTouchScaling(tjs_real startdist, tjs_real curdist,
     if(Owner) {
         tTJSVariant arg[5] = { startdist, curdist, cx, cy, flag };
         static ttstr eventname(TJS_W("onTouchScaling"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 5, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 5, arg);
     }
     if(DrawDevice)
         DrawDevice->OnTouchScaling(startdist, curdist, cx, cy, flag);
@@ -487,7 +487,7 @@ void tTJSNI_BaseWindow::OnTouchRotate(tjs_real startangle, tjs_real curangle,
     if(Owner) {
         tTJSVariant arg[6] = { startangle, curangle, dist, cx, cy, flag };
         static ttstr eventname(TJS_W("onTouchRotate"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 6, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 6, arg);
     }
     if(DrawDevice)
         DrawDevice->OnTouchRotate(startangle, curangle, dist, cx, cy, flag);
@@ -498,7 +498,7 @@ void tTJSNI_BaseWindow::OnMultiTouch() {
         return;
     if(Owner) {
         static ttstr eventname(TJS_W("onMultiTouch"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 0, nullptr);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 0, nullptr);
     }
     if(DrawDevice)
         DrawDevice->OnMultiTouch();
@@ -523,7 +523,7 @@ void tTJSNI_BaseWindow::OnMouseEnter() {
         return;
     if(Owner) {
         static ttstr eventname(TJS_W("onMouseEnter"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 0, nullptr);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 0, nullptr);
     }
 }
 //---------------------------------------------------------------------------
@@ -532,7 +532,7 @@ void tTJSNI_BaseWindow::OnMouseLeave() {
         return;
     if(Owner) {
         static ttstr eventname(TJS_W("onMouseLeave"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 0, nullptr);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 0, nullptr);
     }
 }
 //---------------------------------------------------------------------------
@@ -542,7 +542,7 @@ void tTJSNI_BaseWindow::OnKeyDown(tjs_uint key, tjs_uint32 shift) {
     if(Owner) {
         tTJSVariant arg[2] = { (tjs_int)key, (tjs_int)shift };
         static ttstr eventname(TJS_W("onKeyDown"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 2, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 2, arg);
     }
     if(DrawDevice)
         DrawDevice->OnKeyDown(key, shift);
@@ -554,7 +554,7 @@ void tTJSNI_BaseWindow::OnKeyUp(tjs_uint key, tjs_uint32 shift) {
     if(Owner) {
         tTJSVariant arg[2] = { (tjs_int)key, (tjs_int)shift };
         static ttstr eventname(TJS_W("onKeyUp"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 2, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 2, arg);
     }
     if(DrawDevice)
         DrawDevice->OnKeyUp(key, shift);
@@ -569,7 +569,7 @@ void tTJSNI_BaseWindow::OnKeyPress(tjs_char key) {
         buf[1] = 0;
         tTJSVariant arg[1] = { buf };
         static ttstr eventname(TJS_W("onKeyPress"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 1, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 1, arg);
     }
     if(DrawDevice)
         DrawDevice->OnKeyPress(key);
@@ -581,7 +581,7 @@ void tTJSNI_BaseWindow::OnFileDrop(const tTJSVariant &array) {
     if(Owner) {
         tTJSVariant arg[1] = { array };
         static ttstr eventname(TJS_W("onFileDrop"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 1, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 1, arg);
     }
 }
 //---------------------------------------------------------------------------
@@ -592,7 +592,7 @@ void tTJSNI_BaseWindow::OnMouseWheel(tjs_uint32 shift, tjs_int delta, tjs_int x,
     if(Owner) {
         tTJSVariant arg[4] = { (tjs_int)shift, delta, x, y };
         static ttstr eventname(TJS_W("onMouseWheel"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 4, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 4, arg);
     }
     if(DrawDevice)
         DrawDevice->OnMouseWheel(shift, delta, x, y);
@@ -603,7 +603,7 @@ void tTJSNI_BaseWindow::OnPopupHide() {
         return;
     if(Owner) {
         static ttstr eventname(TJS_W("onPopupHide"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 0, nullptr);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 0, nullptr);
     }
 }
 //---------------------------------------------------------------------------
@@ -616,7 +616,7 @@ void tTJSNI_BaseWindow::OnActivate(bool activate_or_deactivate) {
         if(Owner) {
             static ttstr a_eventname(TJS_W("onActivate"));
             static ttstr d_eventname(TJS_W("onDeactivate"));
-            TVPPostEvent(Owner, Owner,
+            krkr::base::PostTJSEvent(Owner, Owner,
                          activate_or_deactivate ? a_eventname : d_eventname, 0,
                          TVP_EPT_IMMEDIATE, 0, nullptr);
         }
@@ -630,7 +630,7 @@ void tTJSNI_BaseWindow::OnHintChange(const ttstr &text, tjs_int x, tjs_int y,
     if(Owner) {
         tTJSVariant arg[6] = { text, x, y, isshow ? 1 : 0 };
         static ttstr eventname(TJS_W("onHintChanged"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 4, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 4, arg);
     }
 }
 //---------------------------------------------------------------------------
@@ -643,17 +643,17 @@ void tTJSNI_BaseWindow::OnDisplayRotate(tjs_int orientation, tjs_int rotate,
         tTJSVariant arg[5] = { orientation, rotate, bpp, hresolution,
                                vresolution };
         static ttstr eventname(TJS_W("onDisplayRotate"));
-        TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 5, arg);
+        krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 5, arg);
     }
     if(DrawDevice)
         DrawDevice->OnDisplayRotate(orientation, rotate, bpp, hresolution,
                                     vresolution);
 }
 //---------------------------------------------------------------------------
-void tTJSNI_BaseWindow::ClearInputEvents() { TVPCancelInputEvents(this); }
+void tTJSNI_BaseWindow::ClearInputEvents() { krkr::base::CancelInputEvents(this); }
 //---------------------------------------------------------------------------
 void tTJSNI_BaseWindow::PostReleaseCaptureEvent() {
-    TVPPostInputEvent(new tTVPOnReleaseCaptureInputEvent(this));
+    krkr::base::PostInputEvent(new tTVPOnReleaseCaptureInputEvent(this));
 }
 //---------------------------------------------------------------------------
 void tTJSNI_BaseWindow::RegisterLayerManager(iTVPLayerManager *manager) {
@@ -748,13 +748,13 @@ void tTJSNI_BaseWindow::SetShowUpdateRect(bool b) {
 void tTJSNI_BaseWindow::RequestUpdate() {
     // is called from primary layer
     // post update event to self
-    TVPPostWindowUpdate((tTJSNI_Window *)this);
+    krkr::base::PostWindowUpdate((tTJSNI_Window *)this);
 }
 //---------------------------------------------------------------------------
 void tTJSNI_BaseWindow::NotifySrcResize() {
     // is called from primary layer
     if(WindowUpdating)
-        TVPThrowExceptionMessage(TVPInvalidMethodInUpdating);
+        ThrowExceptionMessage(TVPInvalidMethodInUpdating);
 }
 
 //---------------------------------------------------------------------------
@@ -849,9 +849,9 @@ tTJSNC_Window::tTJSNC_Window() : tTJSNativeClass(TJS_W("Window")) {
     TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ update) {
         TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
                                 /*var. type*/ tTJSNI_Window);
-        tTVPUpdateType type = utNormal;
+        UpdateType type = utNormal;
         if(numparams >= 2 && param[1]->Type() != tvtVoid)
-            type = (tTVPUpdateType)(tjs_int)*param[0];
+            type = (UpdateType)(tjs_int)*param[0];
         _this->Update(type);
         return TJS_S_OK;
     }
@@ -1771,7 +1771,7 @@ TJS_END_NATIVE_PROP_GETTER
 TJS_BEGIN_NATIVE_PROP_SETTER {
     TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
                             /*var. type*/ tTJSNI_Window);
-    _this->SetDefaultImeMode((tTVPImeMode)(tjs_int)*param);
+    _this->SetDefaultImeMode((ImeMode)(tjs_int)*param);
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER
@@ -1789,7 +1789,7 @@ TJS_END_NATIVE_PROP_GETTER
 TJS_BEGIN_NATIVE_PROP_SETTER {
     TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
                             /*var. type*/ tTJSNI_Window);
-    _this->SetMouseCursorState((tTVPMouseCursorState)(tjs_int)*param);
+    _this->SetMouseCursorState((MouseCursorState)(tjs_int)*param);
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER
@@ -1854,7 +1854,7 @@ TJS_BEGIN_NATIVE_PROP_SETTER {
             if(TJS_FAILED(clo.Object->NativeInstanceSupport(
                    TJS_NIS_GETINSTANCE, tTJSNC_Layer::ClassID,
                    (iTJSNativeInstance **)&to)))
-                TVPThrowExceptionMessage(TVPSpecifyLayer);
+                ThrowExceptionMessage(TVPSpecifyLayer);
         }
     }
 
@@ -1871,7 +1871,7 @@ TJS_BEGIN_NATIVE_PROP_DECL(primaryLayer){ TJS_BEGIN_NATIVE_PROP_GETTER{
                             /*var. type*/ tTJSNI_Window);
 tTJSNI_BaseLayer *pri = _this->GetDrawDevice()->GetPrimaryLayer();
 if(!pri)
-    TVPThrowExceptionMessage(TVPWindowHasNoLayer);
+    ThrowExceptionMessage(TVPWindowHasNoLayer);
 
 if(pri && pri->GetOwnerNoAddRef())
     *result = tTJSVariant(pri->GetOwnerNoAddRef(), pri->GetOwnerNoAddRef());

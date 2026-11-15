@@ -103,9 +103,9 @@ public:
     // LayerManager に対してイベントを通知するためのメソッド
     void FireClick(tjs_int x, tjs_int y);
     void FireDoubleClick(tjs_int x, tjs_int y);
-    void FireMouseDown(tjs_int x, tjs_int y, enum tTVPMouseButton mb,
+    void FireMouseDown(tjs_int x, tjs_int y, enum MouseButton mb,
                        tjs_uint32 flags);
-    void FireMouseUp(tjs_int x, tjs_int y, enum tTVPMouseButton mb,
+    void FireMouseUp(tjs_int x, tjs_int y, enum MouseButton mb,
                      tjs_uint32 flags);
     void FireMouseMove(tjs_int x, tjs_int y, tjs_uint32 flags);
     void FireMouseWheel(tjs_uint32 shift, tjs_int delta, tjs_int x, tjs_int y);

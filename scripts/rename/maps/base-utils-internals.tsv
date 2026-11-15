@@ -1,0 +1,13 @@
+# module: base
+# qualify: krkr::utils
+# owner: cpp/core/base
+#
+# base 第 8 轮（C）：**`namespace krkr::utils` 的内部符号，代码却写在 base/runtime**。
+# 这是 DECISIONS #28 记的那个坑：按目录归属会把这些符号算成 base，按 namespace
+# 归属它们是 utils。它们绝大多数是文件内 `static`，所以 owner 必须是实际定义目录
+# （cpp/core/base），不能把它们挪进 utils 的 map。
+
+TVPCreateNativeClass_Timer	CreateNativeClass_Timer	fn
+TVPCreateNativeClass_Clipboard	CreateNativeClass_Clipboard	fn
+TVPCreateNativeClass_Debug	CreateNativeClass_Debug	fn
+TVPCreateNativeClass_Pad	CreateNativeClass_Pad	fn

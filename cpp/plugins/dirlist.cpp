@@ -23,7 +23,7 @@ if(numparams < 1)
 ttstr dir(*param[0]);
 
 if(dir.GetLastChar() != TJS_W('/'))
-    TVPThrowExceptionMessage(
+    ThrowExceptionMessage(
         TJS_W("'/' must be specified at the end of given directory name."));
 
 // OSネイティブな表現に変換
@@ -38,7 +38,7 @@ try {
     array->NativeInstanceSupport(TJS_NIS_GETINSTANCE, TJSGetArrayClassID(),
                                  (iTJSNativeInstance **)&ni);
     krkr::io::GetLocalPath(dir);
-    krkr::io::GetLocalFileListAt(dir, [ni](const ttstr &name, tTVPLocalFileInfo *s) {
+    krkr::io::GetLocalFileListAt(dir, [ni](const ttstr &name, LocalFileInfo *s) {
         if(s->Mode & (S_IFREG | S_IFDIR)) {
             ni->Items.emplace_back(name);
         }
@@ -63,7 +63,7 @@ static void PostRegistCallback() {
     tTJSVariant val;
 
     // TJS のグローバルオブジェクトを取得する
-    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    iTJSDispatch2 *global = GetScriptDispatch();
 
     // 1 まずオブジェクトを作成
     GetDirListFunction = new tGetDirListFunction();

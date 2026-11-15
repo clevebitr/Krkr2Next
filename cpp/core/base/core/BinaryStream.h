@@ -6,9 +6,9 @@
 
 namespace krkr::base {
 
-extern tTJSBinaryStream *TVPCreateBinaryStreamForRead(const ttstr &name,
+extern tTJSBinaryStream *CreateBinaryStreamForRead(const ttstr &name,
                                                       const ttstr &modestr);
-extern tTJSBinaryStream *TVPCreateBinaryStreamForWrite(const ttstr &name,
+extern tTJSBinaryStream *CreateBinaryStreamForWrite(const ttstr &name,
                                                        const ttstr &modestr);
 
 /**
@@ -43,6 +43,4 @@ inline std::optional<std::uint32_t> parseModeNumber(const tjs_char *mode,
 } // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::base::TVPCreateBinaryStreamForRead;
-using krkr::base::TVPCreateBinaryStreamForWrite;
 using krkr::base::parseModeNumber;

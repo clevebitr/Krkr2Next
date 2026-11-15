@@ -2037,7 +2037,7 @@ private:
 // When a registered Layer is available, blits via GPU/CPU CopyFBOToLayer.
 // Otherwise falls back to PostDrawHook overlay blit.
 // ---------------------------------------------------------------------------
-class Live2DContinuousCallback : public tTVPContinuousEventCallbackIntf {
+class Live2DContinuousCallback : public ContinuousEventCallbackIntf {
 public:
     void OnContinuousCallback(tjs_uint64 /*tick*/) override {
         bool anyActive = false;
@@ -2062,10 +2062,10 @@ public:
                                g_live2dRenderTarget.height, layer, savedFBO);
             }
         }
-        if(anyActive && !layer && TVPGetWindowCount() > 0) {
+        if(anyActive && !layer && GetWindowCount() > 0) {
             tTJSNI_Window *win = TVPGetWindowListAt(0);
             if(win)
-                TVPPostWindowUpdate(win);
+                krkr::base::PostWindowUpdate(win);
         }
     }
 };
@@ -2092,7 +2092,7 @@ static void Live2DPostDrawHook() {
 static void EnsureContinuousHook() {
     if(g_continuousHookRegistered)
         return;
-    TVPAddContinuousEventHook(&g_live2dContinuousCb);
+    AddContinuousEventHook(&g_live2dContinuousCb);
     SetPostDrawHook(Live2DPostDrawHook);
     g_continuousHookRegistered = true;
     spdlog::info("krkrlive2d: continuous animation hook registered");

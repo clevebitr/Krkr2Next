@@ -293,13 +293,13 @@ void TVPAddTransHandlerProvider(iTVPTransHandlerProvider *pro) {
     // retrieve transition name
     const tjs_char *cname;
     if(TJS_FAILED(pro->GetName(&cname)))
-        TVPThrowExceptionMessage(
+        ThrowExceptionMessage(
             TVPTransHandlerError,
             TJS_W("tTVPTransHandlerProvider::GetName failed"));
     ttstr name = cname;
     tTVPTransHandlerProviderHolder *p = TVPTransHandlerProviders.Find(name);
     if(p)
-        TVPThrowExceptionMessage(TVPTransAlreadyRegistered, name);
+        ThrowExceptionMessage(TVPTransAlreadyRegistered, name);
 
     tTVPTransHandlerProviderHolder holder(pro);
     TVPTransHandlerProviders.Add(name, holder);
@@ -311,7 +311,7 @@ void TVPRemoveTransHandlerProvider(iTVPTransHandlerProvider *pro) {
     // retrieve transition name
     const tjs_char *cname;
     if(TJS_FAILED(pro->GetName(&cname)))
-        TVPThrowExceptionMessage(
+        ThrowExceptionMessage(
             TVPTransHandlerError,
             TJS_W("tTVPTransHandlerProvider::GetName failed"));
     ttstr name = cname;
@@ -348,7 +348,7 @@ static void TVPClearTransHandlerProvider() {
     // called at system shutdown
     TVPTransHandlerProviders.Clear();
 }
-static tTVPAtExit
+static AtExit
     TVPClearTransHandlerProviderAtExit(KRKR_ATEXIT_PRI_SHUTDOWN,
                                        TVPClearTransHandlerProvider);
 //---------------------------------------------------------------------------
@@ -498,7 +498,7 @@ tjs_error tTVPCrossFadeTransHandlerProvider::StartTransition(
         return TJS_E_FAIL;
 
     if(src1w != src2w || src1h != src2h)
-        TVPThrowExceptionMessage(
+        ThrowExceptionMessage(
             TVPTransitionLayerSizeMismatch,
             ttstr((tjs_int)src2w) + TJS_W("x") + ttstr((tjs_int)src2h),
             ttstr((tjs_int)src1w) + TJS_W("x") + ttstr((tjs_int)src1h));
@@ -520,7 +520,7 @@ iTVPBaseTransHandler *tTVPCrossFadeTransHandlerProvider::GetTransitionObject(
     tjs_int64 time;
     tjs_error er = options->GetAsNumber(TJS_W("time"), (tjs_int64 *)&time);
     if(TJS_FAILED(er))
-        TVPThrowExceptionMessage(TVPSpecifyOption, TJS_W("time"));
+        ThrowExceptionMessage(TVPSpecifyOption, TJS_W("time"));
     if(time < 2)
         time = 2; // too small time may cause problem
 
@@ -803,7 +803,7 @@ public:
         tjs_int64 time;
         er = options->GetAsNumber(TJS_W("time"), (tjs_int64 *)&time);
         if(TJS_FAILED(er))
-            TVPThrowExceptionMessage(TVPSpecifyOption, TJS_W("time"));
+            ThrowExceptionMessage(TVPSpecifyOption, TJS_W("time"));
         if(time < 2)
             time = 2; // too small time may cause problem
 
@@ -817,12 +817,12 @@ public:
         const tjs_char *rulename;
         er = options->GetAsString(TJS_W("rule"), &rulename);
         if(TJS_FAILED(er))
-            TVPThrowExceptionMessage(TVPSpecifyOption, TJS_W("rule"));
+            ThrowExceptionMessage(TVPSpecifyOption, TJS_W("rule"));
 
         iTVPScanLineProvider *scpro;
         er = imagepro->LoadImage(rulename, 8, 0x02ffffff, src1w, src1h, &scpro);
         if(TJS_FAILED(er))
-            TVPThrowExceptionMessage(TVPCannotLoadRuleGraphic, rulename);
+            ThrowExceptionMessage(TVPCannotLoadRuleGraphic, rulename);
 
         // create a transition object
         iTVPBaseTransHandler *ret;
@@ -1029,13 +1029,13 @@ static void TVPSLPCopyRect(iTVPScanLineProvider *destimg, tjs_int x, tjs_int y,
 class tTVPScrollTransHandler : public tTVPCrossFadeTransHandler {
     typedef tTVPCrossFadeTransHandler inherited;
 
-    tTVPScrollTransFrom From;
-    tTVPScrollTransStay Stay;
+    ScrollTransFrom From;
+    ScrollTransStay Stay;
 
 public:
     tTVPScrollTransHandler(iTVPSimpleOptionProvider *options,
                            tTVPLayerType layertype, tjs_uint64 time,
-                           tTVPScrollTransFrom from, tTVPScrollTransStay stay,
+                           ScrollTransFrom from, ScrollTransStay stay,
                            tjs_int maxphase) :
         tTVPCrossFadeTransHandler(options, layertype, time, maxphase) {
         From = from;
@@ -1098,25 +1098,25 @@ public:
         tjs_int64 time;
         er = options->GetAsNumber(TJS_W("time"), &time);
         if(TJS_FAILED(er))
-            TVPThrowExceptionMessage(TVPSpecifyOption, TJS_W("time"));
+            ThrowExceptionMessage(TVPSpecifyOption, TJS_W("time"));
         if(time < 2)
             time = 2; // too small time may cause problem
 
         // retrieve "from" option
-        tTVPScrollTransFrom from;
+        ScrollTransFrom from;
         er = options->GetAsNumber(TJS_W("from"), &value);
         if(TJS_FAILED(er))
             from = sttLeft;
         else
-            from = (tTVPScrollTransFrom)value;
+            from = (ScrollTransFrom)value;
 
         // retrieve "stay" option
-        tTVPScrollTransStay stay;
+        ScrollTransStay stay;
         er = options->GetAsNumber(TJS_W("stay"), &value);
         if(TJS_FAILED(er))
             stay = ststNoStay;
         else
-            stay = (tTVPScrollTransStay)value;
+            stay = (ScrollTransStay)value;
 
         // determine maximum phase count
         tjs_int maxphase =
@@ -1131,7 +1131,7 @@ public:
 };
 //---------------------------------------------------------------------------
 struct tTVPScrollDivisibleData : public tTVPDivisibleData {
-    void Blend(tTVPScrollTransFrom from, tTVPScrollTransStay stay,
+    void Blend(ScrollTransFrom from, ScrollTransStay stay,
                tjs_int phase);
 };
 //---------------------------------------------------------------------------
@@ -1139,8 +1139,8 @@ void tTVPScrollTransHandler::Blend(tTVPDivisibleData *data) {
     ((tTVPScrollDivisibleData *)data)->Blend(From, Stay, Phase);
 }
 //---------------------------------------------------------------------------
-void tTVPScrollDivisibleData::Blend(tTVPScrollTransFrom from,
-                                    tTVPScrollTransStay stay, tjs_int phase) {
+void tTVPScrollDivisibleData::Blend(ScrollTransFrom from,
+                                    ScrollTransStay stay, tjs_int phase) {
     // scroll the image
     tjs_int imagewidth;
     tjs_int imageheight;

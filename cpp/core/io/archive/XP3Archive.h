@@ -95,7 +95,7 @@ struct XP3ArchiveSegment {
 };
 
 //---------------------------------------------------------------------------
-class XP3Archive : public tTVPArchive {
+class XP3Archive : public Archive {
 public:
     struct tArchiveItem {
         ttstr Name;
@@ -121,14 +121,14 @@ public:
               bool normalizeName = true);
 
 public:
-    XP3Archive(const ttstr &name, int) : tTVPArchive(name) {}
+    XP3Archive(const ttstr &name, int) : Archive(name) {}
 
     XP3Archive(const ttstr &name, tTJSBinaryStream *st = nullptr,
                    tjs_int64 offset = -1, bool normalizeFileName = true);
 
     ~XP3Archive() override;
 
-    static tTVPArchive *Create(const ttstr &name,
+    static Archive *Create(const ttstr &name,
                                tTJSBinaryStream *st = nullptr,
                                bool normalizeFileName = true);
 

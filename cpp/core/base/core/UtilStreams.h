@@ -17,18 +17,18 @@
 namespace krkr::base {
 
 //---------------------------------------------------------------------------
-// tTVPStreamHolder
+// StreamHolder
 //---------------------------------------------------------------------------
-class tTVPStreamHolder {
+class StreamHolder {
     tTJSBinaryStream *Stream;
 
 public:
-    tTVPStreamHolder() { Stream = nullptr; }
+    StreamHolder() { Stream = nullptr; }
 
-    tTVPStreamHolder(const ttstr &name, tjs_uint32 mode = 0) :
+    StreamHolder(const ttstr &name, tjs_uint32 mode = 0) :
         Stream{ krkr::io::CreateStream(name, mode) } {}
 
-    ~tTVPStreamHolder() { delete Stream; }
+    ~StreamHolder() { delete Stream; }
 
     tTJSBinaryStream *operator->() const { return Stream; }
 
@@ -52,20 +52,20 @@ public:
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPLocalTempStorageHolder
+// LocalTempStorageHolder
 //---------------------------------------------------------------------------
 // this class holds storage as local filesystem file ( does not open
 // it ). storage is copied to local fliesystem if needed.
-class tTVPLocalTempStorageHolder {
+class LocalTempStorageHolder {
     bool FileMustBeDeleted;
     bool FolderMustBeDeleted;
     ttstr LocalName;
     ttstr LocalFolder;
 
 public:
-    tTVPLocalTempStorageHolder(const ttstr &name);
+    LocalTempStorageHolder(const ttstr &name);
 
-    ~tTVPLocalTempStorageHolder();
+    ~LocalTempStorageHolder();
 
     [[nodiscard]] bool IsTemporaryFile() const { return FileMustBeDeleted; }
 
@@ -127,7 +127,7 @@ protected:
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPPartialStream
+// PartialStream
 //---------------------------------------------------------------------------
 /*
         this class offers read-only accesses for a partial of the
@@ -135,7 +135,7 @@ protected:
    and given limited size.
 */
 //---------------------------------------------------------------------------
-class tTVPPartialStream : public tTJSBinaryStream {
+class PartialStream : public tTJSBinaryStream {
 private:
     tTJSBinaryStream *Stream;
     tjs_uint64 Start;
@@ -143,10 +143,10 @@ private:
     tjs_uint64 CurrentPos;
 
 public:
-    tTVPPartialStream(tTJSBinaryStream *stream, tjs_uint64 start,
+    PartialStream(tTJSBinaryStream *stream, tjs_uint64 start,
                       tjs_uint64 size);
 
-    ~tTVPPartialStream() override;
+    ~PartialStream() override;
 
     tjs_uint64 Seek(tjs_int64 offset, tjs_int whence) override;
 
@@ -160,7 +160,7 @@ public:
 };
 
 //---------------------------------------------------------------------------
-struct tTVPUnpackArchiveCallbacks {
+struct UnpackArchiveCallbacks {
     std::function<void()> FuncOnEnded;
     std::function<void(int, const char *)> FuncOnError;
     std::function<void(tjs_uint64, tjs_uint64)> FuncOnProgress;
@@ -168,18 +168,18 @@ struct tTVPUnpackArchiveCallbacks {
     std::function<std::string()> FuncPassword;
 };
 
-class tTVPUnpackArchiveThread;
+class UnpackArchiveThread;
 
-class iTVPUnpackArchiveImpl {
+class IUnpackArchiveImpl {
 protected:
-    const tTVPUnpackArchiveCallbacks *_callbacks = nullptr;
+    const UnpackArchiveCallbacks *_callbacks = nullptr;
 
 public:
     bool StopRequired = false;
 
-    virtual ~iTVPUnpackArchiveImpl() = default;
+    virtual ~IUnpackArchiveImpl() = default;
 
-    void SetCallback(const tTVPUnpackArchiveCallbacks *cb) { _callbacks = cb; }
+    void SetCallback(const UnpackArchiveCallbacks *cb) { _callbacks = cb; }
 
     virtual bool Open(const std::string &path) = 0;
 
@@ -188,11 +188,11 @@ public:
     virtual void ExtractTo(const std::string &path) = 0;
 };
 
-class tTVPUnpackArchive : public tTVPUnpackArchiveCallbacks {
+class UnpackArchive : public UnpackArchiveCallbacks {
 public:
-    tTVPUnpackArchive();
+    UnpackArchive();
 
-    virtual ~tTVPUnpackArchive(); // must ve deconstructed from main
+    virtual ~UnpackArchive(); // must ve deconstructed from main
                                   // thread
     int Prepare(const std::string &path, const std::string &_outpath,
                 tjs_uint64 *totalSize);
@@ -238,23 +238,17 @@ protected:
 private:
     void Process();
 
-    iTVPUnpackArchiveImpl *_impl = nullptr;
+    IUnpackArchiveImpl *_impl = nullptr;
     std::string OutPath;
 
-    friend class tTVPUnpackArchiveThread;
+    friend class UnpackArchiveThread;
 
-    tTVPUnpackArchiveThread *ArcThread = nullptr;
+    UnpackArchiveThread *ArcThread = nullptr;
 };
 
 } // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::base::tTVPStreamHolder;
-using krkr::base::tTVPLocalTempStorageHolder;
 using krkr::base::krkr::io::MemoryStream;
-using krkr::base::tTVPPartialStream;
-using krkr::base::tTVPUnpackArchiveCallbacks;
-using krkr::base::iTVPUnpackArchiveImpl;
-using krkr::base::tTVPUnpackArchive;
 
 #endif

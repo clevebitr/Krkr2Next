@@ -28,40 +28,40 @@ std::string ShowFileSelector(const std::string &title,
 namespace krkr::base {
 
 //---------------------------------------------------------------------------
-// TVPSelectFile related
+// SelectFile related
 //---------------------------------------------------------------------------
 #define TVP_OLD_OFN_STRUCT_SIZE 76
 //---------------------------------------------------------------------------
 #if 0
-static tjs_int TVPLastScreenWidth = 0;
-static tjs_int TVPLastScreenHeight = 0;
-static tjs_int TVPLastOFNLeft = -30000;
-static tjs_int TVPLastOFNTop = -30000;
-static UINT_PTR APIENTRY TVPOFNHookProc(HWND hdlg, UINT uiMsg, WPARAM wParam,
+static tjs_int LastScreenWidth = 0;
+static tjs_int LastScreenHeight = 0;
+static tjs_int LastOFNLeft = -30000;
+static tjs_int LastOFNTop = -30000;
+static UINT_PTR APIENTRY OFNHookProc(HWND hdlg, UINT uiMsg, WPARAM wParam,
     LPARAM lParam)
 {
     if(uiMsg == WM_INITDIALOG)
     {
         int left, top;
         HWND parent = GetParent(hdlg);
-        if((TVPLastOFNLeft == -30000 && TVPLastOFNTop == -30000) ||
-            TVPLastScreenWidth != tTVPScreen::GetWidth() || TVPLastScreenHeight != tTVPScreen::GetHeight() )
+        if((LastOFNLeft == -30000 && LastOFNTop == -30000) ||
+            LastScreenWidth != Screen::GetWidth() || LastScreenHeight != Screen::GetHeight() )
         {
             // center the window
             RECT rect;
             GetWindowRect(parent, &rect);
-            left = ((tTVPScreen::GetWidth() - rect.right + rect.left) / 2);
-            top = ((tTVPScreen::GetHeight() - rect.bottom + rect.top) / 3);
+            left = ((Screen::GetWidth() - rect.right + rect.left) / 2);
+            top = ((Screen::GetHeight() - rect.bottom + rect.top) / 3);
         }
         else
         {
             // set last position
-            left = TVPLastOFNLeft;
-            top = TVPLastOFNTop;
+            left = LastOFNLeft;
+            top = LastOFNTop;
         }
 
-        TVPLastScreenWidth = tTVPScreen::GetWidth();
-        TVPLastScreenHeight = tTVPScreen::GetHeight();
+        LastScreenWidth = Screen::GetWidth();
+        LastScreenHeight = Screen::GetHeight();
 
         SetWindowPos(parent, 0,
             left,
@@ -74,13 +74,13 @@ static UINT_PTR APIENTRY TVPOFNHookProc(HWND hdlg, UINT uiMsg, WPARAM wParam,
         HWND parent = GetParent(hdlg);
         RECT rect;
         GetWindowRect(parent, &rect);
-        TVPLastOFNLeft = rect.left;
-        TVPLastOFNTop = rect.top;
+        LastOFNLeft = rect.left;
+        LastOFNTop = rect.top;
     }
     return 0;
 }
 //---------------------------------------------------------------------------
-static void TVPPushFilterPair(std::vector<std::wstring> &filters, std::wstring filter)
+static void PushFilterPair(std::vector<std::wstring> &filters, std::wstring filter)
 {
     std::wstring::size_type vpos = filter.find_first_of(L"|");
     if( vpos != std::wstring::npos )
@@ -99,7 +99,7 @@ static void TVPPushFilterPair(std::vector<std::wstring> &filters, std::wstring f
 #endif
 
 //---------------------------------------------------------------------------
-bool TVPSelectFile(iTJSDispatch2 *params) {
+bool SelectFile(iTJSDispatch2 *params) {
     // show open dialog box
     // NOTE: currently this only shows ANSI version of file open
     // dialog.
@@ -120,7 +120,7 @@ bool TVPSelectFile(iTJSDispatch2 *params) {
         OPENFILENAME ofn;
         memset(&ofn, 0, sizeof(ofn));
         ofn.lStructSize = sizeof(ofn);
-        ofn.hwndOwner = TVPGetModalWindowOwnerHandle();
+        ofn.hwndOwner = GetModalWindowOwnerHandle();
         if( ofn.hwndOwner == INVALID_HANDLE_VALUE ) {
             ofn.hwndOwner = nullptr;
         }
@@ -138,7 +138,7 @@ bool TVPSelectFile(iTJSDispatch2 *params) {
             std::vector<std::wstring> filterlist;
             if(val.Type() != tvtObject)
             {
-                TVPPushFilterPair(filterlist, ttstr(val).AsStdString());
+                PushFilterPair(filterlist, ttstr(val).AsStdString());
             }
             else
             {
@@ -156,7 +156,7 @@ bool TVPSelectFile(iTJSDispatch2 *params) {
                     if(TJS_SUCCEEDED(array->PropGetByNum(TJS_MEMBERMUSTEXIST,
                         i, &tmp, array)))
                     {
-                        TVPPushFilterPair(filterlist, ttstr(tmp).AsStdString());
+                        PushFilterPair(filterlist, ttstr(tmp).AsStdString());
                     }
                 }
             }
@@ -263,7 +263,7 @@ bool TVPSelectFile(iTJSDispatch2 *params) {
         }
 
         // hook proc
-        ofn.lpfnHook = TVPOFNHookProc;
+        ofn.lpfnHook = OFNHookProc;
 
         // show dialog box
         if(!issave)

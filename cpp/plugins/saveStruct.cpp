@@ -368,12 +368,12 @@ static void PostRegistCallback() {
     // Array.count を取得
     {
         tTJSVariant varScripts;
-        TVPExecuteExpression(TJS_W("Array"), &varScripts);
+        ExecuteExpression(TJS_W("Array"), &varScripts);
         iTJSDispatch2 *dispatch = varScripts.AsObjectNoAddRef();
         tTJSVariant val;
         if(TJS_FAILED(dispatch->PropGet(TJS_IGNOREPROP, TJS_W("count"), nullptr,
                                         &val, dispatch))) {
-            TVPThrowExceptionMessage(TJS_W("can't get Array.count"));
+            ThrowExceptionMessage(TJS_W("can't get Array.count"));
         }
         ArrayCountProp = val.AsObject();
     }

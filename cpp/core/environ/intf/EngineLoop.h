@@ -5,7 +5,7 @@
  *
  * Responsibilities:
  *   - Drive Application::Run() each frame (called by engine_tick)
- *   - Forward input events from engine_api → engine core (TVPPostInputEvent)
+ *   - Forward input events from engine_api → engine core (krkr::base::PostInputEvent)
  *   - Maintain async key state (_scancode[]) for TJS2 System.getKeyState
  *
  * This class is the Phase 3 replacement for MainScene.
@@ -107,7 +107,7 @@ public:
      * Dispatch a single input event to the engine core.
      *
      * Converts EngineInputEvent → TVP input events and posts them
-     * via TVPPostInputEvent. Also maintains scancode[] for async key state.
+     * via krkr::base::PostInputEvent. Also maintains scancode[] for async key state.
      *
      * @param event  The input event from engine_api.
      * @return true on success, false if the event could not be dispatched

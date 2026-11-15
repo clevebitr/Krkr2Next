@@ -1,9 +1,9 @@
 
 #ifndef __TVP_SCREEN_H__
 #define __TVP_SCREEN_H__
-class tTVPScreen {
+class Screen {
 public:
-    tTVPScreen();
+    Screen();
     static int GetWidth();
     static int GetHeight();
     //	static void GetDesktopRect( RECT& r );

@@ -71,7 +71,7 @@ extern ttstr GetErrorDialogTitle();
 
 namespace krkr::base {
 
-static const tjs_nchar *TVPInitTJSScript =
+static const tjs_nchar *InitTJSScript =
     // note that this script is stored as narrow string
     TJS_N(R"(const
 /* constants */
@@ -382,38 +382,38 @@ psexcl		:%[type:ltPsExclusion		],
 //---------------------------------------------------------------------------
 // global variables
 //---------------------------------------------------------------------------
-tTJS *TVPScriptEngine = nullptr;
-ttstr TVPStartupScriptName(TJS_W("startup.tjs"));
+tTJS *scriptEngine = nullptr;
+ttstr StartupScriptName(TJS_W("startup.tjs"));
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 // Garbage Collection stuff
 //---------------------------------------------------------------------------
-class tTVPTJSGCCallback : public tTVPCompactEventCallbackIntf {
+class TJSGCCallback : public CompactEventCallbackIntf {
     void OnCompact(tjs_int level) override {
-        if(TVPScriptEngine) {
+        if(scriptEngine) {
             if(level >= TVP_COMPACT_LEVEL_MINIMIZE) {
                 tjs_int compactLevel = (level >= TVP_COMPACT_LEVEL_MAX) ? 3 : 2;
-                TVPScriptEngine->CompactScriptCache(compactLevel);
-                TVPScriptEngine->DoGarbageCollection(true);
+                scriptEngine->CompactScriptCache(compactLevel);
+                scriptEngine->DoGarbageCollection(true);
             } else if(level >= TVP_COMPACT_LEVEL_IDLE) {
-                TVPScriptEngine->CompactScriptCache(1);
-                TVPScriptEngine->DoGarbageCollection();
+                scriptEngine->CompactScriptCache(1);
+                scriptEngine->DoGarbageCollection();
             }
         }
     }
-} static TVPTJSGCCallback;
+} static tjsGCCallback;
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPInitScriptEngine
+// InitScriptEngine
 //---------------------------------------------------------------------------
-static bool TVPScriptEngineInit = false;
+static bool ScriptEngineInit = false;
 
-void TVPInitScriptEngine() {
-    if(TVPScriptEngineInit)
+void InitScriptEngine() {
+    if(ScriptEngineInit)
         return;
-    TVPScriptEngineInit = true;
+    ScriptEngineInit = true;
 
     tTJSVariant val;
 
@@ -453,41 +453,41 @@ void TVPInitScriptEngine() {
     }
 
 #ifdef TVP_START_UP_SCRIPT_NAME
-    TVPStartupScriptName = TVP_START_UP_SCRIPT_NAME;
+    StartupScriptName = TVP_START_UP_SCRIPT_NAME;
 #else
     // Set startup script name
     if(krkr::base::GetCommandLine(TJS_W("-startup"), &val)) {
         ttstr str(val);
-        TVPStartupScriptName = str;
+        StartupScriptName = str;
     }
 #endif
 
     // create script engine object
-    TVPScriptEngine = new tTJS();
+    scriptEngine = new tTJS();
 
     // add kirikiriz
-    //	TVPScriptEngine->SetPPValue( TJS_W("kirikiriz"), 1 );
+    //	scriptEngine->SetPPValue( TJS_W("kirikiriz"), 1 );
 
     // set TJSGetRandomBits128
     TJSGetRandomBits128 = krkr::utils::GetRandomBits128;
 
     // script system initialization
-    TVPScriptEngine->ExecScript(ttstr(TVPInitTJSScript));
+    scriptEngine->ExecScript(ttstr(InitTJSScript));
 
     // set console output gateway handler
-    TVPScriptEngine->SetConsoleOutput(krkr::utils::GetTJS2ConsoleOutputGateway());
+    scriptEngine->SetConsoleOutput(krkr::utils::GetTJS2ConsoleOutputGateway());
 
     // set text stream functions
-    TJSCreateTextStreamForRead = TVPCreateTextStreamForRead;
-    TJSCreateTextStreamForWrite = TVPCreateTextStreamForWrite;
+    TJSCreateTextStreamForRead = CreateTextStreamForRead;
+    TJSCreateTextStreamForWrite = CreateTextStreamForWrite;
 
     // set binary stream functions
-    TJSCreateBinaryStreamForRead = TVPCreateBinaryStreamForRead;
-    TJSCreateBinaryStreamForWrite = TVPCreateBinaryStreamForWrite;
+    TJSCreateBinaryStreamForRead = CreateBinaryStreamForRead;
+    TJSCreateBinaryStreamForWrite = CreateBinaryStreamForWrite;
 
     // register some TVP classes/objects/functions/propeties
     iTJSDispatch2 *dsp;
-    iTJSDispatch2 *global = TVPScriptEngine->GetGlobalNoAddRef();
+    iTJSDispatch2 *global = scriptEngine->GetGlobalNoAddRef();
 
     auto registerObject = [&](const tjs_char *classname, auto instance) {
         auto dsp = instance;
@@ -499,31 +499,31 @@ void TVPInitScriptEngine() {
 
     /* classes */
     registerObject(TJS_W("Debug"), TVPCreateNativeClass_Debug());
-    registerObject(TJS_W("Font"), TVPCreateNativeClass_Font());
-    registerObject(TJS_W("Layer"), TVPCreateNativeClass_Layer());
+    registerObject(TJS_W("Font"), CreateNativeClass_Font());
+    registerObject(TJS_W("Layer"), CreateNativeClass_Layer());
     registerObject(TJS_W("CDDASoundBuffer"),
                    TVPCreateNativeClass_CDDASoundBuffer());
     registerObject(TJS_W("MIDISoundBuffer"),
                    TVPCreateNativeClass_MIDISoundBuffer());
     registerObject(TJS_W("Timer"), TVPCreateNativeClass_Timer());
-    registerObject(TJS_W("AsyncTrigger"), TVPCreateNativeClass_AsyncTrigger());
-    registerObject(TJS_W("System"), TVPCreateNativeClass_System());
+    registerObject(TJS_W("AsyncTrigger"), CreateNativeClass_AsyncTrigger());
+    registerObject(TJS_W("System"), CreateNativeClass_System());
     registerObject(TJS_W("Storages"), TVPCreateNativeClass_Storages());
     registerObject(TJS_W("Plugins"), TVPCreateNativeClass_Plugins());
-    registerObject(TJS_W("VideoOverlay"), TVPCreateNativeClass_VideoOverlay());
+    registerObject(TJS_W("VideoOverlay"), CreateNativeClass_VideoOverlay());
     registerObject(TJS_W("Pad"), TVPCreateNativeClass_Pad());
     registerObject(TJS_W("Clipboard"), TVPCreateNativeClass_Clipboard());
     registerObject(TJS_W("Scripts"),
-                   TVPCreateNativeClass_Scripts()); // declared in this file
-    registerObject(TJS_W("Rect"), TVPCreateNativeClass_Rect());
-    registerObject(TJS_W("Bitmap"), TVPCreateNativeClass_Bitmap());
+                   CreateNativeClass_Scripts()); // declared in this file
+    registerObject(TJS_W("Rect"), CreateNativeClass_Rect());
+    registerObject(TJS_W("Bitmap"), CreateNativeClass_Bitmap());
     registerObject(TJS_W("ImageFunction"),
-                   TVPCreateNativeClass_ImageFunction());
+                   CreateNativeClass_ImageFunction());
     registerObject(TJS_W("BitmapLayerTreeOwner"),
-                   TVPCreateNativeClass_BitmapLayerTreeOwner());
+                   CreateNativeClass_BitmapLayerTreeOwner());
 
     /* KAG special support */
-    registerObject(TJS_W("KAGParser"), TVPCreateNativeClass_KAGParser());
+    registerObject(TJS_W("KAGParser"), CreateNativeClass_KAGParser());
 
     /* WaveSoundBuffer and its filters */
     iTJSDispatch2 *waveclass = nullptr;
@@ -538,7 +538,7 @@ void TVPInitScriptEngine() {
     /* Window and its drawdevices */
     iTJSDispatch2 *windowclass = nullptr;
     registerObject(TJS_W("Window"),
-                   (windowclass = TVPCreateNativeClass_Window()));
+                   (windowclass = CreateNativeClass_Window()));
     dsp = new tTJSNC_BasicDrawDevice();
     val = tTJSVariant(dsp);
     dsp->Release();
@@ -556,183 +556,183 @@ void TVPInitScriptEngine() {
     gWindowMenuProperty->Release();
     windowclass->PropSet(TJS_MEMBERENSURE, TJS_W("menu"), nullptr, &val,
                          windowclass);
-    registerObject(TJS_W("MenuItem"), TVPCreateNativeClass_MenuItem());
+    registerObject(TJS_W("MenuItem"), CreateNativeClass_MenuItem());
 
     // Add Extension Classes
     krkr::extension::InstallRegisteredClasses(global);
 
     // Garbage Collection Hook
-    TVPAddCompactEventHook(&TVPTJSGCCallback);
+    AddCompactEventHook(&tjsGCCallback);
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPUninitScriptEngine
+// UninitScriptEngine
 //---------------------------------------------------------------------------
-static bool TVPScriptEngineUninit = false;
+static bool ScriptEngineUninit = false;
 
-void TVPUninitScriptEngine() {
-    if(TVPScriptEngineUninit)
+void UninitScriptEngine() {
+    if(ScriptEngineUninit)
         return;
-    TVPScriptEngineUninit = true;
+    ScriptEngineUninit = true;
 
-    // TVPScriptEngine->Shutdown();
-    TVPScriptEngine->Release();
+    // scriptEngine->Shutdown();
+    scriptEngine->Release();
     /*
         Objects, theirs lives are contolled by reference counter, may
        not be all freed here in some occations.
     */
-    TVPScriptEngine = nullptr;
+    scriptEngine = nullptr;
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPRestartScriptEngine
+// RestartScriptEngine
 //---------------------------------------------------------------------------
-void TVPRestartScriptEngine() {
-    TVPUninitScriptEngine();
-    TVPScriptEngineInit = false;
-    TVPInitScriptEngine();
+void RestartScriptEngine() {
+    UninitScriptEngine();
+    ScriptEngineInit = false;
+    InitScriptEngine();
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPResetScriptEngineForRestart
+// ResetScriptEngineForRestart
 //---------------------------------------------------------------------------
-void TVPResetScriptEngineForRestart() {
-    // After TVPUninitScriptEngine has already been called (via
+void ResetScriptEngineForRestart() {
+    // After UninitScriptEngine has already been called (via
     // krkr::base::SystemUninit in engine_destroy), reset the guard variables so the
     // script engine can be re-initialized on the next engine_open_game cycle.
-    TVPScriptEngineInit = false;
-    TVPScriptEngineUninit = false;
+    ScriptEngineInit = false;
+    ScriptEngineUninit = false;
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPGetScriptEngine
+// GetScriptEngine
 //---------------------------------------------------------------------------
-tTJS *TVPGetScriptEngine() { return TVPScriptEngine; }
+tTJS *GetScriptEngine() { return scriptEngine; }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPGetScriptDispatch
+// GetScriptDispatch
 //---------------------------------------------------------------------------
-iTJSDispatch2 *TVPGetScriptDispatch() {
-    if(TVPScriptEngine)
-        return TVPScriptEngine->GetGlobal();
+iTJSDispatch2 *GetScriptDispatch() {
+    if(scriptEngine)
+        return scriptEngine->GetGlobal();
     return nullptr;
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPExecuteScript
+// ExecuteScript
 //---------------------------------------------------------------------------
-void TVPExecuteScript(const ttstr &content, tTJSVariant *result) {
-    if(TVPScriptEngine)
-        TVPScriptEngine->ExecScript(content, result);
+void ExecuteScript(const ttstr &content, tTJSVariant *result) {
+    if(scriptEngine)
+        scriptEngine->ExecScript(content, result);
     else
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
 }
 
 //---------------------------------------------------------------------------
-void TVPExecuteScript(const ttstr &content, const ttstr &name, tjs_int lineofs,
+void ExecuteScript(const ttstr &content, const ttstr &name, tjs_int lineofs,
                       tTJSVariant *result) {
-    if(TVPScriptEngine)
-        TVPScriptEngine->ExecScript(content, result, nullptr, &name, lineofs);
+    if(scriptEngine)
+        scriptEngine->ExecScript(content, result, nullptr, &name, lineofs);
     else
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
 }
 
 //---------------------------------------------------------------------------
-void TVPExecuteScript(const ttstr &content, iTJSDispatch2 *context,
+void ExecuteScript(const ttstr &content, iTJSDispatch2 *context,
                       tTJSVariant *result) {
-    if(TVPScriptEngine)
-        TVPScriptEngine->ExecScript(content, result, context);
+    if(scriptEngine)
+        scriptEngine->ExecScript(content, result, context);
     else
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
 }
 
 //---------------------------------------------------------------------------
-void TVPExecuteScript(const ttstr &content, const ttstr &name, tjs_int lineofs,
+void ExecuteScript(const ttstr &content, const ttstr &name, tjs_int lineofs,
                       iTJSDispatch2 *context, tTJSVariant *result) {
-    if(TVPScriptEngine)
-        TVPScriptEngine->ExecScript(content, result, context, &name, lineofs);
+    if(scriptEngine)
+        scriptEngine->ExecScript(content, result, context, &name, lineofs);
     else
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPExecuteExpression
+// ExecuteExpression
 //---------------------------------------------------------------------------
-void TVPExecuteExpression(const ttstr &content, tTJSVariant *result) {
-    TVPExecuteExpression(content, nullptr, result);
+void ExecuteExpression(const ttstr &content, tTJSVariant *result) {
+    ExecuteExpression(content, nullptr, result);
 }
 
 //---------------------------------------------------------------------------
-void TVPExecuteExpression(const ttstr &content, const ttstr &name,
+void ExecuteExpression(const ttstr &content, const ttstr &name,
                           tjs_int lineofs, tTJSVariant *result) {
-    TVPExecuteExpression(content, name, lineofs, nullptr, result);
+    ExecuteExpression(content, name, lineofs, nullptr, result);
 }
 
 //---------------------------------------------------------------------------
-void TVPExecuteExpression(const ttstr &content, iTJSDispatch2 *context,
+void ExecuteExpression(const ttstr &content, iTJSDispatch2 *context,
                           tTJSVariant *result) {
-    if(TVPScriptEngine) {
-        iTJSConsoleOutput *output = TVPScriptEngine->GetConsoleOutput();
-        TVPScriptEngine->SetConsoleOutput(
+    if(scriptEngine) {
+        iTJSConsoleOutput *output = scriptEngine->GetConsoleOutput();
+        scriptEngine->SetConsoleOutput(
             nullptr); // once set TJS console to nullptr
         try {
-            TVPScriptEngine->EvalExpression(content, result, context);
+            scriptEngine->EvalExpression(content, result, context);
         } catch(...) {
-            TVPScriptEngine->SetConsoleOutput(output);
+            scriptEngine->SetConsoleOutput(output);
             throw;
         }
-        TVPScriptEngine->SetConsoleOutput(output);
+        scriptEngine->SetConsoleOutput(output);
     } else {
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
     }
 }
 
 //---------------------------------------------------------------------------
-void TVPExecuteExpression(const ttstr &content, const ttstr &name,
+void ExecuteExpression(const ttstr &content, const ttstr &name,
                           tjs_int lineofs, iTJSDispatch2 *context,
                           tTJSVariant *result) {
-    if(TVPScriptEngine) {
-        iTJSConsoleOutput *output = TVPScriptEngine->GetConsoleOutput();
-        TVPScriptEngine->SetConsoleOutput(
+    if(scriptEngine) {
+        iTJSConsoleOutput *output = scriptEngine->GetConsoleOutput();
+        scriptEngine->SetConsoleOutput(
             nullptr); // once set TJS console to nullptr
         try {
-            TVPScriptEngine->EvalExpression(content, result, context, &name,
+            scriptEngine->EvalExpression(content, result, context, &name,
                                             lineofs);
         } catch(...) {
-            TVPScriptEngine->SetConsoleOutput(output);
+            scriptEngine->SetConsoleOutput(output);
             throw;
         }
-        TVPScriptEngine->SetConsoleOutput(output);
+        scriptEngine->SetConsoleOutput(output);
     } else {
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
     }
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPExecuteBytecode
+// ExecuteBytecode
 //---------------------------------------------------------------------------
-void TVPExecuteBytecode(const tjs_uint8 *content, size_t len,
+void ExecuteBytecode(const tjs_uint8 *content, size_t len,
                         iTJSDispatch2 *context, tTJSVariant *result,
                         const tjs_char *name) {
-    if(!TVPScriptEngine)
-        TVPThrowInternalError;
+    if(!scriptEngine)
+        KRKR_THROW_INTERNAL_ERROR;
 
-    TVPScriptEngine->LoadByteCode(content, len, result, context, name);
+    scriptEngine->LoadByteCode(content, len, result, context, name);
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void TVPExecuteStorage(const ttstr &name, tTJSVariant *result,
+void ExecuteStorage(const ttstr &name, tTJSVariant *result,
                        bool isexpression, const tjs_char *modestr) {
-    TVPExecuteStorage(name, nullptr, result, isexpression, modestr);
+    ExecuteStorage(name, nullptr, result, isexpression, modestr);
 }
 #include <fstream>
 #include <tjsByteCodeLoader.h>
@@ -743,12 +743,12 @@ void TVPExecuteStorage(const ttstr &name, tTJSVariant *result,
 // 为什么需要：不少作品的脚本本身依赖 Windows/参考引擎的某些行为，靠脚本层改写
 // 比在引擎里加特例可控得多（改了哪些行一目了然，且只影响匹配到的脚本）。
 // 移植自 AetherKiri `cpp/core/base/ScriptMgnIntf.cpp` 的同名机制
-// （`TVPApplyScriptCompatibilityPatches`），目前只搬了千恋万花需要的
+// （`ApplyScriptCompatibilityPatches`），目前只搬了千恋万花需要的
 // `custom.tjs` 那一条，后续按需追加。
 //
 // 匹配一律用**结构化锚点**（函数签名 + 块内特征串），不用行号：整合包/汉化版会
 // 增删行，行号匹配一旦偏了就静默改错地方。
-static void TVPApplyScriptCompatibilityPatches(const ttstr &shortname,
+static void ApplyScriptCompatibilityPatches(const ttstr &shortname,
                                                ttstr &buffer) {
     const ttstr lower = shortname.AsLowerCase();
 
@@ -811,8 +811,8 @@ static void TVPApplyScriptCompatibilityPatches(const ttstr &shortname,
 // 为什么需要后置钩子：这些脚本在数据包里是**编译字节码**（汉化组把实现搬进了
 // msghack.tjs 之类的字节码），源码改写无从下手；能做的只有“脚本跑完、全局符号已
 // 就位”之后在 TJS 侧包一层。移植自 AetherKiri
-// `cpp/core/base/ScriptMgnIntf.cpp` 的 `TVPApplyPostScriptCompatibilityPatches`。
-static void TVPApplyPostScriptCompatibilityPatches(const ttstr &shortname) {
+// `cpp/core/base/ScriptMgnIntf.cpp` 的 `ApplyPostScriptCompatibilityPatches`。
+static void ApplyPostScriptCompatibilityPatches(const ttstr &shortname) {
     const ttstr lower = shortname.AsLowerCase();
 
     // 汉化整合包（msgHack 工具链）的描边颜色参数路由。
@@ -823,7 +823,7 @@ static void TVPApplyPostScriptCompatibilityPatches(const ttstr &shortname) {
     // 而 `ecol` 缺失时，改用消息层的 `edge`/`edgeColor` 再交给原函数。
     if(lower == TJS_W("msghack.tjs")) {
         try {
-            TVPExecuteScript(
+            ExecuteScript(
                 TJS_W(
                     "(function() {\r\n"
                     "\tif (typeof global.EdgeShadowDrawText == \"undefined\") return;\r\n"
@@ -854,24 +854,24 @@ static void TVPApplyPostScriptCompatibilityPatches(const ttstr &shortname) {
 
 }
 
-void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
+void ExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
                        tTJSVariant *result, bool isexpression,
                        const tjs_char *modestr) {
     // execute storage which contains script
-    if(!TVPScriptEngine)
-        TVPThrowInternalError;
+    if(!scriptEngine)
+        KRKR_THROW_INTERNAL_ERROR;
 
     { // for bytecode
         ttstr place(krkr::io::SearchPlacedPath(name));
         ttstr shortname(krkr::io::ExtractStorageName(place));
-        std::unique_ptr<tTJSBinaryStream> stream{ TVPCreateBinaryStreamForRead(
+        std::unique_ptr<tTJSBinaryStream> stream{ CreateBinaryStreamForRead(
             place, modestr) };
         if(stream) {
-            bool isbytecode = TVPScriptEngine->LoadByteCode(
+            bool isbytecode = scriptEngine->LoadByteCode(
                 stream.get(), result, context, shortname.c_str());
 
             if(isbytecode) {
-                TVPApplyPostScriptCompatibilityPatches(shortname);
+                ApplyPostScriptCompatibilityPatches(shortname);
                 // save extract binary file for debug!
                 //                auto loader =
                 //                std::make_unique<tTJSByteCodeLoader>(); auto
@@ -884,7 +884,7 @@ void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
                 //                std::unique_ptr<tTJSScriptBlock,
                 //                                std::function<void(tTJSScriptBlock
                 //                                *)>>
-                //                    blk{ loader->ReadByteCode(TVPScriptEngine,
+                //                    blk{ loader->ReadByteCode(scriptEngine,
                 //                    name.c_str(),
                 //                                              buff,
                 //                                              stream->GetSize()),
@@ -927,12 +927,12 @@ void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
 
     ttstr place(krkr::io::SearchPlacedPath(name));
     ttstr shortname(krkr::io::ExtractStorageName(place));
-    std::unique_ptr<iTJSTextReadStream> stream{ TVPCreateTextStreamForRead(
+    std::unique_ptr<iTJSTextReadStream> stream{ CreateTextStreamForRead(
         place, modestr) };
     ttstr buffer;
     stream->Read(buffer, 0);
     // 按脚本名做源码级兼容改写（见上面的说明）。必须在 ExecScript 之前。
-    TVPApplyScriptCompatibilityPatches(shortname, buffer);
+    ApplyScriptCompatibilityPatches(shortname, buffer);
 
     // save extract script file for debug!
     //    auto tmpPlace = place.AsStdString();
@@ -948,29 +948,29 @@ void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
     //    }
     // end
 
-    if(TVPScriptEngine) {
+    if(scriptEngine) {
 
         if(!isexpression)
-            TVPScriptEngine->ExecScript(buffer, result, context, &shortname);
+            scriptEngine->ExecScript(buffer, result, context, &shortname);
         else
-            TVPScriptEngine->EvalExpression(buffer, result, context,
+            scriptEngine->EvalExpression(buffer, result, context,
                                             &shortname);
 
-        TVPApplyPostScriptCompatibilityPatches(shortname);
+        ApplyPostScriptCompatibilityPatches(shortname);
     }
 }
 
 //---------------------------------------------------------------------------
-void TVPCompileStorage(const ttstr &name, bool isrequestresult,
+void CompileStorage(const ttstr &name, bool isrequestresult,
                        bool outputdebug, bool isexpression,
                        const ttstr &outputpath) {
     // execute storage which contains script
-    if(!TVPScriptEngine)
-        TVPThrowInternalError;
+    if(!scriptEngine)
+        KRKR_THROW_INTERNAL_ERROR;
 
     ttstr place(krkr::io::SearchPlacedPath(name));
     ttstr shortname(krkr::io::ExtractStorageName(place));
-    iTJSTextReadStream *stream = TVPCreateTextStreamForRead(place, TJS_W(""));
+    iTJSTextReadStream *stream = CreateTextStreamForRead(place, TJS_W(""));
 
     ttstr buffer;
     try {
@@ -982,9 +982,9 @@ void TVPCompileStorage(const ttstr &name, bool isrequestresult,
     stream->Destruct();
 
     tTJSBinaryStream *outputstream = krkr::io::CreateStream(outputpath, TJS_BS_WRITE);
-    if(TVPScriptEngine) {
+    if(scriptEngine) {
         try {
-            TVPScriptEngine->CompileScript(buffer.c_str(), outputstream,
+            scriptEngine->CompileScript(buffer.c_str(), outputstream,
                                            isrequestresult, outputdebug,
                                            isexpression, name.c_str(), 0);
         } catch(...) {
@@ -997,9 +997,9 @@ void TVPCompileStorage(const ttstr &name, bool isrequestresult,
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCreateMessageMapFile
+// CreateMessageMapFile
 //---------------------------------------------------------------------------
-void TVPCreateMessageMapFile(const ttstr &filename) {
+void CreateMessageMapFile(const ttstr &filename) {
 #ifdef TJS_TEXT_OUT_CRLF
     ttstr script(TJS_W("{\r\n\tvar r = System.assignMessage;\r\n"));
 #else
@@ -1011,7 +1011,7 @@ void TVPCreateMessageMapFile(const ttstr &filename) {
     script += TJS_W("}");
 
     iTJSTextWriteStream *stream =
-        TVPCreateTextStreamForWrite(filename, TJS_W(""));
+        CreateTextStreamForWrite(filename, TJS_W(""));
     try {
         stream->Write(script);
     } catch(...) {
@@ -1024,24 +1024,24 @@ void TVPCreateMessageMapFile(const ttstr &filename) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPDumpScriptEngine
+// DumpScriptEngine
 //---------------------------------------------------------------------------
-void TVPDumpScriptEngine() {
+void DumpScriptEngine() {
     krkr::utils::StartTJS2Dump();
-    TVPScriptEngine->SetConsoleOutput(krkr::utils::GetTJS2DumpOutputGateway());
+    scriptEngine->SetConsoleOutput(krkr::utils::GetTJS2DumpOutputGateway());
     try {
-        TVPScriptEngine->Dump();
+        scriptEngine->Dump();
     } catch(...) {
         krkr::utils::EndTJS2Dump();
-        TVPScriptEngine->SetConsoleOutput(krkr::utils::GetTJS2ConsoleOutputGateway());
+        scriptEngine->SetConsoleOutput(krkr::utils::GetTJS2ConsoleOutputGateway());
         throw;
     }
-    TVPScriptEngine->SetConsoleOutput(krkr::utils::GetTJS2ConsoleOutputGateway());
+    scriptEngine->SetConsoleOutput(krkr::utils::GetTJS2ConsoleOutputGateway());
     krkr::utils::EndTJS2Dump();
 }
 //---------------------------------------------------------------------------
 
-bool TVPStartupSuccess = false;
+bool StartupSuccess = false;
 
 void OpenPatchLibUrl();
 
@@ -1058,7 +1058,7 @@ void OpenPatchLibUrl();
 // 只补**缺失**的：`typeof x == "undefined"` 的判断保证不覆盖游戏或补丁
 // 自己设过的值，所以重复安装是安全的（同一进程连续开多个游戏时也会用到）。
 // 移植自 AetherKiri cpp/core/base/ScriptMgnIntf.cpp 的同名实现。
-const tjs_char *TVPGetStartupPatchPrerequisitesScript() {
+const tjs_char *GetStartupPatchPrerequisitesScript() {
     return TJS_W("if(typeof global.inSystemMenuStorages == \"undefined\") "
                  "global.inSystemMenuStorages = [];\n"
                  "if(typeof global.kagHookEntries == \"undefined\") "
@@ -1081,7 +1081,7 @@ const tjs_char *TVPGetStartupPatchPrerequisitesScript() {
 // `typeof 裸标识符` 在标识符不存在时会**抛** "Member does not exist"，只有
 // `typeof global.x`（成员访问）才会安静地给出 "undefined"。裸写会让每局启动
 // 都多刷一条异常（实测 おっぱいスパイ学園 就是这样）。
-const tjs_char *TVPGetPatchWindowPrerequisitesScript() {
+const tjs_char *GetPatchWindowPrerequisitesScript() {
     return TJS_W(
         "if(typeof global.KAGWindow != \"undefined\") {\n"
         "  if(typeof global.KAGWindow.inSystemMenuStorages == \"undefined\") "
@@ -1103,18 +1103,18 @@ const tjs_char *TVPGetPatchWindowPrerequisitesScript() {
         "}\n");
 }
 
-static void TVPInstallStartupPatchPrerequisites() {
-    TVPExecuteScript(TVPGetStartupPatchPrerequisitesScript(),
+static void InstallStartupPatchPrerequisites() {
+    ExecuteScript(GetStartupPatchPrerequisitesScript(),
                      TJS_W("startup_patch_prereq.tjs"), 0,
                      static_cast<tTJSVariant *>(nullptr));
 }
 
-static void TVPInstallPatchWindowPrerequisites() {
+static void InstallPatchWindowPrerequisites() {
     try {
         // 标题自己的 startup 脚本可能显式清掉这些兼容全局；这里只补缺失的，
         // 再把它们接到补丁要用的窗口类上。
-        TVPInstallStartupPatchPrerequisites();
-        TVPExecuteScript(TVPGetPatchWindowPrerequisitesScript(),
+        InstallStartupPatchPrerequisites();
+        ExecuteScript(GetPatchWindowPrerequisitesScript(),
                          TJS_W("patch_window_prereq.tjs"), 0,
                          static_cast<tTJSVariant *>(nullptr));
     } catch(const TJS::eTJSScriptError &e) {
@@ -1131,9 +1131,9 @@ static void TVPInstallPatchWindowPrerequisites() {
 
 // KAG 的几个运行时开关：补丁脚本会读它们，而框架在某些启动路径下并不建。
 // 同样只补缺失的。
-static void TVPInstallKagRuntimeDefaults() {
+static void InstallKagRuntimeDefaults() {
     try {
-        TVPExecuteScript(
+        ExecuteScript(
             TJS_W(
                 "if(typeof kag != \"undefined\") {\n"
                 "  if(typeof kag.autoMode == \"undefined\") kag.autoMode = "
@@ -1156,13 +1156,13 @@ static void TVPInstallKagRuntimeDefaults() {
 }
 
 //---------------------------------------------------------------------------
-// TVPExecuteStartupScript
+// ExecuteStartupScript
 //---------------------------------------------------------------------------
 namespace {
     // 注入给 tjs2 的"全局对象查询"（A 块兼容回退用）。放在这里是因为只有 core/base 认识
-    // TVPGetScriptEngine；tjs2 侧保持不依赖核心（见 tjsObject.h 的说明）。
+    // GetScriptEngine；tjs2 侧保持不依赖核心（见 tjsObject.h 的说明）。
     iTJSDispatch2 *TJSCompatGlobalGetterImpl() {
-        tTJS *engine = TVPGetScriptEngine();
+        tTJS *engine = GetScriptEngine();
         return engine ? engine->GetGlobalNoAddRef() : nullptr;
     }
 
@@ -1173,7 +1173,7 @@ namespace {
     } g_tjsCompatGetterBootstrap;
 } // namespace
 
-void TVPExecuteStartupScript() {
+void ExecuteStartupScript() {
     // 每局启动先把"默认读取编码"复位成 utf-8。
     //
     // 为什么：`Storages.setTextEncoding` 改的是**全局**默认读取编码，而它在同一
@@ -1181,7 +1181,7 @@ void TVPExecuteStartupScript() {
     // 之后，下一局没有显式声明的脚本会按错误编码解码 —— 表现是乱码但不报错。
     // AetherKiri 在同一位置做同样的事。
     try {
-        TVPSetDefaultReadEncoding(TJS_W("utf-8"));
+        SetDefaultReadEncoding(TJS_W("utf-8"));
     } catch(...) {
         spdlog::warn("Reset default read encoding failed");
     }
@@ -1189,7 +1189,7 @@ void TVPExecuteStartupScript() {
     // 前置成员要在 patch.tjs 之前就位。单独捕获：它只是给补丁兜底，
     // 失败也绝不能阻断启动。
     try {
-        TVPInstallStartupPatchPrerequisites();
+        InstallStartupPatchPrerequisites();
     } catch(...) {
         spdlog::warn("Install startup patch prerequisites failed");
     }
@@ -1198,7 +1198,7 @@ void TVPExecuteStartupScript() {
     try {
         ttstr patch = krkr::io::GetAppPath() + "patch.tjs";
         if(krkr::io::IsExistentStorageNoSearch(patch))
-            TVPExecuteStorage(patch);
+            ExecuteStorage(patch);
     } catch(const TJS::eTJSScriptError &e) {
         ttstr &msg = strPatchError;
         msg += e.GetMessage();
@@ -1242,31 +1242,31 @@ void TVPExecuteStartupScript() {
     // execute "startup.tjs"
     try {
 
-        ttstr place(krkr::io::SearchPlacedPath(TVPStartupScriptName));
+        ttstr place(krkr::io::SearchPlacedPath(StartupScriptName));
         spdlog::info("Loading startup script: {}", place.AsStdString());
 #if defined(__ANDROID__)
         __android_log_print(ANDROID_LOG_INFO, "krkr2",
                             "Loading startup script: %s",
                             place.AsStdString().c_str());
 #endif
-        TVPStartupSuccess = false;
+        StartupSuccess = false;
         // —— startup.tjs 执行探针：抓 restart 时 startup 提前抛错的时机/消息。
         // 黑屏特征：startup.tjs 抛异常(而 system/Initialize.tjs
         // 存在)时被静默吞掉改走 fallback， KAG boot
         // 被绕过。此探针记录是"完成"还是"抛错"及错误内容，钉死跳 KvK boot
         // 的具体 gate。
         try {
-            iTJSTextReadStream *stream = TVPCreateTextStreamForRead(place, "");
+            iTJSTextReadStream *stream = CreateTextStreamForRead(place, "");
             stream->Destruct();
-            TVPExecuteStorage(TVPStartupScriptName);
-            TVPStartupSuccess = true;
+            ExecuteStorage(StartupScriptName);
+            StartupSuccess = true;
         }
         catch(...) {
             if(!krkr::io::IsExistentStorage(TJS_W("system/Initialize.tjs"))) {
                 throw;
             }
         }
-        if(!TVPStartupSuccess) {
+        if(!StartupSuccess) {
             // try direct execute initialize.tjs to compatible for
             // some patch
 #if defined(__ANDROID__)
@@ -1274,16 +1274,16 @@ void TVPExecuteStartupScript() {
                 ANDROID_LOG_INFO, "krkr2",
                 "Fallback startup script: system/Initialize.tjs");
 #endif
-            TVPExecuteStorage(TJS_W("system/Initialize.tjs"));
-            TVPStartupSuccess = true;
+            ExecuteStorage(TJS_W("system/Initialize.tjs"));
+            StartupSuccess = true;
         }
         spdlog::info("Startup script ended.");
         // KAG 已经起来了，补上补丁脚本会读的运行时开关
-        TVPInstallKagRuntimeDefaults();
+        InstallKagRuntimeDefaults();
         // 窗口镜像只能等到框架建好：KiriNext 的 patch.tjs 跑在 startup.tjs
         // 之前，那时 KAGWindow 还不存在（见
-        // TVPGetPatchWindowPrerequisitesScript）
-        TVPInstallPatchWindowPrerequisites();
+        // GetPatchWindowPrerequisitesScript）
+        InstallPatchWindowPrerequisites();
 #if defined(__ANDROID__)
         __android_log_print(ANDROID_LOG_INFO, "krkr2",
                             "Startup script ended successfully");
@@ -1291,14 +1291,14 @@ void TVPExecuteStartupScript() {
         try {
             ttstr patch = krkr::io::GetAppPath() + "AfterStartup.tjs";
             if(krkr::io::IsExistentStorageNoSearch(patch))
-                TVPExecuteStorage(patch);
+                ExecuteStorage(patch);
         } catch(...) {
         }
         // AfterStartup.tjs 之后**再补一次** KAG 运行时默认值：游戏的
         // AfterStartup.tjs（或它加载的补丁）可能清掉/覆盖这批开关，AetherKiri
         // 在同一位置也补第二次。这里只补"缺失的"，不覆盖游戏自己设过的值。
         try {
-            TVPInstallKagRuntimeDefaults();
+            InstallKagRuntimeDefaults();
         } catch(...) {
         }
     }
@@ -1313,7 +1313,7 @@ void TVPExecuteStartupScript() {
 //---------------------------------------------------------------------------
 static bool TJSGetSystem_exceptionHandler_Object(tTJSVariantClosure &dest) {
     // get System.exceptionHandler
-    iTJSDispatch2 *global = TVPGetScriptEngine()->GetGlobalNoAddRef();
+    iTJSDispatch2 *global = GetScriptEngine()->GetGlobalNoAddRef();
     if(!global)
         return false;
 
@@ -1352,14 +1352,14 @@ static bool TJSGetSystem_exceptionHandler_Object(tTJSVariantClosure &dest) {
 }
 
 //---------------------------------------------------------------------------
-bool TVPProcessUnhandledException(eTJSScriptException &e) {
+bool ProcessUnhandledException(eTJSScriptException &e) {
     bool result;
     tTJSVariantClosure clo;
     clo.Object = clo.ObjThis = nullptr;
 
     try {
         // get the script engine
-        tTJS *engine = TVPGetScriptEngine();
+        tTJS *engine = GetScriptEngine();
         if(!engine)
             return false; // the script engine had been shutdown
 
@@ -1380,10 +1380,10 @@ bool TVPProcessUnhandledException(eTJSScriptException &e) {
         result = res.operator bool();
     } catch(eTJSScriptError &e) {
         clo.Release();
-        TVPShowScriptException(e);
+        ShowScriptException(e);
     } catch(eTJS &e) {
         clo.Release();
-        TVPShowScriptException(e);
+        ShowScriptException(e);
     } catch(...) {
         clo.Release();
         throw;
@@ -1394,14 +1394,14 @@ bool TVPProcessUnhandledException(eTJSScriptException &e) {
 }
 
 //---------------------------------------------------------------------------
-bool TVPProcessUnhandledException(eTJSScriptError &e) {
+bool ProcessUnhandledException(eTJSScriptError &e) {
     bool result;
     tTJSVariantClosure clo;
     clo.Object = clo.ObjThis = nullptr;
 
     try {
         // get the script engine
-        tTJS *engine = TVPGetScriptEngine();
+        tTJS *engine = GetScriptEngine();
         if(!engine)
             return false; // the script engine had been shutdown
 
@@ -1425,10 +1425,10 @@ bool TVPProcessUnhandledException(eTJSScriptError &e) {
         result = res.operator bool();
     } catch(eTJSScriptError &e) {
         clo.Release();
-        TVPShowScriptException(e);
+        ShowScriptException(e);
     } catch(eTJS &e) {
         clo.Release();
-        TVPShowScriptException(e);
+        ShowScriptException(e);
     } catch(...) {
         clo.Release();
         throw;
@@ -1439,14 +1439,14 @@ bool TVPProcessUnhandledException(eTJSScriptError &e) {
 }
 
 //---------------------------------------------------------------------------
-bool TVPProcessUnhandledException(eTJS &e) {
+bool ProcessUnhandledException(eTJS &e) {
     bool result;
     tTJSVariantClosure clo;
     clo.Object = clo.ObjThis = nullptr;
 
     try {
         // get the script engine
-        tTJS *engine = TVPGetScriptEngine();
+        tTJS *engine = GetScriptEngine();
         if(!engine)
             return false; // the script engine had been shutdown
 
@@ -1469,10 +1469,10 @@ bool TVPProcessUnhandledException(eTJS &e) {
         result = res.operator bool();
     } catch(eTJSScriptError &e) {
         clo.Release();
-        TVPShowScriptException(e);
+        ShowScriptException(e);
     } catch(eTJS &e) {
         clo.Release();
-        TVPShowScriptException(e);
+        ShowScriptException(e);
     } catch(...) {
         clo.Release();
         throw;
@@ -1484,20 +1484,20 @@ bool TVPProcessUnhandledException(eTJS &e) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-void TVPStartObjectHashMap() {
+void StartObjectHashMap() {
     // addref ObjectHashMap if the program is being debugged.
     if(TJSEnableDebugMode)
         TJSAddRefObjectHashMap();
 }
 
 //---------------------------------------------------------------------------
-// TVPBeforeProcessUnhandledException
+// BeforeProcessUnhandledException
 //---------------------------------------------------------------------------
-void TVPBeforeProcessUnhandledException() { DumpHWException(); }
+void BeforeProcessUnhandledException() { DumpHWException(); }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPShowScriptException
+// ShowScriptException
 //---------------------------------------------------------------------------
 /*
         These functions display the error location, reason, etc.
@@ -1505,19 +1505,19 @@ void TVPBeforeProcessUnhandledException() { DumpHWException(); }
    occurrence of errors.
 */
 
-static void TVPTerminateAfterScriptException(const ttstr &reason) {
+static void TerminateAfterScriptException(const ttstr &reason) {
     if(hostSuppressProcessExit) {
         // Embedded host mode: avoid full synchronous teardown from inside
         // script exception handling. Mark runtime terminated and unwind.
-        TVPTerminateAsync(1);
+        TerminateAsync(1);
         throw EAbort(reason);
     }
     krkr::base::TerminateSync(1);
 }
 
 //---------------------------------------------------------------------------
-void TVPShowScriptException(eTJS &e) {
-    TVPSetSystemEventDisabledState(true);
+void ShowScriptException(eTJS &e) {
+    SetSystemEventDisabledState(true);
     krkr::utils::OnError();
 
     if(!krkr::base::systemUninitCalled) {
@@ -1528,13 +1528,13 @@ void TVPShowScriptException(eTJS &e) {
         ShowSimpleMessageBox(errstr, GetErrorDialogTitle());
         // Application->MessageDlg( errstr.AsStdString(),
         // std::wstring(), mtError, mbOK );
-        TVPTerminateAfterScriptException(errstr);
+        TerminateAfterScriptException(errstr);
     }
 }
 
 //---------------------------------------------------------------------------
-void TVPShowScriptException(eTJSScriptError &e) {
-    TVPSetSystemEventDisabledState(true);
+void ShowScriptException(eTJSScriptError &e) {
+    SetSystemEventDisabledState(true);
     krkr::utils::OnError();
 
     if(!krkr::base::systemUninitCalled) {
@@ -1602,7 +1602,7 @@ void TVPShowScriptException(eTJSScriptError &e) {
                             arg = ttstr(str);
                             krkr::utils::AddLog(ttstr(TJS_W("(execute) ")) + exepath +
                                       ttstr(TJS_W(" ")) + arg);
-                            TVPShellExecute(exepath, arg);
+                            ShellExecute(exepath, arg);
                         }
                     }
                 }
@@ -1610,19 +1610,19 @@ void TVPShowScriptException(eTJSScriptError &e) {
             }
         }
 #endif
-        TVPTerminateAfterScriptException(errstr);
+        TerminateAfterScriptException(errstr);
     }
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPInitializeStartupScript
+// InitializeStartupScript
 //---------------------------------------------------------------------------
-void TVPInitializeStartupScript() {
-    TVPStartObjectHashMap();
+void InitializeStartupScript() {
+    StartObjectHashMap();
 
-    TVPExecuteStartupScript();
-    if(terminateOnNoWindowStartup && TVPGetWindowCount() == 0) {
+    ExecuteStartupScript();
+    if(terminateOnNoWindowStartup && GetWindowCount() == 0) {
         // no window is created and main window is invisible
         Application->Terminate();
     }
@@ -1747,7 +1747,7 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ execStorage) {
         ? param[2]->AsObjectNoAddRef()
         : nullptr;
 
-    TVPExecuteStorage(name, context, result, false, modestr.c_str());
+    ExecuteStorage(name, context, result, false, modestr.c_str());
 
     return TJS_S_OK;
 }
@@ -1768,7 +1768,7 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ evalStorage) {
         ? param[2]->AsObjectNoAddRef()
         : nullptr;
 
-    TVPExecuteStorage(name, context, result, true, modestr.c_str());
+    ExecuteStorage(name, context, result, true, modestr.c_str());
 
     return TJS_S_OK;
 }
@@ -1797,7 +1797,7 @@ TJS_BEGIN_NATIVE_METHOD_DECL(
     if(numparams >= 5 && (tjs_int)*param[4]) {
         isexpression = true;
     }
-    TVPCompileStorage(name, isresult, outputdebug, isexpression, output);
+    CompileStorage(name, isresult, outputdebug, isexpression, output);
 
     return TJS_S_OK;
 }
@@ -1821,10 +1821,10 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ exec) {
         ? param[3]->AsObjectNoAddRef()
         : nullptr;
 
-    if(TVPScriptEngine)
-        TVPScriptEngine->ExecScript(content, result, context, &name, lineofs);
+    if(scriptEngine)
+        scriptEngine->ExecScript(content, result, context, &name, lineofs);
     else
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
 
     return TJS_S_OK;
 }
@@ -1848,11 +1848,11 @@ TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ eval) {
         ? param[3]->AsObjectNoAddRef()
         : nullptr;
 
-    if(TVPScriptEngine)
-        TVPScriptEngine->EvalExpression(content, result, context, &name,
+    if(scriptEngine)
+        scriptEngine->EvalExpression(content, result, context, &name,
                                         lineofs);
     else
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
 
     return TJS_S_OK;
 }
@@ -1860,7 +1860,7 @@ TJS_END_NATIVE_STATIC_METHOD_DECL(/*func. name*/ eval)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ dump) {
     // execute given string as a script
-    TVPDumpScriptEngine();
+    DumpScriptEngine();
 
     return TJS_S_OK;
 }
@@ -1956,13 +1956,13 @@ TJS_END_NATIVE_STATIC_METHOD_DECL(/*func. name*/
                                                   */
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(textEncoding){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetDefaultReadEncoding();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = GetDefaultReadEncoding();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
 
 TJS_BEGIN_NATIVE_PROP_SETTER {
-    TVPSetDefaultReadEncoding(*param);
+    SetDefaultReadEncoding(*param);
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER
@@ -2084,16 +2084,16 @@ TJS_END_NATIVE_MEMBERS
 //---------------------------------------------------------------------------
 tTJSNativeInstance *tTJSNC_Scripts::CreateNativeInstance() {
     // this class cannot create an instance
-    TVPThrowExceptionMessage(TVPCannotCreateInstance);
+    ThrowExceptionMessage(TVPCannotCreateInstance);
 
     return nullptr;
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCreateNativeClass_Scripts
+// CreateNativeClass_Scripts
 //---------------------------------------------------------------------------
-tTJSNativeClass *TVPCreateNativeClass_Scripts() {
+tTJSNativeClass *CreateNativeClass_Scripts() {
     auto *cls = new tTJSNC_Scripts();
 
     // setup some platform-specific members

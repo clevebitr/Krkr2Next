@@ -29,7 +29,7 @@ bool TVPAcceptSaveAsPNG(void *formatdata, const ttstr &type,
     if(result && dic) {
 #if 0
 		tTJSVariant result;
-		TVPExecuteExpression(
+		ExecuteExpression(
 			TJS_W("(const)%["),
 			TJS_W("\"offs_x\"=>(const)%[\"type\"=>\"integer\",\"desc\"=>\"offset x\",\"default\"=>0]")
 			TJS_W("\"offs_y\"=>(const)%[\"type\"=>\"integer\",\"desc\"=>\"offset y\",\"default\"=>0]")
@@ -87,7 +87,7 @@ static void PNG_free(png_structp ps, void * /* png_structp*/ mem) {
 //---------------------------------------------------------------------------
 // user_error_fn
 static void PNG_error(png_structp ps, png_const_charp msg) {
-    TVPThrowExceptionMessage(TVPPNGLoadError, msg);
+    ThrowExceptionMessage(TVPPNGLoadError, msg);
 }
 //---------------------------------------------------------------------------
 // user_warning_fn
@@ -193,7 +193,7 @@ void TVPLoadPNG(void *formatdata, void *callbackdata,
         // (png_voidp)nullptr, (png_error_ptr)PNG_error,
         // (png_error_ptr)PNG_warning );
         if(!png_ptr)
-            TVPThrowExceptionMessage(TVPPNGLoadError,
+            ThrowExceptionMessage(TVPPNGLoadError,
                                      (const tjs_char *)TVPLibpngError);
 
         // set read_chunk_callback
@@ -210,13 +210,13 @@ void TVPLoadPNG(void *formatdata, void *callbackdata,
         // create png_info
         info_ptr = png_create_info_struct(png_ptr);
         if(!info_ptr)
-            TVPThrowExceptionMessage(TVPPNGLoadError,
+            ThrowExceptionMessage(TVPPNGLoadError,
                                      (const tjs_char *)TVPLibpngError);
 
         // create end_info
         end_info = png_create_info_struct(png_ptr);
         if(!end_info)
-            TVPThrowExceptionMessage(TVPPNGLoadError,
+            ThrowExceptionMessage(TVPPNGLoadError,
                                      (const tjs_char *)TVPLibpngError);
 
         // set stream interface
@@ -293,7 +293,7 @@ void TVPLoadPNG(void *formatdata, void *callbackdata,
         if(mode == glmPalettized) {
             // convert the image to palettized one if needed
             if(bit_depth > 8)
-                TVPThrowExceptionMessage(
+                ThrowExceptionMessage(
                     TVPPNGLoadError,
                     (const tjs_char *)TVPUnsupportedColorTypePalette);
 
@@ -366,7 +366,7 @@ void TVPLoadPNG(void *formatdata, void *callbackdata,
                     png_set_filler(png_ptr, 0xff, PNG_FILLER_AFTER);
                     break;
                 default:
-                    TVPThrowExceptionMessage(
+                    ThrowExceptionMessage(
                         TVPPNGLoadError,
                         (const tjs_char *)TVPUnsupportedColorType);
             }
@@ -375,7 +375,7 @@ void TVPLoadPNG(void *formatdata, void *callbackdata,
         // size checking
         if(width >= 65536 || height >= 65536) {
             // too large image to handle
-            TVPThrowExceptionMessage(TVPPNGLoadError,
+            ThrowExceptionMessage(TVPPNGLoadError,
                                      (const tjs_char *)TVPTooLargeImage);
         }
 
@@ -437,7 +437,7 @@ void TVPLoadPNG(void *formatdata, void *callbackdata,
             row_pointers = new png_bytep[height];
             png_size_t rowbytes = png_get_rowbytes(png_ptr, info_ptr);
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
-            image = (tjs_uint8 *)TVPMmapAlloc(rowbytes * height);
+            image = (tjs_uint8 *)MmapAlloc(rowbytes * height);
             image_is_mmap = true;
 #else
             image = new tjs_uint8[rowbytes * height];
@@ -474,7 +474,7 @@ void TVPLoadPNG(void *formatdata, void *callbackdata,
         if(image) {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
             if(image_is_mmap)
-                TVPMmapFree(image);
+                MmapFree(image);
             else
 #endif
                 delete[] image;
@@ -488,7 +488,7 @@ void TVPLoadPNG(void *formatdata, void *callbackdata,
     if(image) {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
         if(image_is_mmap)
-            TVPMmapFree(image);
+            MmapFree(image);
         else
 #endif
             delete[] image;
@@ -536,23 +536,23 @@ void TVPSaveAsPNG(void *formatdata, tTJSBinaryStream *dst,
     tjs_uint height = image->GetHeight();
     tjs_uint width = image->GetWidth();
     if(height == 0 || width == 0)
-        TVPThrowInternalError;
+        KRKR_THROW_INTERNAL_ERROR;
 
     // open stream
     tTJSBinaryStream *stream = dst;
 
     try {
-        TVPClearGraphicCache();
+        ClearGraphicCache();
 
         png_structp png_ptr = png_create_write_struct(
             PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
         if(!png_ptr) {
-            TVPThrowExceptionMessage(TVPPngSaveError);
+            ThrowExceptionMessage(TVPPngSaveError);
         }
         png_infop info_ptr = png_create_info_struct(png_ptr);
         if(!info_ptr) {
             png_destroy_write_struct(&png_ptr, nullptr);
-            TVPThrowExceptionMessage(TVPPngSaveError);
+            ThrowExceptionMessage(TVPPngSaveError);
         }
 
         png_set_write_fn(png_ptr, (png_voidp)stream,
@@ -628,19 +628,19 @@ void TVPLoadHeaderPNG(void *formatdata, tTJSBinaryStream *src,
             (png_free_ptr)PNG_free);
 
         if(!png_ptr)
-            TVPThrowExceptionMessage(TVPPNGLoadError,
+            ThrowExceptionMessage(TVPPNGLoadError,
                                      (const tjs_char *)TVPLibpngError);
 
         // create png_info
         info_ptr = png_create_info_struct(png_ptr);
         if(!info_ptr)
-            TVPThrowExceptionMessage(TVPPNGLoadError,
+            ThrowExceptionMessage(TVPPNGLoadError,
                                      (const tjs_char *)TVPLibpngError);
 
         // create end_info
         end_info = png_create_info_struct(png_ptr);
         if(!end_info)
-            TVPThrowExceptionMessage(TVPPNGLoadError,
+            ThrowExceptionMessage(TVPPNGLoadError,
                                      (const tjs_char *)TVPLibpngError);
 
         // set stream interface

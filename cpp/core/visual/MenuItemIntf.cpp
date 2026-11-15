@@ -22,7 +22,7 @@
 // Input Events
 //---------------------------------------------------------------------------
 // For input event tag
-tTVPUniqueTagForInputEvent tTVPOnMenuItemClickInputEvent ::Tag;
+UniqueTagForInputEvent tTVPOnMenuItemClickInputEvent ::Tag;
 //---------------------------------------------------------------------------
 
 static const tjs_char *TVPSpecifyMenuItem =
@@ -59,12 +59,12 @@ tjs_error tTJSNI_BaseMenuItem::Construct(tjs_int numparams, tTJSVariant **param,
             // is this Window instance ?
             tTJSVariantClosure clo = param[1]->AsObjectClosureNoAddRef();
             if(clo.Object == nullptr)
-                TVPThrowExceptionMessage(TVPSpecifyWindow);
+                ThrowExceptionMessage(TVPSpecifyWindow);
             tTJSNI_Window *win = nullptr;
             if(TJS_FAILED(clo.Object->NativeInstanceSupport(
                    TJS_NIS_GETINSTANCE, tTJSNC_Window::ClassID,
                    (iTJSNativeInstance **)&win)))
-                TVPThrowExceptionMessage(TVPSpecifyWindow);
+                ThrowExceptionMessage(TVPSpecifyWindow);
             Window = win;
         }
     }
@@ -73,8 +73,8 @@ tjs_error tTJSNI_BaseMenuItem::Construct(tjs_int numparams, tTJSVariant **param,
 }
 //---------------------------------------------------------------------------
 void tTJSNI_BaseMenuItem::Invalidate() {
-    TVPCancelSourceEvents(Owner);
-    TVPCancelInputEvents(this);
+    krkr::base::CancelSourceEvents(Owner);
+    krkr::base::CancelInputEvents(this);
 
     { // locked
         tTJSSpinLockHolder holder(Children.Lock);
@@ -112,15 +112,15 @@ tTJSNI_MenuItem *tTJSNI_BaseMenuItem::CastFromVariant(const tTJSVariant &from) {
         // is this Window instance ?
         tTJSVariantClosure clo = from.AsObjectClosureNoAddRef();
         if(clo.Object == nullptr)
-            TVPThrowExceptionMessage(TVPSpecifyMenuItem);
+            ThrowExceptionMessage(TVPSpecifyMenuItem);
         tTJSNI_MenuItem *menuitem = nullptr;
         if(TJS_FAILED(clo.Object->NativeInstanceSupport(
                TJS_NIS_GETINSTANCE, tTJSNC_MenuItem::ClassID,
                (iTJSNativeInstance **)&menuitem)))
-            TVPThrowExceptionMessage(TVPSpecifyMenuItem);
+            ThrowExceptionMessage(TVPSpecifyMenuItem);
         return menuitem;
     }
-    TVPThrowExceptionMessage(TVPSpecifyMenuItem);
+    ThrowExceptionMessage(TVPSpecifyMenuItem);
     return nullptr;
 }
 //---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ iTJSDispatch2 *tTJSNI_BaseMenuItem::GetChildrenArrayNoAddRef() {
             er = classobj->PropGet(0, TJS_W("clear"), nullptr, &val, classobj);
             // retrieve clear method
             if(TJS_FAILED(er))
-                TVPThrowInternalError;
+                KRKR_THROW_INTERNAL_ERROR;
             ArrayClearMethod = val.AsObject();
         } catch(...) {
             ChildrenArray->Release();
@@ -212,8 +212,8 @@ void tTJSNI_BaseMenuItem::OnClick() {
 
     // fire event
     static ttstr eventname(TJS_W("onClick"));
-    TVPPostEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 0, nullptr);
-    TVPDoSaveSystemVariables();
+    krkr::base::PostTJSEvent(Owner, Owner, eventname, 0, TVP_EPT_IMMEDIATE, 0, nullptr);
+    krkr::base::DoSaveSystemVariables();
 }
 //---------------------------------------------------------------------------
 tTJSNI_BaseMenuItem *tTJSNI_BaseMenuItem::GetRootMenuItem() const {
@@ -568,7 +568,7 @@ iTJSDispatch2 *TVPCreateMenuItemObject(iTJSDispatch2 *window) {
     tTJSVariant *pparam[2] = { &param, &param };
     if(TJS_FAILED(menuitemclass.Obj->CreateNew(0, nullptr, nullptr, &out, 2,
                                                pparam, menuitemclass.Obj)))
-        TVPThrowExceptionMessage(TVPInternalError,
+        ThrowExceptionMessage(TVPInternalError,
                                  TJS_W("TVPCreateMenuItemObject"));
 
     return out;

@@ -473,7 +473,7 @@ static tjs_error ImageFactory(GdipWrapper<ImageClass> **result,
             *result = new GdipWrapper<ImageClass>(image);
             return TJS_S_OK;
         } else {
-            TVPThrowExceptionMessage(TJS_W("cannot open:%1"), *params[0]);
+            ThrowExceptionMessage(TJS_W("cannot open:%1"), *params[0]);
         }
     }
     return TJS_E_INVALIDPARAM;
@@ -484,7 +484,7 @@ static void ImageLoad(GdipWrapper<ImageClass> *obj, const tjs_char *filename) {
     if(image) {
         obj->setGdipObject(image);
     } else {
-        TVPThrowExceptionMessage(TJS_W("cannot open:%1"), ttstr(filename));
+        ThrowExceptionMessage(TJS_W("cannot open:%1"), ttstr(filename));
     }
 }
 

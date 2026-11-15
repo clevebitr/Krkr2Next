@@ -8,7 +8,7 @@ BitmapInfomation::BitmapInfomation(tjs_uint width, tjs_uint height, int bpp) {
         ((bpp == 8) ? sizeof(TVPRGBQUAD) * 256 : 0);
     BitmapInfo = (TVPBITMAPINFO *)malloc(BitmapInfoSize);
     if(!BitmapInfo)
-        TVPThrowExceptionMessage(TVPCannotAllocateBitmapBits,
+        ThrowExceptionMessage(TVPCannotAllocateBitmapBits,
                                  TJS_W("allocating BITMAPINFOHEADER"),
                                  ttstr((tjs_int)BitmapInfoSize));
 

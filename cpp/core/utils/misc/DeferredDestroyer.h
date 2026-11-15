@@ -1,7 +1,7 @@
 // DeferredDestroyer.h — 把"销毁重量级对象"从当前线程挪到后台清理线程（header-only）
 //
 // 原名 movie/ffmpeg/MoviePlayerJanitor.h。它唯一的调用方是 visual 的
-// VideoOvlImpl（延迟销毁 tTVPLocalTempStorageHolder），movie 自己反而不用；
+// VideoOvlImpl（延迟销毁 LocalTempStorageHolder），movie 自己反而不用；
 // 放在 movie 目录会造成 visual -> movie 的反向头依赖，所以下移到 utils。
 //
 // 为什么必须这样：BasePlayer 的析构会走 CloseInputStream → StopThread()（join 解码

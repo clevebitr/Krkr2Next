@@ -28,7 +28,7 @@
 namespace krkr::base {
 
 //---------------------------------------------------------------------------
-// TVPFormatMessage
+// FormatMessage
 //---------------------------------------------------------------------------
 /*
         these functions do :
@@ -36,7 +36,7 @@ namespace krkr::base {
         %1 must appear only once in the message string, otherwise
    internal buffer will overflow. ( %2 must also so )
 */
-ttstr TVPFormatMessage(const tjs_char *msg, const ttstr &p1) {
+ttstr FormatMessage(const tjs_char *msg, const ttstr &p1) {
     tjs_char *p;
     auto *buf = new tjs_char[TJS_strlen(msg) + p1.GetLen() + 1];
     p = buf;
@@ -66,7 +66,7 @@ ttstr TVPFormatMessage(const tjs_char *msg, const ttstr &p1) {
     return ret;
 }
 
-ttstr TVPFormatMessage(const tjs_char *msg, const ttstr &p1, const ttstr &p2) {
+ttstr FormatMessage(const tjs_char *msg, const ttstr &p1, const ttstr &p2) {
     tjs_char *p;
     auto *buf = new tjs_char[TJS_strlen(msg) + p1.GetLen() + p2.GetLen() + 1];
     p = buf;
@@ -105,81 +105,81 @@ ttstr TVPFormatMessage(const tjs_char *msg, const ttstr &p1, const ttstr &p2) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPThrowExceptionMessage
+// ThrowExceptionMessage
 //---------------------------------------------------------------------------
-void TVPThrowExceptionMessage(const tjs_char *msg) { throw eTJSError(msg); }
+void ThrowExceptionMessage(const tjs_char *msg) { throw eTJSError(msg); }
 
-void TVPThrowExceptionMessage(const tjs_char *msg, const ttstr &p1,
+void ThrowExceptionMessage(const tjs_char *msg, const ttstr &p1,
                               tjs_int num) {
-    throw eTJSError(TVPFormatMessage(msg, p1, ttstr(num)));
+    throw eTJSError(FormatMessage(msg, p1, ttstr(num)));
 }
 
-void TVPThrowExceptionMessage(const tjs_char *msg, const ttstr &p1) {
-    throw eTJSError(TVPFormatMessage(msg, p1));
+void ThrowExceptionMessage(const tjs_char *msg, const ttstr &p1) {
+    throw eTJSError(FormatMessage(msg, p1));
 }
 
-void TVPThrowExceptionMessage(const tjs_char *msg, const ttstr &p1,
+void ThrowExceptionMessage(const tjs_char *msg, const ttstr &p1,
                               const ttstr &p2) {
-    throw eTJSError(TVPFormatMessage(msg, p1, p2));
+    throw eTJSError(FormatMessage(msg, p1, p2));
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 // version retrieving
 //---------------------------------------------------------------------------
-tjs_int TVPVersionMajor;
-tjs_int TVPVersionMinor;
-tjs_int TVPVersionRelease;
-tjs_int TVPVersionBuild;
+tjs_int VersionMajor;
+tjs_int VersionMinor;
+tjs_int VersionRelease;
+tjs_int VersionBuild;
 //---------------------------------------------------------------------------
 
 #ifndef WIDEN2
 #define WIDEN2(x) TJS_W(x)
 #define WIDEN(x) WIDEN2(x)
 #endif
-const tjs_char *TVPCompileDate = WIDEN(__DATE__);
-const tjs_char *TVPCompileTime = WIDEN(__TIME__);
+const tjs_char *CompileDate = WIDEN(__DATE__);
+const tjs_char *CompileTime = WIDEN(__TIME__);
 
 //---------------------------------------------------------------------------
 // version information related functions
 //---------------------------------------------------------------------------
-extern ttstr TVPReadAboutStringFromResource();
+extern ttstr ReadAboutStringFromResource();
 
-ttstr TVPGetAboutString() {
-    TVPGetVersion();
-    ttstr verstr{ fmt::format("{}.{}.{}.{}", TVPVersionMajor, TVPVersionMinor,
-                              TVPVersionRelease, TVPVersionBuild) };
+ttstr GetAboutString() {
+    GetVersion();
+    ttstr verstr{ fmt::format("{}.{}.{}.{}", VersionMajor, VersionMinor,
+                              VersionRelease, VersionBuild) };
 
     ttstr tjsverstr{ fmt::format("{}.{}.{}", TJSVersionMajor, TJSVersionMinor,
                                  TJSVersionRelease) };
 
-    return TVPFormatMessage(TVPReadAboutStringFromResource().c_str(), verstr,
+    return FormatMessage(ReadAboutStringFromResource().c_str(), verstr,
                             tjsverstr) +
         krkr::utils::GetImportantLog();
 }
 
 //---------------------------------------------------------------------------
-ttstr TVPGetVersionInformation() {
-    TVPGetVersion();
-    ttstr verstr{ fmt::format("{}.{}.{}.{}", TVPVersionMajor, TVPVersionMinor,
-                              TVPVersionRelease, TVPVersionBuild) };
+ttstr GetVersionInformation() {
+    GetVersion();
+    ttstr verstr{ fmt::format("{}.{}.{}.{}", VersionMajor, VersionMinor,
+                              VersionRelease, VersionBuild) };
 
     ttstr tjsverstr{ fmt::format("{}.{}.{}", TJSVersionMajor, TJSVersionMinor,
                                  TJSVersionRelease) };
 
-    ttstr version = TVPFormatMessage(TVPVersionInformation, verstr, tjsverstr);
+    ttstr version = FormatMessage(TVPVersionInformation, verstr, tjsverstr);
     ttstr str = ApplicationSpecialPath::ReplaceStringAll(
-        version.AsStdString(), TJS_W("%DATE%"), ttstr(TVPCompileDate));
+        version.AsStdString(), TJS_W("%DATE%"), ttstr(CompileDate));
     str = ApplicationSpecialPath::ReplaceStringAll(str, TJS_W("%TIME%"),
-                                                   ttstr(TVPCompileTime));
+                                                   ttstr(CompileTime));
     return str;
 }
 
 //---------------------------------------------------------------------------
-ttstr TVPGetVersionString() {
-    TVPGetVersion();
-    ttstr verstr{ fmt::format("{}.{}.{}.{}", TVPVersionMajor, TVPVersionMinor,
-                              TVPVersionRelease, TVPVersionBuild) };
+ttstr GetVersionString() {
+    GetVersion();
+    ttstr verstr{ fmt::format("{}.{}.{}.{}", VersionMajor, VersionMinor,
+                              VersionRelease, VersionBuild) };
     return verstr;
 }
 //---------------------------------------------------------------------------
@@ -187,17 +187,17 @@ ttstr TVPGetVersionString() {
 //---------------------------------------------------------------------------
 // Versoin retriving
 //---------------------------------------------------------------------------
-void TVPGetSystemVersion(tjs_int &major, tjs_int &minor, tjs_int &release,
+void GetSystemVersion(tjs_int &major, tjs_int &minor, tjs_int &release,
                          tjs_int &build) {
-    TVPGetVersion();
-    major = TVPVersionMajor;
-    minor = TVPVersionMinor;
-    release = TVPVersionRelease;
-    build = TVPVersionBuild;
+    GetVersion();
+    major = VersionMajor;
+    minor = VersionMinor;
+    release = VersionRelease;
+    build = VersionBuild;
 }
 
 //---------------------------------------------------------------------------
-void TVPGetTJSVersion(tjs_int &major, tjs_int &minor, tjs_int &release) {
+void GetTJSVersion(tjs_int &major, tjs_int &minor, tjs_int &release) {
     major = TJSVersionMajor;
     minor = TJSVersionMinor;
     release = TJSVersionRelease;

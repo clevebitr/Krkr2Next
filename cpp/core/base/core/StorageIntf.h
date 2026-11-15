@@ -32,21 +32,21 @@ ttstr StringFromBMPUnicode(const tjs_uint16 *src, tjs_int maxlen = -1);
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPArchive base archive class
+// Archive base archive class
 //---------------------------------------------------------------------------
-class tTVPArchive {
+class Archive {
 private:
     tjs_uint RefCount;
 
 public:
     //-- constructor
-    tTVPArchive(const ttstr &name) {
+    Archive(const ttstr &name) {
         ArchiveName = name;
         Init = false;
         RefCount = 1;
     }
 
-    virtual ~tTVPArchive() {}
+    virtual ~Archive() {}
 
     //-- AddRef and Release
     void AddRef() { RefCount++; }
@@ -96,13 +96,13 @@ public:
 
 // TODO: 过渡兼容，调用点迁移完成后删除
 using krkr::io::StringFromBMPUnicode;
-using krkr::io::tTVPArchive;
+using krkr::io::Archive;
 
 //---------------------------------------------------------------------------
 
 /*[*/
 //---------------------------------------------------------------------------
-// iTVPStorageMedia
+// IStorageMedia
 //---------------------------------------------------------------------------
 /*
         abstract class for managing media ( like file: http: etc.)
@@ -118,16 +118,16 @@ class tTJSBinaryStream;
 namespace krkr::io {
 
 //---------------------------------------------------------------------------
-class iTVPStorageLister // callback class for GetListAt
+class IStorageLister // callback class for GetListAt
 {
 public:
     virtual void Add(const ttstr &file) = 0;
 };
 
 //---------------------------------------------------------------------------
-class iTVPStorageMedia {
+class IStorageMedia {
 public:
-    virtual ~iTVPStorageMedia() {} // add by ZeaS
+    virtual ~IStorageMedia() {} // add by ZeaS
     virtual void AddRef() = 0;
 
     virtual void Release() = 0;
@@ -155,7 +155,7 @@ public:
     // name does not contain in-archive storage name but
     // is normalized.
 
-    virtual void GetListAt(const ttstr &name, iTVPStorageLister *lister) = 0;
+    virtual void GetListAt(const ttstr &name, IStorageLister *lister) = 0;
     // list files at given place
 
     virtual void GetLocallyAccessibleName(ttstr &name) = 0;
@@ -168,8 +168,8 @@ public:
 } // namespace krkr::io
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::io::iTVPStorageLister;
-using krkr::io::iTVPStorageMedia;
+using krkr::io::IStorageLister;
+using krkr::io::IStorageMedia;
 
 //---------------------------------------------------------------------------
 /*]*/
@@ -179,8 +179,8 @@ using krkr::io::iTVPStorageMedia;
 //---------------------------------------------------------------------------
 namespace krkr::io {
 
-extern tTVPArchive *OpenArchive(const ttstr &name, bool normalizeFileName);
-// open archive and return tTVPArchive instance.
+extern Archive *OpenArchive(const ttstr &name, bool normalizeFileName);
+// open archive and return Archive instance.
 
 TJS_EXP_FUNC_DEF(ttstr, GetTemporaryName, ());
 // retrieve file name to store temporary data ( must be unique, local
@@ -195,7 +195,7 @@ void PreNormalizeStorageName(ttstr &name);
 // system, so that this function must convert it to the TVP storage
 // name rules.
 
-iTVPStorageMedia *CreateFileMedia();
+IStorageMedia *CreateFileMedia();
 // create basic default "file:" storage media
 // /*
 // extern void krkr::io::PreNormalizeStorageName(ttstr &name);
@@ -211,10 +211,10 @@ tTJSBinaryStream *OpenStream(const ttstr &name, tjs_uint32 flags);
 // extern void TVPGetStorageListAt(const ttstr &name, std::vector<ttstr>
 // & list);
 //
-// extern ttstr TVPGetMediaCurrent(const ttstr & name);
-// extern void TVPSetMediaCurrent(const ttstr & name, const ttstr & dir);
+// extern ttstr GetMediaCurrent(const ttstr & name);
+// extern void SetMediaCurrent(const ttstr & name, const ttstr & dir);
 //
-// extern ttstr TVPGetNativeName(const ttstr &name);
+// extern ttstr GetNativeName(const ttstr &name);
 //         // retrieve OS native name
 //
 // extern ttstr krkr::io::GetLocallyAccessiblePath(const ttstr &name);
@@ -256,9 +256,9 @@ using krkr::io::TVPCreateFolders;
 //---------------------------------------------------------------------------
 namespace krkr::io {
 
-TJS_EXP_FUNC_DEF(void, RegisterStorageMedia, (iTVPStorageMedia * media));
+TJS_EXP_FUNC_DEF(void, RegisterStorageMedia, (IStorageMedia * media));
 // register storage media
-TJS_EXP_FUNC_DEF(void, UnregisterStorageMedia, (iTVPStorageMedia * media));
+TJS_EXP_FUNC_DEF(void, UnregisterStorageMedia, (IStorageMedia * media));
 // remove storage media
 
 extern tTJSBinaryStream *CreateStream(const ttstr &name,
@@ -447,11 +447,11 @@ using krkr::io::TVPCreateNativeClass_Storages;
 
 namespace krkr::io {
 
-class tTVPStorageMedia : public iTVPStorageMedia {
+class StorageMedia : public IStorageMedia {
 protected:
     tjs_int refCount;
 
-    tTVPStorageMedia() : refCount(1) {}
+    StorageMedia() : refCount(1) {}
 
     void AddRef() override { refCount++; }
 
@@ -473,18 +473,18 @@ protected:
 } // namespace krkr::io
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::io::tTVPStorageMedia;
+using krkr::io::StorageMedia;
 
 namespace krkr::io {
 
 class TArchiveStream : public tTJSBinaryStream {
-    tTVPArchive *Owner;
+    Archive *Owner;
     tjs_int64 CurrentPos;
     tjs_uint64 StartPos, DataLength;
     tTJSBinaryStream *_instr;
 
 public:
-    TArchiveStream(tTVPArchive *owner, tjs_uint64 off, tjs_uint64 len);
+    TArchiveStream(Archive *owner, tjs_uint64 off, tjs_uint64 len);
 
     ~TArchiveStream() override;
 

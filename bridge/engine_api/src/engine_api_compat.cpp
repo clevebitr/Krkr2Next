@@ -109,7 +109,7 @@ void ApplyCompatProfileLocked() {
             spdlog::info("compat profile: 判档依据 game_root={}", g_compat_game_root);
         }
     }
-    TVPSetCommandLine(TJS_W("ogldrawdevice_compat"), ttstr(prof->ogldrawdevice).c_str());
+    krkr::base::SetCommandLine(TJS_W("ogldrawdevice_compat"), ttstr(prof->ogldrawdevice).c_str());
 }
 
 } // namespace

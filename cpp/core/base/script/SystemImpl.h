@@ -17,25 +17,20 @@
 namespace krkr::base {
 
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(bool, TVPGetAsyncKeyState,
+TJS_EXP_FUNC_DEF(bool, GetAsyncKeyState,
                  (tjs_uint keycode, bool getcurrent = true));
 
 //---------------------------------------------------------------------------
-extern void TVPPostApplicationActivateEvent();
+extern void PostApplicationActivateEvent();
 
-extern void TVPPostApplicationDeactivateEvent();
+extern void PostApplicationDeactivateEvent();
 
-extern bool TVPShellExecute(const TJS::ttstr &target, const TJS::ttstr &param);
+extern bool ShellExecute(const TJS::ttstr &target, const TJS::ttstr &param);
 
-extern void TVPDoSaveSystemVariables();
+extern void DoSaveSystemVariables();
 
 } // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::base::TVPGetAsyncKeyState;
-using krkr::base::TVPPostApplicationActivateEvent;
-using krkr::base::TVPPostApplicationDeactivateEvent;
-using krkr::base::TVPShellExecute;
-using krkr::base::TVPDoSaveSystemVariables;
 //---------------------------------------------------------------------------
 #endif

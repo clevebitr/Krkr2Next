@@ -33,7 +33,7 @@
 #include "krkr_egl_context.h"
 #include "SysInitImpl.h"
 #include "VideoOvlImpl.h"
-// TVPPostWindowUpdate（BringToFront / ShowWindowAsModal 用它请求重绘）
+// krkr::base::PostWindowUpdate（BringToFront / ShowWindowAsModal 用它请求重绘）
 #include "EventIntf.h"
 // 关窗确认闸门与模态输入泵（krkr::base）在 SysInitImpl.h 里声明；
 // 卡死探针的阶段标记在下面这个头里 —— 模态循环每帧要刷心跳，否则会被看门狗
@@ -283,7 +283,7 @@ public:
         // 重绘，让这一层（通常是对话框窗口）在本帧被重新合成提交。空实现会让
         // Show()/showModal() 之后窗口一直不刷新。
         if(owner_)
-            TVPPostWindowUpdate(owner_);
+            krkr::base::PostWindowUpdate(owner_);
     }
 
     // 游戏内置对话框（退出确认等）走的就是 Window.showModal()。
@@ -305,7 +305,7 @@ public:
     void ShowWindowAsModal() override {
         visible_ = true;
         if(owner_)
-            TVPPostWindowUpdate(owner_);
+            krkr::base::PostWindowUpdate(owner_);
         // 边沿记录：游戏可能反复调 showModal()，逐次打日志会让日志无限增长
         // （老实现就是每条一次 warn，正是"错误日志一直涨"的来源）。
         if(!modal_logged_) {
@@ -799,7 +799,7 @@ public:
             visible_ = false;
             modal_ = false; // 让 ShowWindowAsModal 的嵌套循环退出
             if(owner_)
-                TVPPostWindowUpdate(owner_);
+                krkr::base::PostWindowUpdate(owner_);
             spdlog::debug("HostWindowLayer::Close: 子窗口（对话框）关闭，结束模态等待");
             return;
         }
@@ -815,7 +815,7 @@ public:
         // 从此不再重绘，宿主即便在确认框里选"继续游戏"也只是在空场景上继续跑。
         // 标记原因，engine_tick 会用 ENGINE_RESULT_WINDOW_CLOSED 告诉宿主。
         terminateWindowClosed = true;
-        TVPTerminateAsync(0);
+        krkr::base::TerminateAsync(0);
     }
 
     void OnCloseQueryCalled(bool b) override {
@@ -831,15 +831,15 @@ public:
     void OnKeyPress(tjs_uint16 vk, int repeat, bool prevkeystate,
                     bool convertkey) override {}
 
-    [[nodiscard]] tTVPImeMode GetDefaultImeMode() const override {
+    [[nodiscard]] ImeMode GetDefaultImeMode() const override {
         return imDisable;
     }
 
-    void SetImeMode(tTVPImeMode mode) override {}
+    void SetImeMode(ImeMode mode) override {}
 
     void ResetImeMode() override {}
 
-    void UpdateWindow(tTVPUpdateType type) override {
+    void UpdateWindow(UpdateType type) override {
         // Rendering is driven by engine_tick / engine_read_frame_rgba
     }
 

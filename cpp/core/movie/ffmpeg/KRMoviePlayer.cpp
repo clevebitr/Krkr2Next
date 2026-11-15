@@ -575,7 +575,7 @@ int TVPMoviePlayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
 }
 
 VideoPresentOverlay::~VideoPresentOverlay() {
-    TVPRemoveContinuousEventHook(this);
+    RemoveContinuousEventHook(this);
     HostClearVideoOverlayFrame();
     ClearNode();
 }
@@ -705,13 +705,13 @@ void VideoPresentOverlay::OnContinuousCallback(tjs_uint64 tick) {
 
 void KRMovie::VideoPresentOverlay::Play() {
     TVPMoviePlayer::Play();
-    TVPAddContinuousEventHook(this);
+    AddContinuousEventHook(this);
     spdlog::info("VideoPresentOverlay::Play: 连续事件钩子已挂（visible={}）",
                  Visible ? "yes" : "no");
 }
 
 void KRMovie::VideoPresentOverlay::Stop() {
-    TVPRemoveContinuousEventHook(this);
+    RemoveContinuousEventHook(this);
     HostClearVideoOverlayFrame();
     TVPMoviePlayer::Stop();
 }

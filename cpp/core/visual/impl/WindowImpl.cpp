@@ -81,11 +81,11 @@ tjs_int TVPGetCursor(const ttstr &name) {
         return *in_hash;
 #if 0
 	// not found
-	tTVPLocalTempStorageHolder file(place);
+	LocalTempStorageHolder file(place);
 
 	HCURSOR handle = ::LoadCursorFromFile(file.GetLocalName().c_str());
 
-	if(!handle) TVPThrowExceptionMessage(TVPCannotLoadCursor, place);
+	if(!handle) ThrowExceptionMessage(TVPCannotLoadCursor, place);
 
 	int id = MouseCursor::AddCursor( handle );
 
@@ -366,7 +366,7 @@ void TVPDumpDirect3DDriverInformation()
 					{
 						log = infostart + TJS_W("Driver version (") + ttstr(driverpath) + TJS_W(") : ");
 						tjs_int major, minor, release, build;
-						if(TVPGetFileVersionOf(driverpath, major, minor, release, build))
+						if(GetFileVersionOf(driverpath, major, minor, release, build))
 						{
 							TJS_snprintf(tmp, 256, L"%d.%d.%d.%d", (int)major, (int)minor, (int)release, (int)build);
 							log += tmp;
@@ -425,7 +425,7 @@ static void TVPInitDirect3D()
 		krkr::utils::AddLog( (const tjs_char*)TVPInfoDirect3D );
 		TVPDirect3DDLLHandle = ::LoadLibrary( L"d3d9.dll" );
 		if(!TVPDirect3DDLLHandle)
-			TVPThrowExceptionMessage(TVPCannotInitDirect3D, (const tjs_char*)TVPCannotLoadD3DDLL );
+			ThrowExceptionMessage(TVPCannotInitDirect3D, (const tjs_char*)TVPCannotLoadD3DDLL );
 	}
 
 	if(!TVPDirect3D)
@@ -435,11 +435,11 @@ static void TVPInitDirect3D()
 			// get Direct3DCreaet function
 			TVPDirect3DCreate = (IDirect3D9*(WINAPI * )(UINT))GetProcAddress(TVPDirect3DDLLHandle, "Direct3DCreate9");
 			if(!TVPDirect3DCreate)
-				TVPThrowExceptionMessage(TVPCannotInitDirect3D, (const tjs_char*)TVPNotFoundDirect3DCreate );
+				ThrowExceptionMessage(TVPCannotInitDirect3D, (const tjs_char*)TVPNotFoundDirect3DCreate );
 
 			TVPDirect3D = TVPDirect3DCreate( D3D_SDK_VERSION );
 			if( nullptr == TVPDirect3D )
-				TVPThrowExceptionMessage( TVPFaildToCreateDirect3D );
+				ThrowExceptionMessage( TVPFaildToCreateDirect3D );
 		}
 		catch(...)
 		{
@@ -484,7 +484,7 @@ IDirect3D9 * TVPGetDirect3DObjectNoAddRef()
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-static tTVPAtExit
+static AtExit
 	TVPUnloadDirect3DAtExit(KRKR_ATEXIT_PRI_RELEASE, TVPUnloadDirect3D);
 //---------------------------------------------------------------------------
 
@@ -523,8 +523,8 @@ static void TVPDoReductionNumerAndDenom(tjs_int &n, tjs_int &d)
 static void TVPGetOriginalScreenMetrics()
 {
 	// retrieve original (un-fullscreened) information
-	TVPDefaultScreenMode.Width = tTVPScreen::GetWidth();
-	TVPDefaultScreenMode.Height = tTVPScreen::GetHeight();
+	TVPDefaultScreenMode.Width = Screen::GetWidth();
+	TVPDefaultScreenMode.Height = Screen::GetHeight();
 	HDC dc = GetDC(0);
 	TVPDefaultScreenMode.BitsPerPixel = GetDeviceCaps(dc, BITSPIXEL);
 	ReleaseDC(0, dc);
@@ -604,7 +604,7 @@ void TVPEnumerateAllDisplayModes(std::vector<tTVPScreenMode> & modes)
 		} while(true);
 	}
 
-	krkr::utils::AddLog( TVPFormatMessage(TVPInfoEnvironmentUsing,
+	krkr::utils::AddLog( krkr::base::FormatMessage(TVPInfoEnvironmentUsing,
 		(TVPUseChangeDisplaySettings?TJS_W("ChangeDisplaySettings API"):TJS_W("Direct3D"))) );
 }
 //---------------------------------------------------------------------------
@@ -622,9 +622,9 @@ static void TVPMakeFullScreenModeCandidates(
 
 	// print debug information
 	krkr::utils::AddLog((const tjs_char*)TVPInfoSearchBestFullscreenResolution);
-	krkr::utils::AddLog(TVPFormatMessage(TVPInfoConditionPreferredScreenMode, preferred.Dump()));
-	krkr::utils::AddLog(TVPFormatMessage(TVPInfoConditionMode, TVPGetGetFullScreenResolutionModeString(mode)));
-	krkr::utils::AddLog(TVPFormatMessage(TVPInfoConditionZoomMode, ttstr(
+	krkr::utils::AddLog(krkr::base::FormatMessage(TVPInfoConditionPreferredScreenMode, preferred.Dump()));
+	krkr::utils::AddLog(krkr::base::FormatMessage(TVPInfoConditionMode, TVPGetGetFullScreenResolutionModeString(mode)));
+	krkr::utils::AddLog(krkr::base::FormatMessage(TVPInfoConditionZoomMode, ttstr(
 		zoom_mode == fszmInner ? TJS_W("inner") :
 		zoom_mode == fszmOuter ? TJS_W("outer") :
 			TJS_W("none"))));
@@ -640,8 +640,8 @@ static void TVPMakeFullScreenModeCandidates(
 	tjs_int screen_aspect_numer = TVPDefaultScreenMode.Width;
 	tjs_int screen_aspect_denom = TVPDefaultScreenMode.Height;
 	TVPDoReductionNumerAndDenom(screen_aspect_numer, screen_aspect_denom); // do reduction
-	krkr::utils::AddLog(TVPFormatMessage(TVPInfoEnvironmentDefaultScreenMode, TVPDefaultScreenMode.Dump()));
-	krkr::utils::AddLog(TVPFormatMessage(TVPInfoEnvironmentDefaultScreenAspectRatio,
+	krkr::utils::AddLog(krkr::base::FormatMessage(TVPInfoEnvironmentDefaultScreenMode, TVPDefaultScreenMode.Dump()));
+	krkr::utils::AddLog(krkr::base::FormatMessage(TVPInfoEnvironmentDefaultScreenAspectRatio,
 		ttstr(screen_aspect_numer),ttstr(screen_aspect_denom)) );
 
 	// clear destination array
@@ -921,7 +921,7 @@ void TVPSwitchToFullScreen(HWND window, tjs_int w, tjs_int h, iTVPDrawDevice* dr
 	for(std::vector<tTVPScreenModeCandidate>::iterator i = candidates.begin();
 		i != candidates.end(); i++)
 	{
-		krkr::utils::AddLog( TVPFormatMessage(TVPInfoTryScreenMode, i->Dump()) );
+		krkr::utils::AddLog( krkr::base::FormatMessage(TVPInfoTryScreenMode, i->Dump()) );
 		success = drawdevice->SwitchToFullScreen( window, i->Width, i->Height, i->BitsPerPixel, TVPDisplayColorFormat, TVPPreferredFullScreenResolutionMode != fsrExpandWindow );
 		if( success )
 		{
@@ -932,7 +932,7 @@ void TVPSwitchToFullScreen(HWND window, tjs_int w, tjs_int h, iTVPDrawDevice* dr
 
 	if(!success)
 	{
-		TVPThrowExceptionMessage(TVPCannotSwitchToFullScreen, (const tjs_char*)TVPAllScreenModeError );
+		ThrowExceptionMessage(TVPCannotSwitchToFullScreen, (const tjs_char*)TVPAllScreenModeError );
 	}
 
 	krkr::utils::AddLog( (const tjs_char*)TVPInfoChangeScreenModeSuccess );
@@ -940,7 +940,7 @@ void TVPSwitchToFullScreen(HWND window, tjs_int w, tjs_int h, iTVPDrawDevice* dr
 	TVPInFullScreen = true;
 
 	TVPGetDisplayColorFormat();
-	//TVPEnsureVSyncTimingThread();
+	//EnsureVSyncTimingThread();
 }
 //---------------------------------------------------------------------------
 void TVPRecalcFullScreen( tjs_int w, tjs_int h )
@@ -976,7 +976,7 @@ void TVPRevertFromFullScreen(HWND window,tjs_uint w,tjs_uint h, iTVPDrawDevice* 
 	TVPInFullScreen = false;
 
 	TVPGetDisplayColorFormat();
-	//TVPEnsureVSyncTimingThread();
+	//EnsureVSyncTimingThread();
 }
 //---------------------------------------------------------------------------
 
@@ -1063,7 +1063,7 @@ static void TVPRestoreDisplayMode()
 	::ChangeDisplaySettings(nullptr, 0);
 }
 //---------------------------------------------------------------------------
-static tTVPAtExit
+static AtExit
 	TVPRestoreDisplayModeAtExit(KRKR_ATEXIT_PRI_CLEANUP, TVPUnloadDirect3D);
 //---------------------------------------------------------------------------
 
@@ -1085,7 +1085,7 @@ static tTVPAtExit
 //---------------------------------------------------------------------------
 // TVPGetModalWindowOwner
 //---------------------------------------------------------------------------
-HWND TVPGetModalWindowOwnerHandle()
+HWND GetModalWindowOwnerHandle()
 {
 	if(TVPFullScreenedWindow)
 		return TVPFullScreenedWindow->GetHandle();
@@ -1099,7 +1099,7 @@ HWND TVPGetModalWindowOwnerHandle()
 // tTJSNI_Window
 //---------------------------------------------------------------------------
 tTJSNI_Window::tTJSNI_Window() {
-    // TVPEnsureVSyncTimingThread();
+    // EnsureVSyncTimingThread();
     //	VSyncTimingThread = nullptr;
     Form = nullptr;
 }
@@ -1116,9 +1116,9 @@ tjs_error tTJSNI_Window::Construct(tjs_int numparams, tTJSVariant **param,
             if(TJS_FAILED(clo.Object->NativeInstanceSupport(
                    TJS_NIS_GETINSTANCE, tTJSNC_Window::ClassID,
                    (iTJSNativeInstance **)&win)))
-                TVPThrowExceptionMessage(TVPSpecifyWindow);
+                ThrowExceptionMessage(TVPSpecifyWindow);
             if(!win)
-                TVPThrowExceptionMessage(TVPSpecifyWindow);
+                ThrowExceptionMessage(TVPSpecifyWindow);
         }
 #if 0
 		Form = new TTVPWindowForm(Application, this, win);
@@ -1150,8 +1150,8 @@ void tTJSNI_Window::Invalidate() {
     }
 
     // remove all events
-    TVPCancelSourceEvents(Owner);
-    TVPCancelInputEvents(this);
+    krkr::base::CancelSourceEvents(Owner);
+    krkr::base::CancelInputEvents(this);
 
     // Set Owner nullptr
     Owner = nullptr;
@@ -1189,7 +1189,7 @@ void tTJSNI_Window::ResetDrawDevice() {
 void tTJSNI_Window::FullScreenGuard() const {
     if(Form) {
         if(Form->GetFullScreenMode())
-            TVPThrowExceptionMessage(TVPInvalidPropertyInFullScreen);
+            ThrowExceptionMessage(TVPInvalidPropertyInFullScreen);
     }
 }
 //---------------------------------------------------------------------------
@@ -1214,12 +1214,12 @@ void tTJSNI_Window::PostInputEvent(const ttstr &name, iTJSDispatch2 *params) {
         type = etUnknown;
 
     if(type == etUnknown)
-        TVPThrowExceptionMessage(TVPSpecifiedEventNameIsUnknown, name);
+        ThrowExceptionMessage(TVPSpecifiedEventNameIsUnknown, name);
 
     if(type == etOnKeyDown || type == etOnKeyUp) {
         // this needs params, "key" and "shift"
         if(params == nullptr)
-            TVPThrowExceptionMessage(TVPSpecifiedEventNeedsParameter, name);
+            ThrowExceptionMessage(TVPSpecifiedEventNeedsParameter, name);
 
         tjs_uint key;
         tjs_uint32 shift = 0;
@@ -1229,14 +1229,14 @@ void tTJSNI_Window::PostInputEvent(const ttstr &name, iTJSDispatch2 *params) {
                                          key_name.GetHint(), &val, params)))
             key = (tjs_int)val;
         else
-            TVPThrowExceptionMessage(TVPSpecifiedEventNeedsParameter2, name,
+            ThrowExceptionMessage(TVPSpecifiedEventNeedsParameter2, name,
                                      TJS_W("key"));
 
         if(TJS_SUCCEEDED(params->PropGet(0, shift_name.c_str(),
                                          shift_name.GetHint(), &val, params)))
             shift = (tjs_int)val;
         else
-            TVPThrowExceptionMessage(TVPSpecifiedEventNeedsParameter2, name,
+            ThrowExceptionMessage(TVPSpecifiedEventNeedsParameter2, name,
                                      TJS_W("shift"));
 
         uint16_t vcl_key = key;
@@ -1249,7 +1249,7 @@ void tTJSNI_Window::PostInputEvent(const ttstr &name, iTJSDispatch2 *params) {
     } else if(type == etOnKeyPress) {
         // this needs param, "key"
         if(params == nullptr)
-            TVPThrowExceptionMessage(TVPSpecifiedEventNeedsParameter, name);
+            ThrowExceptionMessage(TVPSpecifiedEventNeedsParameter, name);
 
         tjs_uint key;
 
@@ -1258,7 +1258,7 @@ void tTJSNI_Window::PostInputEvent(const ttstr &name, iTJSDispatch2 *params) {
                                          key_name.GetHint(), &val, params)))
             key = (tjs_int)val;
         else
-            TVPThrowExceptionMessage(TVPSpecifiedEventNeedsParameter2, name,
+            ThrowExceptionMessage(TVPSpecifiedEventNeedsParameter2, name,
                                      TJS_W("key"));
 
         char vcl_key = key;
@@ -1339,13 +1339,13 @@ void tTJSNI_Window::DisableAttentionPoint() {
         Form->DisableAttentionPoint();
 }
 //---------------------------------------------------------------------------
-void tTJSNI_Window::SetImeMode(tTVPImeMode mode) {
+void tTJSNI_Window::SetImeMode(ImeMode mode) {
     // set ime mode
     if(Form)
         Form->SetImeMode(mode);
 }
 //---------------------------------------------------------------------------
-void tTJSNI_Window::SetDefaultImeMode(tTVPImeMode mode) {
+void tTJSNI_Window::SetDefaultImeMode(ImeMode mode) {
     // set default ime mode
     if(Form) {
         //		Form->SetDefaultImeMode(mode,
@@ -1353,7 +1353,7 @@ void tTJSNI_Window::SetDefaultImeMode(tTVPImeMode mode) {
     }
 }
 //---------------------------------------------------------------------------
-tTVPImeMode tTJSNI_Window::GetDefaultImeMode() const {
+ImeMode tTJSNI_Window::GetDefaultImeMode() const {
     if(Form)
         return Form->GetDefaultImeMode();
     return ::imDisable;
@@ -1495,7 +1495,7 @@ void tTJSNI_Window::BringToFront() {
         Form->BringToFront();
 }
 //---------------------------------------------------------------------------
-void tTJSNI_Window::Update(tTVPUpdateType type) {
+void tTJSNI_Window::Update(UpdateType type) {
     if(Form)
         Form->UpdateWindow(type);
 }
@@ -1816,10 +1816,10 @@ void tTJSNI_Window::SetMaskRegion(tjs_int threshold) {
         return;
 
     if(!DrawDevice)
-        TVPThrowExceptionMessage(TVPWindowHasNoLayer);
+        ThrowExceptionMessage(TVPWindowHasNoLayer);
     tTJSNI_BaseLayer *lay = DrawDevice->GetPrimaryLayer();
     if(!lay)
-        TVPThrowExceptionMessage(TVPWindowHasNoLayer);
+        ThrowExceptionMessage(TVPWindowHasNoLayer);
     //	Form->SetMaskRegion(
     //((tTJSNI_Layer*)lay)->CreateMaskRgn((tjs_uint)threshold) );
 }
@@ -1830,13 +1830,13 @@ void tTJSNI_Window::RemoveMaskRegion() {
     Form->RemoveMaskRegion();
 }
 //---------------------------------------------------------------------------
-void tTJSNI_Window::SetMouseCursorState(tTVPMouseCursorState mcs) {
+void tTJSNI_Window::SetMouseCursorState(MouseCursorState mcs) {
     if(!Form)
         return;
     Form->SetMouseCursorState(mcs);
 }
 //---------------------------------------------------------------------------
-tTVPMouseCursorState tTJSNI_Window::GetMouseCursorState() const {
+MouseCursorState tTJSNI_Window::GetMouseCursorState() const {
     if(!Form)
         return mcsVisible;
     return Form->GetMouseCursorState();
@@ -2100,10 +2100,10 @@ void tTJSNI_Window::DisableAttentionPoint(class iTVPLayerManager *manager) {
 }
 //---------------------------------------------------------------------------
 void tTJSNI_Window::SetImeMode(class iTVPLayerManager *manager,
-                               tjs_int mode) // mode == tTVPImeMode
+                               tjs_int mode) // mode == ImeMode
 {
     if(DrawDevice)
-        DrawDevice->SetImeMode(manager, (tTVPImeMode)mode);
+        DrawDevice->SetImeMode(manager, (ImeMode)mode);
 }
 //---------------------------------------------------------------------------
 void tTJSNI_Window::ResetImeMode(class iTVPLayerManager *manager) {
@@ -2130,9 +2130,9 @@ tTJSNativeInstance *tTJSNC_Window::CreateNativeInstance() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPCreateNativeClass_Window
+// CreateNativeClass_Window
 //---------------------------------------------------------------------------
-tTJSNativeClass *TVPCreateNativeClass_Window() {
+tTJSNativeClass *CreateNativeClass_Window() {
     tTJSNativeClass *cls = new tTJSNC_Window();
     static tjs_uint32 TJS_NCM_CLASSID;
     TJS_NCM_CLASSID = tTJSNC_Window::ClassID;
@@ -2195,7 +2195,7 @@ tTJSNativeClass *TVPCreateNativeClass_Window() {
                            TJS_MEMBERENSURE | TJS_IGNOREPROP,
                            startX_name.c_str(), startX_name.GetHint(), &val,
                            object)))
-                        TVPThrowInternalError;
+                        KRKR_THROW_INTERNAL_ERROR;
                 }
                 {
                     tTJSVariant val(_this->GetTouchPointStartY(index));
@@ -2203,28 +2203,28 @@ tTJSNativeClass *TVPCreateNativeClass_Window() {
                            TJS_MEMBERENSURE | TJS_IGNOREPROP,
                            startY_name.c_str(), startY_name.GetHint(), &val,
                            object)))
-                        TVPThrowInternalError;
+                        KRKR_THROW_INTERNAL_ERROR;
                 }
                 {
                     tTJSVariant val(_this->GetTouchPointX(index));
                     if(TJS_FAILED(object->PropSet(
                            TJS_MEMBERENSURE | TJS_IGNOREPROP, X_name.c_str(),
                            X_name.GetHint(), &val, object)))
-                        TVPThrowInternalError;
+                        KRKR_THROW_INTERNAL_ERROR;
                 }
                 {
                     tTJSVariant val(_this->GetTouchPointY(index));
                     if(TJS_FAILED(object->PropSet(
                            TJS_MEMBERENSURE | TJS_IGNOREPROP, Y_name.c_str(),
                            Y_name.GetHint(), &val, object)))
-                        TVPThrowInternalError;
+                        KRKR_THROW_INTERNAL_ERROR;
                 }
                 {
                     tTJSVariant val(_this->GetTouchPointID(index));
                     if(TJS_FAILED(object->PropSet(
                            TJS_MEMBERENSURE | TJS_IGNOREPROP, ID_name.c_str(),
                            ID_name.GetHint(), &val, object)))
-                        TVPThrowInternalError;
+                        KRKR_THROW_INTERNAL_ERROR;
                 }
                 tTJSVariant objval(object, object);
                 object->Release();

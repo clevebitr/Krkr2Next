@@ -32,7 +32,7 @@ private:
     const tjs_uint8 *Image; // tft mapped memory
     tjs_uint64 FileLength;
     tjs_uint RefCount;
-    //	tTVPLocalTempStorageHolder LocalStorage;
+    //	LocalTempStorageHolder LocalStorage;
 
     tjs_int Version; // data version
     const tjs_char *ChIndex;

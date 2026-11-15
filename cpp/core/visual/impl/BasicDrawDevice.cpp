@@ -105,13 +105,13 @@ bool tTVPBasicDrawDevice::GetDirect3D9Device() {
 	TVPEnsureDirect3DObject();
 
 	if( nullptr == ( Direct3D = TVPGetDirect3DObjectNoAddRef() ) )
-		TVPThrowExceptionMessage( TVPFaildToCreateDirect3D );
+		ThrowExceptionMessage( TVPFaildToCreateDirect3D );
 
 	HRESULT hr;
 	if( FAILED( hr = DecideD3DPresentParameters() ) ) {
 		if( IsTargetWindowActive() ) {
 			ErrorToLog( hr );
-			TVPThrowExceptionMessage( TVPFaildToDecideBackbufferFormat );
+			ThrowExceptionMessage( TVPFaildToDecideBackbufferFormat );
 		}
 		return false;
 	}
@@ -121,7 +121,7 @@ bool tTVPBasicDrawDevice::GetDirect3D9Device() {
 	if( D3D_OK != ( hr = Direct3D->CreateDevice( iCurrentMonitor, D3DDEVTYPE_HAL, TargetWindow, BehaviorFlags, &D3dPP, &Direct3DDevice ) ) ) {
 		if( IsTargetWindowActive() ) {
 			ErrorToLog( hr );
-			TVPThrowExceptionMessage( TVPFaildToCreateDirect3DDevice );
+			ThrowExceptionMessage( TVPFaildToCreateDirect3DDevice );
 		}
 		return false;
 	}
@@ -146,7 +146,7 @@ bool tTVPBasicDrawDevice::GetDirect3D9Device() {
 	if( FAILED(hr = Direct3DDevice->SetViewport(&vp)) ) {
 		if( IsTargetWindowActive() ) {
 			ErrorToLog( hr );
-			TVPThrowExceptionMessage( TVPFaildToSetViewport );
+			ThrowExceptionMessage( TVPFaildToSetViewport );
 		}
 		return false;
 	}
@@ -154,7 +154,7 @@ bool tTVPBasicDrawDevice::GetDirect3D9Device() {
 	if( FAILED( hr = InitializeDirect3DState() ) ) {
 		if( IsTargetWindowActive() ) {
 			ErrorToLog( hr );
- 			TVPThrowExceptionMessage( TVPFaildToSetRenderState );
+ 			ThrowExceptionMessage( TVPFaildToSetRenderState );
 		}
 		return false;
 	}
@@ -303,7 +303,7 @@ bool tTVPBasicDrawDevice::CreateTexture() {
 		if( D3D_OK != ( hr = Direct3DDevice->CreateTexture( dwWidth, dwHeight, 1, D3DUSAGE_DYNAMIC, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT, &Texture, nullptr) ) ) {
 			if( IsTargetWindowActive() ) {
 				ErrorToLog( hr );
-				TVPThrowExceptionMessage(TVPCannotAllocateD3DOffScreenSurface,TJSInt32ToHex(hr, 8));
+				ThrowExceptionMessage(TVPCannotAllocateD3DOffScreenSurface,TJSInt32ToHex(hr, 8));
 			}
 			return false;
 		}
@@ -333,7 +333,7 @@ void tTVPBasicDrawDevice::EnsureDevice()
 				InvalidateAll();
 			}
 		} catch(const eTJS & e) {
-			krkr::utils::AddImportantLog( TVPFormatMessage(TVPBasicDrawDeviceFailedToCreateDirect3DDevice,e.GetMessage()) );
+			krkr::utils::AddImportantLog( krkr::base::FormatMessage(TVPBasicDrawDeviceFailedToCreateDirect3DDevice,e.GetMessage()) );
 			DestroyD3DDevice();
 		} catch(...) {
 			krkr::utils::AddImportantLog( (const tjs_char*)TVPBasicDrawDeviceFailedToCreateDirect3DDeviceUnknownReason );
@@ -479,7 +479,7 @@ void tTVPBasicDrawDevice::ErrorToLog( HRESULT hr ) {
 void tTVPBasicDrawDevice::AddLayerManager(iTVPLayerManager *manager) {
     if(!inherited::Managers.empty()) {
         // "Basic" デバイスでは２つ以上のLayer Managerを登録できない
-        TVPThrowExceptionMessage(
+        ThrowExceptionMessage(
             TVPBasicDrawDeviceDoesNotSupporteLayerManagerMoreThanOne);
     }
     inherited::AddLayerManager(manager);
@@ -516,7 +516,7 @@ void tTVPBasicDrawDevice::SetDestRectangle(const tTVPRect &rect) {
 		try {
 			EnsureDevice();
 		} catch(const eTJS & e) {
-			krkr::utils::AddImportantLog( TVPFormatMessage(TVPBasicDrawDeviceFailedToCreateDirect3DDevices,e.GetMessage() ) );
+			krkr::utils::AddImportantLog( krkr::base::FormatMessage(TVPBasicDrawDeviceFailedToCreateDirect3DDevices,e.GetMessage() ) );
 			success = false;
 		} catch(...) {
 			krkr::utils::AddImportantLog( (const tjs_char*)TVPBasicDrawDeviceFailedToCreateDirect3DDevicesUnknownReason );
@@ -576,7 +576,7 @@ void tTVPBasicDrawDevice::Show() {
 		TryRecreateWhenDeviceLost();
 	} else if(hr != D3D_OK) {
 		ErrorToLog( hr );
-		krkr::utils::AddImportantLog( TVPFormatMessage(TVPBasicDrawDeviceInfDirect3DDevicePresentFailed,TJSInt32ToHex(hr, 8)) );
+		krkr::utils::AddImportantLog( krkr::base::FormatMessage(TVPBasicDrawDeviceInfDirect3DDevicePresentFailed,TJSInt32ToHex(hr, 8)) );
 	}
 #endif
 }
@@ -635,7 +635,7 @@ void tTVPBasicDrawDevice::StartBitmapCompletion(iTVPLayerManager *manager) {
 		HRESULT hr = Texture->LockRect( 0, &rt, nullptr, D3DLOCK_NO_DIRTY_UPDATE );
 
 		if(hr == D3DERR_INVALIDCALL && IsTargetWindowActive() ) {
-			TVPThrowExceptionMessage( TVPInternalErrorResult, TJSInt32ToHex(hr, 8));
+			ThrowExceptionMessage( TVPInternalErrorResult, TJSInt32ToHex(hr, 8));
 		}
 
 		if(hr != D3D_OK) {
@@ -812,7 +812,7 @@ got_error:
 			if( FAILED( hr = InitializeDirect3DState() ) ) {
 				if( IsTargetWindowActive() ) {
 					ErrorToLog( hr );
-					TVPThrowExceptionMessage( TVPFaildToSetRenderState );
+					ThrowExceptionMessage( TVPFaildToSetRenderState );
 				} else {
 					DestroyD3DDevice();
 				}
@@ -820,7 +820,7 @@ got_error:
 		}
 	} else if(hr != D3D_OK) {
 		ErrorToLog( hr );
-		krkr::utils::AddImportantLog( TVPFormatMessage(TVPBasicDrawDeviceInfPolygonDrawingFailed,TJSInt32ToHex(hr, 8)) );
+		krkr::utils::AddImportantLog( krkr::base::FormatMessage(TVPBasicDrawDeviceInfPolygonDrawingFailed,TJSInt32ToHex(hr, 8)) );
 	}
 #endif
 }

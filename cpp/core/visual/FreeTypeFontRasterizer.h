@@ -31,7 +31,7 @@ enum class FontFallbackMode {
 
 /**
  * 由 engine_api 的 `font_fallback_mode` 选项下发（值 `auto`/`legacy`/`chain`，
- * 经 TVPSetCommandLine 落到 IndividualConfigManager，再由这里读进内存）。
+ * 经 krkr::base::SetCommandLine 落到 IndividualConfigManager，再由这里读进内存）。
  * 无法识别的字符串按 `auto` 处理，不抛异常——设置项不该让引擎起不来。
  */
 void TVPSetFontFallbackModeFromString(const char *mode);

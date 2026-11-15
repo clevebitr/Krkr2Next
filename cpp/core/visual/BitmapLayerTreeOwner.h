@@ -71,5 +71,5 @@ protected:
     tTJSNativeInstance *CreateNativeInstance() override;
 };
 
-extern tTJSNativeClass *TVPCreateNativeClass_BitmapLayerTreeOwner();
+extern tTJSNativeClass *CreateNativeClass_BitmapLayerTreeOwner();
 #endif

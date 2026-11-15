@@ -29,11 +29,11 @@ static constexpr size_t kStreamMmapThreshold = 256 * 1024;
 #include "Platform.h"
 
 //---------------------------------------------------------------------------
-// tTVPLocalTempStorageHolder
+// LocalTempStorageHolder
 //---------------------------------------------------------------------------
 #define TVP_LOCAL_TEMP_COPY_BLOCK_SIZE 65536 * 2
 
-tTVPLocalTempStorageHolder::tTVPLocalTempStorageHolder(const ttstr &name) {
+LocalTempStorageHolder::LocalTempStorageHolder(const ttstr &name) {
     // name must be normalized !!!
 
     FileMustBeDeleted = false;
@@ -54,8 +54,8 @@ tTVPLocalTempStorageHolder::tTVPLocalTempStorageHolder(const ttstr &name) {
 
         try {
             // copy to local file
-            tTVPStreamHolder src(name);
-            tTVPStreamHolder dest(LocalName,
+            StreamHolder src(name);
+            StreamHolder dest(LocalName,
                                   TJS_BS_WRITE | TJS_BS_DELETE_ON_CLOSE);
             tjs_uint8 *buffer = new tjs_uint8[TVP_LOCAL_TEMP_COPY_BLOCK_SIZE];
             try {
@@ -82,7 +82,7 @@ tTVPLocalTempStorageHolder::tTVPLocalTempStorageHolder(const ttstr &name) {
 }
 
 //---------------------------------------------------------------------------
-tTVPLocalTempStorageHolder::~tTVPLocalTempStorageHolder() {
+LocalTempStorageHolder::~LocalTempStorageHolder() {
     if(FileMustBeDeleted)
         krkr::io::RemoveFile(LocalName);
     if(FolderMustBeDeleted)
@@ -102,7 +102,7 @@ krkr::io::MemoryStream::krkr::io::MemoryStream(const void *block, tjs_uint size)
     if(!Block) {
         Block = Alloc(size);
         if(!Block)
-            TVPThrowExceptionMessage(TVPInsufficientMemory);
+            ThrowExceptionMessage(TVPInsufficientMemory);
     } else {
         Reference = true; // memory block was given
     }
@@ -164,7 +164,7 @@ tjs_uint krkr::io::MemoryStream::Read(void *buffer, tjs_uint read_size) {
 tjs_uint krkr::io::MemoryStream::Write(const void *buffer, tjs_uint write_size) {
     // writing may increase the internal buffer size.
     if(Reference)
-        TVPThrowExceptionMessage(TVPWriteError);
+        ThrowExceptionMessage(TVPWriteError);
 
     tjs_uint newpos = CurrentPos + write_size;
     if(newpos >= AllocSize) {
@@ -188,7 +188,7 @@ tjs_uint krkr::io::MemoryStream::Write(const void *buffer, tjs_uint write_size) 
         Block = Realloc(Block, AllocSize);
 
         if(AllocSize && !Block)
-            TVPThrowExceptionMessage(TVPInsufficientMemory);
+            ThrowExceptionMessage(TVPInsufficientMemory);
         // this exception cannot be repaird; a fatal error.
     }
 
@@ -205,13 +205,13 @@ tjs_uint krkr::io::MemoryStream::Write(const void *buffer, tjs_uint write_size) 
 //---------------------------------------------------------------------------
 void krkr::io::MemoryStream::SetEndOfStorage() {
     if(Reference)
-        TVPThrowExceptionMessage(TVPWriteError);
+        ThrowExceptionMessage(TVPWriteError);
 
     Size = CurrentPos;
     AllocSize = Size;
     Block = Realloc(Block, Size);
     if(Size && !Block)
-        TVPThrowExceptionMessage(TVPInsufficientMemory);
+        ThrowExceptionMessage(TVPInsufficientMemory);
 }
 
 //---------------------------------------------------------------------------
@@ -224,7 +224,7 @@ void krkr::io::MemoryStream::Clear() {
 //---------------------------------------------------------------------------
 void krkr::io::MemoryStream::SetSize(tjs_uint size) {
     if(Reference)
-        TVPThrowExceptionMessage(TVPWriteError);
+        ThrowExceptionMessage(TVPWriteError);
 
     if(Size > size) {
         // decrease
@@ -234,14 +234,14 @@ void krkr::io::MemoryStream::SetSize(tjs_uint size) {
         if(CurrentPos > Size)
             CurrentPos = Size;
         if(size && !Block)
-            TVPThrowExceptionMessage(TVPInsufficientMemory);
+            ThrowExceptionMessage(TVPInsufficientMemory);
     } else {
         // increase
         AllocSize = size;
         Size = size;
         Block = Realloc(Block, size);
         if(size && !Block)
-            TVPThrowExceptionMessage(TVPInsufficientMemory);
+            ThrowExceptionMessage(TVPInsufficientMemory);
     }
 }
 
@@ -259,7 +259,7 @@ void krkr::io::MemoryStream::Init() {
 void *krkr::io::MemoryStream::Alloc(size_t size) {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
     if(size >= kStreamMmapThreshold) {
-        void *p = TVPMmapAlloc(size);
+        void *p = MmapAlloc(size);
         if(p) {
             UseMmap = true;
             return p;
@@ -274,18 +274,18 @@ void *krkr::io::MemoryStream::Alloc(size_t size) {
 void *krkr::io::MemoryStream::Realloc(void *orgblock, size_t size) {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
     if(UseMmap) {
-        void *newblock = TVPMmapAlloc(size);
+        void *newblock = MmapAlloc(size);
         if(!newblock)
             return nullptr;
         if(orgblock) {
             size_t copySize = (AllocSize < size) ? AllocSize : size;
             memcpy(newblock, orgblock, copySize);
-            TVPMmapFree(orgblock);
+            MmapFree(orgblock);
         }
         return newblock;
     }
     if(size >= kStreamMmapThreshold && !orgblock) {
-        void *p = TVPMmapAlloc(size);
+        void *p = MmapAlloc(size);
         if(p) {
             UseMmap = true;
             return p;
@@ -299,7 +299,7 @@ void *krkr::io::MemoryStream::Realloc(void *orgblock, size_t size) {
 void krkr::io::MemoryStream::Free(void *block) {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
     if(UseMmap) {
-        TVPMmapFree(block);
+        MmapFree(block);
         UseMmap = false;
         return;
     }
@@ -309,9 +309,9 @@ void krkr::io::MemoryStream::Free(void *block) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// tTVPPartialStream
+// PartialStream
 //---------------------------------------------------------------------------
-tTVPPartialStream::tTVPPartialStream(tTJSBinaryStream *stream, tjs_uint64 start,
+PartialStream::PartialStream(tTJSBinaryStream *stream, tjs_uint64 start,
                                      tjs_uint64 size) {
     // the stream given as a argument here will be owned by this
     // instance, and freed at the destruction.
@@ -331,13 +331,13 @@ tTVPPartialStream::tTVPPartialStream(tTJSBinaryStream *stream, tjs_uint64 start,
 }
 
 //---------------------------------------------------------------------------
-tTVPPartialStream::~tTVPPartialStream() {
+PartialStream::~PartialStream() {
     if(Stream)
         delete Stream;
 }
 
 //---------------------------------------------------------------------------
-tjs_uint64 tTVPPartialStream::Seek(tjs_int64 offset, tjs_int whence) {
+tjs_uint64 PartialStream::Seek(tjs_int64 offset, tjs_int whence) {
     tjs_int64 newpos;
     switch(whence) {
         case TJS_BS_SEEK_SET:
@@ -368,7 +368,7 @@ tjs_uint64 tTVPPartialStream::Seek(tjs_int64 offset, tjs_int whence) {
 }
 
 //---------------------------------------------------------------------------
-tjs_uint tTVPPartialStream::Read(void *buffer, tjs_uint read_size) {
+tjs_uint PartialStream::Read(void *buffer, tjs_uint read_size) {
     if(CurrentPos + read_size >= Size) {
         read_size = static_cast<tjs_uint>(Size - CurrentPos);
     }
@@ -381,12 +381,12 @@ tjs_uint tTVPPartialStream::Read(void *buffer, tjs_uint read_size) {
 }
 
 //---------------------------------------------------------------------------
-tjs_uint tTVPPartialStream::Write(const void *buffer, tjs_uint write_size) {
+tjs_uint PartialStream::Write(const void *buffer, tjs_uint write_size) {
     return 0;
 }
 
 //---------------------------------------------------------------------------
-tjs_uint64 tTVPPartialStream::GetSize() { return Size; }
+tjs_uint64 PartialStream::GetSize() { return Size; }
 //---------------------------------------------------------------------------
 
 extern "C" {
@@ -394,7 +394,7 @@ extern "C" {
 #include <archive_entry.h>
 }
 #if 0
-class LibArchive_Archive : public tTVPArchive {
+class LibArchive_Archive : public Archive {
     struct archive *_arc;
     tTJSBinaryStream *_stream;
     static const int BUFFER_SIZE = 16 * 1024;
@@ -413,7 +413,7 @@ class LibArchive_Archive : public tTVPArchive {
     }
 
 public:
-    LibArchive_Archive(const ttstr & name, tTJSBinaryStream *st) : tTVPArchive(name), _stream(st) {
+    LibArchive_Archive(const ttstr & name, tTJSBinaryStream *st) : Archive(name), _stream(st) {
         _arc = archive_read_new();
     }
     ~LibArchive_Archive() {
@@ -477,7 +477,7 @@ public:
     }
 };
 
-tTVPArchive *TVPOpenLibArchive(const ttstr & name, tTJSBinaryStream *st, bool normalizeFileName) {
+Archive *OpenLibArchive(const ttstr & name, tTJSBinaryStream *st, bool normalizeFileName) {
     LibArchive_Archive *arc = new LibArchive_Archive(name, st);
     if (arc->Open(normalizeFileName)) {
         return arc;
@@ -499,11 +499,11 @@ static FILE *_fileopen(ttstr path) {
     return fp;
 }
 
-class tTVPUnpackArchiveThread {
+class UnpackArchiveThread {
     std::thread *ThreadObj;
     std::mutex Mutex;
     std::condition_variable Cond;
-    tTVPUnpackArchive *Owner;
+    UnpackArchive *Owner;
 
     void Entry() {
         {
@@ -514,11 +514,11 @@ class tTVPUnpackArchiveThread {
     }
 
 public:
-    tTVPUnpackArchiveThread(tTVPUnpackArchive *owner) : Owner(owner) {
-        ThreadObj = new std::thread(&tTVPUnpackArchiveThread::Entry, this);
+    UnpackArchiveThread(UnpackArchive *owner) : Owner(owner) {
+        ThreadObj = new std::thread(&UnpackArchiveThread::Entry, this);
     }
 
-    ~tTVPUnpackArchiveThread() {
+    ~UnpackArchiveThread() {
         if(ThreadObj->joinable()) {
             ThreadObj->join();
         }
@@ -528,9 +528,9 @@ public:
     void Start() { Cond.notify_all(); }
 };
 
-class tTVPUnpackArchiveImplLibArchive : public iTVPUnpackArchiveImpl {
+class UnpackArchiveImplLibArchive : public IUnpackArchiveImpl {
     struct archive *ArcObj = nullptr;
-    tTVPArchive *pTVPArc = nullptr;
+    Archive *pTVPArc = nullptr;
     tjs_int64 _totalSize = 0;
     int _totalFileCount = 0;
     FILE *FpIn = nullptr;
@@ -541,7 +541,7 @@ class tTVPUnpackArchiveImplLibArchive : public iTVPUnpackArchiveImpl {
     std::string onPassphraseCallback();
 
 public:
-    ~tTVPUnpackArchiveImplLibArchive() override {
+    ~UnpackArchiveImplLibArchive() override {
         if(pTVPArc)
             pTVPArc->Release();
         if(FpIn) {
@@ -745,15 +745,15 @@ public:
     }
 };
 
-std::string tTVPUnpackArchiveImplLibArchive::onPassphraseCallback() {
+std::string UnpackArchiveImplLibArchive::onPassphraseCallback() {
     return _callbacks->FuncPassword();
 }
 
 const char *
-tTVPUnpackArchiveImplLibArchive::_onPassphraseCallback(archive *,
+UnpackArchiveImplLibArchive::_onPassphraseCallback(archive *,
                                                        void *clientdata) {
     static std::string psw =
-        ((tTVPUnpackArchiveImplLibArchive *)clientdata)->onPassphraseCallback();
+        ((UnpackArchiveImplLibArchive *)clientdata)->onPassphraseCallback();
     return psw.c_str();
 }
 
@@ -762,7 +762,7 @@ tTVPUnpackArchiveImplLibArchive::_onPassphraseCallback(archive *,
 #include <raros.hpp>
 #include <dll.hpp>
 
-class tTVPUnpackArchiveImplUnRAR : public iTVPUnpackArchiveImpl {
+class UnpackArchiveImplUnRAR : public IUnpackArchiveImpl {
     std::string _archivePath;
     std::vector<std::string> _filelist;
     tjs_int64 _totalSize, _totalProcessedBytes, _curProcessedBytes;
@@ -828,7 +828,7 @@ class tTVPUnpackArchiveImplUnRAR : public iTVPUnpackArchiveImpl {
     }
 
 public:
-    ~tTVPUnpackArchiveImplUnRAR() override {}
+    ~UnpackArchiveImplUnRAR() override {}
 
     bool Open(const std::string &path) override {
         _archivePath = path;
@@ -839,7 +839,7 @@ public:
         RARSetCallback(
             arc._handle,
             [](UINT msg, LPARAM UserData, LPARAM P1, LPARAM P2) -> int {
-                return ((tTVPUnpackArchiveImplUnRAR *)UserData)
+                return ((UnpackArchiveImplUnRAR *)UserData)
                     ->OnCallback(msg, P1, P2);
             },
             (LPARAM)this);
@@ -882,7 +882,7 @@ public:
         RARSetCallback(
             arc._handle,
             [](UINT msg, LPARAM UserData, LPARAM P1, LPARAM P2) -> int {
-                return ((tTVPUnpackArchiveImplUnRAR *)UserData)
+                return ((UnpackArchiveImplUnRAR *)UserData)
                     ->OnCallback(msg, P1, P2);
             },
             (LPARAM)this);
@@ -920,7 +920,7 @@ public:
 
 #endif
 
-int tTVPUnpackArchive::Prepare(const std::string &path,
+int UnpackArchive::Prepare(const std::string &path,
                                const std::string &_outpath,
                                tjs_uint64 *totalSize) {
     FILE *FpIn = fopen(path.c_str(), "rb");
@@ -935,11 +935,11 @@ int tTVPUnpackArchive::Prepare(const std::string &path,
     fclose(FpIn);
 #ifdef _UNRAR_DLL_
     if(!memcmp(signature, "Rar!", 4)) {
-        _impl = new tTVPUnpackArchiveImplUnRAR();
+        _impl = new UnpackArchiveImplUnRAR();
     } else
 #endif
     {
-        _impl = new tTVPUnpackArchiveImplLibArchive();
+        _impl = new UnpackArchiveImplLibArchive();
     }
     _impl->SetCallback(this);
     if(!_impl->Open(path)) {
@@ -950,36 +950,36 @@ int tTVPUnpackArchive::Prepare(const std::string &path,
         *totalSize = _impl->GetTotalSize();
     int file_count = _impl->GetFileCount();
     if(file_count) {
-        ArcThread = new tTVPUnpackArchiveThread(this);
+        ArcThread = new UnpackArchiveThread(this);
     }
     return file_count;
 }
 
-void tTVPUnpackArchive::Start() {
+void UnpackArchive::Start() {
     _impl->StopRequired = false;
     ArcThread->Start();
 }
 
-void tTVPUnpackArchive::Stop() {
+void UnpackArchive::Stop() {
     _impl->StopRequired = true;
     ArcThread->Start();
 }
 
-void tTVPUnpackArchive::Close() {
+void UnpackArchive::Close() {
     if(_impl)
         delete _impl;
     _impl = nullptr;
 }
 
-void tTVPUnpackArchive::Process() {
+void UnpackArchive::Process() {
     if(_impl->StopRequired)
         return;
     _impl->ExtractTo(OutPath);
 }
 
-tTVPUnpackArchive::tTVPUnpackArchive() {}
+UnpackArchive::UnpackArchive() {}
 
-tTVPUnpackArchive::~tTVPUnpackArchive() {
+UnpackArchive::~UnpackArchive() {
     if(ArcThread)
         delete ArcThread;
 }

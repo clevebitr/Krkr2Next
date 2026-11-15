@@ -35,7 +35,7 @@ extern void BeforeSystemUninit();
 extern void AfterSystemUninit();
 
 extern void
-TVPTerminateAsync(int code = 0); // do acynchronous teminating of application
+TerminateAsync(int code = 0); // do acynchronous teminating of application
 extern void TerminateSync(
     int code = 0); // do synchronous teminating of application(never return)
 extern void MainWindowClosed(); // called from WindowIntf.cpp,
@@ -57,8 +57,8 @@ extern void ResetRuntimeForRestart();
 //---------------------------------------------------------------------------
 void AddAtExitHandler(tjs_int pri, void (*handler)());
 
-struct tTVPAtExit {
-    tTVPAtExit(tjs_int pri, void (*handler)()) {
+struct AtExit {
+    AtExit(tjs_int pri, void (*handler)()) {
         AddAtExitHandler(pri, handler);
     }
 };
@@ -83,7 +83,7 @@ TJS_EXP_FUNC_DEF(tjs_int, GetCommandLineArgumentGeneration, ());
 // whether the command line options has changed, by comparing this
 // value to your value which is remembered when of previous call of
 // this.
-TJS_EXP_FUNC_DEF(void, TVPSetCommandLine,
+TJS_EXP_FUNC_DEF(void, SetCommandLine,
                  (const tjs_char *name, const ttstr &value));
 // sets command line to the specified value.
 // note that this function does not check any consistency or
@@ -92,9 +92,9 @@ TJS_EXP_FUNC_DEF(void, TVPSetCommandLine,
 } // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::base::TVPTerminateAsync;
+using krkr::base::TerminateAsync;
 using krkr::base::AddAtExitHandler;
-using krkr::base::TVPSetCommandLine;
+using krkr::base::SetCommandLine;
 
 //---------------------------------------------------------------------------
 

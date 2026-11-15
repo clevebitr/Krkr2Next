@@ -26,14 +26,14 @@
 // Window List Management
 //---------------------------------------------------------------------------
 extern void TVPClearAllWindowInputEvents();
-// extern bool TVPIsWaitVSync();
+// extern bool IsWaitVSync();
 //---------------------------------------------------------------------------
 
 /*[*/
 //---------------------------------------------------------------------------
 // Window related constants
 //---------------------------------------------------------------------------
-enum tTVPUpdateType {
+enum UpdateType {
     utNormal, // only needed region
     utEntire // entire of window
 };
@@ -47,7 +47,7 @@ enum BorderStyle {
     bsSizeToolWin = 5
 };
 //---------------------------------------------------------------------------
-enum tTVPMouseCursorState {
+enum MouseCursorState {
     mcsVisible, // the mouse cursor is visible
     mcsTempHidden, // the mouse cursor is temporarily hidden
     mcsHidden // the mouse cursor is invisible
@@ -123,7 +123,7 @@ public:
 
     //! @brief		IMEモードの設定
     //! @param		mode		IMEモード
-    virtual void SetImeMode(tTVPImeMode mode) = 0;
+    virtual void SetImeMode(ImeMode mode) = 0;
 
     //! @brief		IMEモードのリセット
     virtual void ResetImeMode() = 0;
@@ -209,9 +209,9 @@ public:
     void OnResize();
     void OnClick(tjs_int x, tjs_int y);
     void OnDoubleClick(tjs_int x, tjs_int y);
-    void OnMouseDown(tjs_int x, tjs_int y, tTVPMouseButton mb,
+    void OnMouseDown(tjs_int x, tjs_int y, MouseButton mb,
                      tjs_uint32 flags);
-    void OnMouseUp(tjs_int x, tjs_int y, tTVPMouseButton mb, tjs_uint32 flags);
+    void OnMouseUp(tjs_int x, tjs_int y, MouseButton mb, tjs_uint32 flags);
     void OnMouseMove(tjs_int x, tjs_int y, tjs_uint32 flags);
     void OnReleaseCapture();
     void OnMouseOutOfWindow();
@@ -270,7 +270,7 @@ public:
     virtual void EndUpdate();
     void RequestUpdate() override;
     void NotifySrcResize() override; // is called from primary layer
-    [[nodiscard]] virtual tTVPImeMode GetDefaultImeMode() const = 0;
+    [[nodiscard]] virtual ImeMode GetDefaultImeMode() const = 0;
 
     void DumpPrimaryLayerStructure();
 
@@ -311,7 +311,7 @@ public:
 //---------------------------------------------------------------------------
 class tTJSNI_Window;
 extern tTJSNI_Window *TVPGetWindowListAt(tjs_int idx);
-extern tjs_int TVPGetWindowCount();
+extern tjs_int GetWindowCount();
 // 该窗口是否属于**当前**会话（在窗口表里）。引擎重启只清空窗口表，窗口对象
 // 本身可能还活着并继续被投递重绘 —— 见 WindowIntf.cpp 中 UpdateContent 的闸门
 // 说明。只比较指针、不解引用，传入悬垂指针同样安全。
@@ -344,7 +344,7 @@ protected:
     */
 };
 //---------------------------------------------------------------------------
-extern tTJSNativeClass *TVPCreateNativeClass_Window();
+extern tTJSNativeClass *CreateNativeClass_Window();
 /*
         implement this in each platform.
         this must return a proper instance of tTJSNI_Window.
@@ -355,90 +355,90 @@ extern tTJSNativeClass *TVPCreateNativeClass_Window();
 //---------------------------------------------------------------------------
 // Input Events
 //---------------------------------------------------------------------------
-class tTVPOnCloseInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnCloseInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
 
 public:
     tTVPOnCloseInputEvent(tTJSNI_BaseWindow *win) :
-        tTVPBaseInputEvent(win, Tag) {};
+        BaseInputEvent(win, Tag) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnClose();
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnResizeInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnResizeInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
 
 public:
     tTVPOnResizeInputEvent(tTJSNI_BaseWindow *win) :
-        tTVPBaseInputEvent(win, Tag) {};
+        BaseInputEvent(win, Tag) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnResize();
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnClickInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnClickInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tjs_int X;
     tjs_int Y;
 
 public:
     tTVPOnClickInputEvent(tTJSNI_BaseWindow *win, tjs_int x, tjs_int y) :
-        tTVPBaseInputEvent(win, Tag), X(x), Y(y) {};
+        BaseInputEvent(win, Tag), X(x), Y(y) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnClick(X, Y);
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnDoubleClickInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnDoubleClickInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tjs_int X;
     tjs_int Y;
 
 public:
     tTVPOnDoubleClickInputEvent(tTJSNI_BaseWindow *win, tjs_int x, tjs_int y) :
-        tTVPBaseInputEvent(win, Tag), X(x), Y(y) {};
+        BaseInputEvent(win, Tag), X(x), Y(y) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnDoubleClick(X, Y);
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnMouseDownInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnMouseDownInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tjs_int X;
     tjs_int Y;
-    tTVPMouseButton Buttons;
+    MouseButton Buttons;
     tjs_uint32 Flags;
 
 public:
     tTVPOnMouseDownInputEvent(tTJSNI_BaseWindow *win, tjs_int x, tjs_int y,
-                              tTVPMouseButton buttons, tjs_uint32 flags) :
-        tTVPBaseInputEvent(win, Tag), X(x), Y(y), Buttons(buttons),
+                              MouseButton buttons, tjs_uint32 flags) :
+        BaseInputEvent(win, Tag), X(x), Y(y), Buttons(buttons),
         Flags(flags) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnMouseDown(X, Y, Buttons, Flags);
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnMouseUpInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnMouseUpInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tjs_int X;
     tjs_int Y;
-    tTVPMouseButton Buttons;
+    MouseButton Buttons;
     tjs_uint32 Flags;
 
 public:
     tTVPOnMouseUpInputEvent(tTJSNI_BaseWindow *win, tjs_int x, tjs_int y,
-                            tTVPMouseButton buttons, tjs_uint32 flags) :
-        tTVPBaseInputEvent(win, Tag), X(x), Y(y), Buttons(buttons),
+                            MouseButton buttons, tjs_uint32 flags) :
+        BaseInputEvent(win, Tag), X(x), Y(y), Buttons(buttons),
         Flags(flags) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnMouseUp(X, Y, Buttons, Flags);
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnMouseMoveInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnMouseMoveInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tjs_int X;
     tjs_int Y;
     tjs_uint32 Flags;
@@ -446,110 +446,110 @@ class tTVPOnMouseMoveInputEvent : public tTVPBaseInputEvent {
 public:
     tTVPOnMouseMoveInputEvent(tTJSNI_BaseWindow *win, tjs_int x, tjs_int y,
                               tjs_uint32 flags) :
-        tTVPBaseInputEvent(win, Tag), X(x), Y(y), Flags(flags) {};
+        BaseInputEvent(win, Tag), X(x), Y(y), Flags(flags) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnMouseMove(X, Y, Flags);
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnReleaseCaptureInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnReleaseCaptureInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
 
 public:
     tTVPOnReleaseCaptureInputEvent(tTJSNI_BaseWindow *win) :
-        tTVPBaseInputEvent(win, Tag) {};
+        BaseInputEvent(win, Tag) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnReleaseCapture();
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnMouseOutOfWindowInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnMouseOutOfWindowInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
 
 public:
     tTVPOnMouseOutOfWindowInputEvent(tTJSNI_BaseWindow *win) :
-        tTVPBaseInputEvent(win, Tag) {};
+        BaseInputEvent(win, Tag) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnMouseOutOfWindow();
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnMouseEnterInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnMouseEnterInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
 
 public:
     tTVPOnMouseEnterInputEvent(tTJSNI_BaseWindow *win) :
-        tTVPBaseInputEvent(win, Tag) {};
+        BaseInputEvent(win, Tag) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnMouseEnter();
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnMouseLeaveInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnMouseLeaveInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
 
 public:
     tTVPOnMouseLeaveInputEvent(tTJSNI_BaseWindow *win) :
-        tTVPBaseInputEvent(win, Tag) {};
+        BaseInputEvent(win, Tag) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnMouseLeave();
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnKeyDownInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnKeyDownInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tjs_uint Key;
     tjs_uint32 Shift;
 
 public:
     tTVPOnKeyDownInputEvent(tTJSNI_BaseWindow *win, tjs_uint key,
                             tjs_uint32 shift) :
-        tTVPBaseInputEvent(win, Tag), Key(key), Shift(shift) {};
+        BaseInputEvent(win, Tag), Key(key), Shift(shift) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnKeyDown(Key, Shift);
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnKeyUpInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnKeyUpInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tjs_uint Key;
     tjs_uint32 Shift;
 
 public:
     tTVPOnKeyUpInputEvent(tTJSNI_BaseWindow *win, tjs_uint key,
                           tjs_uint32 shift) :
-        tTVPBaseInputEvent(win, Tag), Key(key), Shift(shift) {};
+        BaseInputEvent(win, Tag), Key(key), Shift(shift) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnKeyUp(Key, Shift);
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnKeyPressInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnKeyPressInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tjs_char Key;
 
 public:
     tTVPOnKeyPressInputEvent(tTJSNI_BaseWindow *win, tjs_char key) :
-        tTVPBaseInputEvent(win, Tag), Key(key) {};
+        BaseInputEvent(win, Tag), Key(key) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnKeyPress(Key);
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnFileDropInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnFileDropInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tTJSVariant Array;
 
 public:
     tTVPOnFileDropInputEvent(tTJSNI_BaseWindow *win, const tTJSVariant &val) :
-        tTVPBaseInputEvent(win, Tag), Array(val) {};
+        BaseInputEvent(win, Tag), Array(val) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnFileDrop(Array);
     }
 };
 //---------------------------------------------------------------------------
-class OnMouseWheelInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class OnMouseWheelInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tjs_uint32 Shift;
     tjs_int WheelDelta;
     tjs_int X;
@@ -558,7 +558,7 @@ class OnMouseWheelInputEvent : public tTVPBaseInputEvent {
 public:
     OnMouseWheelInputEvent(tTJSNI_BaseWindow *win, tjs_uint32 shift,
                                tjs_int wheeldelta, tjs_int x, tjs_int y) :
-        tTVPBaseInputEvent(win, Tag), Shift(shift), WheelDelta(wheeldelta),
+        BaseInputEvent(win, Tag), Shift(shift), WheelDelta(wheeldelta),
         X(x), Y(y) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())
@@ -566,25 +566,25 @@ public:
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnPopupHideInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnPopupHideInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
 
 public:
     tTVPOnPopupHideInputEvent(tTJSNI_BaseWindow *win) :
-        tTVPBaseInputEvent(win, Tag) {};
+        BaseInputEvent(win, Tag) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnPopupHide();
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnWindowActivateEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnWindowActivateEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     bool ActivateOrDeactivate;
 
 public:
     tTVPOnWindowActivateEvent(tTJSNI_BaseWindow *win,
                               bool activate_or_deactivate) :
-        tTVPBaseInputEvent(win, Tag),
+        BaseInputEvent(win, Tag),
         ActivateOrDeactivate(activate_or_deactivate) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnActivate(ActivateOrDeactivate);
@@ -593,8 +593,8 @@ public:
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-class tTVPOnTouchDownInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnTouchDownInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tjs_real X;
     tjs_real Y;
     tjs_real CX;
@@ -604,14 +604,14 @@ class tTVPOnTouchDownInputEvent : public tTVPBaseInputEvent {
 public:
     tTVPOnTouchDownInputEvent(tTJSNI_BaseWindow *win, tjs_real x, tjs_real y,
                               tjs_real cx, tjs_real cy, tjs_uint32 id) :
-        tTVPBaseInputEvent(win, Tag), X(x), Y(y), CX(cx), CY(cy), ID(id) {};
+        BaseInputEvent(win, Tag), X(x), Y(y), CX(cx), CY(cy), ID(id) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnTouchDown(X, Y, CX, CY, ID);
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnTouchUpInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnTouchUpInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tjs_real X;
     tjs_real Y;
     tjs_real CX;
@@ -621,14 +621,14 @@ class tTVPOnTouchUpInputEvent : public tTVPBaseInputEvent {
 public:
     tTVPOnTouchUpInputEvent(tTJSNI_BaseWindow *win, tjs_real x, tjs_real y,
                             tjs_real cx, tjs_real cy, tjs_uint32 id) :
-        tTVPBaseInputEvent(win, Tag), X(x), Y(y), CX(cx), CY(cy), ID(id) {};
+        BaseInputEvent(win, Tag), X(x), Y(y), CX(cx), CY(cy), ID(id) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnTouchUp(X, Y, CX, CY, ID);
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnTouchMoveInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnTouchMoveInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tjs_real X;
     tjs_real Y;
     tjs_real CX;
@@ -638,14 +638,14 @@ class tTVPOnTouchMoveInputEvent : public tTVPBaseInputEvent {
 public:
     tTVPOnTouchMoveInputEvent(tTJSNI_BaseWindow *win, tjs_real x, tjs_real y,
                               tjs_real cx, tjs_real cy, tjs_uint32 id) :
-        tTVPBaseInputEvent(win, Tag), X(x), Y(y), CX(cx), CY(cy), ID(id) {};
+        BaseInputEvent(win, Tag), X(x), Y(y), CX(cx), CY(cy), ID(id) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnTouchMove(X, Y, CX, CY, ID);
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnTouchScalingInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnTouchScalingInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tjs_real StartDistance;
     tjs_real CurrentDistance;
     tjs_real CX;
@@ -656,7 +656,7 @@ public:
     tTVPOnTouchScalingInputEvent(tTJSNI_BaseWindow *win, tjs_real startdist,
                                  tjs_real curdist, tjs_real cx, tjs_real cy,
                                  tjs_int flag) :
-        tTVPBaseInputEvent(win, Tag), StartDistance(startdist),
+        BaseInputEvent(win, Tag), StartDistance(startdist),
         CurrentDistance(curdist), CX(cx), CY(cy), Flag(flag) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())
@@ -664,8 +664,8 @@ public:
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnTouchRotateInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnTouchRotateInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tjs_real StartAngle;
     tjs_real CurrentAngle;
     tjs_real Distance;
@@ -677,7 +677,7 @@ public:
     tTVPOnTouchRotateInputEvent(tTJSNI_BaseWindow *win, tjs_real startangle,
                                 tjs_real curangle, tjs_real dist, tjs_real cx,
                                 tjs_real cy, tjs_int flag) :
-        tTVPBaseInputEvent(win, Tag), StartAngle(startangle),
+        BaseInputEvent(win, Tag), StartAngle(startangle),
         CurrentAngle(curangle), Distance(dist), CX(cx), CY(cy), Flag(flag) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())
@@ -685,19 +685,19 @@ public:
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnMultiTouchInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnMultiTouchInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
 
 public:
     tTVPOnMultiTouchInputEvent(tTJSNI_BaseWindow *win) :
-        tTVPBaseInputEvent(win, Tag) {};
+        BaseInputEvent(win, Tag) {};
     void Deliver() const override {
         ((tTJSNI_BaseWindow *)GetSource())->OnMultiTouch();
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnHintChangeInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnHintChangeInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     ttstr HintMessage;
     tjs_int HintX;
     tjs_int HintY;
@@ -706,7 +706,7 @@ class tTVPOnHintChangeInputEvent : public tTVPBaseInputEvent {
 public:
     tTVPOnHintChangeInputEvent(tTJSNI_BaseWindow *win, const ttstr &text,
                                tjs_int x, tjs_int y, bool isshow) :
-        tTVPBaseInputEvent(win, Tag), HintMessage(text), HintX(x), HintY(y),
+        BaseInputEvent(win, Tag), HintMessage(text), HintX(x), HintY(y),
         IsShow(isshow) {};
 
     void Deliver() const override {
@@ -715,8 +715,8 @@ public:
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnDisplayRotateInputEvent : public tTVPBaseInputEvent {
-    static tTVPUniqueTagForInputEvent Tag;
+class tTVPOnDisplayRotateInputEvent : public BaseInputEvent {
+    static UniqueTagForInputEvent Tag;
     tjs_int Orientation;
     tjs_int Rotate;
     tjs_int BPP;
@@ -727,7 +727,7 @@ public:
     tTVPOnDisplayRotateInputEvent(tTJSNI_BaseWindow *win, tjs_int orientation,
                                   tjs_int rotate, tjs_int bpp,
                                   tjs_int hresolution, tjs_int vresolution) :
-        tTVPBaseInputEvent(win, Tag), Orientation(orientation), Rotate(rotate),
+        BaseInputEvent(win, Tag), Orientation(orientation), Rotate(rotate),
         BPP(bpp), HorizontalResolution(hresolution),
         VerticalResolution(vresolution) {};
     void Deliver() const override {

@@ -16,12 +16,12 @@
 //---------------------------------------------------------------------------
 // mouse button
 //---------------------------------------------------------------------------
-enum tTVPMouseButton { mbLeft, mbRight, mbMiddle, mbX1, mbX2 };
+enum MouseButton { mbLeft, mbRight, mbMiddle, mbX1, mbX2 };
 
 //---------------------------------------------------------------------------
 // IME modes : comes from VCL's TImeMode
 //---------------------------------------------------------------------------
-enum tTVPImeMode {
+enum ImeMode {
     imDisable,
     imClose,
     imOpen,

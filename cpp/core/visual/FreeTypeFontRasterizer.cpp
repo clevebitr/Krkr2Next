@@ -41,7 +41,7 @@ namespace {
     bool g_font_fallback_mode_init = false;
 
     /**
-     * 首次使用时把设置读进来。`IndividualConfigManager` 由 TVPSetCommandLine
+     * 首次使用时把设置读进来。`IndividualConfigManager` 由 krkr::base::SetCommandLine
      * 写值，
      * 而选项是在引擎起来之前下发的、字体初始化在之后，所以这里读到的一定是最新值。
      * 读一次就冻结：ApplyFont 在渲染线程上跑，不该每帧去碰配置管理器。

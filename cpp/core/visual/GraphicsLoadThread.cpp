@@ -153,7 +153,7 @@ void AsyncImageLoader::HandleLoadedImage() {
                 if(cmd->owner_ &&
                    cmd->owner_->IsValid(0, nullptr, nullptr, cmd->owner_) ==
                        TJS_S_TRUE) {
-                    TVPPostEvent(cmd->owner_, cmd->owner_, eventname, 0,
+                    krkr::base::PostTJSEvent(cmd->owner_, cmd->owner_, eventname, 0,
                                  TVP_EPT_IMMEDIATE, 4, param);
                 }
 
@@ -190,7 +190,7 @@ void AsyncImageLoader::HandleLoadedImage() {
                 if(cmd->owner_ &&
                    cmd->owner_->IsValid(0, nullptr, nullptr, cmd->owner_) ==
                        TJS_S_TRUE) {
-                    TVPPostEvent(cmd->owner_, cmd->owner_, eventname, 0,
+                    krkr::base::PostTJSEvent(cmd->owner_, cmd->owner_, eventname, 0,
                                  TVP_EPT_IMMEDIATE, 4, param);
                 }
             }
@@ -225,15 +225,15 @@ void AsyncImageLoader::LoadRequest(iTJSDispatch2 *owner, tTJSNI_Bitmap *bmp,
         param[2] = 0; // false
         param[3] = TJS_W(""); // error_mes
         static ttstr eventname(TJS_W("onLoaded"));
-        TVPPostEvent(owner, owner, eventname, 0, TVP_EPT_IMMEDIATE, 4, param);
+        krkr::base::PostTJSEvent(owner, owner, eventname, 0, TVP_EPT_IMMEDIATE, 4, param);
         return;
     }
     if(krkr::io::IsExistentStorage(name) == false) {
-        TVPThrowExceptionMessage(TVPCannotFindStorage, name);
+        ThrowExceptionMessage(TVPCannotFindStorage, name);
     }
     ttstr ext = krkr::io::ExtractStorageExt(name);
     if(ext == TJS_W("")) {
-        TVPThrowExceptionMessage(TJS_W("Filename extension not found/%1"),
+        ThrowExceptionMessage(TJS_W("Filename extension not found/%1"),
                                  name);
     }
 
@@ -308,7 +308,7 @@ void AsyncImageLoader::LoadImageFromCommand(tTVPImageLoadCommand *cmd) {
     }
     if(handler) {
         try {
-            tTVPStreamHolder holder(name);
+            StreamHolder holder(name);
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
             TVPDecodeArena::Instance().Begin();
 #endif
@@ -324,10 +324,10 @@ void AsyncImageLoader::LoadImageFromCommand(tTVPImageLoadCommand *cmd) {
 #if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
             TVPDecodeArena::Instance().End();
 #endif
-            cmd->result_ = TVPFormatMessage(TVPImageLoadError, cmd->path_);
+            cmd->result_ = krkr::base::FormatMessage(TVPImageLoadError, cmd->path_);
         }
     } else {
         // error
-        cmd->result_ = TVPFormatMessage(TVPUnknownGraphicFormat, cmd->path_);
+        cmd->result_ = krkr::base::FormatMessage(TVPUnknownGraphicFormat, cmd->path_);
     }
 }
