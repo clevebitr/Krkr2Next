@@ -35,8 +35,8 @@ void TVPInvokeEvents() {
     if(TVPEventInvoked)
         return;
     TVPEventInvoked = true;
-    if(TVPSystemControl) {
-        TVPSystemControl->InvokeEvents();
+    if(krkr::environ::GetSystemControl) {
+        krkr::environ::GetSystemControl->InvokeEvents();
     }
 }
 //---------------------------------------------------------------------------
@@ -46,8 +46,8 @@ void TVPInvokeEvents() {
 //---------------------------------------------------------------------------
 void TVPEventReceived() {
     TVPEventInvoked = false;
-    if(TVPSystemControl)
-        TVPSystemControl->NotifyEventDelivered();
+    if(krkr::environ::GetSystemControl)
+        krkr::environ::GetSystemControl->NotifyEventDelivered();
 }
 //---------------------------------------------------------------------------
 
@@ -55,8 +55,8 @@ void TVPEventReceived() {
 // TVPCallDeliverAllEventsOnIdle
 //---------------------------------------------------------------------------
 void TVPCallDeliverAllEventsOnIdle() {
-    if(TVPSystemControl) {
-        TVPSystemControl->CallDeliverAllEventsOnIdle();
+    if(krkr::environ::GetSystemControl) {
+        krkr::environ::GetSystemControl->CallDeliverAllEventsOnIdle();
     }
 }
 //---------------------------------------------------------------------------
@@ -92,14 +92,14 @@ bool TVPGetBreathing() {
 // TVPSystemEventDisabledState
 //---------------------------------------------------------------------------
 void TVPSetSystemEventDisabledState(bool en) {
-    TVPSystemControl->SetEventEnabled(!en);
+    krkr::environ::GetSystemControl->SetEventEnabled(!en);
     if(!en)
         TVPDeliverAllEvents();
 }
 
 //---------------------------------------------------------------------------
 bool TVPGetSystemEventDisabledState() {
-    return !TVPSystemControl->GetEventEnabled();
+    return !krkr::environ::GetSystemControl->GetEventEnabled();
 }
 //---------------------------------------------------------------------------
 
@@ -215,11 +215,11 @@ static tjs_int TVPContinousHandlerLimitFrequency = 0;
 void TVPBeginContinuousEvent() {
     // read commandline options
     static tjs_int ArgumentGeneration = 0;
-    if(ArgumentGeneration != TVPGetCommandLineArgumentGeneration()) {
-        ArgumentGeneration = TVPGetCommandLineArgumentGeneration();
+    if(ArgumentGeneration != krkr::base::GetCommandLineArgumentGeneration()) {
+        ArgumentGeneration = krkr::base::GetCommandLineArgumentGeneration();
 
         tTJSVariant val;
-        if(TVPGetCommandLine(TJS_W("-contfreq"), &val)) {
+        if(krkr::base::GetCommandLine(TJS_W("-contfreq"), &val)) {
             TVPContinousHandlerLimitFrequency = (tjs_int)val;
         }
     }
@@ -229,8 +229,8 @@ void TVPBeginContinuousEvent() {
             // no limit
             // this notifies continuous calling of
             // TVPDeliverAllEvents.
-            if(TVPSystemControl)
-                TVPSystemControl->BeginContinuousEvent();
+            if(krkr::environ::GetSystemControl)
+                krkr::environ::GetSystemControl->BeginContinuousEvent();
         } else {
             // has limit
             if(!TVPContinuousHandlerCallLimitThread)
@@ -255,8 +255,8 @@ void TVPEndContinuousEvent() {
         TVPContinuousHandlerCallLimitThread->SetEnabled(false);
 
     // anyway
-    if(TVPSystemControl)
-        TVPSystemControl->EndContinuousEvent();
+    if(krkr::environ::GetSystemControl)
+        krkr::environ::GetSystemControl->EndContinuousEvent();
 }
 //---------------------------------------------------------------------------
 
@@ -269,7 +269,7 @@ static void TVPReleaseContinuousHandlerCallLimitThread() {
 
 // to release TVPContinuousHandlerCallLimitThread at exit
 static tTVPAtExit
-    TVPTimerThreadUninitAtExit(TVP_ATEXIT_PRI_SHUTDOWN,
+    TVPTimerThreadUninitAtExit(KRKR_ATEXIT_PRI_SHUTDOWN,
                                TVPReleaseContinuousHandlerCallLimitThread);
 //---------------------------------------------------------------------------
 

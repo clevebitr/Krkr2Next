@@ -30,8 +30,8 @@
 #include "EventIntf.h"
 
 // Forward declarations for functions used by the engine core
-extern bool TVPCheckStartupPath(const std::string &path);
-extern void TVPForceSwapBuffer();
+extern bool CheckStartupPath(const std::string &path);
+extern void ForceSwapBuffer();
 
 namespace krkr::environ {
 
@@ -40,9 +40,9 @@ namespace krkr::environ {
 // ---------------------------------------------------------------------------
 
 static void (*s_postUpdate)() = nullptr;
-void TVPSetPostUpdateEvent(void (*f)()) { s_postUpdate = f; }
+void SetPostUpdateEvent(void (*f)()) { s_postUpdate = f; }
 
-// TVPDrawSceneOnce 的进程级节拍（含有效性标志），runtime-restart 时复位。
+// DrawSceneOnce 的进程级节拍（含有效性标志），runtime-restart 时复位。
 static tjs_uint64 s_drawSceneLastTick = 0;
 static bool s_drawSceneLastTickValid = false;
 
@@ -50,7 +50,7 @@ static bool s_drawSceneLastTickValid = false;
 // Bit 0 = currently pressed, Bit 4 = was pressed since last query
 static tjs_uint8 s_scancode[0x200] = {};
 
-bool TVPGetKeyMouseAsyncState(tjs_uint keycode, bool getcurrent) {
+bool GetKeyMouseAsyncState(tjs_uint keycode, bool getcurrent) {
     if(keycode >= sizeof(s_scancode) / sizeof(s_scancode[0]))
         return false;
     tjs_uint8 code = s_scancode[keycode];
@@ -58,7 +58,7 @@ bool TVPGetKeyMouseAsyncState(tjs_uint keycode, bool getcurrent) {
     return code & (getcurrent ? 1 : 0x10);
 }
 
-bool TVPGetJoyPadAsyncState(tjs_uint keycode, bool getcurrent) {
+bool GetJoyPadAsyncState(tjs_uint keycode, bool getcurrent) {
     if(keycode >= sizeof(s_scancode) / sizeof(s_scancode[0]))
         return false;
     tjs_uint8 code = s_scancode[keycode];
@@ -66,10 +66,10 @@ bool TVPGetJoyPadAsyncState(tjs_uint keycode, bool getcurrent) {
     return code & (getcurrent ? 1 : 0x10);
 }
 
-int TVPDrawSceneOnce(int interval) {
+int DrawSceneOnce(int interval) {
     tjs_uint64 curTick = krkr::utils::GetRoughTickCount32();
     // 进程级静态节拍，首帧惰性取基准。runtime-restart 时由
-    // TVPResetDrawSceneOnceTimingForRestart() 置回未初始化，避免二次打开沿用
+    // ResetDrawSceneOnceTimingForRestart() 置回未初始化，避免二次打开沿用
     // 上一游戏的 lastTick 算出巨大 remain 而反复跳过合成（黑屏）。
     tjs_uint64 &lastTick = s_drawSceneLastTick;
     if(!s_drawSceneLastTickValid) {
@@ -80,7 +80,7 @@ int TVPDrawSceneOnce(int interval) {
     if(remain <= 0) {
         if(s_postUpdate)
             s_postUpdate();
-        TVPForceSwapBuffer();
+        ForceSwapBuffer();
         lastTick = curTick;
         return 0;
     } else {
@@ -88,8 +88,8 @@ int TVPDrawSceneOnce(int interval) {
     }
 }
 
-void TVPResetDrawSceneOnceTimingForRestart() {
-    // 下次 TVPDrawSceneOnce 重取节拍基准（engine_destroy 复位链调用）。
+void ResetDrawSceneOnceTimingForRestart() {
+    // 下次 DrawSceneOnce 重取节拍基准（engine_destroy 复位链调用）。
     s_drawSceneLastTickValid = false;
 }
 
@@ -137,7 +137,7 @@ void EngineLoop::Tick(float delta) {
 }
 
 bool EngineLoop::StartupFrom(const std::string &path) {
-    if(!TVPCheckStartupPath(path)) {
+    if(!CheckStartupPath(path)) {
         return false;
     }
 
@@ -380,7 +380,7 @@ void EngineLoop::HandlePointerScroll(const EngineInputEvent &event) {
 
     if(delta != 0) {
         TVPPostInputEvent(
-            new tTVPOnMouseWheelInputEvent(win, shift, delta, x, y));
+            new OnMouseWheelInputEvent(win, shift, delta, x, y));
     }
 }
 

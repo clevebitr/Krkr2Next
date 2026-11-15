@@ -822,7 +822,7 @@ void TVPResampleImage(const tTVPRect &cliprect, iTVPBaseBitmap *dest,
 
     try {
 #if 0
-		tjs_uint32 CpuFeature = TVPGetCPUType();
+		tjs_uint32 CpuFeature = krkr::base::GetCPUType();
 		if( (CpuFeature & TVP_CPU_HAS_AVX2) ) {
 			TVPResampleImageAVX2( clip, func, dest, destrect, src, srcrect, type, typeopt );
 		} else if( (CpuFeature & TVP_CPU_HAS_SSE2) ) {

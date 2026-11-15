@@ -45,7 +45,7 @@ typedef enum engine_result_t {
      * engine_tick returns this instead of ENGINE_RESULT_INVALID_STATE so the host can
      * tell "the game ended" apart from a real error, and leave the game screen
      * instead of counting a failed tick every frame. Host mode never terminates the
-     * process for this (see TVPHostSuppressProcessExit), so without host action the
+     * process for this (see hostSuppressProcessExit), so without host action the
      * engine only reports this code forever and the picture freezes.
      *
      * 游戏自己要求退出（TJS `System.exit()` / `Application.terminate`）。engine_tick
@@ -71,12 +71,12 @@ typedef enum engine_result_t {
     ENGINE_RESULT_STARTUP_PENDING = -7,
     /*
      * The game closed its own window, which terminates the runtime
-     * (`TVPTerminateOnWindowClose`). Distinct from ENGINE_RESULT_GAME_TERMINATED
+     * (`terminateOnWindowClose`). Distinct from ENGINE_RESULT_GAME_TERMINATED
      * because the window is already gone: the host must NOT offer "keep playing"
      * (cancelling would only resume ticking an empty scene — measured on device as
      * a frozen game), it should just leave the game screen.
      *
-     * 游戏关掉了自己的窗口（TVPTerminateOnWindowClose）。与 GAME_TERMINATED 分开是
+     * 游戏关掉了自己的窗口（terminateOnWindowClose）。与 GAME_TERMINATED 分开是
      * 因为窗口已经没了：宿主**不能**提供"继续游戏"（撤销后只是在空场景上继续跑，
      * 真机实测就是卡死），应当直接离开游戏界面。
      */

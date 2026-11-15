@@ -136,15 +136,15 @@
 #define ENGINE_OPTION_RENDERER "renderer"
 
 /** Memory profile ("balanced" / "aggressive").
- *  Consumed by the C++ memory governor via TVPGetCommandLine(). */
+ *  Consumed by the C++ memory governor via krkr::base::GetCommandLine(). */
 #define ENGINE_OPTION_MEMORY_PROFILE "memory_profile"
 
 /** Runtime memory budget in MB (0 = auto).
- *  Consumed by the C++ memory governor via TVPGetCommandLine(). */
+ *  Consumed by the C++ memory governor via krkr::base::GetCommandLine(). */
 #define ENGINE_OPTION_MEMORY_BUDGET_MB "memory_budget_mb"
 
 /** Memory governor log interval in milliseconds.
- *  Consumed by the C++ memory governor via TVPGetCommandLine(). */
+ *  Consumed by the C++ memory governor via krkr::base::GetCommandLine(). */
 #define ENGINE_OPTION_MEMORY_LOG_INTERVAL_MS "memory_log_interval_ms"
 
 /** PSB resource cache budget in MB. */

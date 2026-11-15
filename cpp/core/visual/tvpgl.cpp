@@ -23,7 +23,7 @@
 #define TVP_REVRGB(v)                                                          \
     ((v & 0xFF00FF00) | ((v >> 16) & 0xFF) | ((v & 0xFF) << 16))
 
-extern void TVPGL_C_Init();
+extern void GL_C_Init();
 #include "simd/tvpgl_simd_init.h"
 extern "C" {
 /*-----------------------------------------------------------------*/
@@ -14129,7 +14129,7 @@ TVP_GL_FUNC_DECL(void, TVPInitTVPGL, ()) {
     TVPConvert32BitTo24Bit = TVPConvert32BitTo24Bit_c;
 #endif
     TVPCreateTable();
-    TVPGL_C_Init();
+    GL_C_Init();
     TVPGL_SIMD_Init(); // Highway SIMD override
 }
 

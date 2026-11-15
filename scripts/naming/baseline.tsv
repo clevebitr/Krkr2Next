@@ -1,10 +1,10 @@
 # 命名契约存量基线（docs/NAMING.md）。三个数字都只能降。
 # module	legacy_symbols	legacy_files	bridges
-base	366	4	174
-io	20	1	0
-sound	20	7	30
-environ	247	3	48
-plugin	28	4	60
+base	322	4	174
+io	17	1	0
+sound	16	7	30
+environ	98	3	16
+plugin	27	4	60
 utils	8	9	42
 compat	3	0	0
 extension	1	0	0

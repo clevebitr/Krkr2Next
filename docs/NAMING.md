@@ -97,6 +97,8 @@
 | `tar.h` | TAR 格式结构体 | 与 POSIX `tar.h` 同名，改名要同步所有 `#include`（低优先，可改） |
 | **插件可见宿主 API** | `TVP_malloc` `TVP_free` `ZLIB_*` `TVP_md5_*` `TVPDoTryBlock` `TVPRegisterGlobalObject` `TVPRemoveGlobalObject` `TVPRegisteredPlugins` `tvpLoadPlugins` 及 `tTVP{Try,Catch,Finally}BlockFunction` | 这些名字写在 **NCB 宏体**里（`ncbi` / `NCB_*` / `TVP_TRY` 展开成它们），只有和 NCB 宏改造同一批才能改（见 `cpp/core/plugin/README.md` §没做的） |
 | **TJS 注册表工厂族** | `TVPCreateNativeClass_*` | 归属要等 `DECISIONS.md` #9 的注册表反转；现在改名会在反转时再改一次 |
+| **environ 的全局实现族** | `TVPCreateFolders`（名字归 `krkr::io`）、`TVPConsoleLog`（`stubs` 全局定义）、`TVPCPUType` / `TVPCPUFeatures`（`extern "C"`）、`TVPMainThreadID`、`TVPSetRenderTarget`（定义在 visual） | 都是 AGENTS.md 已登记的"仍定义在全局/别处"债务；改名要先决定它们归哪个 namespace |
+| `tTVPApplication` | — | 目标是 `Application`，但全局已经有**指针变量** `Application`（AGENTS.md 例外）——两者同名会让 namespace 内的 `Application->…` 全部失效 |
 | `TVPMainForm` | 6 处，**只出现在注释里** | 指向已被删除的 Win32 主窗口，符号本身已不存在（`DebugIntf.cpp` 的 `/* */` 死代码块 + `DebugImpl.cpp` 的 `//` 注释）。没有"真实名字"可改，留着当历史叙述 |
 | `7zArchive.cpp` | — | **不是例外**：它属于 N2，目标 `SevenZipArchive.cpp` |
 | `*.tjs` 资源 | `resources/` | 脚本资源，不是 C++ |
@@ -115,7 +117,7 @@
 | 4 | `io` | 123 + 27 + 17（已应用） | ✅ **io 收口**：第 2 轮 1023 处 / 83 文件（`7zArchive.cpp` → `SevenZipArchive.cpp`）、第 4 轮 189 处 / 11 文件（`io-globals.tsv`，27 个 N7 变量）、第 4b 轮 45 处 / 3 文件（`io-residual.tsv`，9 个 `--draft` 漏收符号 + 6 处注释 + 5 处日志串）；遗留 176→**26**，余下**全部是别的模块的符号**（base 13 / utils 6 / environ 5）+ `TVPCreateNativeClass_Storages`（§4 例外） |
 | 5 | `compat` | 0 | ✅ 自有符号已是新风格（`--draft` 扫出 0 个），无需改名 |
 | 6 | `sound` | 127 + 64（已应用） | ✅ **收口**：`sound.tsv` 127 符号 / 893 处 / 36 文件 + `sound-residual.tsv` 64 符号 / 434 处 / 9 文件（N7 变量、匿名 struct/enum 实例、多行定义）+ 2 处注释；遗留 211→**20**（全部是 base/environ/movie 的符号 + 4 个例外）。同时修正了消息符号口径：`MsgImpl.h` 里独有的 ~40 个 `tTJSMessageHolder` 以前被当成遗留符号 |
-| 7 | `environ` | 101（draft） | 🟡 map 已起草 |
+| 7 | `environ` | 133 + 残项（已应用） | ✅ **收口**：三张 map（按**声明所在的 namespace** 切：`krkr::environ` / `krkr::base` / 全局）+ 残项；遗留 247→**98**（余下全是 base/visual 的符号与 §4 例外）。新增工具能力 `kind=global`：environ 多数符号名字就活在全局作用域，加 `krkr::environ::` 前缀会变成另一个符号 |
 | 8 | `base` | 465（基线） | ⬜ 未起草；先做非消息部分，消息符号永久例外 |
 | 9 | `visual` / `movie` | — | 这两块结构未动；它们的**调用点**会在 1–8 里被 codemod 顺带更新 |
 
@@ -154,6 +156,9 @@ tTVPAtInstallClass	AtInstallClass	type
   （`krkr::extension::AddClassHandler`）—— 全限定在 C++ 里总是合法，
   所以 codemod **不需要理解调用点所在的 namespace**。
 - `macro` 类条目不做限定（宏没有 namespace）。
+- `global` 类条目同样不做限定，用于**名字本身活在全局作用域**的符号：`environ` 的
+  多数函数/变量都是这种（声明在 base/visual 的全局头里、实现在 environ 全局作用域）。
+  这类符号如果被写成 `krkr::environ::X`，在调用点就是"另一个符号"，链接期直接找不到。
 - `--apply` 之前会做四件事：新名重复检测、新名已存在检测、旧名零命中检测、
   注释/字符串命中统计。
 
@@ -189,6 +194,7 @@ tTVPAtInstallClass	AtInstallClass	type
 | 4b | `io` 残项（draft 漏收） | 9（+11 注释/日志） | 45 | 3 | ~15 min |
 | 5 | `utils`（含 5b 残项） | 32 + 19 + 1 手工 | 686 + 70 去重限定 | 90 | ~70 min（含新检查脚本） |
 | 6 | `sound`（含 6b 残项） | 127 + 64 + 2 注释 | 1327 | 39 | ~80 min |
+| 7 | `environ`（三张 map + 残项） | 125 + 8 | 836 | 76 | ~90 min（含 `kind=global`） |
 
 **吞吐 ≈ 100~150 符号/小时**（工具成熟后，不含编译回归）。
 
@@ -197,7 +203,7 @@ tTVPAtInstallClass	AtInstallClass	type
 | ~~`io` 剩余（N7 全局变量）~~ | ~~28~~ | ✅ 第 4 轮完成 | — |
 | ~~`utils`~~ | ~~37~~ | ✅ 第 5 轮完成 | — |
 | ~~`sound`~~ | ~~132~~ | ✅ 第 6 轮完成 | — |
-| `environ` | 134 | ~1.5 h | 1~2 天 |
+| ~~`environ`~~ | ~~134~~ | ✅ 第 7 轮完成 | — |
 | `base` | ~250（不含 153 个消息例外） | ~3 h | 2~4 天（注册表族要等反转） |
 | ~~`io` 残项~~ | ~~13~~ | ✅ 第 4b 轮完成（9 符号 + 11 处注释/日志） | — |
 

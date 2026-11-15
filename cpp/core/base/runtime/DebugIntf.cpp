@@ -72,14 +72,14 @@ static void TVPDestroyLogObjects() {
         delete TVPLogDeque, TVPLogDeque = nullptr;
     if(TVPImportantLogs)
         delete TVPImportantLogs, TVPImportantLogs = nullptr;
-    // runtime-restart 时 TVPSystemUninit 会经 tTVPAtExit 再次调用本函数，
+    // runtime-restart 时 krkr::base::SystemUninit 会经 tTVPAtExit 再次调用本函数，
     // 必须复位初始化标志，否则 restart 后 TVPEnsureLogObjects 提前返回、
     // krkr::utils::AddLog 静默丢弃全部 [TVP Console] 输出（含 KAG 场景/错误信息）。
     TVPLogObjectsInitialized = false;
 }
 
 //---------------------------------------------------------------------------
-tTVPAtExit TVPDestroyLogObjectsAtExit(TVP_ATEXIT_PRI_CLEANUP,
+tTVPAtExit TVPDestroyLogObjectsAtExit(KRKR_ATEXIT_PRI_CLEANUP,
                                       TVPDestroyLogObjects);
 //---------------------------------------------------------------------------
 
@@ -138,7 +138,7 @@ void ClearLoggingHandlers() {
 }
 
 static tTVPAtExit
-    TVPDestroyLoggingHandlerAtExit(TVP_ATEXIT_PRI_PREPARE,
+    TVPDestroyLoggingHandlerAtExit(KRKR_ATEXIT_PRI_PREPARE,
                                    DestroyLoggingHandlerVector);
 //---------------------------------------------------------------------------
 static bool TVPInDeliverLoggingEvent = false;
@@ -274,7 +274,7 @@ void tTVPLogStreamHolder::Open(const tjs_nchar *mode) {
         } else {
             // no log location specified
             filename = krkr::utils::nativeLogLocation + TJS_W("/krkr.console.log");
-            TVPEnsureDataPathDirectory();
+            EnsureDataPathDirectory();
             std::string _filename = filename.AsStdString();
             Stream = fopen(_filename.c_str(), mode);
             if(!Stream)
@@ -557,7 +557,7 @@ void SetLogLocation(const ttstr &loc) {
 
     // check force logging option
     tTJSVariant val;
-    if(TVPGetCommandLine(TJS_W("-forcelog"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-forcelog"), &val)) {
         ttstr str(val);
         if(str == TJS_W("yes")) {
             krkr::utils::loggingToFile = false;
@@ -567,7 +567,7 @@ void SetLogLocation(const ttstr &loc) {
             krkr::utils::StartLogToFile(true);
         }
     }
-    if(TVPGetCommandLine(TJS_W("-logerror"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-logerror"), &val)) {
         ttstr str(val);
         if(str == TJS_W("no")) {
             krkr::utils::autoClearLogOnError = false;

@@ -25,7 +25,7 @@ enum {
     ssRepeat = TVP_SS_REPEAT,
 };
 #if 0
-class tTVPWindow {
+class Window {
 	WNDCLASSEX	wc_;
 	bool		created_;
 
@@ -140,13 +140,13 @@ protected:
 
 	static bool HasMenu( HWND hWnd );
 public:
-	tTVPWindow()
+	Window()
 	: window_handle_(nullptr), created_(false), left_double_click_(false), ime_control_(nullptr), border_style_(0), modal_result_(0),
 		in_window_(false), ignore_touch_mouse_(false), in_mode_(false), has_parent_(false) {
 		min_size_.cx = min_size_.cy = 0;
 		max_size_.cx = max_size_.cy = 0;
 	}
-	virtual ~tTVPWindow();
+	virtual ~Window();
 
 	bool HasFocus() const {
 		return window_handle_ == ::GetFocus();
@@ -180,8 +180,8 @@ public:
 	void GetCaption( std::wstring& v ) const;
 	void SetCaption( const std::wstring& v );
 	
-	void SetBorderStyle( enum tTVPBorderStyle st);
-	enum tTVPBorderStyle GetBorderStyle() const;
+	void SetBorderStyle( enum BorderStyle st);
+	enum BorderStyle GetBorderStyle() const;
 
 	void SetWidth( int w );
 	int GetWidth() const;
@@ -306,7 +306,7 @@ public:
 };
 #endif
 
-enum tTVPWMRRegMode { wrmRegister = 0, wrmUnregister = 1 };
+enum WMRRegMode { wrmRegister = 0, wrmUnregister = 1 };
 enum {
     orientUnknown,
     orientPortrait,
@@ -314,7 +314,7 @@ enum {
 };
 
 // Scene-tree based rendering is removed; the host shell handles display.
-using TVPOverlayNode = void;
+using OverlayNode = void;
 
 class iWindowLayer {
 protected:
@@ -381,7 +381,7 @@ public:
     virtual void ResetTouchVelocity(tjs_int id) = 0;
     virtual bool GetMouseVelocity(float &x, float &y, float &speed) const = 0;
     virtual void TickBeat() = 0;
-    virtual TVPOverlayNode *GetPrimaryArea() = 0;
+    virtual OverlayNode *GetPrimaryArea() = 0;
 
     void SetZoomNumer(tjs_int n) { SetZoom(n, ZoomDenom); }
     [[nodiscard]] tjs_int GetZoomNumer() const { return ZoomNumer; }
@@ -389,7 +389,7 @@ public:
     [[nodiscard]] tjs_int GetZoomDenom() const { return ZoomDenom; }
 
     // dummy function
-    void RegisterWindowMessageReceiver(tTVPWMRRegMode mode, void *proc,
+    void RegisterWindowMessageReceiver(WMRRegMode mode, void *proc,
                                        const void *userdata) {}
     void SetLeft(tjs_int) {}
     void SetTop(tjs_int) {}
@@ -403,7 +403,7 @@ public:
     void SetMinSize(tjs_int, tjs_int) {}
     void SetMaxSize(tjs_int, tjs_int) {}
     void SetPosition(tjs_int, tjs_int) {}
-    void SetBorderStyle(tTVPBorderStyle) {}
+    void SetBorderStyle(BorderStyle) {}
     void SetStayOnTop(bool) {}
     void SetFullScreenMode(bool) {}
     tjs_int GetLeft() { return 0; }
@@ -416,7 +416,7 @@ public:
     tjs_int GetInnerHeight() { return GetHeight(); }
     bool GetStayOnTop() { return false; }
     bool GetFullScreenMode() { return false; }
-    [[nodiscard]] tTVPBorderStyle GetBorderStyle() const { return bsNone; }
+    [[nodiscard]] BorderStyle GetBorderStyle() const { return bsNone; }
     void SetTrapKey(bool b) {}
     [[nodiscard]] bool GetTrapKey() const { return false; }
     void RemoveMaskRegion() {}

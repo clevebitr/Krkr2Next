@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-extern void TVPGL_ASM_Init();
+extern void InitGLAsm();
 
 #ifdef __cplusplus
 }

@@ -58,7 +58,7 @@ static void ShowInMessageBox(const char *format, ...) {
     char buf[256];
     vsnprintf(buf, 256 - 3, format, args);
     const char *btnText = "OK";
-    TVPShowSimpleMessageBox(buf, "Log", 1, &btnText);
+    ShowSimpleMessageBox(buf, "Log", 1, &btnText);
 
     va_end(args);
 }
@@ -480,7 +480,7 @@ std::string TVPGetOpenGLInfo() {
 // 				LocaleConfigManager::GetInstance()->GetText("msgbox_nerver_notice").c_str(),
 // 			};
 // 			int n =
-// TVPShowSimpleMessageBox(LocaleConfigManager::GetInstance()->GetText
+// ShowSimpleMessageBox(LocaleConfigManager::GetInstance()->GetText
 // 				("issue_GL_EXT_shader_framebuffer_fetch").c_str(),
 // "Info", forceNotice ? 1 : 2, btnText); 			if (n == 1) {
 // 				GlobalConfigManager::GetInstance()->SetValueInt("noticed_adreno_issue",
@@ -1093,7 +1093,7 @@ protected:
                 break;
         }
 
-        TVPCheckMemory();
+        CheckMemory();
         _glBindTexture2D(texture);
         glTexImage2D(GL_TEXTURE_2D, 0, internalfmt, intw, inth, 0, pixfmt,
                      GL_UNSIGNED_BYTE, pixel);
@@ -1485,7 +1485,7 @@ public:
 
         uint64_t oldBytes = (uint64_t)texinfo.Width * texinfo.Height * pixsize;
 
-        TVPCheckMemory();
+        CheckMemory();
         _glBindTexture2D(texinfo.Name);
         texinfo.Width = pitch / pixsize;
         texinfo.Height = rc.get_height();
@@ -1591,7 +1591,7 @@ public:
                 break;
         }
 
-        TVPCheckMemory();
+        CheckMemory();
         texture = FetchGLTexture();
         glTexImage2D(GL_TEXTURE_2D, 0, internalfmt, internalW, internalH, 0,
                      pixfmt, GL_UNSIGNED_BYTE, tmp);
@@ -1868,7 +1868,7 @@ public:
 
     void InitCompressedPixel(const void *data, unsigned int len, GLenum format,
                              unsigned int width, unsigned int height) {
-        TVPCheckMemory();
+        CheckMemory();
         _glBindTexture2D(texture);
         glCompressedTexImage2D(GL_TEXTURE_2D, 0, format /*GL_ETC1_RGB8_OES*/,
                                width, height, 0, len, data);
@@ -1881,7 +1881,7 @@ public:
 
     void InitPixel(const void *pixel, unsigned int pitch, GLenum format,
                    GLenum pixfmt, unsigned int intw, unsigned int inth) {
-        TVPCheckMemory();
+        CheckMemory();
         _glBindTexture2D(texture);
         glTexImage2D(GL_TEXTURE_2D, 0, format, intw, inth, 0, pixfmt,
                      GL_UNSIGNED_BYTE, pixel);
@@ -2651,7 +2651,7 @@ bool tTVPOGLTexture2D::RestoreNormalSize() {
         }
         return true;
     } else {
-        TVPShowSimpleMessageBox(
+        ShowSimpleMessageBox(
             ttstr(TJS_W("Too large texture is not accessable by GPU.")),
             TJS_W("Please use software renderer"));
         return false;
@@ -2699,11 +2699,11 @@ const void *tTVPOGLTexture2D::GetScanLineForRead(tjs_uint l) {
 // 定义在 environ/EngineLoop.cpp（krkr::environ）；命名空间限定声明，
 // 避免与 MainScene.h 可能带入的全局 using 冲突。
 namespace krkr::environ {
-void TVPSetPostUpdateEvent(void (*f)());
+void SetPostUpdateEvent(void (*f)());
 } // namespace krkr::environ
 
 // TODO: 过渡兼容，命名空间迁移收尾后删除
-using krkr::environ::TVPSetPostUpdateEvent;
+using krkr::environ::SetPostUpdateEvent;
 static iTVPTexture2D *(*_CreateStaticTexture2D)(const void *dib, tjs_uint tw,
                                                 tjs_uint th, tjs_int pitch,
                                                 TVPTextureFormat::e fmt,
@@ -3289,7 +3289,7 @@ protected:
             // 里按需重新上传为有效 GL id。
             TVPClearGraphicCache();
         });
-        TVPSetPostUpdateEvent(_RestoreGLStatues);
+        krkr::environ::SetPostUpdateEvent(_RestoreGLStatues);
     }
 
     tjs_uint _drawCount;
@@ -4386,7 +4386,7 @@ public:
 			for (int i = 0; i < 256 * 256 * 4; ++i) {
 				if (std::abs(pix1[i] - pix2[i]) > 2) {
 					const char *btnText = "OK";
-					TVPShowSimpleMessageBox(LocaleConfigManager::GetInstance()->GetText
+					ShowSimpleMessageBox(LocaleConfigManager::GetInstance()->GetText
 						("issue_GL_EXT_shader_framebuffer_fetch").c_str(), "Info", 1, &btnText);
 					break;
 				}
@@ -5278,7 +5278,7 @@ REGISTER_RENDERMANAGER(TVPRenderManager_OpenGL, opengl);
 // Explicit registration function to force linker to include this translation
 // unit (static library dead-stripping would otherwise discard the auto-register
 // global)
-void TVPForceRegisterOpenGLRenderManager() {
+void ForceRegisterOpenGLRenderManager() {
     // intentionally empty – the REGISTER_RENDERMANAGER static initializer above
     // does the real work; this function just needs to be referenced from
     // another TU.

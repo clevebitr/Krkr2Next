@@ -74,7 +74,7 @@ engine_result_t OpenGameCore(engine_handle_t handle, engine_handle_s *impl,
         return ENGINE_RESULT_INTERNAL_ERROR;
     }
 
-    if (TVPTerminated) {
+    if (terminated) {
         std::lock_guard<std::recursive_mutex> guard(impl->mutex);
         SetHandleErrorLocked(impl, "runtime requested termination during startup");
         return ENGINE_RESULT_INVALID_STATE;
@@ -84,7 +84,7 @@ engine_result_t OpenGameCore(engine_handle_t handle, engine_handle_s *impl,
     if (auto *loop = EngineLoop::GetInstance(); loop != nullptr) {
         loop->Start();
     }
-    if (auto *scene = TVPMainScene::GetInstance(); scene != nullptr) {
+    if (auto *scene = MainScene::GetInstance(); scene != nullptr) {
         scene->scheduleUpdate();
     }
 
@@ -121,12 +121,12 @@ engine_result_t OpenGameCore(engine_handle_t handle, engine_handle_s *impl,
 void RunOpenGameAsync(engine_handle_t handle, engine_handle_s *impl,
                       std::string game_root_path_utf8) {
     PushStartupLog(impl, "engine_open_game_async: worker started");
-    TVPTerminated = false;
-    TVPTerminateCode = 0;
-    TVPSystemUninitCalled = false;
-    TVPTerminateOnWindowClose = false;
-    TVPTerminateOnNoWindowStartup = false;
-    TVPHostSuppressProcessExit = true;
+    terminated = false;
+    terminateCode = 0;
+    krkr::base::systemUninitCalled = false;
+    terminateOnWindowClose = false;
+    terminateOnNoWindowStartup = false;
+    hostSuppressProcessExit = true;
 
     const engine_result_t open_result =
         OpenGameCore(handle, impl, game_root_path_utf8.c_str());
@@ -181,7 +181,7 @@ engine_result_t engine_create(const engine_create_desc_t *desc, engine_handle_t 
 
     EnsureRuntimeLoggersInitialized();
     EnsureInternalPluginAnchorsLinked();
-    TVPHostSuppressProcessExit = true;
+    hostSuppressProcessExit = true;
     krkr::base::SetDeferWindowClose(true);
     krkr::base::SetModalInputPump(&PumpModalInputOnTickThreadImpl);
 
@@ -267,8 +267,8 @@ engine_result_t engine_destroy(engine_handle_t handle) {
             });
         spdlog::info("engine_destroy: FilterUserMessage done");
 
-        TVPTerminated = false;
-        TVPTerminateCode = 0;
+        terminated = false;
+        terminateCode = 0;
 
         try {
             spdlog::info("engine_destroy: TVPUnregisterInternalPluginsForRestart begin");
@@ -288,13 +288,13 @@ engine_result_t engine_destroy(engine_handle_t handle) {
 
         try {
             spdlog::info("engine_destroy: TVPSystemUninit begin");
-            TVPSystemUninit();
+            krkr::base::SystemUninit();
             spdlog::info("engine_destroy: TVPSystemUninit end");
         } catch (...) {
             spdlog::error("engine_destroy: TVPSystemUninit threw");
         }
 
-        if (auto *scene = TVPMainScene::GetInstance()) {
+        if (auto *scene = MainScene::GetInstance()) {
             spdlog::info("engine_destroy: deleting TVPMainScene...");
             delete scene;
             spdlog::info("engine_destroy: TVPMainScene deleted");
@@ -306,17 +306,17 @@ engine_result_t engine_destroy(engine_handle_t handle) {
         }
 
         try {
-            TVPResetRuntimeForRestart();
+            krkr::base::ResetRuntimeForRestart();
             TVPResetScriptEngineForRestart();
-            TVPResetSysInitImplForRestart();
-            TVPResetApplicationForRestart();
+            ResetSysInitImplForRestart();
+            krkr::environ::ResetApplicationForRestart();
             krkr::io::ResetStorageImplForRestart();
             TVPResetRenderManagerForRestart();
             TVPResetWindowListForRestart();
             TVPResetLayerBitmapImplForRestart();
             TVPResetFontImplForRestart();
             TVPResetTransIntfForRestart();
-            TVPResetDrawSceneOnceTimingForRestart();
+            krkr::environ::ResetDrawSceneOnceTimingForRestart();
             tTVPBitmapBitsAlloc::ResetForRestart();
             krkr::extension::ResetInstallStateForRestart();
             krkr::plugin::ResetPluginSystemForRestart();
@@ -327,7 +327,7 @@ engine_result_t engine_destroy(engine_handle_t handle) {
 
         if (g_engine_bootstrapped) {
             spdlog::info("engine_destroy: TVPEngineBootstrap::Shutdown...");
-            TVPEngineBootstrap::Shutdown();
+            EngineBootstrap::Shutdown();
             g_engine_bootstrapped = false;
             spdlog::info("engine_destroy: TVPEngineBootstrap::Shutdown done");
         }
@@ -386,12 +386,12 @@ engine_result_t engine_open_game(engine_handle_t handle, const char *game_root_p
             "runtime restart is not supported yet; restart process to open another game");
     }
 
-    TVPTerminated = false;
-    TVPTerminateCode = 0;
-    TVPSystemUninitCalled = false;
-    TVPTerminateOnWindowClose = false;
-    TVPTerminateOnNoWindowStartup = false;
-    TVPHostSuppressProcessExit = true;
+    terminated = false;
+    terminateCode = 0;
+    krkr::base::systemUninitCalled = false;
+    terminateOnWindowClose = false;
+    terminateOnNoWindowStartup = false;
+    hostSuppressProcessExit = true;
     g_runtime_startup_active = true;
     g_runtime_startup_owner = handle;
     ResetStartupState(impl);
@@ -409,7 +409,7 @@ engine_result_t engine_open_game(engine_handle_t handle, const char *game_root_p
 
     if (open_result == ENGINE_RESULT_INTERNAL_ERROR) {
         SetHandleErrorLocked(impl, "StartApplication threw an exception");
-    } else if (open_result == ENGINE_RESULT_INVALID_STATE && TVPTerminated) {
+    } else if (open_result == ENGINE_RESULT_INVALID_STATE && terminated) {
         SetHandleErrorLocked(impl, "runtime requested termination during startup");
     } else {
         SetHandleErrorLocked(impl, "engine_open_game failed");
@@ -570,8 +570,8 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
 
     krkr::stall::MarkStage("engine_tick: 开始");
 
-    if (TVPTerminated) {
-        if (TVPTerminateWindowClosed) {
+    if (terminated) {
+        if (terminateWindowClosed) {
             return SetHandleErrorAndReturnLocked(
                 impl, ENGINE_RESULT_WINDOW_CLOSED,
                 "runtime terminated because the game closed its window");
@@ -660,8 +660,8 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
     }
 #endif
 
-    if (TVPTerminated) {
-        if (TVPTerminateWindowClosed) {
+    if (terminated) {
+        if (terminateWindowClosed) {
             return SetHandleErrorAndReturnLocked(
                 impl, ENGINE_RESULT_WINDOW_CLOSED,
                 "runtime terminated because the game closed its window");
@@ -706,7 +706,7 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
 
     if (::Application) {
         const auto update_start = std::chrono::steady_clock::now();
-        if (TVPMainWindow && TVPHostVideoOverlayFrameActive()) {
+        if (TVPMainWindow && HostVideoOverlayFrameActive()) {
             TVPPostWindowUpdate(TVPMainWindow);
         }
         krkr::stall::MarkStage("engine_tick: Application::Run（脚本+合成+绘制）");
@@ -717,12 +717,12 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
 
     const auto post_start = std::chrono::steady_clock::now();
     krkr::stall::MarkStage("engine_tick: 呈现（DrawSceneOnce/回收/交付）");
-    ::TVPDrawSceneOnce(0);
+    ::krkr::environ::DrawSceneOnce(0);
     iTVPTexture2D::RecycleProcess();
     FramePerfAccumulatePost(impl, post_start, std::chrono::steady_clock::now());
 
-    if (TVPTerminated) {
-        if (TVPTerminateWindowClosed) {
+    if (terminated) {
+        if (terminateWindowClosed) {
             return SetHandleErrorAndReturnLocked(
                 impl, ENGINE_RESULT_WINDOW_CLOSED,
                 "runtime terminated because the game closed its window");
@@ -841,17 +841,17 @@ engine_result_t engine_cancel_termination(engine_handle_t handle) {
     std::lock_guard<std::recursive_mutex> guard(impl->mutex);
     result = ValidateHandleThreadLocked(impl);
     if (result != ENGINE_RESULT_OK) return result;
-    if (!TVPTerminated) {
+    if (!terminated) {
         ClearHandleErrorLocked(impl);
         SetThreadError(nullptr);
         return ENGINE_RESULT_OK;
     }
-    if (TVPTerminateWindowClosed) {
+    if (terminateWindowClosed) {
         SetHandleErrorLocked(impl, "cannot cancel: the game closed its window");
         return ENGINE_RESULT_INVALID_STATE;
     }
-    TVPTerminated = false;
-    TVPTerminateCode = 0;
+    terminated = false;
+    terminateCode = 0;
     if (::Application) ::Application->Unterminate();
     krkr::stall::SetPaused(false);
     krkr::stall::MarkStage("engine_tick: 已取消退出，恢复运行");
@@ -878,7 +878,7 @@ engine_result_t engine_resolve_window_close(engine_handle_t handle, int32_t allo
         SetThreadError(nullptr);
         return ENGINE_RESULT_OK;
     }
-    if (TVPTerminated) {
+    if (terminated) {
         SetHandleErrorLocked(impl, "cannot keep playing: the runtime already terminated");
         return ENGINE_RESULT_INVALID_STATE;
     }

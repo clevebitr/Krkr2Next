@@ -24,7 +24,7 @@
 // global flags
 //---------------------------------------------------------------------------
 extern bool TVPFreeUnusedLayerCache;
-extern tjs_int TVPGetLayerCount();
+extern tjs_int GetLayerCount();
 extern tjs_uint64 TVPGetLayerTotalBitmapBytes();
 
 //---------------------------------------------------------------------------

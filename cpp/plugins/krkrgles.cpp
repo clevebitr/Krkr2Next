@@ -3275,7 +3275,7 @@ static void KrkrGlesPostRegist() {
 
     // 其余：按 ogldrawdevice_compat 选项（off/ogl/alias）。
     tTJSVariant modeVal;
-    if(!TVPGetCommandLine(KrkrOglCompatOption, &modeVal))
+    if(!krkr::base::GetCommandLine(KrkrOglCompatOption, &modeVal))
         return;
     const ttstr mode(modeVal);
     const ttstr kOgl(KrkrOglCompatOgl);

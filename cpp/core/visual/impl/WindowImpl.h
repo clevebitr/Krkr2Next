@@ -104,9 +104,9 @@ TJS_EXP_FUNC_DEF(tjs_uint32, TVPGetCurrentShiftKeyState, ());
 
 // implement for Application
 #if 0
-TJS_EXP_FUNC_DEF(void, TVPRegisterAcceleratorKey, (HWND hWnd, char virt, short key, short cmd) );
-TJS_EXP_FUNC_DEF(void, TVPUnregisterAcceleratorKey, (HWND hWnd, short cmd));
-TJS_EXP_FUNC_DEF(void, TVPDeleteAcceleratorKeyTable, (HWND hWnd));
+TJS_EXP_FUNC_DEF(void, RegisterAcceleratorKey, (HWND hWnd, char virt, short key, short cmd) );
+TJS_EXP_FUNC_DEF(void, UnregisterAcceleratorKey, (HWND hWnd, short cmd));
+TJS_EXP_FUNC_DEF(void, DeleteAcceleratorKeyTable, (HWND hWnd));
 HWND TVPGetModalWindowOwnerHandle();
 //---------------------------------------------------------------------------
 
@@ -298,7 +298,7 @@ public:
 #if 0
 	HWND GetWindowHandleForPlugin();
 #endif
-    void RegisterWindowMessageReceiver(tTVPWMRRegMode mode, void *proc,
+    void RegisterWindowMessageReceiver(WMRRegMode mode, void *proc,
                                        const void *userdata);
 
     //-- methods
@@ -365,8 +365,8 @@ public:
 
     void SetInnerSize(tjs_int w, tjs_int h);
 
-    void SetBorderStyle(tTVPBorderStyle st);
-    [[nodiscard]] tTVPBorderStyle GetBorderStyle() const;
+    void SetBorderStyle(BorderStyle st);
+    [[nodiscard]] BorderStyle GetBorderStyle() const;
 
     void SetStayOnTop(bool b);
     [[nodiscard]] bool GetStayOnTop() const;

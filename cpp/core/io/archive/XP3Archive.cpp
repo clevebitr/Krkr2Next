@@ -203,7 +203,7 @@ static void ShutdownArchiveHandleCache() {
 }
 
 //---------------------------------------------------------------------------
-static tTVPAtExit ShutdownArchiveCacheAtExit(TVP_ATEXIT_PRI_CLEANUP,
+static tTVPAtExit ShutdownArchiveCacheAtExit(KRKR_ATEXIT_PRI_CLEANUP,
                                                 ShutdownArchiveHandleCache);
 //---------------------------------------------------------------------------
 
@@ -380,7 +380,7 @@ bool GetXP3ArchiveOffset(tTJSBinaryStream *st, const ttstr name,
         }
     } else {
         if(raise) {
-            ttstr msg(TVPGetMessageByLocale("err_not_xp3_archive"));
+            ttstr msg(GetMessageByLocale("err_not_xp3_archive"));
             TVPThrowExceptionMessage(msg.c_str(), name);
             // TVPThrowExceptionMessage(TVPCannotFindXP3Mark, name);
         }

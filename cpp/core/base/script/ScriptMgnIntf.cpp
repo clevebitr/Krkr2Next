@@ -67,7 +67,7 @@
 //---------------------------------------------------------------------------
 
 // 定义在 environ/Application.cpp（全局作用域），声明留 namespace 外。
-extern ttstr TVPGetErrorDialogTitle();
+extern ttstr GetErrorDialogTitle();
 
 namespace krkr::base {
 
@@ -75,7 +75,7 @@ static const tjs_nchar *TVPInitTJSScript =
     // note that this script is stored as narrow string
     TJS_N(R"(const
 /* constants */
- /* tTVPBorderStyle */ bsNone=0,  bsSingle=1,  bsSizeable=2,  bsDialog=3,  bsToolWindow=4,  bsSizeToolWin=5,
+ /* BorderStyle */ bsNone=0,  bsSingle=1,  bsSizeable=2,  bsDialog=3,  bsToolWindow=4,  bsSizeToolWin=5,
  /* tTVPUpdateType */ utNormal=0,  utEntire =1,
  /* tTVPMouseButton */  mbLeft=0,  mbRight=1,  mbMiddle=2, mbX1=3, mbX2=4,
  /* tTVPMouseCursorState */ mcsVisible=0, mcsTempHidden=1, mcsHidden=2,
@@ -418,7 +418,7 @@ void TVPInitScriptEngine() {
     tTJSVariant val;
 
     // Set eval expression mode
-    if(TVPGetCommandLine(TJS_W("-evalcontext"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-evalcontext"), &val)) {
         ttstr str(val);
         if(str == TJS_W("global")) {
             TJSEvalOperatorIsOnGlobal = true;
@@ -427,7 +427,7 @@ void TVPInitScriptEngine() {
     }
 
     // Set igonre-prop compat mode
-    if(TVPGetCommandLine(TJS_W("-unaryaster"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-unaryaster"), &val)) {
         ttstr str(val);
         if(str == TJS_W("compat")) {
             TJSUnaryAsteriskIgnoresPropAccess = true;
@@ -435,12 +435,12 @@ void TVPInitScriptEngine() {
     }
 
     // Set debug mode
-    if(TVPGetCommandLine(TJS_W("-debug"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-debug"), &val)) {
         ttstr str(val);
         if(str == TJS_W("yes")) {
             TJSEnableDebugMode = true;
             krkr::utils::AddImportantLog((const tjs_char *)TVPWarnDebugOptionEnabled);
-            //			if(TVPGetCommandLine(TJS_W("-warnrundelobj"),
+            //			if(krkr::base::GetCommandLine(TJS_W("-warnrundelobj"),
             //&val) )
             //			{
             //				str = val;
@@ -456,7 +456,7 @@ void TVPInitScriptEngine() {
     TVPStartupScriptName = TVP_START_UP_SCRIPT_NAME;
 #else
     // Set startup script name
-    if(TVPGetCommandLine(TJS_W("-startup"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-startup"), &val)) {
         ttstr str(val);
         TVPStartupScriptName = str;
     }
@@ -601,7 +601,7 @@ void TVPRestartScriptEngine() {
 //---------------------------------------------------------------------------
 void TVPResetScriptEngineForRestart() {
     // After TVPUninitScriptEngine has already been called (via
-    // TVPSystemUninit in engine_destroy), reset the guard variables so the
+    // krkr::base::SystemUninit in engine_destroy), reset the guard variables so the
     // script engine can be re-initialized on the next engine_open_game cycle.
     TVPScriptEngineInit = false;
     TVPScriptEngineUninit = false;
@@ -1043,7 +1043,7 @@ void TVPDumpScriptEngine() {
 
 bool TVPStartupSuccess = false;
 
-void TVPOpenPatchLibUrl();
+void OpenPatchLibUrl();
 
 //---------------------------------------------------------------------------
 // 汉化/兼容补丁的前置成员
@@ -1213,7 +1213,7 @@ void TVPExecuteStartupScript() {
         msg += TJS_W("\n");
         msg += e.GetTrace();
     } catch(const TJS::eTJS &e) {
-        if(!TVPSystemUninitCalled)
+        if(!krkr::base::systemUninitCalled)
             strPatchError = e.GetMessage();
     } catch(const std::exception &e) {
         strPatchError = e.what();
@@ -1233,9 +1233,9 @@ void TVPExecuteStartupScript() {
             LocaleConfigManager::GetInstance()->GetText("msgbox_ok"));
         btns.emplace_back(
             LocaleConfigManager::GetInstance()->GetText("browse_patch_lib"));
-        if(TVPShowSimpleMessageBox(msg, TVPGetPackageVersionString(), btns) ==
+        if(ShowSimpleMessageBox(msg, GetPackageVersionString(), btns) ==
            1) {
-            TVPOpenPatchLibUrl();
+            OpenPatchLibUrl();
         }
     }
 
@@ -1493,7 +1493,7 @@ void TVPStartObjectHashMap() {
 //---------------------------------------------------------------------------
 // TVPBeforeProcessUnhandledException
 //---------------------------------------------------------------------------
-void TVPBeforeProcessUnhandledException() { TVPDumpHWException(); }
+void TVPBeforeProcessUnhandledException() { DumpHWException(); }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -1506,13 +1506,13 @@ void TVPBeforeProcessUnhandledException() { TVPDumpHWException(); }
 */
 
 static void TVPTerminateAfterScriptException(const ttstr &reason) {
-    if(TVPHostSuppressProcessExit) {
+    if(hostSuppressProcessExit) {
         // Embedded host mode: avoid full synchronous teardown from inside
         // script exception handling. Mark runtime terminated and unwind.
         TVPTerminateAsync(1);
         throw EAbort(reason);
     }
-    TVPTerminateSync(1);
+    krkr::base::TerminateSync(1);
 }
 
 //---------------------------------------------------------------------------
@@ -1520,12 +1520,12 @@ void TVPShowScriptException(eTJS &e) {
     TVPSetSystemEventDisabledState(true);
     krkr::utils::OnError();
 
-    if(!TVPSystemUninitCalled) {
+    if(!krkr::base::systemUninitCalled) {
         ttstr errstr =
             (ttstr(TVPScriptExceptionRaised) + TJS_W("\n") + e.GetMessage());
         krkr::utils::AddLog(ttstr(TVPScriptExceptionRaised) + TJS_W("\n") +
                   e.GetMessage());
-        TVPShowSimpleMessageBox(errstr, TVPGetErrorDialogTitle());
+        ShowSimpleMessageBox(errstr, GetErrorDialogTitle());
         // Application->MessageDlg( errstr.AsStdString(),
         // std::wstring(), mtError, mbOK );
         TVPTerminateAfterScriptException(errstr);
@@ -1537,14 +1537,14 @@ void TVPShowScriptException(eTJSScriptError &e) {
     TVPSetSystemEventDisabledState(true);
     krkr::utils::OnError();
 
-    if(!TVPSystemUninitCalled) {
+    if(!krkr::base::systemUninitCalled) {
         ttstr errstr =
             (ttstr(TVPScriptExceptionRaised) + TJS_W("\n") + e.GetMessage());
         krkr::utils::AddLog(ttstr(TVPScriptExceptionRaised) + TJS_W("\n") +
                   e.GetMessage());
         if(e.GetTrace().GetLen() != 0)
             krkr::utils::AddLog(ttstr(TJS_W("trace : ")) + e.GetTrace());
-        TVPShowSimpleMessageBox(errstr, TVPGetErrorDialogTitle());
+        ShowSimpleMessageBox(errstr, GetErrorDialogTitle());
         //	Application->MessageDlg( errstr.AsStdString(),
         // Application->GetTitle(), mtStop, mbOK );
 
@@ -1584,11 +1584,11 @@ void TVPShowScriptException(eTJSScriptError &e) {
                 scriptPath =
                     std::wstring(L"\"") + scriptPath + std::wstring(L"\"");
                 tTJSVariant val;
-                if(TVPGetCommandLine(TJS_W("-exceptionexe"), &val)) {
+                if(krkr::base::GetCommandLine(TJS_W("-exceptionexe"), &val)) {
                     ttstr exepath(val);
                     // exepath = ttstr(TJS_W("\"")) + exepath +
                     // ttstr(TJS_W("\""));
-                    if(TVPGetCommandLine(TJS_W("-exceptionarg"), &val)) {
+                    if(krkr::base::GetCommandLine(TJS_W("-exceptionarg"), &val)) {
                         ttstr arg(val);
                         if(!exepath.IsEmpty() && !arg.IsEmpty()) {
                             std::wstring str(arg.AsStdString());
@@ -1622,7 +1622,7 @@ void TVPInitializeStartupScript() {
     TVPStartObjectHashMap();
 
     TVPExecuteStartupScript();
-    if(TVPTerminateOnNoWindowStartup && TVPGetWindowCount() == 0) {
+    if(terminateOnNoWindowStartup && TVPGetWindowCount() == 0) {
         // no window is created and main window is invisible
         Application->Terminate();
     }

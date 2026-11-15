@@ -2,8 +2,8 @@
  * @file MainScene.cpp
  * @brief Compatibility wrapper — delegates to EngineLoop.
  *
- * TVPMainScene is kept as a thin compatibility layer so that existing code
- * (engine_api.cpp, standalone main.cpp) can still reference TVPMainScene.
+ * MainScene is kept as a thin compatibility layer so that existing code
+ * (engine_api.cpp, standalone main.cpp) can still reference MainScene.
  * All real logic now lives in EngineLoop (Phase 3).
  */
 
@@ -17,48 +17,48 @@ namespace krkr::environ {
 // ---------------------------------------------------------------------------
 // Global functions — now defined in EngineLoop.cpp, only declared here
 // for backward compatibility with headers that expect them in MainScene.
-// (TVPSetPostUpdateEvent, TVPGetKeyMouseAsyncState, TVPGetJoyPadAsyncState,
-//  TVPDrawSceneOnce are all implemented in EngineLoop.cpp)
+// (SetPostUpdateEvent, GetKeyMouseAsyncState, GetJoyPadAsyncState,
+//  DrawSceneOnce are all implemented in EngineLoop.cpp)
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// TVPMainScene implementation — thin delegation to EngineLoop
+// MainScene implementation — thin delegation to EngineLoop
 // ---------------------------------------------------------------------------
 
-static TVPMainScene *_instance = nullptr;
+static MainScene *_instance = nullptr;
 
-TVPMainScene::TVPMainScene() = default;
-TVPMainScene::~TVPMainScene() {
+MainScene::MainScene() = default;
+MainScene::~MainScene() {
     if(_instance == this) {
         _instance = nullptr;
     }
 }
 
-TVPMainScene *TVPMainScene::GetInstance() { return _instance; }
+MainScene *MainScene::GetInstance() { return _instance; }
 
-TVPMainScene *TVPMainScene::CreateInstance() {
+MainScene *MainScene::CreateInstance() {
     if(!_instance) {
-        _instance = new TVPMainScene();
+        _instance = new MainScene();
         // Ensure EngineLoop singleton is also created
         EngineLoop::CreateInstance();
     }
     return _instance;
 }
 
-void TVPMainScene::scheduleUpdate() {
+void MainScene::scheduleUpdate() {
     _updateScheduled = true;
     if(auto *loop = EngineLoop::GetInstance()) {
         loop->Start();
     }
 }
 
-void TVPMainScene::update(float delta) {
+void MainScene::update(float delta) {
     if(auto *loop = EngineLoop::GetInstance()) {
         loop->Tick(delta);
     }
 }
 
-bool TVPMainScene::startupFrom(const std::string &path) {
+bool MainScene::startupFrom(const std::string &path) {
     if(auto *loop = EngineLoop::GetInstance()) {
         bool result = loop->StartupFrom(path);
         if(result) {
@@ -70,7 +70,7 @@ bool TVPMainScene::startupFrom(const std::string &path) {
     return false;
 }
 
-void TVPMainScene::doStartup(const std::string &path) {
+void MainScene::doStartup(const std::string &path) {
     // Delegated — EngineLoop::StartupFrom calls DoStartup internally
 }
 

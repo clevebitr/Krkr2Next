@@ -3,7 +3,7 @@
  * @brief Stub MainScene — replaces the original Scene-based MainScene.
  *
  * This is a lightweight engine loop driver that provides the same external
- * interface as the original TVPMainScene but without any external framework
+ * interface as the original MainScene but without any external framework
  * dependency. It drives Application::Run() each frame and manages game startup.
  */
 #pragma once
@@ -17,14 +17,14 @@ using tjs_uint = unsigned int;
 
 namespace krkr::environ {
 
-class TVPMainScene {
-    TVPMainScene();
+class MainScene {
+    MainScene();
 
 public:
-    ~TVPMainScene();
+    ~MainScene();
 
-    static TVPMainScene *GetInstance();
-    static TVPMainScene *CreateInstance();
+    static MainScene *GetInstance();
+    static MainScene *CreateInstance();
 
     /**
      * Start the engine from the given game path.
@@ -56,20 +56,14 @@ private:
 };
 
 // Global functions previously defined in MainScene.cpp
-void TVPSetPostUpdateEvent(void (*f)());
-int TVPDrawSceneOnce(int interval);
-// runtime-restart：复位 TVPDrawSceneOnce 内部的进程级静态节拍，避免二次打开继承
+void SetPostUpdateEvent(void (*f)());
+int DrawSceneOnce(int interval);
+// runtime-restart：复位 DrawSceneOnce 内部的进程级静态节拍，避免二次打开继承
 // 上一游戏 lastTick 算出巨大 remain 而跳过合成。
-void TVPResetDrawSceneOnceTimingForRestart();
-bool TVPGetKeyMouseAsyncState(unsigned int keycode, bool getcurrent);
-bool TVPGetJoyPadAsyncState(unsigned int keycode, bool getcurrent);
+void ResetDrawSceneOnceTimingForRestart();
+bool GetKeyMouseAsyncState(unsigned int keycode, bool getcurrent);
+bool GetJoyPadAsyncState(unsigned int keycode, bool getcurrent);
 
 } // namespace krkr::environ
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::environ::TVPMainScene;
-using krkr::environ::TVPSetPostUpdateEvent;
-using krkr::environ::TVPDrawSceneOnce;
-using krkr::environ::TVPResetDrawSceneOnceTimingForRestart;
-using krkr::environ::TVPGetKeyMouseAsyncState;
-using krkr::environ::TVPGetJoyPadAsyncState;

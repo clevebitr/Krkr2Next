@@ -54,7 +54,7 @@ namespace {
 
     bool K2CompatEnabledByOption() {
         tTJSVariant raw;
-        if(!TVPGetCommandLine(TJS_W("k2compat_scripts"), &raw))
+        if(!krkr::base::GetCommandLine(TJS_W("k2compat_scripts"), &raw))
             return false;
         ttstr v(raw);
         v.ToLowerCase();

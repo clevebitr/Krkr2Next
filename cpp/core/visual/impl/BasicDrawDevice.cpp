@@ -29,13 +29,13 @@ bool TVPZoomInterpolation = true;
 //---------------------------------------------------------------------------
 static void TVPInitBasicDrawDeviceOptions() {
     if(TVPBasicDrawDeviceOptionsGeneration ==
-       TVPGetCommandLineArgumentGeneration())
+       krkr::base::GetCommandLineArgumentGeneration())
         return;
-    TVPBasicDrawDeviceOptionsGeneration = TVPGetCommandLineArgumentGeneration();
+    TVPBasicDrawDeviceOptionsGeneration = krkr::base::GetCommandLineArgumentGeneration();
 
     tTJSVariant val;
     TVPZoomInterpolation = true;
-    if(TVPGetCommandLine(TJS_W("-smoothzoom"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-smoothzoom"), &val)) {
         ttstr str(val);
         if(str == TJS_W("no"))
             TVPZoomInterpolation = false;

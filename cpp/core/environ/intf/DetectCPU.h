@@ -21,14 +21,12 @@ extern tjs_uint32 TVPCPUType;
 
 namespace krkr::base {
 
-extern void TVPDetectCPU();
-TJS_EXP_FUNC_DEF(tjs_uint32, TVPGetCPUType, ());
+extern void DetectCPU();
+TJS_EXP_FUNC_DEF(tjs_uint32, GetCPUType, ());
 
 } // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::base::TVPDetectCPU;
-using krkr::base::TVPGetCPUType;
 
 //---------------------------------------------------------------------------
 #endif

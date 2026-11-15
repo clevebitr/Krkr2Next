@@ -13,39 +13,39 @@ struct TVPMemoryInfo { // all in kB
     unsigned long VirtualUsed;
 };
 
-void TVPGetMemoryInfo(TVPMemoryInfo &m);
-tjs_int TVPGetSystemFreeMemory(); // in MB
-tjs_int TVPGetSelfUsedMemory(); // in MB
+void GetMemoryInfo(TVPMemoryInfo &m);
+tjs_int GetSystemFreeMemory(); // in MB
+tjs_int GetSelfUsedMemory(); // in MB
 
-extern "C" int TVPShowSimpleMessageBox(const char *text, const char *caption,
+extern "C" int ShowSimpleMessageBox(const char *text, const char *caption,
                                        unsigned int nButton,
                                        const char **btnText); // C-style
 
-int TVPShowSimpleMessageBox(const ttstr &text, const ttstr &caption,
+int ShowSimpleMessageBox(const ttstr &text, const ttstr &caption,
                             const std::vector<ttstr> &vecButtons);
-int TVPShowSimpleMessageBox(const ttstr &text, const ttstr &caption);
-int TVPShowSimpleMessageBoxYesNo(const ttstr &text, const ttstr &caption);
+int ShowSimpleMessageBox(const ttstr &text, const ttstr &caption);
+int ShowSimpleMessageBoxYesNo(const ttstr &text, const ttstr &caption);
 
-int TVPShowSimpleInputBox(ttstr &text, const ttstr &caption,
+int ShowSimpleInputBox(ttstr &text, const ttstr &caption,
                           const ttstr &prompt,
                           const std::vector<ttstr> &vecButtons);
 
-std::vector<std::string> TVPGetDriverPath();
-std::vector<std::string> TVPGetAppStoragePath();
-bool TVPCheckStartupPath(const std::string &path);
-std::string TVPGetPackageVersionString();
-void TVPExitApplication(int code);
-void TVPCheckMemory();
-const std::string &TVPGetInternalPreferencePath();
-bool TVPDeleteFile(const std::string &filename);
-bool TVPRenameFile(const std::string &from, const std::string &to);
-bool TVPCopyFile(const std::string &from, const std::string &to);
+std::vector<std::string> GetDriverPath();
+std::vector<std::string> GetAppStoragePath();
+bool CheckStartupPath(const std::string &path);
+std::string GetPackageVersionString();
+void ExitApplication(int code);
+void CheckMemory();
+const std::string &GetInternalPreferencePath();
+bool DeleteLocalFile(const std::string &filename);
+bool RenameLocalFile(const std::string &from, const std::string &to);
+bool CopyLocalFile(const std::string &from, const std::string &to);
 
-void TVPShowIME(int x, int y, int w, int h);
-void TVPHideIME();
+void ShowIME(int x, int y, int w, int h);
+void HideIME();
 
-void TVPRelinquishCPU();
-void TVPPrintLog(const char *str);
+void RelinquishCPU();
+void PrintLog(const char *str);
 
 // 宏定义冲突 sys/stat.h
 #ifdef st_atime
@@ -66,8 +66,8 @@ struct tTVP_stat {
     uint64_t st_ctime;
 };
 
-bool TVP_stat(const tjs_char *name, tTVP_stat &s);
-bool TVP_stat(const char *name, tTVP_stat &s);
-bool TVP_utime(const char *name, time_t modtime);
+bool KRKR_stat(const tjs_char *name, tTVP_stat &s);
+bool KRKR_stat(const char *name, tTVP_stat &s);
+bool KRKR_utime(const char *name, time_t modtime);
 
-void TVPSendToOtherApp(const std::string &filename);
+void SendToOtherApp(const std::string &filename);

@@ -145,7 +145,7 @@ static void SendDumps(std::string dumpdir, std::vector<std::string> allDumps,
     }
 }
 
-void TVPCheckAndSendDumps(const std::string &dumpdir,
+void CheckAndSendDumps(const std::string &dumpdir,
                           const std::string &packageName,
                           const std::string &versionStr) {
     std::vector<std::string> allDumps;
@@ -165,7 +165,7 @@ void TVPCheckAndSendDumps(const std::string &dumpdir,
             LocaleConfigManager::GetInstance()->GetText("crash_report_msg");
         char buf[256];
         sprintf(buf, msgfmt.c_str(), allDumps.size());
-        if(TVPShowSimpleMessageBoxYesNo(buf, title) == 0) {
+        if(ShowSimpleMessageBoxYesNo(buf, title) == 0) {
             static std::thread dumpthread;
             dumpthread =
                 std::thread([dumpdir, allDumps, packageName, versionStr] {

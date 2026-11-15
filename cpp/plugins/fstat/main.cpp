@@ -187,7 +187,7 @@ class StoragesFstat {
                            tTJSVariant &atime, tTJSVariant &mtime,
                            tTJSVariant *size = nullptr) {
         tTVP_stat st{};
-        TVP_stat(filename.c_str(), st);
+        KRKR_stat(filename.c_str(), st);
         const bool isdir = (st.st_mode & 0170000) == S_IFDIR;
 
         if(!isdir && size != nullptr) {
@@ -209,13 +209,13 @@ class StoragesFstat {
     static int setFileTime(ttstr const &filename, tTJSVariant &ctime,
                            tTJSVariant &atime, tTJSVariant &mtime) {
         tTVP_stat st{};
-        TVP_stat(filename.c_str(), st);
+        KRKR_stat(filename.c_str(), st);
         const bool isdir = (st.st_mode & 0170000) == S_IFDIR;
 
         tjs_int64 m;
         const bool hasC = restoreDate(mtime, m);
         const bool r =
-            TVP_utime(filename.AsNarrowStdString().c_str(), hasC ? m : 0);
+            KRKR_utime(filename.AsNarrowStdString().c_str(), hasC ? m : 0);
 
         return r ? 0 : isdir ? 2 : 1;
     }
@@ -332,7 +332,7 @@ public:
         ttstr filename = krkr::io::NormalizeStorageName(target);
         getLocalName(filename);
         tTVP_stat stat{};
-        if(TVP_stat(filename.c_str(), stat)) {
+        if(KRKR_stat(filename.c_str(), stat)) {
             return 0;
         }
         return static_cast<tjs_int64>(stat.st_mtime);
@@ -340,7 +340,7 @@ public:
     static bool setLastModifiedFileTime(ttstr target, tjs_int64 time) {
         ttstr filename = krkr::io::NormalizeStorageName(target);
         getLocalName(filename);
-        return TVP_utime(filename.AsNarrowStdString().c_str(), time);
+        return KRKR_utime(filename.AsNarrowStdString().c_str(), time);
     }
 
     /**
@@ -390,7 +390,7 @@ public:
         }
         if(ttstr filename(krkr::io::GetLocallyAccessiblePath(placedPath));
            filename.length()) {
-            r = TVPDeleteFile(filename.AsNarrowStdString());
+            r = DeleteLocalFile(filename.AsNarrowStdString());
             if(!r) {
                 krkr::utils::AddLog(ttstr(TJS_W("deleteFile : ")) + filename +
                           TJS_W("Failed"));
@@ -432,8 +432,8 @@ public:
             krkr::io::GetLocallyAccessiblePath(krkr::io::NormalizeStorageName(to)));
         if(fromFile.length() && toFile.length()) {
             const std::string &ff = fromFile.AsNarrowStdString();
-            r = TVPCopyFile(ff, toFile.AsNarrowStdString());
-            TVPDeleteFile(ff);
+            r = CopyLocalFile(ff, toFile.AsNarrowStdString());
+            DeleteLocalFile(ff);
             if(!r) {
                 ttstr mes;
                 krkr::utils::AddLog(ttstr(TJS_W("moveFile : ")) + fromFile + ", " +
@@ -640,7 +640,7 @@ public:
         dir = krkr::io::NormalizeStorageName(dir);
         krkr::io::GetLocalPath(dir);
 
-        const bool r = TVPDeleteFile(dir.AsNarrowStdString());
+        const bool r = DeleteLocalFile(dir.AsNarrowStdString());
         if(!r) {
             krkr::utils::AddLog(ttstr(TJS_W("removeDirectory : ")) + dir +
                       TJS_W(" failed."));
@@ -792,7 +792,7 @@ public:
 private:
     static bool _copyFile(const ttstr &from, const ttstr &to) {
         if(from.length() && to.length()) {
-            if(TVPCopyFile(from.AsNarrowStdString(), to.AsNarrowStdString())) {
+            if(CopyLocalFile(from.AsNarrowStdString(), to.AsNarrowStdString())) {
                 krkr::io::ClearStorageCaches();
                 return true;
             }
@@ -919,7 +919,7 @@ public:
      * カレントディレクトリ
      ----------------------------------------------------------------------*/
     static ttstr getCurrentPath() {
-        const std::string crDir = TVPGetAppStoragePath().front();
+        const std::string crDir = GetAppStoragePath().front();
         const ttstr result(crDir);
         return krkr::io::NormalizeStorageName(result + TJS_W("\\"));
     }

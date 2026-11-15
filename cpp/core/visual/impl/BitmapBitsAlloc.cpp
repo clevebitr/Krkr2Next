@@ -42,7 +42,7 @@ public:
 	HeapAllocAllocator() : HeapHandle(nullptr) {
 		tTJSVariant val;
 		tjs_uint64 size = 0;
-		if(TVPGetCommandLine(TJS_W("-bitmapheapsize"), &val)) {
+		if(krkr::base::GetCommandLine(TJS_W("-bitmapheapsize"), &val)) {
 			ttstr str(val);
 			if(str == TJS_W("auto")) {
 				size = 0;
@@ -115,7 +115,7 @@ void tTVPBitmapBitsAlloc::InitializeAllocator() {
     if(Allocator == nullptr) {
 #if 0
 		tTJSVariant val;
-		if (TVPGetCommandLine(TJS_W("-bitmapallocator"), &val)) {
+		if (krkr::base::GetCommandLine(TJS_W("-bitmapallocator"), &val)) {
 			ttstr str(val);
 			if(str == TJS_W("globalalloc"))
 				Allocator = new GlobalAllocAllocator();
@@ -143,7 +143,7 @@ void tTVPBitmapBitsAlloc::FreeAllocator() {
 void tTVPBitmapBitsAlloc::ResetForRestart() {
     FreeAllocator();
 } // 对照上游 PR#12
-static tTVPAtExit TVPUninitMessageLoad(TVP_ATEXIT_PRI_CLEANUP,
+static tTVPAtExit TVPUninitMessageLoad(KRKR_ATEXIT_PRI_CLEANUP,
                                        tTVPBitmapBitsAlloc::FreeAllocator);
 
 void *tTVPBitmapBitsAlloc::Alloc(tjs_uint size, tjs_uint width,

@@ -48,12 +48,12 @@ static bool TVPAppTitleInit = false;
 
 namespace krkr::environ {
 // 定义在 environ/EngineLoop.cpp；这里只留声明，不引入 environ 头部依赖。
-bool TVPGetKeyMouseAsyncState(tjs_uint keycode, bool getcurrent);
+bool GetKeyMouseAsyncState(tjs_uint keycode, bool getcurrent);
 } // namespace krkr::environ
 
 // TODO: 过渡兼容，命名空间迁移收尾后删除
-using krkr::environ::TVPGetKeyMouseAsyncState;
-using krkr::environ::TVPGetJoyPadAsyncState; // 声明来自 DInputMgn.h
+using krkr::environ::GetKeyMouseAsyncState;
+using krkr::environ::GetJoyPadAsyncState; // 声明来自 DInputMgn.h
 
 //---------------------------------------------------------------------------
 // TVPGetAsyncKeyState
@@ -66,10 +66,10 @@ bool krkr::base::TVPGetAsyncKeyState(tjs_uint keycode, bool getcurrent) {
 
     if(keycode >= VK_PAD_FIRST && keycode <= VK_PAD_LAST) {
         // JoyPad related keys are treated in DInputMgn.cpp
-        return TVPGetJoyPadAsyncState(keycode, getcurrent);
+        return krkr::environ::GetJoyPadAsyncState(keycode, getcurrent);
     }
 
-    return TVPGetKeyMouseAsyncState(keycode, getcurrent);
+    return krkr::environ::GetKeyMouseAsyncState(keycode, getcurrent);
 #if 0
     if(keycode == VK_LBUTTON || keycode == VK_RBUTTON)
     {
@@ -520,7 +520,7 @@ void krkr::base::TVPPostApplicationDeactivateEvent() {
 static void TVPOnApplicationActivate(bool activate_or_deactivate) {
     // called by event system, to fire System.onActivate or
     // System.onDeactivate event
-    if(!TVPSystemControlAlive)
+    if(!krkr::environ::systemControlAlive)
         return;
 
     // check the state again (because the state may change during the
@@ -614,7 +614,7 @@ static void TVPHeapDump()
 }
 //---------------------------------------------------------------------------
 #endif
-bool TVPAutoSaveBookMark = false;
+bool autoSaveBookMark = false;
 
 extern void krkr::base::TVPDoSaveSystemVariables() {
     try {
@@ -636,7 +636,7 @@ extern void krkr::base::TVPDoSaveSystemVariables() {
                     fn->FuncCall(0, nullptr, nullptr, nullptr, 0, &args, kag);
                 }
             }
-            if(TVPAutoSaveBookMark &&
+            if(autoSaveBookMark &&
                kag->PropGet(0, TJS_W("saveBookMark"), nullptr, &var, kag) ==
                    TJS_S_OK &&
                var.Type() == tvtObject) {
@@ -993,13 +993,13 @@ tTJSNativeClass *krkr::base::TVPCreateNativeClass_System() {
                     vecButtons.emplace_back(TJS_W("Cancel"));
             }
 
-            int ret = TVPShowSimpleMessageBox(text, caption, vecButtons);
+            int ret = ShowSimpleMessageBox(text, caption, vecButtons);
             if(result)
                 result->operator=(ret);
             return TJS_S_OK;
         }
 
-        TVPShowSimpleMessageBox(text, caption);
+        ShowSimpleMessageBox(text, caption);
 
         if(result)
             result->Clear();
@@ -1143,7 +1143,7 @@ tTJSNativeClass *krkr::base::TVPCreateNativeClass_System() {
 
         ttstr name = *param[0];
 
-        bool res = TVPGetCommandLine(name.c_str(), result);
+        bool res = krkr::base::GetCommandLine(name.c_str(), result);
 
         if(!res)
             result->Clear();
@@ -1267,7 +1267,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL_OUTER(cls, appDataPath)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(dataPath){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPDataPath;
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = krkr::base::dataPath;
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER

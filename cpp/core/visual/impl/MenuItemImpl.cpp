@@ -57,7 +57,7 @@ static void UpdateMenuList() {
             iTJSDispatch2 *menu = target->second;
             MENU_LIST.erase(target);
             menu->Release();
-            // TVPDeleteAcceleratorKeyTable(hWnd);
+            // DeleteAcceleratorKeyTable(hWnd);
         } else {
             i++;
         }
@@ -305,14 +305,14 @@ bool tTJSNI_MenuItem::GetVisible() const {
     // MenuItem->getVisible();
 }
 
-void TVPShowPopMenu(tTJSNI_MenuItem *menu);
+void ShowPopMenu(tTJSNI_MenuItem *menu);
 
 //---------------------------------------------------------------------------
 tjs_int tTJSNI_MenuItem::TrackPopup(tjs_uint32 flags, tjs_int x,
                                     tjs_int y) const {
     // if (!MenuItem) return 0;
     //  TODO
-    TVPShowPopMenu((tTJSNI_MenuItem *)this);
+    ShowPopMenu((tTJSNI_MenuItem *)this);
     return 1;
     //
     // 	HWND  hWindow;

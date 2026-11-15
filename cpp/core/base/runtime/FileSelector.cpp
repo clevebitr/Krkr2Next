@@ -21,7 +21,7 @@
 
 #include "TVPScreen.h"
 
-std::string TVPShowFileSelector(const std::string &title,
+std::string ShowFileSelector(const std::string &title,
                                 const std::string &filename,
                                 std::string initdir, bool issave);
 
@@ -378,7 +378,7 @@ bool TVPSelectFile(iTJSDispatch2 *params) {
         issave = val.operator bool();
 
     // show dialog box
-    result = TVPShowFileSelector(title, filename, initialdir, issave);
+    result = ShowFileSelector(title, filename, initialdir, issave);
 
     if(!result.empty()) {
         // returns some informations

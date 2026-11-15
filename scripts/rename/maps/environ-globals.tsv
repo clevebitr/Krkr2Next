@@ -1,0 +1,140 @@
+# module: environ
+# qualify: krkr::environ   （kind=global 时忽略，保留只为可读）
+# owner: cpp/core/environ
+#
+# environ 第 7 轮（C）：**名字活在全局作用域**的符号，用 `kind=global` 不加限定。
+#
+# 这批占到 environ 的绝大多数：函数声明散在 base/visual 的头里（很多是全局作用域的
+# `extern`/`TJS_EXP_FUNC_DEF`），实现在 environ/platform/*、app/* 的全局作用域；
+# 另有 49 个连头文件声明都没有（就地 `extern`）。
+# 工具原来只会"别处全限定"，对这类符号会写出 `krkr::environ::X` —— 与全局的 `X`
+# 不是同一个符号，四处立刻编译不过。所以给工具加了 `kind=global`（见 §6）。
+#
+# 三个撞 Win32 API 名的改成更精确的名字（Android 上没有 Win32，但别留地雷）：
+#   TVPCopyFile    -> CopyLocalFile
+#   TVPDeleteFile  -> DeleteLocalFile
+#   TVPRenameFile  -> RenameLocalFile
+#   TVPGetCommandLine -> GetCommandLineArguments（Win32: ::GetCommandLine）
+
+TVPAddAtExitHandler	AddAtExitHandler	global
+TVPCheckMemory	CheckMemory	global
+TVPCheckStartupPath	CheckStartupPath	global
+TVPCopyFile	CopyLocalFile	global
+TVPDeleteAcceleratorKeyTable	DeleteAcceleratorKeyTable	global
+TVPDeleteFile	DeleteLocalFile	global
+TVPDumpHWException	DumpHWException	global
+TVPEngineBootstrap	EngineBootstrap	global
+TVPEnsureDataPathDirectory	EnsureDataPathDirectory	global
+TVPExecuteUserConfig	ExecuteUserConfig	global
+TVPExitApplication	ExitApplication	global
+TVPGetAppStoragePath	GetAppStoragePath	global
+TVPGetDeviceID	GetDeviceID	global
+TVPGetDriverPath	GetDriverPath	global
+TVPGetInternalPreferencePath	GetInternalPreferencePath	global
+TVPGetLayerCount	GetLayerCount	global
+TVPGetMemoryInfo	GetMemoryInfo	global
+TVPGetOSName	GetOSName	global
+TVPGetPackageVersionString	GetPackageVersionString	global
+TVPGetPlatformName	GetPlatformName	global
+TVPGetSelfUsedMemory	GetSelfUsedMemory	global
+TVPGetSystemFreeMemory	GetSystemFreeMemory	global
+TVPHideIME	HideIME	global
+TVPInitializeBaseSystems	InitializeBaseSystems	global
+TVPMainScene	MainScene	global
+TVPPrintLog	PrintLog	global
+TVPRegisterAcceleratorKey	RegisterAcceleratorKey	global
+TVPRelinquishCPU	RelinquishCPU	global
+TVPRenameFile	RenameLocalFile	global
+TVPResetSysInitImplForRestart	ResetSysInitImplForRestart	global
+TVPSendToOtherApp	SendToOtherApp	global
+TVPShowIME	ShowIME	global
+TVPShowSimpleInputBox	ShowSimpleInputBox	global
+TVPShowSimpleMessageBox	ShowSimpleMessageBox	global
+TVPShowSimpleMessageBoxYesNo	ShowSimpleMessageBoxYesNo	global
+TVPUnregisterAcceleratorKey	UnregisterAcceleratorKey	global
+TVP_stat	KRKR_stat	global
+TVP_utime	KRKR_utime	global
+tTVPAsyncImageLoader	AsyncImageLoader	global
+tTVPBorderStyle	BorderStyle	global
+tTVPCPUClockAccuracy	CPUClockAccuracy	global
+tTVPOnMouseWheelInputEvent	OnMouseWheelInputEvent	global
+tTVPSystemControl	SystemControl	global
+tTVPWMRRegMode	WMRRegMode	global
+tTVPWindow	Window	global
+TVPCauseAtExit	CauseAtExit	global
+TVPCheckAbout	CheckAbout	global
+TVPCheckAndSendDumps	CheckAndSendDumps	global
+TVPCheckPrintDataPath	CheckPrintDataPath	global
+TVPCheckStartupArg	CheckStartupArg	global
+TVPClampInt	ClampInt	global
+TVPControlAdDialog	ControlAdDialog	global
+TVPCreateAndAddWindow	CreateAndAddWindow	global
+TVPDisableCPU	DisableCPU	global
+TVPDumpCPUFeatures	DumpCPUFeatures	global
+TVPDumpCPUInfo	DumpCPUInfo	global
+TVPDumpOptions	DumpOptions	global
+TVPExecuteAsync	ExecuteAsync	global
+TVPForceRegisterOpenGLRenderManager	ForceRegisterOpenGLRenderManager	global
+TVPForceSwapBuffer	ForceSwapBuffer	global
+TVPGL_C_Init	GL_C_Init	global
+TVPGL_SSE2_Init	GL_SSE2_Init	global
+TVPGetCPUTypeForOne	GetCPUTypeForOne	global
+TVPGetCurrentLanguage	GetCurrentLanguage	global
+TVPGetDeviceLanguage	GetDeviceLanguage	global
+TVPGetEmbeddedOptions	GetEmbeddedOptions	global
+TVPGetErrorDialogTitle	GetErrorDialogTitle	global
+TVPGetIntegerOption	GetIntegerOption	global
+TVPGetMainThreadPriorityControl	GetMainThreadPriorityControl	global
+TVPGetMessageByLocale	GetMessageByLocale	global
+TVPGetSystemTotalMemoryMB	GetSystemTotalMemoryMB	global
+TVPHostClearVideoOverlayFrame	HostClearVideoOverlayFrame	global
+TVPHostSubmitVideoOverlayFrame	HostSubmitVideoOverlayFrame	global
+TVPHostVideoOverlayFrameActive	HostVideoOverlayFrameActive	global
+TVPInitCompatibleNativeFunctions	InitCompatibleNativeFunctions	global
+TVPInitProgramArgumentsAndDataPath	InitProgramArgumentsAndDataPath	global
+TVPInitRandomGenerator	InitRandomGenerator	global
+TVPInitUIExtension	InitUIExtension	global
+TVPInitWindowOptions	InitWindowOptions	global
+TVPLoadMessage	LoadMessage	global
+TVPOpenPatchLibUrl	OpenPatchLibUrl	global
+TVPParseCommandLineOne	ParseCommandLineOne	global
+TVPProcessInputEvents	ProcessInputEvents	global
+TVPResolveBudgetMB	ResolveBudgetMB	global
+TVPSavePVRv3	SavePVRv3	global
+TVPSetPostDrawHook	SetPostDrawHook	global
+TVPSetXP3FilterScript	SetXP3FilterScript	global
+TVPShowFileSelector	ShowFileSelector	global
+TVPShowPopMenu	ShowPopMenu	global
+TVPWaitWritePermit	WaitWritePermit	global
+TVPWriteDataToFileJava	WriteDataToFileJava	global
+TVP_MAIN_DEBUG	KRKR_MAIN_DEBUG	global
+tTVPAtExitInfo	AtExitInfo	global
+tTVPXP3ArchiveEx	XP3ArchiveEx	global
+
+# ── 第 7b 轮：定义在 environ 里的全局变量（N7）+ 几个全局类型/函数 ──────────
+TVPTotalPhysMemory	totalPhysMemory	global
+TVPProgramArguments	programArguments	global
+TVPTerminateCode	terminateCode	global
+TVPTerminated	terminated	global
+TVPCommandLineArgumentGeneration	commandLineArgumentGeneration	global
+TVPNativeDataPath	nativeDataPath	global
+TVPEarlySetOptions	earlySetOptions	global
+TVPNativeProjectDir	nativeProjectDir	global
+TVPTerminateWindowClosed	terminateWindowClosed	global
+TVPDataPathDirectoryEnsured	dataPathDirectoryEnsured	global
+TVPProgramArgumentsInit	programArgumentsInit	global
+TVPHostSuppressProcessExit	hostSuppressProcessExit	global
+TVPMainThreadPriorityControl	mainThreadPriorityControl	global
+TVPOverlayNode	OverlayNode	global
+TVPProjectDirSelected	projectDirSelected	global
+TVPSystemSecurityOptions	systemSecurityOptions	global
+TVPTerminateOnWindowClose	terminateOnWindowClose	global
+TVPAutoSaveBookMark	autoSaveBookMark	global
+TVPTerminateOnNoWindowStartup	terminateOnNoWindowStartup	global
+TVPEnableGlobalHeapCompaction	enableGlobalHeapCompaction	global
+TVPHighTimerPeriod	highTimerPeriod	global
+TVPTimeBeginPeriodRes	timeBeginPeriodRes	global
+TVPZlibFileFunc	zlibFileFunc	global
+TVPCPUClock	cpuClock	global
+TVPCPUClockAccuracy	cpuClockAccuracy	global
+TVPGL_ASM_Init	InitGLAsm	global

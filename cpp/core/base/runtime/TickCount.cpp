@@ -68,7 +68,7 @@ namespace krkr::utils {
         }
     }
 
-    static tTVPAtExit TVPWatchThreadUninitAtExit(TVP_ATEXIT_PRI_SHUTDOWN,
+    static tTVPAtExit TVPWatchThreadUninitAtExit(KRKR_ATEXIT_PRI_SHUTDOWN,
                                                  TVPWatchThreadUninit);
 
     // krkr::utils::StartTickCount

@@ -530,7 +530,7 @@ TVPXP3ArchiveExtractionFilterWrapper(krkr::io::XP3ExtractionFilterInfo *info,
     }
 }
 
-void TVPSetXP3FilterScript(ttstr content) {
+void SetXP3FilterScript(ttstr content) {
     if(sXP3FilterScript != content) {
         for(auto it : _thread_decoders) {
             delete it.second;

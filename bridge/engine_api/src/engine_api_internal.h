@@ -83,9 +83,9 @@ extern "C" void krkr_GetSurfaceDimensions(uint32_t *, uint32_t *);
 #include "visual/ogl/ogl_common.h"
 #include "ConfigManager/GlobalConfigManager.h"
 
-// TVPDrawSceneOnce / TVPResetDrawSceneOnceTimingForRestart 的声明由上面已
+// krkr::environ::DrawSceneOnce / krkr::environ::ResetDrawSceneOnceTimingForRestart 的声明由上面已
 // include 的 environ/MainScene.h 提供（现在在 krkr::environ，并带全局 using）。
-bool TVPHostVideoOverlayFrameActive();
+bool HostVideoOverlayFrameActive();
 extern "C" void TVPRegisterKrkrGLESPluginAnchor();
 #ifdef KRKR2_LIVE2D
 extern "C" void TVPRegisterKrkrLive2DPluginAnchor();

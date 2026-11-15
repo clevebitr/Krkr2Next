@@ -28,7 +28,7 @@
 #include "StorageIntf.h"
 #include "EventIntf.h"
 #include "WindowIntf.h"
-// TVPGetCommandLine：仍用于其它命令行开关；兼容层判定见 IsAetherKiriCompatEnabled。
+// krkr::base::GetCommandLine：仍用于其它命令行开关；兼容层判定见 IsAetherKiriCompatEnabled。
 #include "SysInitIntf.h"
 #include "compat/layer/CompatLayer.h"
 
@@ -69,7 +69,7 @@ struct Live2DRenderTarget {
 };
 Live2DRenderTarget g_live2dRenderTarget;
 
-extern void TVPSetPostDrawHook(void (*hook)());
+extern void SetPostDrawHook(void (*hook)());
 
 // Registered Layer from krkrgles.cpp — used to blit Live2D content
 extern iTJSDispatch2 *KrkrGLES_GetRegisteredLayer();
@@ -2093,7 +2093,7 @@ static void EnsureContinuousHook() {
     if(g_continuousHookRegistered)
         return;
     TVPAddContinuousEventHook(&g_live2dContinuousCb);
-    TVPSetPostDrawHook(Live2DPostDrawHook);
+    SetPostDrawHook(Live2DPostDrawHook);
     g_continuousHookRegistered = true;
     spdlog::info("krkrlive2d: continuous animation hook registered");
 }

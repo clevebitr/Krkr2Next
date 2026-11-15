@@ -82,6 +82,6 @@ namespace TJS {
     //---------------------------------------------------------------------------
 } // namespace TJS
 
-extern ttstr TVPGetMessageByLocale(const std::string &key);
+extern ttstr GetMessageByLocale(const std::string &key);
 
 #endif

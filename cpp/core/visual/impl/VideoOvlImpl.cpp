@@ -81,7 +81,7 @@ static void TVPShutdownVideoOverlay() {
         (*i)->Shutdown();
     }
 }
-static tTVPAtExit TVPShutdownVideoOverlayAtExit(TVP_ATEXIT_PRI_PREPARE,
+static tTVPAtExit TVPShutdownVideoOverlayAtExit(KRKR_ATEXIT_PRI_PREPARE,
                                                 TVPShutdownVideoOverlay);
 //---------------------------------------------------------------------------
 // 嵌套内部使用的状态名转换

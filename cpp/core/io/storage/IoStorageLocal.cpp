@@ -269,7 +269,7 @@ void GetLocalFileListAt(
     if((dirp = opendir(folder.c_str()))) {
         while((direntp = readdir(dirp)) != nullptr) {
             std::string fullpath = folder + "/" + direntp->d_name;
-            if(!TVP_stat(fullpath.c_str(), stat_buf))
+            if(!KRKR_stat(fullpath.c_str(), stat_buf))
                 continue;
             ttstr file(direntp->d_name);
             if(file.length() <= 2) {
@@ -612,13 +612,13 @@ bool RemoveFolder(const ttstr &name) {
 // GetAppPath
 //---------------------------------------------------------------------------
 // apppath 缓存提升到文件作用域，使 ResetStorageImplForRestart 可复位
-// （TVPProjectDir 在 runtime-restart 时被清空，旧缓存必须重建）。
+// （krkr::base::projectDir 在 runtime-restart 时被清空，旧缓存必须重建）。
 static ttstr appPathCache;
 static bool appPathCacheValid = false;
 
 ttstr GetAppPath() {
     if(!appPathCacheValid) {
-        ttstr dir = TVPProjectDir;
+        ttstr dir = krkr::base::projectDir;
         // 档案工程（`.../data.xp3>`）下 ExtractStoragePath 会保留末尾的 '>'，
         // 于是 `GetAppPath() + "patch.tjs"` 变成"包里找 patch.tjs"、临时文件名也会
         // 指向包内（写入会失败）。旧层（classic）保持这个历史行为；AetherKiri 层按策略
@@ -675,7 +675,7 @@ bool CheckExistentLocalFile(const ttstr &name) {
         return true; // a file
 #endif
     tTVP_stat s{};
-    if(!TVP_stat(name.c_str(), s)) {
+    if(!KRKR_stat(name.c_str(), s)) {
         return false; // not exist
     }
     return s.st_mode & S_IFREG;
@@ -687,7 +687,7 @@ bool CheckExistentLocalFile(const ttstr &name) {
 //---------------------------------------------------------------------------
 bool CheckExistentLocalFolder(const ttstr &name) {
     tTVP_stat s{};
-    if(!TVP_stat(name.c_str(), s)) {
+    if(!KRKR_stat(name.c_str(), s)) {
         return false; // not exist
     }
 
@@ -1526,22 +1526,22 @@ void AutoMountSiblingXP3Archives() {
     // 否则用 xp3 当工程目录时这条复位不会执行。
     ResetBuiltinXP3CxDecoder();
 
-    if(TVPProjectDir.GetLastChar() != TJS_W('/'))
+    if(krkr::base::projectDir.GetLastChar() != TJS_W('/'))
         return;
 
-    tjs_int len = TVPProjectDir.GetLen();
-    while(len > 0 && TVPProjectDir[len - 1] == TJS_W('/'))
+    tjs_int len = krkr::base::projectDir.GetLen();
+    while(len > 0 && krkr::base::projectDir[len - 1] == TJS_W('/'))
         len--;
     if(len == 0)
         return;
-    ttstr projDir = TVPProjectDir.SubString(0, len);
+    ttstr projDir = krkr::base::projectDir.SubString(0, len);
     ttstr parentStoragePath = ExtractStoragePath(projDir);
     if(parentStoragePath.IsEmpty())
         return;
 
     ttstr projBaseName = ExtractStorageName(projDir);
 
-    spdlog::info("AutoMountXP3: TVPProjectDir={}", TVPProjectDir.AsStdString());
+    spdlog::info("AutoMountXP3: projectDir={}", krkr::base::projectDir.AsStdString());
     spdlog::info("AutoMountXP3: parentStoragePath={}",
                  parentStoragePath.AsStdString());
     spdlog::info("AutoMountXP3: projBaseName={}", projBaseName.AsStdString());
@@ -1683,10 +1683,10 @@ void AutoMountSiblingXP3Archives() {
 // 这里补上"扫描工程目录自身 xp3"的挂载，逻辑与兄弟挂载完全一致
 // （OpenArchive + 逐个目录 AddAutoPath 注册进 auto-path 表）。
 void AutoMountProjectXP3Archives() {
-    if(TVPProjectDir.GetLastChar() != TJS_W('/'))
+    if(krkr::base::projectDir.GetLastChar() != TJS_W('/'))
         return;
 
-    ttstr projStorage = TVPProjectDir;
+    ttstr projStorage = krkr::base::projectDir;
 
     ttstr nativeProj = projStorage;
     try {

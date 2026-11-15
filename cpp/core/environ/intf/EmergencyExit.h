@@ -11,8 +11,8 @@
 #ifndef EmergencyExitH
 #define EmergencyExitH
 
-extern double TVPCPUClock;
-enum tTVPCPUClockAccuracy { ccaNotSet, ccaRough, ccaAccurate };
-extern tTVPCPUClockAccuracy TVPCPUClockAccuracy;
+extern double cpuClock;
+enum CPUClockAccuracy { ccaNotSet, ccaRough, ccaAccurate };
+extern CPUClockAccuracy cpuClockAccuracy;
 //---------------------------------------------------------------------------
 #endif

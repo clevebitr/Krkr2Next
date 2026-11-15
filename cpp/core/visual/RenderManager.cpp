@@ -144,7 +144,7 @@ static void *TVPAllocBitmapBits(tjs_uint size, tjs_uint width,
     tjs_uint8 *ptrorg, *ptr;
     tjs_uint allocbytes = 16 + size + sizeof(tTVPLayerBitmapMemoryRecord) +
         sizeof(tjs_uint32) * 2;
-    TVPCheckMemory();
+    CheckMemory();
     ptr = ptrorg = (tjs_uint8 *)malloc(allocbytes);
     if(!ptr)
         TVPThrowExceptionMessage(
@@ -228,7 +228,7 @@ tTVPBitmap::tTVPBitmap(tjs_uint width, tjs_uint height, tjs_uint bpp)
 {
 	// tTVPBitmap constructor
 
-	TVPInitWindowOptions(); // ensure window/bitmap usage options are initialized
+	InitWindowOptions(); // ensure window/bitmap usage options are initialized
 
 	RefCount = 1;
 
@@ -244,7 +244,7 @@ tTVPBitmap::~tTVPBitmap()
 tTVPBitmap::tTVPBitmap(const tTVPBitmap & r)
 {
 	// constructor for cloning bitmap
-	TVPInitWindowOptions(); // ensure window/bitmap usage options are initialized
+	InitWindowOptions(); // ensure window/bitmap usage options are initialized
 
 	RefCount = 1;
 
@@ -368,7 +368,7 @@ void iTVPTexture2D::RecycleProcess() {
     _toDeleteTextures.clear();
     glFlush();
 }
-static tTVPAtExit TVPReleaseTexture2D(TVP_ATEXIT_PRI_RELEASE + 500,
+static tTVPAtExit TVPReleaseTexture2D(KRKR_ATEXIT_PRI_RELEASE + 500,
                                       iTVPTexture2D::RecycleProcess);
 
 void iTVPTexture2D::Release() {
@@ -2414,7 +2414,7 @@ iTVPRenderMethod *iTVPRenderManager::GetRenderMethod(const char *name,
     auto it = AllMethods.find(hash);
     if(it != AllMethods.end())
         return it->second;
-    TVPShowSimpleMessageBox(ttstr(TJS_W("Operation \"")) + name +
+    ShowSimpleMessageBox(ttstr(TJS_W("Operation \"")) + name +
                                 TJS_W("\" is not supported under ") +
                                 GetName() + TJS_W(" mode."),
                             TJS_W("Please use software renderer"));
@@ -4955,7 +4955,7 @@ iTVPRenderManager *TVPGetRenderManager() {
         // Prefer command-line option set via engine_set_option
         tTJSVariant val;
         ttstr str;
-        if(TVPGetCommandLine(TJS_W("renderer"), &val)) {
+        if(krkr::base::GetCommandLine(TJS_W("renderer"), &val)) {
             str = val;
         }
         if(str.IsEmpty()) {

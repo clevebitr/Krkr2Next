@@ -737,7 +737,7 @@ public:
             if(r < ARCHIVE_WARN)
                 break;
             if(archive_entry_mtime_is_set(entry)) {
-                TVP_utime(fullpath.c_str(), archive_entry_mtime(entry));
+                KRKR_utime(fullpath.c_str(), archive_entry_mtime(entry));
             }
         }
         archive_read_close(ArcObj);

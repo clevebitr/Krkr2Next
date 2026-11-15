@@ -38,10 +38,10 @@ extern tTJSNativeClass *TVPCreateNativeClass_System();
 //---------------------------------------------------------------------------
 // 以下两个由各平台实现（environ/platform/android、environ/platform/stubs），暂留全局。
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(ttstr, TVPGetPlatformName, ());
+TJS_EXP_FUNC_DEF(ttstr, GetPlatformName, ());
 // retrieve platform name (eg. "Win32")
 // implement in each platform.
-TJS_EXP_FUNC_DEF(ttstr, TVPGetOSName, ());
+TJS_EXP_FUNC_DEF(ttstr, GetOSName, ());
 
 // retrieve OS name
 // implement in each platform.

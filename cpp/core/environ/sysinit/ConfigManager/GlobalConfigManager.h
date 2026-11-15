@@ -9,7 +9,7 @@ namespace krkr::base {
 //---------------------------------------------------------------------------
 // 壳下发的引擎选项覆盖（`engine_set_option`）
 //---------------------------------------------------------------------------
-// 为什么需要单独一条通道：壳设的键目前只落进**命令行参数**（`TVPProgramArguments`），
+// 为什么需要单独一条通道：壳设的键目前只落进**命令行参数**（`programArguments`），
 // 而渲染相关键（`ogl_compress_tex` / `ogl_accurate_render` / `ogl_max_texsize` /
 // `memusage`）是通过 `IndividualConfigManager::GetValue` 从 `Kirikiroid2Preference.xml`
 // / 全局配置读的 —— 两条路互不相通，所以壳设了也不生效（日志 `Specified option(s)`
@@ -18,9 +18,9 @@ namespace krkr::base {
 // 为什么不用 `SetValue()` 直接写进 `AllConfig`：`UsePreferenceAt(游戏目录)` 会先
 // `Clear()` 再 `Initialize()`，壳在开游戏前设的值会被整份清掉。所以用一张独立的、
 // 不随配置文件读写的表，且**优先级最高**（壳显式设的就是"这次启动要用的值"）。
-void TVPSetShellOption(const std::string &name, const std::string &value);
-bool TVPGetShellOption(const std::string &name, std::string &out);
-void TVPClearShellOptions();
+void SetShellOption(const std::string &name, const std::string &value);
+bool GetShellOption(const std::string &name, std::string &out);
+void ClearShellOptions();
 
 class iSysConfigManager {
 protected:
@@ -89,8 +89,5 @@ public:
 } // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::base::TVPSetShellOption;
-using krkr::base::TVPGetShellOption;
-using krkr::base::TVPClearShellOptions;
 using krkr::base::iSysConfigManager;
 using krkr::base::GlobalConfigManager;

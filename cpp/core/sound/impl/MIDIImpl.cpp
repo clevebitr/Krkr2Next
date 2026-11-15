@@ -44,7 +44,7 @@ static void UninitMIDIOut() {
         midiOutClose(midiOutHandle), midiOutHandle = nullptr;
 }
 //---------------------------------------------------------------------------
-static tTVPAtExit UninitMIDIOutAtExit(TVP_ATEXIT_PRI_RELEASE,
+static tTVPAtExit UninitMIDIOutAtExit(KRKR_ATEXIT_PRI_RELEASE,
                                          UninitMIDIOut);
 //---------------------------------------------------------------------------
 static void CheckMIDIDelay() {
@@ -255,7 +255,7 @@ static void DeleteMIDIThread() {
         delete midiThread, midiThread = nullptr;
 }
 //---------------------------------------------------------------------------
-static tTVPAtExit DeleteMIDIThreadAtExit(TVP_ATEXIT_PRI_SHUTDOWN,
+static tTVPAtExit DeleteMIDIThreadAtExit(KRKR_ATEXIT_PRI_SHUTDOWN,
                                             DeleteMIDIThread);
 //---------------------------------------------------------------------------
 static void AddMIDIBuffer(tTJSNI_MIDISoundBuffer *buf) {

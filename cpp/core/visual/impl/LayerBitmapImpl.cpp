@@ -29,7 +29,7 @@
 #include "DebugIntf.h"
 #include <spdlog/spdlog.h>
 // #include "WindowFormUnit.h"
-void TVPInitWindowOptions();
+void InitWindowOptions();
 #include "UtilStreams.h"
 #include "ConfigManager/IndividualConfigManager.h"
 
@@ -95,7 +95,7 @@ void TVPUninitializeFontRasterizers() {
     TVPFontRasterizersInit = false;
     TVPCurrentFontRasterizers = FONT_RASTER_FREE_TYPE;
 }
-static tTVPAtExit TVPUninitializeFontRaster(TVP_ATEXIT_PRI_RELEASE,
+static tTVPAtExit TVPUninitializeFontRaster(KRKR_ATEXIT_PRI_RELEASE,
                                             TVPUninitializeFontRasterizers);
 
 void TVPSetFontRasterizer(tjs_int index) {
@@ -204,7 +204,7 @@ static void TVPUnmapAllPrerenderedFonts() {
 }
 //---------------------------------------------------------------------------
 static tTVPAtExit
-    TVPUnmapAllPrerenderedFontsAtExit(TVP_ATEXIT_PRI_PREPARE,
+    TVPUnmapAllPrerenderedFontsAtExit(KRKR_ATEXIT_PRI_PREPARE,
                                       TVPUnmapAllPrerenderedFonts);
 //---------------------------------------------------------------------------
 static tTVPPrerenderedFont *TVPGetPrerenderedMappedFont(const tTVPFont &font) {
@@ -357,7 +357,7 @@ static tTVPCharacterData *TVPGetCharacter(const tTVPFontAndCharacterData &font,
 tTVPBitmap::tTVPBitmap(tjs_uint width, tjs_uint height, tjs_uint bpp) {
     // tTVPBitmap constructor
 
-    TVPInitWindowOptions(); // ensure window/bitmap usage options are
+    InitWindowOptions(); // ensure window/bitmap usage options are
                             // initialized
 
     RefCount = 1;
@@ -368,7 +368,7 @@ tTVPBitmap::tTVPBitmap(tjs_uint width, tjs_uint height, tjs_uint bpp) {
 tTVPBitmap::tTVPBitmap(tjs_uint width, tjs_uint height, tjs_uint bpp,
                        void *bits) {
     // tTVPBitmap constructor
-    TVPInitWindowOptions(); // ensure window/bitmap usage options are
+    InitWindowOptions(); // ensure window/bitmap usage options are
                             // initialized
 
     RefCount = 1;
@@ -405,7 +405,7 @@ tTVPBitmap::~tTVPBitmap() {
 //---------------------------------------------------------------------------
 tTVPBitmap::tTVPBitmap(const tTVPBitmap &r) {
     // constructor for cloning bitmap
-    TVPInitWindowOptions(); // ensure window/bitmap usage options are
+    InitWindowOptions(); // ensure window/bitmap usage options are
                             // initialized
 
     RefCount = 1;

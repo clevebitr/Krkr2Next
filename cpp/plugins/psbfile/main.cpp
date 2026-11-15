@@ -177,7 +177,7 @@ void initPsbFile() {
     psbMedia = new PSBMedia();
     krkr::io::RegisterStorageMedia(psbMedia);
     psbMedia->Release();
-    TVPRegisterPSBCacheInfoCallback(psbCacheInfoCallback);
+    krkr::environ::RegisterPSBCacheInfoCallback(psbCacheInfoCallback);
     // 让解析器能问"编译场景里有没有这个标签"（见上面 CollectScenarioLabels 一节）。
     TVPRegisterCompiledScenarioLabelResolver(HasCompiledScenarioLabel);
     LOGGER->info("initPsbFile");
@@ -185,7 +185,7 @@ void initPsbFile() {
 
 void deInitPsbFile() {
     TVPRegisterCompiledScenarioLabelResolver(nullptr);
-    TVPRegisterPSBCacheInfoCallback(nullptr);
+    krkr::environ::RegisterPSBCacheInfoCallback(nullptr);
     if(psbMedia != nullptr) {
         psbMedia->clear();
         krkr::io::UnregisterStorageMedia(psbMedia);

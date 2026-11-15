@@ -19,7 +19,7 @@ void krkr::utils::OnError();
 //---------------------------------------------------------------------------
 #if defined(WIN32) && defined(_DEBUG)
 #include <new.h>
-#define TVP_MAIN_DEBUG
+#define KRKR_MAIN_DEBUG
 // #include <vld.h>
 #include "GraphicsLoaderIntf.h"
 #include <set>

@@ -20,16 +20,16 @@
 #include "RenderManager.h"
 
 // Forward declaration — defined in stubs/ui_stubs.cpp
-void TVPInitUIExtension();
+void InitUIExtension();
 
 // Forward declaration — forces linker to include the OpenGL render manager
 // translation unit (which would otherwise be dead-stripped in static library
 // builds)
-extern void TVPForceRegisterOpenGLRenderManager();
+extern void ForceRegisterOpenGLRenderManager();
 
 extern "C" void SDL_SetMainReady();
 extern std::thread::id TVPMainThreadID;
-std::string TVPGetCurrentLanguage();
+std::string GetCurrentLanguage();
 
 namespace krkr::environ {
 
@@ -37,16 +37,16 @@ namespace krkr::environ {
 // Static member
 // ---------------------------------------------------------------------------
 
-bool TVPEngineBootstrap::s_initialized = false;
+bool EngineBootstrap::s_initialized = false;
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-bool TVPEngineBootstrap::Initialize(uint32_t width, uint32_t height) {
+bool EngineBootstrap::Initialize(uint32_t width, uint32_t height) {
     if(s_initialized) {
         spdlog::warn(
-            "TVPEngineBootstrap::Initialize called but already initialized");
+            "EngineBootstrap::Initialize called but already initialized");
         return true;
     }
 
@@ -65,10 +65,10 @@ bool TVPEngineBootstrap::Initialize(uint32_t width, uint32_t height) {
     // 2.5. Force-link the OpenGL render manager so it survives static library
     //      dead-stripping.  Must happen after EGL context is ready but before
     //      TVPGetRenderManager() is first called.
-    TVPForceRegisterOpenGLRenderManager();
+    ForceRegisterOpenGLRenderManager();
 
     // 3. Initialize UI extensions
-    TVPInitUIExtension();
+    InitUIExtension();
 
     // 4. Initialize locale
     InitializeLocale();
@@ -80,7 +80,7 @@ bool TVPEngineBootstrap::Initialize(uint32_t width, uint32_t height) {
     return true;
 }
 
-void TVPEngineBootstrap::Shutdown() {
+void EngineBootstrap::Shutdown() {
     if(!s_initialized) {
         return;
     }
@@ -91,7 +91,7 @@ void TVPEngineBootstrap::Shutdown() {
     //
     // 队列是**进程级**的、且不带上下文世代标记，而 EngineLoop::Tick 每帧都会
     // 调 RecycleProcess 排空它，所以正常情况下队列只会在两次 tick 之间非空。
-    // 唯一的缺口在关闭阶段：EngineLoop / TVPMainScene 析构会释放纹理，此时已
+    // 唯一的缺口在关闭阶段：EngineLoop / MainScene 析构会释放纹理，此时已
     // 不再有 tick，这些纹理就带着**旧上下文的 GL 名字**活到下一个游戏会话——
     // 届时 glDeleteTextures 作用在新上下文上，而新上下文很可能已经复用了同一
     // 批 id，删掉的就是**活**纹理（缺图 / 黑图）。
@@ -103,7 +103,7 @@ void TVPEngineBootstrap::Shutdown() {
     s_initialized = false;
 }
 
-bool TVPEngineBootstrap::Resize(uint32_t width, uint32_t height) {
+bool EngineBootstrap::Resize(uint32_t width, uint32_t height) {
     if(!s_initialized) {
         spdlog::error("EngineBootstrap::Resize called before Initialize");
         return false;
@@ -122,13 +122,13 @@ bool TVPEngineBootstrap::Resize(uint32_t width, uint32_t height) {
     return true;
 }
 
-bool TVPEngineBootstrap::IsInitialized() { return s_initialized; }
+bool EngineBootstrap::IsInitialized() { return s_initialized; }
 
 // ---------------------------------------------------------------------------
 // Private helpers
 // ---------------------------------------------------------------------------
 
-void TVPEngineBootstrap::InitializeGraphics(uint32_t width, uint32_t height) {
+void EngineBootstrap::InitializeGraphics(uint32_t width, uint32_t height) {
     auto &egl = krkr::GetEngineEGLContext();
     if(!egl.Initialize(width, height)) {
         spdlog::error("EngineBootstrap: EGL context initialization failed, "
@@ -153,8 +153,8 @@ void TVPEngineBootstrap::InitializeGraphics(uint32_t width, uint32_t height) {
     spdlog::info("EngineBootstrap: EGL context ready");
 }
 
-void TVPEngineBootstrap::InitializeLocale() {
-    LocaleConfigManager::GetInstance()->Initialize(TVPGetCurrentLanguage());
+void EngineBootstrap::InitializeLocale() {
+    LocaleConfigManager::GetInstance()->Initialize(GetCurrentLanguage());
 }
 
 } // namespace krkr::environ

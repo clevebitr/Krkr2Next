@@ -30,18 +30,18 @@ namespace {
     }
 } // namespace
 
-void TVPSetShellOption(const std::string &name, const std::string &value) {
+void SetShellOption(const std::string &name, const std::string &value) {
     if(name.empty())
         return;
     std::lock_guard<std::mutex> lock(ShellOptionsMutex());
     ShellOptions()[name] = value;
 }
 
-bool TVPGetShellOption(const std::string &name, std::string &out) {
+bool GetShellOption(const std::string &name, std::string &out) {
     return LookupShellOption(name, out);
 }
 
-void TVPClearShellOptions() {
+void ClearShellOptions() {
     std::lock_guard<std::mutex> lock(ShellOptionsMutex());
     ShellOptions().clear();
 }
@@ -78,7 +78,7 @@ bool IndividualConfigManager::CreatePreferenceAt(const std::string &folder) {
     // #endif
     Clear();
     // 	if (!fp) {
-    // 		TVPShowSimpleMessageBox(
+    // 		ShowSimpleMessageBox(
     // 			LocaleConfigManager::GetInstance()->GetText("cannot_create_preference"),
     // 			LocaleConfigManager::GetInstance()->GetText("readonly_storage"));
     // 		return false;

@@ -415,7 +415,7 @@ void TVPInitFontNames() {
     }
 
     if(TVPDefaultFontName.IsEmpty()) {
-        TVPShowSimpleMessageBox(
+        ShowSimpleMessageBox(
             ("Could not found any font.\nPlease ensure that at "
              "least \"default.ttf\" exists"),
             "Exception Occured");

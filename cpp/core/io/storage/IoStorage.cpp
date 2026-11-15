@@ -809,7 +809,7 @@ void SetArchiveCacheCount(tjs_uint max_count) {
     archiveCache.SetMaxCount((tjs_int)max_count);
 }
 
-static tTVPAtExit ClearArchiveCacheAtExit(TVP_ATEXIT_PRI_SHUTDOWN,
+static tTVPAtExit ClearArchiveCacheAtExit(KRKR_ATEXIT_PRI_SHUTDOWN,
                                              ClearArchiveCache);
 //---------------------------------------------------------------------------
 

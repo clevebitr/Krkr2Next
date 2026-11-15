@@ -1481,7 +1481,7 @@ void TVPClearGraphicCache() {
     TVPGraphicCache.Clear();
     TVPGraphicCacheTotalBytes = 0;
 }
-static tTVPAtExit TVPUninitMessageLoad(TVP_ATEXIT_PRI_RELEASE,
+static tTVPAtExit TVPUninitMessageLoad(KRKR_ATEXIT_PRI_RELEASE,
                                        TVPClearGraphicCache);
 //---------------------------------------------------------------------------
 struct tTVPClearGraphicCacheCallback : public tTVPCompactEventCallbackIntf {

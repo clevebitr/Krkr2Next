@@ -2,4 +2,4 @@
 #include <jni.h>
 #include <string>
 
-std::string TVPGetDeviceID();
+std::string GetDeviceID();

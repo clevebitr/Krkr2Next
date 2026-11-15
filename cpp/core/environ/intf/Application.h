@@ -90,9 +90,9 @@ class tTVPApplication {
     bool application_activating_;
     bool has_map_report_process_;
 
-    class tTVPAsyncImageLoader *image_load_thread_;
+    class AsyncImageLoader *image_load_thread_;
 #if 0
-	std::stack<class tTVPWindow*> modal_window_stack_;
+	std::stack<class Window*> modal_window_stack_;
 #endif
 private:
     void CheckConsole();
@@ -179,7 +179,7 @@ public:
             &func);
 
 #if 0
-	void ModalStarted( class tTVPWindow* form ) {
+	void ModalStarted( class Window* form ) {
 		modal_window_stack_.push(form);
 	}
 
@@ -207,7 +207,7 @@ public:
      */
     void LoadImageRequest(class iTJSDispatch2 *owner, class tTJSNI_Bitmap *bmp,
                           const ttstr &name);
-    tTVPAsyncImageLoader *GetAsyncImageLoader() { return image_load_thread_; }
+    AsyncImageLoader *GetAsyncImageLoader() { return image_load_thread_; }
 
     void RegisterActiveEvent(void *host,
                              const std::function<void(void *, eTVPActiveEvent)>
@@ -244,11 +244,10 @@ extern std::thread::id TVPMainThreadID;
 namespace krkr::environ {
 
 // 复位应用层状态，使 engine_destroy 后可干净二次启动（runtime-restart）。
-extern void TVPResetApplicationForRestart();
+extern void ResetApplicationForRestart();
 
 } // namespace krkr::environ
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::environ::TVPResetApplicationForRestart;
 
 #endif // __T_APPLICATION_H__

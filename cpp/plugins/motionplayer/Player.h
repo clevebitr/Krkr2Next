@@ -3963,7 +3963,7 @@ namespace motion {
                 return _coordOrigin;
             _coordOrigin = 0; // default center (safe fallback)
             tTJSVariant v;
-            if(TVPGetCommandLine(TJS_W("psb_coord_origin"), &v)) {
+            if(krkr::base::GetCommandLine(TJS_W("psb_coord_origin"), &v)) {
                 ttstr s = ttstr(v).AsLowerCase();
                 if(s == TJS_W("topleft") || s == TJS_W("top-left") ||
                    s == TJS_W("left")) {

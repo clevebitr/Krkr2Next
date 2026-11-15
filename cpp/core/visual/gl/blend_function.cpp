@@ -587,7 +587,7 @@ extern void TVP_ch_blur_mul_copy_sse2_c(tjs_uint8 *dest, const tjs_uint8 *src,
 /**
  * GL初期化。関数ポインタを設定する
  */
-void TVPGL_C_Init() {
+void GL_C_Init() {
 
     // 各種ブレンドを関数オブジェクト化することでアフィン変換や拡縮に展開しやすくする
     SET_BLEND_FUNCTIONS(AlphaBlend, alpha_blend);

@@ -13,7 +13,7 @@
 
 namespace krkr::environ {
 
-class TVPEngineBootstrap {
+class EngineBootstrap {
 public:
     /**
      * Initialize the engine runtime for host mode.
@@ -60,4 +60,3 @@ private:
 } // namespace krkr::environ
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::environ::TVPEngineBootstrap;

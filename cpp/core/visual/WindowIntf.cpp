@@ -80,7 +80,7 @@ static void TVPUnregisterWindowToList(tTJSNI_Window *window) {
         TVPWindowVector.erase(i);
 
         if(flag) {
-            TVPMainWindowClosed(); // MainWindow had been closed
+            krkr::base::MainWindowClosed(); // MainWindow had been closed
             TVPMainWindow = nullptr;
         }
     }
@@ -142,7 +142,7 @@ tTVPUniqueTagForInputEvent tTVPOnKeyDownInputEvent ::Tag;
 tTVPUniqueTagForInputEvent tTVPOnKeyUpInputEvent ::Tag;
 tTVPUniqueTagForInputEvent tTVPOnKeyPressInputEvent ::Tag;
 tTVPUniqueTagForInputEvent tTVPOnFileDropInputEvent ::Tag;
-tTVPUniqueTagForInputEvent tTVPOnMouseWheelInputEvent ::Tag;
+tTVPUniqueTagForInputEvent OnMouseWheelInputEvent ::Tag;
 tTVPUniqueTagForInputEvent tTVPOnPopupHideInputEvent ::Tag;
 tTVPUniqueTagForInputEvent tTVPOnWindowActivateEvent ::Tag;
 tTVPUniqueTagForInputEvent tTVPOnTouchDownInputEvent ::Tag;
@@ -1678,7 +1678,7 @@ TJS_END_NATIVE_PROP_GETTER
 TJS_BEGIN_NATIVE_PROP_SETTER {
     TJS_GET_NATIVE_INSTANCE(/*var. name*/ _this,
                             /*var. type*/ tTJSNI_Window);
-    _this->SetBorderStyle((tTVPBorderStyle)(tjs_int)*param);
+    _this->SetBorderStyle((BorderStyle)(tjs_int)*param);
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER

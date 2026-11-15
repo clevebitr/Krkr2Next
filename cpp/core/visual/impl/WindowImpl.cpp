@@ -36,7 +36,7 @@
 // #include "VSyncTimingThread.h"
 // #include "MouseCursor.h"
 
-iWindowLayer *TVPCreateAndAddWindow(tTJSNI_Window *w);
+iWindowLayer *CreateAndAddWindow(tTJSNI_Window *w);
 #define MK_SHIFT 4
 #define MK_CONTROL 8
 #define MK_ALT (0x20)
@@ -238,7 +238,7 @@ static void TVPInitFullScreenOptions()
 {
 	tTJSVariant val;
 
-	if(TVPGetCommandLine(TJS_W("-fsbpp"), &val) )
+	if(krkr::base::GetCommandLine(TJS_W("-fsbpp"), &val) )
 	{
 		ttstr str(val);
 		if(str == TJS_W("16"))
@@ -251,7 +251,7 @@ static void TVPInitFullScreenOptions()
 			TVPPreferredFullScreenBPP = 0; // means nochange
 	}
 
-	if(TVPGetCommandLine(TJS_W("-fsres"), &val) )
+	if(krkr::base::GetCommandLine(TJS_W("-fsres"), &val) )
 	{
 		ttstr str(val);
 		if(str == TJS_W("auto"))
@@ -266,7 +266,7 @@ static void TVPInitFullScreenOptions()
 			TVPPreferredFullScreenResolutionMode = fsrExpandWindow;
 	}
 
-	if(TVPGetCommandLine(TJS_W("-fszoom"), &val) )
+	if(krkr::base::GetCommandLine(TJS_W("-fszoom"), &val) )
 	{
 		ttstr str(val);
 		if(str == TJS_W("yes") || str == TJS_W("inner"))
@@ -277,7 +277,7 @@ static void TVPInitFullScreenOptions()
 			TVPPreferredFullScreenUsingEngineZoomMode = fszmNone;
 	}
 
-	if(TVPGetCommandLine(TJS_W("-fsmethod"), &val) )
+	if(krkr::base::GetCommandLine(TJS_W("-fsmethod"), &val) )
 	{
 		ttstr str(val);
 		if(str == TJS_W("cds"))
@@ -485,7 +485,7 @@ IDirect3D9 * TVPGetDirect3DObjectNoAddRef()
 
 //---------------------------------------------------------------------------
 static tTVPAtExit
-	TVPUnloadDirect3DAtExit(TVP_ATEXIT_PRI_RELEASE, TVPUnloadDirect3D);
+	TVPUnloadDirect3DAtExit(KRKR_ATEXIT_PRI_RELEASE, TVPUnloadDirect3D);
 //---------------------------------------------------------------------------
 
 
@@ -1064,7 +1064,7 @@ static void TVPRestoreDisplayMode()
 }
 //---------------------------------------------------------------------------
 static tTVPAtExit
-	TVPRestoreDisplayModeAtExit(TVP_ATEXIT_PRI_CLEANUP, TVPUnloadDirect3D);
+	TVPRestoreDisplayModeAtExit(KRKR_ATEXIT_PRI_CLEANUP, TVPUnloadDirect3D);
 //---------------------------------------------------------------------------
 
 
@@ -1126,7 +1126,7 @@ tjs_error tTJSNI_Window::Construct(tjs_int numparams, tTJSVariant **param,
 		Form = new TTVPWindowForm(Application, this);
 #endif
     }
-    Form = TVPCreateAndAddWindow(this);
+    Form = CreateAndAddWindow(this);
     return TJS_S_OK;
 }
 //---------------------------------------------------------------------------
@@ -1139,7 +1139,7 @@ void tTJSNI_Window::Invalidate() {
 		VSyncTimingThread = nullptr;
 	}
 #endif
-    // Form 由 TVPCreateAndAddWindow 里的 new 创建，本类以 iWindowLayer* 持有、
+    // Form 由 CreateAndAddWindow 里的 new 创建，本类以 iWindowLayer* 持有、
     // 且是唯一持有者，所以在这里释放。上游的 TTVPWindowForm 是收到关闭消息后
     // 自删除的，本移植改成 closing_ 标志后那个惯用法就失效了——只置空会泄漏
     // 整个 HostWindowLayer（含它的 GL program/VBO/纹理）。
@@ -1464,7 +1464,7 @@ HWND tTJSNI_Window::GetWindowHandleForPlugin()
 }
 #endif
 //---------------------------------------------------------------------------
-void tTJSNI_Window::RegisterWindowMessageReceiver(tTVPWMRRegMode mode,
+void tTJSNI_Window::RegisterWindowMessageReceiver(WMRRegMode mode,
                                                   void *proc,
                                                   const void *userdata) {
     if(!Form)
@@ -1738,15 +1738,15 @@ void tTJSNI_Window::SetInnerSize(tjs_int w, tjs_int h) {
         Form->SetInnerSize(w, h);
 }
 //---------------------------------------------------------------------------
-void tTJSNI_Window::SetBorderStyle(tTVPBorderStyle st) {
+void tTJSNI_Window::SetBorderStyle(BorderStyle st) {
     FullScreenGuard();
     if(Form)
         Form->SetBorderStyle(st);
 }
 //---------------------------------------------------------------------------
-tTVPBorderStyle tTJSNI_Window::GetBorderStyle() const {
+BorderStyle tTJSNI_Window::GetBorderStyle() const {
     if(!Form)
-        return (tTVPBorderStyle)0;
+        return (BorderStyle)0;
     return Form->GetBorderStyle();
 }
 //---------------------------------------------------------------------------
@@ -2165,7 +2165,7 @@ tTJSNativeClass *TVPCreateNativeClass_Window() {
             return TJS_E_BADPARAMCOUNT;
 
         _this->RegisterWindowMessageReceiver(
-            (tTVPWMRRegMode)((tjs_int)*param[0]),
+            (WMRRegMode)((tjs_int)*param[0]),
             reinterpret_cast<void *>(param[1]->AsInteger()),
             reinterpret_cast<const void *>(param[2]->AsInteger()));
 

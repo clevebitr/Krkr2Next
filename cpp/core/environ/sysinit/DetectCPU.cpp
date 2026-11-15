@@ -31,13 +31,13 @@ tjs_uint32 TVPCPUFeatures = 0;
 
 namespace krkr::base {
 
-static bool TVPCPUChecked = false;
+static bool cpuChecked = false;
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPGetCPUTypeForOne
+// GetCPUTypeForOne
 //---------------------------------------------------------------------------
-static void TVPGetCPUTypeForOne() {
+static void GetCPUTypeForOne() {
     try {
         TVPCPUFeatures = 0;
 
@@ -67,7 +67,7 @@ static void TVPGetCPUTypeForOne() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-static ttstr TVPDumpCPUFeatures(tjs_uint32 features) {
+static ttstr DumpCPUFeatures(tjs_uint32 features) {
     ttstr ret;
     // #define TVP_DUMP_CPU(x, n) { ret += TJS_W("  ") TJS_W(n);  \
     // 	if(features & x) ret += TJS_W(":yes"); else ret += TJS_W(":no"); }
@@ -85,11 +85,11 @@ static ttstr TVPDumpCPUFeatures(tjs_uint32 features) {
     return ret;
 }
 //---------------------------------------------------------------------------
-static ttstr TVPDumpCPUInfo(tjs_int cpu_num) {
+static ttstr DumpCPUInfo(tjs_int cpu_num) {
     // dump detected cpu type
     ttstr features(TJS_W("(info) CPU #") + ttstr(cpu_num) + TJS_W(" : "));
 
-    features += TVPDumpCPUFeatures(TVPCPUFeatures);
+    features += DumpCPUFeatures(TVPCPUFeatures);
 
     tjs_uint32 vendor = TVPCPUFeatures & TVP_CPU_VENDOR_MASK;
 
@@ -133,14 +133,14 @@ static ttstr TVPDumpCPUInfo(tjs_int cpu_num) {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPDetectCPU
+// DetectCPU
 //---------------------------------------------------------------------------
-static void TVPDisableCPU(tjs_uint32 featurebit, const tjs_char *name) {}
+static void DisableCPU(tjs_uint32 featurebit, const tjs_char *name) {}
 
-void TVPDetectCPU() {
-    if(TVPCPUChecked)
+void DetectCPU() {
+    if(cpuChecked)
         return;
-    TVPCPUChecked = true;
+    cpuChecked = true;
 
 #ifdef __APPLE__
     // must be iOS
@@ -152,7 +152,7 @@ void TVPDetectCPU() {
     TVPCPUType &= ~TVP_CPU_FEATURE_MASK;
     TVPCPUType |= features;
 
-    TVPDisableCPU(TVP_CPU_HAS_NEON, TJS_W("-cpuneon"));
+    DisableCPU(TVP_CPU_HAS_NEON, TJS_W("-cpuneon"));
 }
 //---------------------------------------------------------------------------
 
@@ -162,17 +162,17 @@ void TVPDetectCPU() {
 unsigned long MMXReady = 0;
 extern "C" {
 void CheckMMX() {
-    TVPDetectCPU();
+    DetectCPU();
     MMXReady = TVPCPUType & TVP_CPU_HAS_MMX;
 }
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPGetCPUType
+// GetCPUType
 //---------------------------------------------------------------------------
-tjs_uint32 TVPGetCPUType() {
-    TVPDetectCPU();
+tjs_uint32 GetCPUType() {
+    DetectCPU();
     return TVPCPUType;
 }
 //---------------------------------------------------------------------------

@@ -32,13 +32,13 @@
 //---------------------------------------------------------------------------
 namespace krkr::base {
 
-ttstr TVPProjectDir; // project directory (in unified storage name)
-ttstr TVPDataPath; // data directory (in unified storage name)
+ttstr projectDir; // project directory (in unified storage name)
+ttstr dataPath; // data directory (in unified storage name)
 
 } // namespace krkr::base
 //---------------------------------------------------------------------------
 
-extern void TVPGL_C_Init();
+extern void GL_C_Init();
 
 // krkr::sound::StopAllWaveSoundsForRestart 定义在 sound 模块的全局作用域。块作用域的
 // extern 声明在 namespace 内会绑到该 namespace，所以提到文件作用域。
@@ -47,9 +47,9 @@ extern void krkr::sound::StopAllWaveSoundsForRestart();
 namespace krkr::base {
 
 //---------------------------------------------------------------------------
-// TVPSystemInit : Entire System Initialization
+// SystemInit : Entire System Initialization
 //---------------------------------------------------------------------------
-void TVPSystemInit() {
+void SystemInit() {
 #ifdef _WIN32
 #ifdef USING_PROTECT
     while(!TVPProtectInit()) {
@@ -58,30 +58,30 @@ void TVPSystemInit() {
 #endif
 #endif
 
-    TVPBeforeSystemInit();
+    BeforeSystemInit();
 
     TVPInitScriptEngine();
 
     TVPInitTVPGL();
-    //	TVPGL_C_Init();
+    //	GL_C_Init();
 
-    TVPAfterSystemInit();
+    AfterSystemInit();
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPSystemUninit : System shutdown, cleanup, etc...
+// SystemUninit : System shutdown, cleanup, etc...
 //---------------------------------------------------------------------------
-static void TVPCauseAtExit();
+static void CauseAtExit();
 
-bool TVPSystemUninitCalled = false;
+bool systemUninitCalled = false;
 
-void TVPSystemUninit() {
-    if(TVPSystemUninitCalled)
+void SystemUninit() {
+    if(systemUninitCalled)
         return;
-    TVPSystemUninitCalled = true;
+    systemUninitCalled = true;
 
-    TVPBeforeSystemUninit();
+    BeforeSystemUninit();
 
     TVPUninitTVPGL();
 
@@ -91,17 +91,17 @@ void TVPSystemUninit() {
         // ignore errors
     }
 
-    TVPAfterSystemUninit();
+    AfterSystemUninit();
 
-    TVPCauseAtExit();
+    CauseAtExit();
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPAddAtExitHandler related
+// AddAtExitHandler related
 //---------------------------------------------------------------------------
-struct tTVPAtExitInfo {
-    tTVPAtExitInfo(tjs_int pri, void (*handler)()) {
+struct AtExitInfo {
+    AtExitInfo(tjs_int pri, void (*handler)()) {
         Priority = pri, Handler = handler;
     }
 
@@ -109,49 +109,49 @@ struct tTVPAtExitInfo {
 
     void (*Handler)();
 
-    bool operator<(const tTVPAtExitInfo &r) const {
+    bool operator<(const AtExitInfo &r) const {
         return this->Priority < r.Priority;
     }
 
-    bool operator>(const tTVPAtExitInfo &r) const {
+    bool operator>(const AtExitInfo &r) const {
         return this->Priority > r.Priority;
     }
 
-    bool operator==(const tTVPAtExitInfo &r) const {
+    bool operator==(const AtExitInfo &r) const {
         return this->Priority == r.Priority;
     }
 };
 
-static std::vector<tTVPAtExitInfo> *TVPAtExitInfos = nullptr;
-static bool TVPAtExitShutdown = false;
+static std::vector<AtExitInfo> *atExitInfos = nullptr;
+static bool atExitShutdown = false;
 
 //---------------------------------------------------------------------------
-void TVPAddAtExitHandler(tjs_int pri, void (*handler)()) {
-    if(TVPAtExitShutdown)
+void AddAtExitHandler(tjs_int pri, void (*handler)()) {
+    if(atExitShutdown)
         return;
 
-    if(!TVPAtExitInfos)
-        TVPAtExitInfos = new std::vector<tTVPAtExitInfo>();
-    TVPAtExitInfos->emplace_back(pri, handler);
+    if(!atExitInfos)
+        atExitInfos = new std::vector<AtExitInfo>();
+    atExitInfos->emplace_back(pri, handler);
 }
 
 //---------------------------------------------------------------------------
-static void TVPCauseAtExit() {
+static void CauseAtExit() {
     // 修正 runtime-restart：tTVPAtExit 文件级 static 对象只在进程启动注册一次，
-    // 首次 engine_destroy 的 TVPCauseAtExit 已把 TVPAtExitInfos delete
-    // 置空；二次 engine_destroy（TVPResetRuntimeForRestart
+    // 首次 engine_destroy 的 CauseAtExit 已把 atExitInfos delete
+    // 置空；二次 engine_destroy（ResetRuntimeForRestart
     // 复位后会再次进入）时为空，不能解引用。
-    if(TVPAtExitShutdown || !TVPAtExitInfos)
+    if(atExitShutdown || !atExitInfos)
         return;
-    TVPAtExitShutdown = true;
+    atExitShutdown = true;
 
-    std::sort(TVPAtExitInfos->begin(),
-              TVPAtExitInfos->end()); // descending sort
+    std::sort(atExitInfos->begin(),
+              atExitInfos->end()); // descending sort
 
     // 逐 handler 打点：真机退出卡死时据最后一条日志定位卡在哪个 at-exit
     // handler。
     tjs_uint idx = 0;
-    for(auto i = TVPAtExitInfos->begin(); i != TVPAtExitInfos->end();
+    for(auto i = atExitInfos->begin(); i != atExitInfos->end();
         ++i, ++idx) {
         // dladdr 把 handler 函数指针解析为符号名（release/strip 后可能为 "?"）
         const char *sym = "?";
@@ -159,31 +159,31 @@ static void TVPCauseAtExit() {
         if(dladdr(reinterpret_cast<void *>(i->Handler), &inf) &&
            inf.dli_sname && inf.dli_sname[0])
             sym = inf.dli_sname;
-        spdlog::info("TVPCauseAtExit: handler[{}] pri={} sym={} begin", idx,
+        spdlog::info("CauseAtExit: handler[{}] pri={} sym={} begin", idx,
                      i->Priority, sym);
         spdlog::default_logger()->flush();
         i->Handler();
-        spdlog::info("TVPCauseAtExit: handler[{}] pri={} sym={} end", idx,
+        spdlog::info("CauseAtExit: handler[{}] pri={} sym={} end", idx,
                      i->Priority, sym);
         spdlog::default_logger()->flush();
     }
 
-    delete TVPAtExitInfos;
-    TVPAtExitInfos = nullptr;
+    delete atExitInfos;
+    atExitInfos = nullptr;
 }
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPResetRuntimeForRestart : Reset state to allow re-initialization
+// ResetRuntimeForRestart : Reset state to allow re-initialization
 //---------------------------------------------------------------------------
-void TVPResetRuntimeForRestart() {
-    TVPSystemUninitCalled = false;
-    TVPAtExitShutdown = false;
-    // TVPAtExitInfos was deleted by TVPCauseAtExit(); leave it null so
-    // TVPAddAtExitHandler will re-create it on next startup.
-    TVPAtExitInfos = nullptr;
-    TVPProjectDir.Clear();
-    TVPDataPath.Clear();
+void ResetRuntimeForRestart() {
+    systemUninitCalled = false;
+    atExitShutdown = false;
+    // atExitInfos was deleted by CauseAtExit(); leave it null so
+    // AddAtExitHandler will re-create it on next startup.
+    atExitInfos = nullptr;
+    projectDir.Clear();
+    dataPath.Clear();
     // TVPScenarioCache 以场景短名（如 "first.ks"）为 key 的进程级缓存，restart
     // 不随 VM 销毁； 换游戏后下一个游戏 kag.loadScenario
     // 会命中前一个游戏的内容（跨游戏同名场景碰撞），

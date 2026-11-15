@@ -36,7 +36,7 @@ void InitCDDAVolumeControlType() {
     // -cdvol=direct : use direct volume control
 
     tTJSVariant val;
-    if(TVPGetCommandLine(TJS_W("-cdvol"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-cdvol"), &val)) {
         ttstr str(val);
         if(str == TJS_W("mixer"))
             cddaVolumeControlType = cvctMixer;
@@ -213,7 +213,7 @@ void RestoreCDVolume() {
     }
 }
 //---------------------------------------------------------------------------
-static tTVPAtExit RestoreCDVolumeAtExit(TVP_ATEXIT_PRI_RELEASE,
+static tTVPAtExit RestoreCDVolumeAtExit(KRKR_ATEXIT_PRI_RELEASE,
                                            RestoreCDVolume);
 //---------------------------------------------------------------------------
 static void SetCDVolume(int v) {

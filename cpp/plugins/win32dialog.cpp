@@ -13,7 +13,7 @@
  * 由 CI 编译校验。
  *
  * 能力边界（≥ 参考实现 Kirikiroid2 / AetherKiri 的 win32dialog，二者只有 messageBox）：
- *   * `messageBox` —— 真实：`TVPShowSimpleMessageBox` → 宿主壳原生确认框，按 Win32
+ *   * `messageBox` —— 真实：`ShowSimpleMessageBox` → 宿主壳原生确认框，按 Win32
  *     MB_* / ID* 语义返回；兼容 3 参与 4 参两种调用形态。
  *   * `open()` / `show()` —— 真实（确认型）：把模板里的标题/正文/按钮文案交给宿主
  *     消息框，按用户点击返回对应 ID，并回调脚本 `onCommand(id, 0, 0)`；
@@ -336,7 +336,7 @@ public:
                              message.AsStdString(), caption.AsStdString(),
                              static_cast<int>(type), buttons.size());
         }
-        const int ret = TVPShowSimpleMessageBox(message, caption, buttons);
+        const int ret = ShowSimpleMessageBox(message, caption, buttons);
         tjs_int id;
         if(yesNo)
             id = (ret == 0) ? 6 /*IDYES*/ : 7 /*IDNO*/;
@@ -458,7 +458,7 @@ public:
                              labels.size(), list);
             }
         }
-        const int idx = TVPShowSimpleMessageBox(body, caption, labels);
+        const int idx = ShowSimpleMessageBox(body, caption, labels);
         const tjs_int id =
             (idx >= 0 && idx < static_cast<int>(ids.size())) ? ids[idx] : ids[0];
         self->_opened = true;

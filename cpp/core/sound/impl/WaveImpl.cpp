@@ -96,7 +96,7 @@ static void InitSoundOptions() {
     */
 
     tTJSVariant val;
-    if(TVPGetCommandLine(TJS_W("-wsdecpri"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-wsdecpri"), &val)) {
         tjs_int v = val;
         if(v < 0)
             v = 0;
@@ -107,32 +107,32 @@ static void InitSoundOptions() {
             decodeThreadHighPriority = decodeThreadLowPriority;
     }
 
-    if(TVPGetCommandLine(TJS_W("-wscontrolpri"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-wscontrolpri"), &val)) {
         if(ttstr(val) == TJS_W("yes"))
             controlPrimaryBufferRun = true;
         else
             controlPrimaryBufferRun = false;
     }
 
-    if(TVPGetCommandLine(TJS_W("-wssoft"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-wssoft"), &val)) {
         if(ttstr(val) == TJS_W("no"))
             useSoftwareBuffer = false;
         else
             useSoftwareBuffer = true;
     }
 
-    if(TVPGetCommandLine(TJS_W("-wsrecreate"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-wsrecreate"), &val)) {
         if(ttstr(val) == TJS_W("yes"))
             alwaysRecreateSoundBuffer = true;
         else
             alwaysRecreateSoundBuffer = false;
     }
 
-    if(TVPGetCommandLine(TJS_W("-wsfreq"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-wsfreq"), &val)) {
         primarySBFrequency = val;
     }
 
-    if(TVPGetCommandLine(TJS_W("-wsbits"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-wsbits"), &val)) {
         ttstr sval(val);
         if(sval == TJS_W("f32")) {
             primaryFloat = true;
@@ -143,7 +143,7 @@ static void InitSoundOptions() {
         }
     }
 
-    if(TVPGetCommandLine(TJS_W("-wspritry"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-wspritry"), &val)) {
         ttstr sval(val);
         if(sval == TJS_W("all"))
             primarySBCreateTryLevel = -1;
@@ -151,7 +151,7 @@ static void InitSoundOptions() {
             primarySBCreateTryLevel = val;
     }
 
-    if(TVPGetCommandLine(TJS_W("-wsuse3d"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-wsuse3d"), &val)) {
         ttstr sval(val);
         if(sval == TJS_W("no"))
             directSoundUse3D = false;
@@ -159,7 +159,7 @@ static void InitSoundOptions() {
             directSoundUse3D = true;
     }
 #if 0
-    if(TVPGetCommandLine(TJS_W("-wsforcecnv"), &val))
+    if(krkr::base::GetCommandLine(TJS_W("-wsforcecnv"), &val))
     {
         ttstr sval(val);
         if(sval == TJS_W("i16"))
@@ -170,7 +170,7 @@ static void InitSoundOptions() {
             forceConvertMode = fcmNone;
     }
 #endif
-    if(TVPGetCommandLine(TJS_W("-wsexpandquad"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-wsexpandquad"), &val)) {
         if(ttstr(val) == TJS_W("yes"))
             expandToQuad = true;
         else
@@ -180,7 +180,7 @@ static void InitSoundOptions() {
         expandToQuad = false;
     // quad expansion is disabled when using 3D sounds
 
-    if(TVPGetCommandLine(TJS_W("-wsmute"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-wsmute"), &val)) {
         ttstr str(val);
         if(str == TJS_W("no") || str == TJS_W("never"))
             soundGlobalFocusModeByOption = sgfmNeverMute;
@@ -190,25 +190,25 @@ static void InitSoundOptions() {
             soundGlobalFocusModeByOption = sgfmMuteOnDeactivate;
     }
 
-    if(TVPGetCommandLine(TJS_W("-wsmutevol"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-wsmutevol"), &val)) {
         tjs_int n = (tjs_int)val;
         if(n >= 0 && n <= 100)
             soundGlobalFocusMuteVolume = n * 1000;
     }
 
-    if(TVPGetCommandLine(TJS_W("-wsl1len"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-wsl1len"), &val)) {
         tjs_int n = (tjs_int)val;
         if(n > 0 && n < 600000)
             l1BufferLength = n;
     }
 
-    if(TVPGetCommandLine(TJS_W("-wsl2len"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-wsl2len"), &val)) {
         tjs_int n = (tjs_int)val;
         if(n > 0 && n < 600000)
             l2BufferLength = n;
     }
 
-    if(TVPGetCommandLine(TJS_W("-wsvolfactor"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-wsvolfactor"), &val)) {
         tjs_int n = (tjs_int)val;
         if(n > 0 && n < 200000)
             volumeLogFactor = n;
@@ -1068,7 +1068,7 @@ static void UninitDirectSoundAtExitProc()
     directSoundShutdown = true;
 }
 static tTVPAtExit uninitDirectSoundAtExit
-    (TVP_ATEXIT_PRI_RELEASE, UninitDirectSoundAtExitProc);
+    (KRKR_ATEXIT_PRI_RELEASE, UninitDirectSoundAtExitProc);
 //---------------------------------------------------------------------------
 IDirectSound * GetDirectSound()
 {
@@ -1713,14 +1713,14 @@ static void ShutdownWaveSoundBuffers() {
 }
 
 static tTVPAtExit
-    shutdownWaveSoundBuffersAtExit(TVP_ATEXIT_PRI_PREPARE,
+    shutdownWaveSoundBuffersAtExit(KRKR_ATEXIT_PRI_PREPARE,
                                       ShutdownWaveSoundBuffers);
 
 //---------------------------------------------------------------------------
 // StopAllWaveSoundsForRestart : runtime-restart 专用声音停止
 //---------------------------------------------------------------------------
-// tTVPAtExit 是一次性的：首次 engine_destroy 的 TVPCauseAtExit 会 delete 置空
-// TVPAtExitInfos，之后重启的 teardown 不再执行
+// tTVPAtExit 是一次性的：首次 engine_destroy 的 CauseAtExit 会 delete 置空
+// krkr::base::atExitInfos，之后重启的 teardown 不再执行
 // ShutdownWaveSoundBuffers，导致上一游戏 正在播放的 BGM/音效（由
 // waveSoundBufferThread 混音输出）继续响、叠进下一游戏 （真机：切游戏后 BGM
 // 重叠，甚至首屏 logo 就带着上一游戏的 BGM）。这里在重启末尾
@@ -1880,7 +1880,7 @@ void WaveSoundBufferDecodeThread::Execute() {
                     }
                 } else {
                     // buffer is not full; sleep shorter
-                    TVPRelinquishCPU();
+                    RelinquishCPU();
                     if(!GetTerminated())
                         SetPriority(decodeThreadLowPriority);
                 }

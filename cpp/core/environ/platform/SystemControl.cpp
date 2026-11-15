@@ -19,7 +19,7 @@
 #include "XP3Archive.h"
 #include "GraphicsLoaderIntf.h"
 #include "LayerIntf.h"
-#include "EmergencyExit.h" // for TVPCPUClock
+#include "EmergencyExit.h" // for cpuClock
 #include "DebugIntf.h"
 // #include "VersionFormUnit.h"
 #include "SystemImpl.h"
@@ -51,35 +51,35 @@ namespace krkr::environ {
 static bool (*g_GetPSBCacheInfo)(size_t &usedBytes,
                                  size_t &limitBytes) = nullptr;
 
-void TVPRegisterPSBCacheInfoCallback(bool (*cb)(size_t &, size_t &)) {
+void RegisterPSBCacheInfoCallback(bool (*cb)(size_t &, size_t &)) {
     g_GetPSBCacheInfo = cb;
 }
 
-tTVPSystemControl *TVPSystemControl;
-bool TVPSystemControlAlive = false;
+SystemControl *GetSystemControl;
+bool systemControlAlive = false;
 
 //---------------------------------------------------------------------------
 // Get whether to control main thread priority or to insert wait
 //---------------------------------------------------------------------------
-static bool TVPMainThreadPriorityControlInit = false;
-static bool TVPMainThreadPriorityControl = false;
-static bool TVPGetMainThreadPriorityControl() {
-    if(TVPMainThreadPriorityControlInit)
-        return TVPMainThreadPriorityControl;
+static bool mainThreadPriorityControlInit = false;
+static bool mainThreadPriorityControl = false;
+static bool GetMainThreadPriorityControl() {
+    if(mainThreadPriorityControlInit)
+        return mainThreadPriorityControl;
     tTJSVariant val;
-    if(TVPGetCommandLine(TJS_W("-lowpri"), &val)) {
+    if(GetCommandLine(TJS_W("-lowpri"), &val)) {
         ttstr str(val);
         if(str == TJS_W("yes"))
-            TVPMainThreadPriorityControl = true;
+            mainThreadPriorityControl = true;
     }
 
-    TVPMainThreadPriorityControlInit = true;
+    mainThreadPriorityControlInit = true;
 
-    return TVPMainThreadPriorityControl;
+    return mainThreadPriorityControl;
 }
 
 namespace {
-    tjs_int TVPClampInt(tjs_int value, tjs_int min_value, tjs_int max_value) {
+    tjs_int ClampInt(tjs_int value, tjs_int min_value, tjs_int max_value) {
         if(value < min_value)
             return min_value;
         if(value > max_value)
@@ -87,34 +87,34 @@ namespace {
         return value;
     }
 
-    tjs_int TVPGetIntegerOption(const tjs_char *name, tjs_int fallback,
+    tjs_int GetIntegerOption(const tjs_char *name, tjs_int fallback,
                                 tjs_int min_value, tjs_int max_value) {
         tTJSVariant val;
-        if(!TVPGetCommandLine(name, &val))
+        if(!GetCommandLine(name, &val))
             return fallback;
-        return TVPClampInt((tjs_int)val.AsInteger(), min_value, max_value);
+        return ClampInt((tjs_int)val.AsInteger(), min_value, max_value);
     }
 
-    tjs_int TVPGetSystemTotalMemoryMB() {
+    tjs_int GetSystemTotalMemoryMB() {
         TVPMemoryInfo meminfo{};
-        TVPGetMemoryInfo(meminfo);
+        GetMemoryInfo(meminfo);
         if(meminfo.MemTotal == 0)
             return 0;
         return static_cast<tjs_int>(meminfo.MemTotal / 1024);
     }
 
-    tjs_int TVPResolveBudgetMB(tjs_int configured_budget_mb) {
+    tjs_int ResolveBudgetMB(tjs_int configured_budget_mb) {
         if(configured_budget_mb > 0)
             return configured_budget_mb;
-        const tjs_int total_mb = TVPGetSystemTotalMemoryMB();
+        const tjs_int total_mb = GetSystemTotalMemoryMB();
         if(total_mb <= 0)
             return 768;
-        return TVPClampInt(total_mb / 4, 512, 1024);
+        return ClampInt(total_mb / 4, 512, 1024);
     }
 } // namespace
 
-void tTVPSystemControl::ReloadMemoryGovernorConfig(bool force) {
-    const tjs_int generation = TVPGetCommandLineArgumentGeneration();
+void SystemControl::ReloadMemoryGovernorConfig(bool force) {
+    const tjs_int generation = GetCommandLineArgumentGeneration();
     if(!force && generation == LastCommandLineGeneration)
         return;
 
@@ -122,7 +122,7 @@ void tTVPSystemControl::ReloadMemoryGovernorConfig(bool force) {
 
     tTJSVariant profile_value;
     ttstr profile = TJS_W("balanced");
-    if(TVPGetCommandLine(TJS_W("memory_profile"), &profile_value))
+    if(GetCommandLine(TJS_W("memory_profile"), &profile_value))
         profile = ttstr(profile_value).AsLowerCase();
 
     if(profile == TJS_W("aggressive") || profile == TJS_W("lowmem")) {
@@ -131,23 +131,23 @@ void tTVPSystemControl::ReloadMemoryGovernorConfig(bool force) {
         MemoryProfile = 0;
     }
 
-    MemoryBudgetMB = TVPGetIntegerOption(TJS_W("memory_budget_mb"), 0, 0, 8192);
-    MemoryLogIntervalMS = TVPGetIntegerOption(TJS_W("memory_log_interval_ms"),
+    MemoryBudgetMB = GetIntegerOption(TJS_W("memory_budget_mb"), 0, 0, 8192);
+    MemoryLogIntervalMS = GetIntegerOption(TJS_W("memory_log_interval_ms"),
                                               12000, 3000, 120000);
 }
 
-void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
+void SystemControl::RunMemoryGovernor(uint32_t tick) {
     ReloadMemoryGovernorConfig(false);
     if(tick - LastMemoryGovernorTick < 1000)
         return;
     LastMemoryGovernorTick = tick;
 
-    const tjs_int self_used_mb = TVPGetSelfUsedMemory();
-    const tjs_int free_mb = TVPGetSystemFreeMemory();
+    const tjs_int self_used_mb = GetSelfUsedMemory();
+    const tjs_int free_mb = GetSystemFreeMemory();
     if(self_used_mb < 0)
         return;
 
-    const tjs_int budget_mb = TVPResolveBudgetMB(MemoryBudgetMB);
+    const tjs_int budget_mb = ResolveBudgetMB(MemoryBudgetMB);
     const tjs_int soft_threshold = budget_mb * (MemoryProfile ? 60 : 68) / 100;
     const tjs_int hard_threshold = budget_mb * (MemoryProfile ? 72 : 78) / 100;
     const tjs_int critical_threshold =
@@ -178,15 +178,15 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
     }
 #endif
 
-    const tjs_int base_graphic_limit_mb = TVPClampInt(
+    const tjs_int base_graphic_limit_mb = ClampInt(
         budget_mb / (MemoryProfile ? 10 : 12), 16, MemoryProfile ? 64 : 96);
     tjs_int target_graphic_limit_mb = base_graphic_limit_mb;
     if(pressure == 1)
         target_graphic_limit_mb =
-            TVPClampInt(base_graphic_limit_mb * 2 / 3, 24, 64);
+            ClampInt(base_graphic_limit_mb * 2 / 3, 24, 64);
     else if(pressure >= 2)
         target_graphic_limit_mb =
-            TVPClampInt(base_graphic_limit_mb / 3, 24, 48);
+            ClampInt(base_graphic_limit_mb / 3, 24, 48);
 
     const tjs_uint64 target_graphic_bytes =
         static_cast<tjs_uint64>(target_graphic_limit_mb) * 1024ULL * 1024ULL;
@@ -366,7 +366,7 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
         if(TVPGetRenderManager()->GetRenderStat(drawCount, vmemsize))
             vmem_mb = static_cast<tjs_int>(vmemsize / (1024ULL * 1024ULL));
 
-        const tjs_int layer_count = TVPGetLayerCount();
+        const tjs_int layer_count = GetLayerCount();
         const tjs_int layermem_mb = static_cast<tjs_int>(
             TVPGetLayerTotalBitmapBytes() / (1024ULL * 1024ULL));
 
@@ -461,7 +461,7 @@ void tTVPSystemControl::RunMemoryGovernor(uint32_t tick) {
     }
 }
 
-tTVPSystemControl::tTVPSystemControl() : EventEnable(true) {
+SystemControl::SystemControl() : EventEnable(true) {
     ContinuousEventCalling = false;
     AutoShowConsoleOnError = false;
 
@@ -481,35 +481,35 @@ tTVPSystemControl::tTVPSystemControl() : EventEnable(true) {
 
     ReloadMemoryGovernorConfig(true);
 
-    TVPSystemControlAlive = true;
+    systemControlAlive = true;
 #if 0
 	SystemWatchTimer.SetInterval(50);
-	SystemWatchTimer.SetOnTimerHandler( this, &tTVPSystemControl::SystemWatchTimerTimer );
+	SystemWatchTimer.SetOnTimerHandler( this, &SystemControl::SystemWatchTimerTimer );
 	SystemWatchTimer.SetEnabled( true );
 #endif
 }
-void tTVPSystemControl::InvokeEvents() { CallDeliverAllEventsOnIdle(); }
-void tTVPSystemControl::CallDeliverAllEventsOnIdle() {
+void SystemControl::InvokeEvents() { CallDeliverAllEventsOnIdle(); }
+void SystemControl::CallDeliverAllEventsOnIdle() {
     //	Application->PostMessageToMainWindow(
     // TVP_EV_DELIVER_EVENTS_DUMMY, 0, 0
     //);
 }
 
-void tTVPSystemControl::BeginContinuousEvent() {
+void SystemControl::BeginContinuousEvent() {
     if(!ContinuousEventCalling) {
         ContinuousEventCalling = true;
         InvokeEvents();
-        if(TVPGetMainThreadPriorityControl()) {
+        if(GetMainThreadPriorityControl()) {
             // make main thread priority lower
             //			SetThreadPriority(GetCurrentThread(),
             // THREAD_PRIORITY_LOWEST);
         }
     }
 }
-void tTVPSystemControl::EndContinuousEvent() {
+void SystemControl::EndContinuousEvent() {
     if(ContinuousEventCalling) {
         ContinuousEventCalling = false;
-        if(TVPGetMainThreadPriorityControl()) {
+        if(GetMainThreadPriorityControl()) {
             // make main thread priority normal
             //			SetThreadPriority(GetCurrentThread(),
             // THREAD_PRIORITY_NORMAL);
@@ -517,26 +517,26 @@ void tTVPSystemControl::EndContinuousEvent() {
     }
 }
 //---------------------------------------------------------------------------
-void tTVPSystemControl::NotifyCloseClicked() {
+void SystemControl::NotifyCloseClicked() {
     // close Button is clicked
     LastCloseClickedTick = krkr::utils::GetRoughTickCount32();
 }
 
-void tTVPSystemControl::NotifyEventDelivered() {
+void SystemControl::NotifyEventDelivered() {
     // called from event system, notifying the event is delivered.
     LastCloseClickedTick = 0;
     // if(TVPHaltWarnForm) delete TVPHaltWarnForm, TVPHaltWarnForm =
     // nullptr;
 }
 
-bool tTVPSystemControl::ApplicationIdle() {
+bool SystemControl::ApplicationIdle() {
     DeliverEvents();
     bool cont = !ContinuousEventCalling;
     MixedIdleTick += krkr::utils::GetRoughTickCount32();
     return cont;
 }
 
-void tTVPSystemControl::DeliverEvents() {
+void SystemControl::DeliverEvents() {
     if(ContinuousEventCalling)
         TVPProcessContinuousHandlerEventFlag = true; // set flag
 
@@ -546,8 +546,8 @@ void tTVPSystemControl::DeliverEvents() {
     }
 }
 
-void tTVPSystemControl::SystemWatchTimerTimer() {
-    if(TVPTerminated) {
+void SystemControl::SystemWatchTimerTimer() {
+    if(terminated) {
         // this will ensure terminating the application.
         // the WM_QUIT message disappears in some unknown
         // situations...
@@ -574,16 +574,16 @@ void tTVPSystemControl::SystemWatchTimerTimer() {
 	// CPU clock monitoring
 	{
 		static bool clock_rough_printed = false;
-		if( !clock_rough_printed && TVPCPUClockAccuracy == ccaRough ) {
+		if( !clock_rough_printed && cpuClockAccuracy == ccaRough ) {
 			tjs_char msg[80];
-			TJS_snprintf(msg, 80, TVPInfoCpuClockRoughly, (int)TVPCPUClock);
+			TJS_snprintf(msg, 80, TVPInfoCpuClockRoughly, (int)cpuClock);
 			krkr::utils::AddImportantLog(msg);
 			clock_rough_printed = true;
 		}
 		static bool clock_printed = false;
-		if( !clock_printed && TVPCPUClockAccuracy == ccaAccurate ) {
+		if( !clock_printed && cpuClockAccuracy == ccaAccurate ) {
 			tjs_char msg[80];
-			TJS_snprintf(msg, 80, TVPInfoCpuClock, (float)TVPCPUClock);
+			TJS_snprintf(msg, 80, TVPInfoCpuClock, (float)cpuClock);
 			krkr::utils::AddImportantLog(msg);
 			clock_printed = true;
 		}

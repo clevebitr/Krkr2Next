@@ -1,0 +1,16 @@
+# module: environ
+# qualify: krkr::base
+# owner: cpp/core/environ
+#
+# environ 第 7b 轮（B）：声明在 `namespace krkr::base` 里的残项 ——
+# sysinit 的全局状态变量（SysInitIntf.h / DetectCPU.cpp）。
+TVPAtExitInfos	atExitInfos	var
+TVPSystemUninitCalled	systemUninitCalled	var
+TVPProjectDir	projectDir	var
+TVPDataPath	dataPath	var
+TVPAtExitShutdown	atExitShutdown	var
+TVPCPUChecked	cpuChecked	var
+
+# sysinit 的查询函数（声明在 environ/intf/SysInitIntf.h 的 `namespace krkr::base`）
+TVPGetCommandLine	GetCommandLine	fn
+TVPGetCommandLineArgumentGeneration	GetCommandLineArgumentGeneration	fn

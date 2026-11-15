@@ -28,14 +28,14 @@ struct tTVPImageLoadCommand {
     ~tTVPImageLoadCommand();
 };
 
-class tTVPAsyncImageLoader : public krkr::utils::Thread {
+class AsyncImageLoader : public krkr::utils::Thread {
     /** 読込み要求コマンドのキュー用CS */
     tTJSCriticalSection CommandQueueCS;
     /** 読込み済み画像キュー用CS */
     tTJSCriticalSection ImageQueueCS;
 
     /** ロード完了後メインスレッドで処理するためのメッセージキュー */
-    NativeEventQueue<tTVPAsyncImageLoader> EventQueue;
+    NativeEventQueue<AsyncImageLoader> EventQueue;
     /**  読込みスレッドへ読込み要求があったことを伝えるイベント */
     krkr::utils::ThreadEvent PushCommandQueueEvent;
 
@@ -85,8 +85,8 @@ public:
     void Proc(NativeEvent &ev);
 
 public:
-    tTVPAsyncImageLoader();
-    ~tTVPAsyncImageLoader() override;
+    AsyncImageLoader();
+    ~AsyncImageLoader() override;
 
     /**
      読込みスレッドの終了を要求する(終了は待たない)

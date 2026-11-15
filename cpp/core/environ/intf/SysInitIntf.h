@@ -18,36 +18,36 @@
 //-- global data
 namespace krkr::base {
 
-extern ttstr TVPProjectDir; // project directory
-extern ttstr TVPDataPath; // data directory
+extern ttstr projectDir; // project directory
+extern ttstr dataPath; // data directory
 
 //-- implementation in this unit
-extern void TVPSystemInit();
+extern void SystemInit();
 
-extern void TVPSystemUninit();
+extern void SystemUninit();
 
 //-- implement in each platform
-extern void TVPBeforeSystemInit(); // this must set TVPProjectDir
-extern void TVPAfterSystemInit();
+extern void BeforeSystemInit(); // this must set projectDir
+extern void AfterSystemInit();
 
-extern void TVPBeforeSystemUninit();
+extern void BeforeSystemUninit();
 
-extern void TVPAfterSystemUninit();
+extern void AfterSystemUninit();
 
 extern void
 TVPTerminateAsync(int code = 0); // do acynchronous teminating of application
-extern void TVPTerminateSync(
+extern void TerminateSync(
     int code = 0); // do synchronous teminating of application(never return)
-extern void TVPMainWindowClosed(); // called from WindowIntf.cpp,
+extern void MainWindowClosed(); // called from WindowIntf.cpp,
                                    // caused by closing main window.
 // this function must shutdown the application, unless the controller
 // window is visible.
 //---------------------------------------------------------------------------
 
-extern bool TVPSystemUninitCalled;
-// whether TVPSystemUninit is called or not
+extern bool systemUninitCalled;
+// whether SystemUninit is called or not
 
-extern void TVPResetRuntimeForRestart();
+extern void ResetRuntimeForRestart();
 // reset internal state to allow re-initialization after engine_destroy
 
 //---------------------------------------------------------------------------
@@ -55,30 +55,30 @@ extern void TVPResetRuntimeForRestart();
 //---------------------------------------------------------------------------
 // AtExit related
 //---------------------------------------------------------------------------
-void TVPAddAtExitHandler(tjs_int pri, void (*handler)());
+void AddAtExitHandler(tjs_int pri, void (*handler)());
 
 struct tTVPAtExit {
     tTVPAtExit(tjs_int pri, void (*handler)()) {
-        TVPAddAtExitHandler(pri, handler);
+        AddAtExitHandler(pri, handler);
     }
 };
 
-#define TVP_ATEXIT_PRI_PREPARE 10
-#define TVP_ATEXIT_PRI_SHUTDOWN 100
-#define TVP_ATEXIT_PRI_RELEASE 1000
-#define TVP_ATEXIT_PRI_CLEANUP 10000
+#define KRKR_ATEXIT_PRI_PREPARE 10
+#define KRKR_ATEXIT_PRI_SHUTDOWN 100
+#define KRKR_ATEXIT_PRI_RELEASE 1000
+#define KRKR_ATEXIT_PRI_CLEANUP 10000
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 // Command line parameter operations (implement in each platform)
 //---------------------------------------------------------------------------
-TJS_EXP_FUNC_DEF(bool, TVPGetCommandLine,
+TJS_EXP_FUNC_DEF(bool, GetCommandLine,
                  (const tjs_char *name, tTJSVariant *value = nullptr));
 // retrieves command line parameter named "name".
 // command line parameter format must be "-name=value"
 // returns false if the the parameter is not exist, otherwise
 // sets the value to "value" and returns true.
-TJS_EXP_FUNC_DEF(tjs_int, TVPGetCommandLineArgumentGeneration, ());
+TJS_EXP_FUNC_DEF(tjs_int, GetCommandLineArgumentGeneration, ());
 // retrieves command line argument generation count. you can check
 // whether the command line options has changed, by comparing this
 // value to your value which is remembered when of previous call of
@@ -92,22 +92,8 @@ TJS_EXP_FUNC_DEF(void, TVPSetCommandLine,
 } // namespace krkr::base
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::base::TVPProjectDir;
-using krkr::base::TVPDataPath;
-using krkr::base::TVPSystemInit;
-using krkr::base::TVPSystemUninit;
-using krkr::base::TVPBeforeSystemInit;
-using krkr::base::TVPAfterSystemInit;
-using krkr::base::TVPBeforeSystemUninit;
-using krkr::base::TVPAfterSystemUninit;
 using krkr::base::TVPTerminateAsync;
-using krkr::base::TVPTerminateSync;
-using krkr::base::TVPMainWindowClosed;
-using krkr::base::TVPSystemUninitCalled;
-using krkr::base::TVPResetRuntimeForRestart;
-using krkr::base::TVPAddAtExitHandler;
-using krkr::base::TVPGetCommandLine;
-using krkr::base::TVPGetCommandLineArgumentGeneration;
+using krkr::base::AddAtExitHandler;
 using krkr::base::TVPSetCommandLine;
 
 //---------------------------------------------------------------------------

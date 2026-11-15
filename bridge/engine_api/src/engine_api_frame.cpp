@@ -399,10 +399,10 @@ engine_result_t engine_get_memory_stats(engine_handle_t handle,
     std::memset(out_stats, 0, sizeof(*out_stats));
     out_stats->struct_size = sizeof(engine_memory_stats_t);
     TVPMemoryInfo meminfo{};
-    TVPGetMemoryInfo(meminfo);
-    out_stats->self_used_mb = static_cast<uint32_t>(std::max<tjs_int>(0, TVPGetSelfUsedMemory()));
+    GetMemoryInfo(meminfo);
+    out_stats->self_used_mb = static_cast<uint32_t>(std::max<tjs_int>(0, GetSelfUsedMemory()));
     out_stats->system_free_mb =
-        static_cast<uint32_t>(std::max<tjs_int>(0, TVPGetSystemFreeMemory()));
+        static_cast<uint32_t>(std::max<tjs_int>(0, GetSystemFreeMemory()));
     out_stats->system_total_mb = static_cast<uint32_t>(meminfo.MemTotal / 1024);
     out_stats->graphic_cache_bytes = TVPGetGraphicCacheTotalBytes();
     out_stats->graphic_cache_limit_bytes = TVPGetGraphicCacheLimit();

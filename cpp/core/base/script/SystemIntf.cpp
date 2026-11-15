@@ -129,7 +129,7 @@ tTJSNC_System::tTJSNC_System() : inherited(TJS_W("System")) {
         if(!TVPStartupSuccess) {
             ;
         } else {
-            TVPTerminateSync(code);
+            krkr::base::TerminateSync(code);
         }
 
         return TJS_S_OK;
@@ -153,7 +153,7 @@ tTJSNC_System::tTJSNC_System() : inherited(TJS_W("System")) {
             LocaleConfigManager::GetInstance()->GetText("msgbox_ok"));
         btns.emplace_back(
             LocaleConfigManager::GetInstance()->GetText("cancel"));
-        int ret = TVPShowSimpleInputBox(value, caption, prompt, btns);
+        int ret = ShowSimpleInputBox(value, caption, prompt, btns);
         bool b = ret == 0; // the left button clicked
 
         if(result) {
@@ -373,7 +373,7 @@ TJS_END_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL(graphicCacheLimit)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(platformName){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetPlatformName();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = GetPlatformName();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -383,7 +383,7 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL(platformName)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(osName){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPGetOSName();
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = GetOSName();
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
@@ -393,13 +393,13 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL(osName)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(exitOnWindowClose){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPTerminateOnWindowClose;
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = terminateOnWindowClose;
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
 
 TJS_BEGIN_NATIVE_PROP_SETTER {
-    TVPTerminateOnWindowClose = 0 != (tjs_int)*param;
+    terminateOnWindowClose = 0 != (tjs_int)*param;
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER
@@ -455,13 +455,13 @@ TJS_DENY_NATIVE_PROP_SETTER
 TJS_END_NATIVE_STATIC_PROP_DECL(osBits)
 //----------------------------------------------------------------------
 TJS_BEGIN_NATIVE_PROP_DECL(exitOnNoWindowStartup){
-    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = TVPTerminateOnNoWindowStartup;
+    TJS_BEGIN_NATIVE_PROP_GETTER{ *result = terminateOnNoWindowStartup;
 return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_GETTER
 
 TJS_BEGIN_NATIVE_PROP_SETTER {
-    TVPTerminateOnNoWindowStartup = 0 != (tjs_int)*param;
+    terminateOnNoWindowStartup = 0 != (tjs_int)*param;
     return TJS_S_OK;
 }
 TJS_END_NATIVE_PROP_SETTER

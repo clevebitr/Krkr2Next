@@ -185,13 +185,13 @@ tjs_int32 tTVPKeyRepeatEmulator::IntervalTime =
 //---------------------------------------------------------------------------
 void tTVPKeyRepeatEmulator::GetKeyRepeatParam() {
     static tjs_int ArgumentGeneration = 0;
-    if(ArgumentGeneration != TVPGetCommandLineArgumentGeneration()) {
-        ArgumentGeneration = TVPGetCommandLineArgumentGeneration();
+    if(ArgumentGeneration != krkr::base::GetCommandLineArgumentGeneration()) {
+        ArgumentGeneration = krkr::base::GetCommandLineArgumentGeneration();
         tTJSVariant val;
-        if(TVPGetCommandLine(TJS_W("-paddelay"), &val)) {
+        if(krkr::base::GetCommandLine(TJS_W("-paddelay"), &val)) {
             HoldTime = (int)val;
         }
-        if(TVPGetCommandLine(TJS_W("-padinterval"), &val)) {
+        if(krkr::base::GetCommandLine(TJS_W("-padinterval"), &val)) {
             IntervalTime = (int)val;
         }
     }
@@ -737,7 +737,7 @@ static void TVPUninitDirectInput()
 }
 //---------------------------------------------------------------------------
 static tTVPAtExit
-	TVPUninitDirectInputAtExit(TVP_ATEXIT_PRI_RELEASE, TVPUninitDirectInput);
+	TVPUninitDirectInputAtExit(KRKR_ATEXIT_PRI_RELEASE, TVPUninitDirectInput);
 //---------------------------------------------------------------------------
 
 
@@ -749,7 +749,7 @@ static tTVPAtExit
 //---------------------------------------------------------------------------
 // Utility functionss
 //---------------------------------------------------------------------------
-bool TVPGetJoyPadAsyncState(tjs_uint keycode, bool getcurrent)
+bool krkr::environ::GetJoyPadAsyncState(tjs_uint keycode, bool getcurrent)
 {
 	return tTVPPadDirectInputDevice::GetAsyncState(keycode, getcurrent);
 }

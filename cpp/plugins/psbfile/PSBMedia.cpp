@@ -1893,7 +1893,7 @@ namespace PSB {
         _ref = 1;
 
         tTJSVariant val;
-        if(TVPGetCommandLine(TJS_W("memory_profile"), &val)) {
+        if(krkr::base::GetCommandLine(TJS_W("memory_profile"), &val)) {
             ttstr profile = ttstr(val).AsLowerCase();
             if(profile == TJS_W("aggressive") || profile == TJS_W("lowmem")) {
                 _configuredMaxEntryCount = 1024;
@@ -1901,13 +1901,13 @@ namespace PSB {
             }
         }
 
-        if(TVPGetCommandLine(TJS_W("psb_cache_entries"), &val)) {
+        if(krkr::base::GetCommandLine(TJS_W("psb_cache_entries"), &val)) {
             const tjs_int configured = static_cast<tjs_int>(val.AsInteger());
             if(configured > 0) {
                 _configuredMaxEntryCount = static_cast<size_t>(configured);
             }
         }
-        if(TVPGetCommandLine(TJS_W("psb_cache_mb"), &val)) {
+        if(krkr::base::GetCommandLine(TJS_W("psb_cache_mb"), &val)) {
             const tjs_int configured = static_cast<tjs_int>(val.AsInteger());
             if(configured > 0) {
                 _configuredMaxByteSize =
@@ -1988,8 +1988,8 @@ namespace PSB {
     }
 
     void PSBMedia::adaptBudgetByMemoryPressureLocked() {
-        const tjs_int self_used_mb = TVPGetSelfUsedMemory();
-        const tjs_int free_mb = TVPGetSystemFreeMemory();
+        const tjs_int self_used_mb = GetSelfUsedMemory();
+        const tjs_int free_mb = GetSystemFreeMemory();
 
         size_t max_entry_count = _configuredMaxEntryCount;
         size_t max_byte_size = _configuredMaxByteSize;

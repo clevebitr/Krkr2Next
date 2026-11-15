@@ -42,23 +42,22 @@
 
 #include <GLES3/gl3.h>
 
-// TVPDrawSceneOnce 定义在 environ/EngineLoop.cpp、声明在 environ/MainScene.h；
+// DrawSceneOnce 定义在 environ/EngineLoop.cpp、声明在 environ/MainScene.h；
 // 这里只留一个声明（模态循环每帧调它做呈现 + 节拍）。
 namespace krkr::environ {
-int TVPDrawSceneOnce(int interval);
+int DrawSceneOnce(int interval);
 } // namespace krkr::environ
 
 // TODO: 过渡兼容，命名空间迁移收尾后删除
-using krkr::environ::TVPDrawSceneOnce;
 
 // 全局图层对象计数（诊断用，区分「引擎没建图层/没东西画」与「画了但没进源纹理」）
-extern tjs_int TVPGetLayerCount();
+extern tjs_int GetLayerCount();
 
 // ---------------------------------------------------------------------------
 // Live2D post-draw hook — called after scene blit in UpdateDrawBuffer
 // ---------------------------------------------------------------------------
 static void (*g_postDrawHook)() = nullptr;
-void TVPSetPostDrawHook(void (*hook)()) { g_postDrawHook = hook; }
+void SetPostDrawHook(void (*hook)()) { g_postDrawHook = hook; }
 
 
 // ---------------------------------------------------------------------------
@@ -81,12 +80,12 @@ static bool VideoOverlayFrameActive() {
     return s_videoOverlaySerial != 0;
 }
 
-// 供 engine_tick 查询（与 TVPHostSubmitVideoOverlayFrame 同一约定：本地 extern 声明，
+// 供 engine_tick 查询（与 HostSubmitVideoOverlayFrame 同一约定：本地 extern 声明，
 // 不新增头文件）。用途见 engine_tick 里的"overlay 电影必须每帧刷新主窗口"。
-bool TVPHostVideoOverlayFrameActive() { return VideoOverlayFrameActive(); }
+bool HostVideoOverlayFrameActive() { return VideoOverlayFrameActive(); }
 
 // 由 KRMoviePlayer.cpp 调用（本地 extern 声明，不新增头文件）。
-bool TVPHostSubmitVideoOverlayFrame(const void *rgba, int width, int height,
+bool HostSubmitVideoOverlayFrame(const void *rgba, int width, int height,
                                     int stride_bytes, int left, int top,
                                     int right, int bottom) {
     if(!rgba || width <= 0 || height <= 0 || stride_bytes < width * 4)
@@ -107,7 +106,7 @@ bool TVPHostSubmitVideoOverlayFrame(const void *rgba, int width, int height,
     return true;
 }
 
-void TVPHostClearVideoOverlayFrame() {
+void HostClearVideoOverlayFrame() {
     std::lock_guard<std::mutex> lk(s_videoOverlayMtx);
     s_videoOverlaySerial = 0;
     s_videoOverlayWidth = s_videoOverlayHeight = 0;
@@ -299,7 +298,7 @@ public:
     // 对话框连一帧都没画出来（用户看到的"游戏自带弹窗不显示"）。
     //
     // 这里按 Kirikiroid2 的 cocos2d 实现（MainScene.cpp）做同样的嵌套循环：
-    // 每帧调 Application::Run()（消息/脚本/合成/绘制）+ TVPDrawSceneOnce(30)
+    // 每帧调 Application::Run()（消息/脚本/合成/绘制）+ DrawSceneOnce(30)
     // （呈现 + 节拍），直到对话框自己 close()（Close() 里把 modal_ 置 false）。
     // 输入来自宿主：engine_send_input 现在允许任意线程投递，模态循环每帧调
     // PumpModalInput() 把它派发掉。
@@ -332,7 +331,7 @@ public:
         } modalWindowGuard(owner_);
         int frames = 0;
         while(modal_) {
-            if(TVPTerminated)
+            if(terminated)
                 break;
             if(owner_ && !TVPIsWindowRegistered(owner_))
                 break; // 窗口被脚本 invalidate 掉了，没有可等的对话框
@@ -340,7 +339,7 @@ public:
             if(::Application)
                 ::Application->Run();
             krkr::stall::MarkStage("host: 等待模态对话框（脚本阻塞在 showModal）");
-            const int remain = TVPDrawSceneOnce(30);
+            const int remain = DrawSceneOnce(30);
             ++frames;
             if(remain > 0)
                 std::this_thread::sleep_for(std::chrono::milliseconds(remain));
@@ -632,7 +631,7 @@ public:
 
         // In IOSurface/WindowSurface mode, glFlush() is sufficient —
         // IOSurface has GPU-GPU sync, and WindowSurface (SurfaceTexture)
-        // is synchronized by eglSwapBuffers in TVPForceSwapBuffer.
+        // is synchronized by eglSwapBuffers in ForceSwapBuffer.
         // In Pbuffer mode, glFinish() is required because the legacy
         // path uses glReadPixels which needs GPU to be done.
         if(egl.HasIOSurface() || egl.HasNativeWindow()) {
@@ -641,7 +640,7 @@ public:
             glFinish();
         }
 
-        // Mark the frame as dirty so TVPForceSwapBuffer() knows there is
+        // Mark the frame as dirty so ForceSwapBuffer() knows there is
         // new content to present.  Without this, eglSwapBuffers would be
         // called every tick even when no rendering happened, causing
         // double-buffer flicker (alternating between current and stale
@@ -815,7 +814,7 @@ public:
         // 这是"游戏关窗退出"的那条路（实测 千恋万花 退出菜单走的就是它）：窗口
         // 从此不再重绘，宿主即便在确认框里选"继续游戏"也只是在空场景上继续跑。
         // 标记原因，engine_tick 会用 ENGINE_RESULT_WINDOW_CLOSED 告诉宿主。
-        TVPTerminateWindowClosed = true;
+        terminateWindowClosed = true;
         TVPTerminateAsync(0);
     }
 
@@ -871,7 +870,7 @@ public:
         // Called every ~50ms; nothing to do — the host shell owns the UI
     }
 
-    TVPOverlayNode *GetPrimaryArea() override { return nullptr; }
+    OverlayNode *GetPrimaryArea() override { return nullptr; }
 
 private:
     void EnsureBlitResources() {
@@ -1008,20 +1007,20 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// TVPInitUIExtension — originally in ui/extension/UIExtension.cpp
+// InitUIExtension — originally in ui/extension/UIExtension.cpp
 // Registered custom UI widgets (PageView, etc.)
 // ---------------------------------------------------------------------------
-void TVPInitUIExtension() {
-    spdlog::debug("TVPInitUIExtension: stub (UI handled by the host shell)");
+void InitUIExtension() {
+    spdlog::debug("InitUIExtension: stub (UI handled by the host shell)");
 }
 
 // ---------------------------------------------------------------------------
-// TVPCreateAndAddWindow — originally in MainScene.cpp
+// CreateAndAddWindow — originally in MainScene.cpp
 // Creates a HostWindowLayer and registers it with the application.
 // ---------------------------------------------------------------------------
-iWindowLayer *TVPCreateAndAddWindow(tTJSNI_Window *w) {
+iWindowLayer *CreateAndAddWindow(tTJSNI_Window *w) {
     auto *layer = new HostWindowLayer(w);
-    spdlog::info("TVPCreateAndAddWindow: created HostWindowLayer ({}x{})",
+    spdlog::info("CreateAndAddWindow: created HostWindowLayer ({}x{})",
                  layer->GetWidth(), layer->GetHeight());
     return layer;
 }
@@ -1051,10 +1050,10 @@ namespace TJS {
 } // namespace TJS
 
 // ---------------------------------------------------------------------------
-// TVPGetOSName / TVPGetPlatformName — originally in MainScene.cpp
+// GetOSName / GetPlatformName — originally in MainScene.cpp
 // Returns OS/platform identification strings.
 // ---------------------------------------------------------------------------
-ttstr TVPGetOSName() {
+ttstr GetOSName() {
 #if defined(__APPLE__)
     return ttstr(TJS_W("macOS"));
 #elif defined(_WIN32)
@@ -1066,7 +1065,7 @@ ttstr TVPGetOSName() {
 #endif
 }
 
-ttstr TVPGetPlatformName() {
+ttstr GetPlatformName() {
 #if defined(__aarch64__) || defined(_M_ARM64)
     return ttstr(TJS_W("ARM64"));
 #elif defined(__x86_64__) || defined(_M_X64)
@@ -1077,12 +1076,12 @@ ttstr TVPGetPlatformName() {
 }
 
 // ---------------------------------------------------------------------------
-// TVPGetInternalPreferencePath — originally in MainScene.cpp
+// GetInternalPreferencePath — originally in MainScene.cpp
 // Returns the directory path for storing preferences/config files.
 // ---------------------------------------------------------------------------
 static std::string s_internalPreferencePath;
 
-const std::string &TVPGetInternalPreferencePath() {
+const std::string &GetInternalPreferencePath() {
     if(s_internalPreferencePath.empty()) {
 #if defined(__APPLE__)
         const char *home = getenv("HOME");
@@ -1126,8 +1125,8 @@ static std::vector<std::string> s_appHomeDirs;
 
 const std::vector<std::string> &krkr::io::GetApplicationHomeDirectory() {
     if(s_appHomeDirs.empty()) {
-        if(!TVPNativeProjectDir.IsEmpty()) {
-            std::string dir = TVPNativeProjectDir.AsNarrowStdString();
+        if(!nativeProjectDir.IsEmpty()) {
+            std::string dir = nativeProjectDir.AsNarrowStdString();
             while(!dir.empty() && dir.back() == '/')
                 dir.pop_back();
             s_appHomeDirs.push_back(dir);
@@ -1139,15 +1138,15 @@ const std::vector<std::string> &krkr::io::GetApplicationHomeDirectory() {
 }
 
 // ---------------------------------------------------------------------------
-// TVPCopyFile — originally in CustomFileUtils.cpp
+// CopyLocalFile — originally in CustomFileUtils.cpp
 // Copies a file from source to destination.
 // ---------------------------------------------------------------------------
-bool TVPCopyFile(const std::string &from, const std::string &to) {
+bool CopyLocalFile(const std::string &from, const std::string &to) {
     std::error_code ec;
     std::filesystem::copy_file(
         from, to, std::filesystem::copy_options::overwrite_existing, ec);
     if(ec) {
-        spdlog::error("TVPCopyFile failed: {} -> {} ({})", from, to,
+        spdlog::error("CopyLocalFile failed: {} -> {} ({})", from, to,
                       ec.message());
         return false;
     }
@@ -1155,34 +1154,34 @@ bool TVPCopyFile(const std::string &from, const std::string &to) {
 }
 
 // ---------------------------------------------------------------------------
-// TVPShowFileSelector — originally in ui/FileSelectorForm.cpp
+// ShowFileSelector — originally in ui/FileSelectorForm.cpp
 // Shows a file selection dialog. This is handled by the host shell.
 // Returns empty string (no selection).
 // ---------------------------------------------------------------------------
-std::string TVPShowFileSelector(const std::string &title,
+std::string ShowFileSelector(const std::string &title,
                                 const std::string &init_dir,
                                 std::string default_ext, bool is_save) {
     spdlog::warn(
-        "TVPShowFileSelector: stub — file selection handled by the host shell");
+        "ShowFileSelector: stub — file selection handled by the host shell");
     return "";
 }
 
 // ---------------------------------------------------------------------------
-// TVPShowPopMenu — originally in ui/InGameMenuForm.cpp
+// ShowPopMenu — originally in ui/InGameMenuForm.cpp
 // Shows a popup context menu. Handled by the host shell.
 // ---------------------------------------------------------------------------
-void TVPShowPopMenu(tTJSNI_MenuItem *menu) {
+void ShowPopMenu(tTJSNI_MenuItem *menu) {
     // 宿主没有弹出菜单接入点：只记录一次调用指纹（游戏用它做右键/长按菜单）。
     // 从 warn 降为 info —— 这不是"出错"，逐次 warn 会让人误判成故障。
-    spdlog::info("TVPShowPopMenu: 宿主未实现弹出菜单，忽略本次请求（menu={}）",
+    spdlog::info("ShowPopMenu: 宿主未实现弹出菜单，忽略本次请求（menu={}）",
                  menu ? "present" : "null");
 }
 
 // ---------------------------------------------------------------------------
-// TVPOpenPatchLibUrl — originally in AppDelegate.cpp
+// OpenPatchLibUrl — originally in AppDelegate.cpp
 // Opens the URL for the patch library website.
 // ---------------------------------------------------------------------------
-void TVPOpenPatchLibUrl() {
+void OpenPatchLibUrl() {
     spdlog::warn(
-        "TVPOpenPatchLibUrl: stub — URL opening handled by the host shell");
+        "OpenPatchLibUrl: stub — URL opening handled by the host shell");
 }

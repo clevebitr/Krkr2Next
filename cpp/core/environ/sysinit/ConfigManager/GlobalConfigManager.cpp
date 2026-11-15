@@ -26,7 +26,7 @@ public:
     void SaveFile(const std::string &path) {
         if(!krkr::io::WriteDataToFile(path, _stream.GetInternalBuffer(),
                                _stream.GetSize())) {
-            TVPShowSimpleMessageBox(LocaleConfigManager::GetInstance()->GetText(
+            ShowSimpleMessageBox(LocaleConfigManager::GetInstance()->GetText(
                                         "cannot_create_preference"),
                                     LocaleConfigManager::GetInstance()->GetText(
                                         "readonly_storage"));
@@ -131,7 +131,7 @@ bool iSysConfigManager::IsValueExist(const std::string &name) {
 }
 
 std::string GlobalConfigManager::GetFilePath() {
-    return TVPGetInternalPreferencePath() + "GlobalPreference.xml";
+    return GetInternalPreferencePath() + "GlobalPreference.xml";
 }
 
 template <>

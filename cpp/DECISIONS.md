@@ -1373,3 +1373,70 @@ sound 的 64 个残项里，变量占了全部：
 
 `check_naming.py` 合计遗留：1297 → 1101 → 1080 → 1043 → 1026 → 910 → **693**
 （口径修正让 910 这一档实际是 878）。
+
+## 2026-11-15 — 命名统一第 7 轮：environ（133 符号），工具新增 kind=global
+
+\## 结果
+
+`environ` 遗留 **247 → 98**（合计 693 → **492**，连带 base 366→322、io 20→17、sound 20→16，
+因为它们剩下的也是 environ 的符号）。environ 余下的 98 个**全是别的模块的符号或登记例外**。
+
+### 为什么不能像前几轮那样"一张 map 走到底"
+
+environ 是"实现提供方"模块：它的符号**声明在别处、实现在自己目录的全局作用域**。
+按声明所处的 namespace 一切，就是三张 map（`qualify` 不同）：
+
+| map | qualify | 规模 | 内容 |
+|---|---|---:|---|
+| `environ.tsv` | `krkr::environ` | 8 | 声明在 `environ/intf/*.h`（EngineLoop / MainScene / SystemControl / Application）里的 |
+| `environ-base.tsv` | **`krkr::base`** | 26 | sysinit / DetectCPU / ConfigManager 一族 —— 目录在 environ，**namespace 是 base** |
+| `environ-globals.tsv` | ——（`kind=global`） | 120 | 声明在 base/visual 全局头里、或根本没有头文件声明的 |
+| 残项 | 各归各 | 8+3+26 | draft 漏收 |
+
+如果把 base 那 26 个用 `krkr::environ::` 前缀改，调用点会指向**不存在的符号**
+（它们真名是 `krkr::base::X`）；全局那 120 个更彻底 —— 加了前缀就是另一个符号。
+
+\## 决策：工具加 `kind=global`（第 5 个 kind）
+
+`rename_symbols.py` 原来只有 fn/type/macro/var，替换策略是"owner 短名、别处全限定"。
+新增 `global`：**任何位置都只写裸名**。判据是"这个符号的声明在全局作用域"，
+由一段脚本按声明所在 namespace 自动分类（注释里列出了每组样例）。
+
+这可能是整轮里最有复用价值的东西：`base`、`visual`、`bridge` 里同样有大量全局符号
+（`TVPThrowExceptionMessage`、`TVPAddLog` 之类），下一轮直接用。
+
+\## 决策：`tTVPApplication` 不改名（写成 `Application` 会静默废掉整个宿主）
+
+目标名 `Application` 与**全局指针变量** `Application`（`extern tTVPApplication *Application;`，
+AGENTS.md 登记的例外）同名。后果不是编译错误，而是：
+
+```cpp
+namespace krkr::environ {
+    void tTVPApplication::Foo() { Application->Bar(); }  // 现在 Application 指类，不是指针
+}
+```
+
+namespace 内的无条件名字查找先找到类 `Application` → 所有 `Application->…` 失效。
+要改必须连那个全局指针一起改（改名叫 `app`？），那是另一件事，登记进 §4。
+
+\## 决策：改名的同时把"日志串里的旧名"一起改
+
+environ 的 log/text 里有 23 处提到被改名的函数（`"TVPShowSimpleMessageBox: title=…"`）。
+`rename_symbols.py` 默认跳过字符串字面量，本轮用同样的 `split_regions()` 写了个只改
+字符串内部的补丁（措辞不动，只换标识符），否则 `grep TVPShowSimpleMessageBox` 永远非空。
+
+\## 数据
+
+| 轮次 | 模块 | 符号 | 替换 | 文件 | 耗时 |
+|---|---|---:|---:|---:|---|
+| 6 | sound | 191 | 1327 | 39 | ~80 min |
+| 7 | environ（3 map + 残项） | 133 | 836 | 76 | ~90 min |
+
+`check_naming.py` 合计遗留：910 → 693 → **492**。桥接 389 → **345**。
+
+\## 下一轮（base）要先做的两件事
+
+1. `base` 里也有全局符号（`TVPThrowExceptionMessage` 46 处、`TVPAddLog`…），走 `kind=global`；
+2. `base/runtime/*.cpp` 里有 ~30 个 `namespace krkr::utils` 的内部 **static**（见决策 #28），
+   它们既不能进 `kind=global`（static 不能限定）也不能进 utils 的 map（owner 不是它们）——
+   只能用 `--roots cpp/core/base` + owner 指到 `cpp/core/base` 的单张 map 手工跑。

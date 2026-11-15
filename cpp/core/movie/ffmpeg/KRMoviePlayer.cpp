@@ -26,14 +26,14 @@ extern "C" {
 extern std::thread::id TVPMainThreadID;
 
 // 宿主视频 overlay 提交接口 —— 实现落在 cpp/core/environ/platform/stubs/ui_stubs.cpp 的
-// HostWindowLayer（与 TVPSetPostDrawHook 同一种做法：本地 extern 声明，不新增
+// HostWindowLayer（与 SetPostDrawHook 同一种做法：本地 extern 声明，不新增
 // 头文件）。引擎把解码出的 RGBA 帧拷给宿主层，宿主层在本帧场景 blit 之后把它
 // 当作一张纹理叠画到宿主 render target 上（overlay 模式下视频盖在画面之上）。
-extern bool TVPHostSubmitVideoOverlayFrame(const void *rgba, int width,
+extern bool HostSubmitVideoOverlayFrame(const void *rgba, int width,
                                            int height, int stride_bytes,
                                            int left, int top, int right,
                                            int bottom);
-extern void TVPHostClearVideoOverlayFrame();
+extern void HostClearVideoOverlayFrame();
 
 NS_KRMOVIE_BEGIN
 
@@ -576,7 +576,7 @@ int TVPMoviePlayer::AddVideoPicture(DVDVideoPicture &pic, int index) {
 
 VideoPresentOverlay::~VideoPresentOverlay() {
     TVPRemoveContinuousEventHook(this);
-    TVPHostClearVideoOverlayFrame();
+    HostClearVideoOverlayFrame();
     ClearNode();
 }
 
@@ -641,14 +641,14 @@ void VideoPresentOverlay::PresentPicture(float dt) {
         if(s_invisibleLogs.fetch_add(1) == 0)
             spdlog::warn("VideoPresentOverlay: 帧已解出但 Visible=false，"
                          "不呈现（overlay 未置可见？）");
-        TVPHostClearVideoOverlayFrame();
+        HostClearVideoOverlayFrame();
         return;
     }
 
     tTVPRect dest = GetBounds();
     if(dest.get_width() <= 0 || dest.get_height() <= 0)
         dest = tTVPRect(0, 0, pic.width, pic.height);
-    const bool submitted = TVPHostSubmitVideoOverlayFrame(
+    const bool submitted = HostSubmitVideoOverlayFrame(
         pic.rgba, pic.width, pic.height, pic.width * 4, dest.left, dest.top,
         dest.right, dest.bottom);
     TVPMovieStatsNotePresent("overlay", /*ptsNotYet=*/false);
@@ -712,7 +712,7 @@ void KRMovie::VideoPresentOverlay::Play() {
 
 void KRMovie::VideoPresentOverlay::Stop() {
     TVPRemoveContinuousEventHook(this);
-    TVPHostClearVideoOverlayFrame();
+    HostClearVideoOverlayFrame();
     TVPMoviePlayer::Stop();
 }
 
@@ -764,7 +764,7 @@ const tTVPRect &MoviePlayerOverlay::GetBounds() {
 void KRMovie::MoviePlayerOverlay::SetVisible(bool b) {
     VideoPresentOverlay::SetVisible(b);
     if(!b)
-        TVPHostClearVideoOverlayFrame();
+        HostClearVideoOverlayFrame();
 }
 
 void MoviePlayerOverlay::OnPlayEvent(KRMovieEvent msg, void *p) {

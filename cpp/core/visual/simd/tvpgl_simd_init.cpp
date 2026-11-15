@@ -2,7 +2,7 @@
  * KrKr2 Engine - Highway SIMD Initialization
  *
  * Overrides the scalar function pointers with Highway SIMD-optimized versions.
- * Called from TVPInitTVPGL() after TVPGL_C_Init().
+ * Called from TVPInitTVPGL() after GL_C_Init().
  */
 
 #include "tvpgl_simd_init.h"

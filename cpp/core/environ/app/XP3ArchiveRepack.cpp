@@ -35,16 +35,16 @@ using namespace NArchive::N7z;
 #define COMPRESS_THRESHOLD 4 * 1024 * 1024
 #define S_INTERRUPT ((HRESULT)0x114705)
 
-void TVPSetXP3FilterScript(ttstr content);
-void TVPSavePVRv3(void *formatdata, tTJSBinaryStream *dst,
+void SetXP3FilterScript(ttstr content);
+void SavePVRv3(void *formatdata, tTJSBinaryStream *dst,
                   const iTVPBaseBitmap *image, const ttstr &mode,
                   iTJSDispatch2 *meta);
 
 namespace krkr::environ {
 
-class tTVPXP3ArchiveEx : public krkr::io::XP3Archive {
+class XP3ArchiveEx : public krkr::io::XP3Archive {
 public:
-    tTVPXP3ArchiveEx(const ttstr &name, tTJSBinaryStream *st) :
+    XP3ArchiveEx(const ttstr &name, tTJSBinaryStream *st) :
         krkr::io::XP3Archive(name, 0) {
         Init(st, -1, false);
     }
@@ -216,7 +216,7 @@ private:
     ULONG STDMETHODCALLTYPE AddRef() noexcept override { return 0; }
     ULONG STDMETHODCALLTYPE Release() noexcept override { return 0; }
 
-    std::vector<std::pair<tTVPXP3ArchiveEx *, std::string>> ConvFileList;
+    std::vector<std::pair<XP3ArchiveEx *, std::string>> ConvFileList;
     std::thread *Thread = nullptr;
     CCreatedCoder CoderCompress, CoderCopy;
     static constexpr int nCodecMethod = 0x30101, // LZMA
@@ -236,8 +236,8 @@ private:
 
 XP3ArchiveRepackAsync::XP3ArchiveRepackAsync() :
     _impl(new XP3ArchiveRepackAsyncImpl()) {
-    TVPDetectCPU();
-    //	TVPGL_ASM_Init();
+    DetectCPU();
+    //	InitGLAsm();
 }
 
 XP3ArchiveRepackAsync::~XP3ArchiveRepackAsync() { delete _impl; }
@@ -314,7 +314,7 @@ uint64_t XP3ArchiveRepackAsyncImpl::AddTask(
     const std::string &src /*, const std::string &dst*/) {
     ttstr path(src);
     krkr::io::LocalFileStream *str = new krkr::io::LocalFileStream(path, path, TJS_BS_READ);
-    tTVPXP3ArchiveEx *xp3arc = new tTVPXP3ArchiveEx(path, str);
+    XP3ArchiveEx *xp3arc = new XP3ArchiveEx(path, str);
     for(const krkr::io::XP3Archive::tArchiveItem &item : xp3arc->ItemVector) {
         xp3arc->TotalSize += item.OrgSize;
     }
@@ -327,7 +327,7 @@ void XP3ArchiveRepackAsyncImpl::SetXP3Filter(const std::string &xp3filter) {
     iTJSTextReadStream *stream = TVPCreateTextStreamForRead(xp3filter, "");
     stream->Read(xp3filterScript, 0);
     delete stream;
-    TVPSetXP3FilterScript(xp3filterScript);
+    SetXP3FilterScript(xp3filterScript);
 }
 
 void XP3ArchiveRepackAsyncImpl::SetOption(const std::string &name, bool v) {
@@ -344,7 +344,7 @@ void XP3ArchiveRepackAsyncImpl::Clear() {
             delete it.first;
     }
     ConvFileList.clear();
-    TVPSetXP3FilterScript(TJS_W(""));
+    SetXP3FilterScript(TJS_W(""));
 }
 
 void XP3ArchiveRepackAsyncImpl::Start() {
@@ -498,7 +498,7 @@ void XP3ArchiveRepackAsyncImpl::DoConv() {
         if(OnNewArchive)
             OnNewArchive(arcidx, it.first->TotalSize, it.second);
 
-        tTVPXP3ArchiveEx *xp3arc = it.first;
+        XP3ArchiveEx *xp3arc = it.first;
         tjs_uint totalFile = xp3arc->GetCount();
 
         std::string tmpname = it.second + ".7z";
@@ -705,7 +705,7 @@ void XP3ArchiveRepackAsyncImpl::DoConv() {
             bmp->AssignBitmap(data.bmp);
 
             if(OptionUsingETC2) {
-                TVPSavePVRv3(nullptr, &memstr, bmp, TJS_W("ETC2_RGBA"),
+                SavePVRv3(nullptr, &memstr, bmp, TJS_W("ETC2_RGBA"),
                              meta.get());
             } else {
                 // convert to tlg5 for better performance

@@ -58,9 +58,9 @@
 //---------------------------------------------------------------------------
 // global data
 //---------------------------------------------------------------------------
-ttstr TVPNativeProjectDir;
-ttstr TVPNativeDataPath;
-bool TVPProjectDirSelected = false;
+ttstr nativeProjectDir;
+ttstr nativeDataPath;
+bool projectDirSelected = false;
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -70,14 +70,14 @@ bool TVPProjectDirSelected = false;
 // signature checker will refer. This enables the signature checker
 // (or other security modules like XP3 encryption module) to check
 // the changes which is not intended by the contents author.
-const static char TVPSystemSecurityOptions[] =
-    "-- TVPSystemSecurityOptions "
+const static char systemSecurityOptions[] =
+    "-- systemSecurityOptions "
     "disablemsgmap(0):forcedataxp3(0):acceptfilenameargument(0) --";
 
 //---------------------------------------------------------------------------
 int GetSystemSecurityOption(const char *name) {
     size_t namelen = TJS_nstrlen(name);
-    const char *p = TJS_nstrstr(TVPSystemSecurityOptions, name);
+    const char *p = TJS_nstrstr(systemSecurityOptions, name);
     if(!p)
         return 0;
     if(p[namelen] == '(' && p[namelen + 2] == ')')
@@ -111,12 +111,12 @@ not recognize TVP's import area.
 is specified at command line or embeded options area.
 */
 
-void TVPDumpHWException() {
+void DumpHWException() {
     // dummy
 }
 
 //---------------------------------------------------------------------------
-static void TVPInitRandomGenerator() {
+static void InitRandomGenerator() {
     tjs_uint32 tick = krkr::utils::GetRoughTickCount32();
     krkr::utils::PushEnvironNoise(&tick, sizeof(tick));
     std::thread::id tid = std::this_thread::get_id();
@@ -127,12 +127,12 @@ static void TVPInitRandomGenerator() {
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-// TVPInitializeBaseSystems
+// InitializeBaseSystems
 //---------------------------------------------------------------------------
-void TVPInitializeBaseSystems() {
+void InitializeBaseSystems() {
     // set system archive delimiter
     tTJSVariant v;
-    if(TVPGetCommandLine(TJS_W("-arcdelim"), &v))
+    if(GetCommandLine(TJS_W("-arcdelim"), &v))
         krkr::io::archiveDelimiter = ttstr(v)[0];
 
     // set default current directory
@@ -151,67 +151,67 @@ void TVPInitializeBaseSystems() {
     }
 }
 
-static tjs_uint64 TVPTotalPhysMemory = 0;
+static tjs_uint64 totalPhysMemory = 0;
 
-static void TVPInitProgramArgumentsAndDataPath(bool stop_after_datapath_got);
+static void InitProgramArgumentsAndDataPath(bool stop_after_datapath_got);
 
-void krkr::base::TVPBeforeSystemInit() {
+void BeforeSystemInit() {
     // RegisterDllLoadHook();
     //  register DLL delayed import hook to support _inmm.dll
 
-    TVPInitProgramArgumentsAndDataPath(false); // ensure command line
+    InitProgramArgumentsAndDataPath(false); // ensure command line
 
     // set system archive delimiter after patch.tjs specified
     tTJSVariant v;
-    if(TVPGetCommandLine(TJS_W("-arcdelim"), &v))
+    if(GetCommandLine(TJS_W("-arcdelim"), &v))
         krkr::io::archiveDelimiter = ttstr(v)[0];
 
-    if(krkr::io::IsExistentStorageNoSearchNoNormalize(TVPProjectDir)) {
-        TVPProjectDir += krkr::io::archiveDelimiter;
+    if(krkr::io::IsExistentStorageNoSearchNoNormalize(projectDir)) {
+        projectDir += krkr::io::archiveDelimiter;
     } else {
-        TVPProjectDir += TJS_W("/");
+        projectDir += TJS_W("/");
     }
-    krkr::io::SetCurrentStorageDirectory(TVPProjectDir);
+    krkr::io::SetCurrentStorageDirectory(projectDir);
     // randomize
-    TVPInitRandomGenerator();
+    InitRandomGenerator();
 
     // memory usage
     {
         TVPMemoryInfo meminf;
-        TVPGetMemoryInfo(meminf);
+        GetMemoryInfo(meminf);
         krkr::utils::PushEnvironNoise(&meminf, sizeof(meminf));
 
-        TVPTotalPhysMemory = meminf.MemTotal * 1024;
-        if(TVPTotalPhysMemory > 768 * 1024 * 1024) {
-            TVPTotalPhysMemory -=
+        totalPhysMemory = meminf.MemTotal * 1024;
+        if(totalPhysMemory > 768 * 1024 * 1024) {
+            totalPhysMemory -=
                 512 * 1024 * 1024; // assume that system reserved 512M memory
         } else {
-            TVPTotalPhysMemory /= 2; // use half memory in small memory devices
+            totalPhysMemory /= 2; // use half memory in small memory devices
         }
 
         krkr::utils::AddImportantLog(TVPFormatMessage(TVPInfoTotalPhysicalMemory,
-                                            tjs_int64(TVPTotalPhysMemory)));
-        if(TVPTotalPhysMemory > 256 * 1024 * 1024) {
+                                            tjs_int64(totalPhysMemory)));
+        if(totalPhysMemory > 256 * 1024 * 1024) {
             std::string str =
                 IndividualConfigManager::GetInstance()->GetValue<std::string>(
                     "memusage", "unlimited");
             if(str == ("low"))
-                TVPTotalPhysMemory = 0; // assumes zero
+                totalPhysMemory = 0; // assumes zero
             else if(str == ("medium"))
-                TVPTotalPhysMemory = 128 * 1024 * 1024;
+                totalPhysMemory = 128 * 1024 * 1024;
             else if(str == ("high"))
-                TVPTotalPhysMemory = 256 * 1024 * 1024;
+                totalPhysMemory = 256 * 1024 * 1024;
         } else { // use minimum memory usage if less than 256M(512M
                  // physics)
-            TVPTotalPhysMemory = 0;
+            totalPhysMemory = 0;
         }
 
-        if(TVPTotalPhysMemory < 128 * 1024 * 1024) {
+        if(totalPhysMemory < 128 * 1024 * 1024) {
             // very very low memory, forcing to assume zero memory
-            TVPTotalPhysMemory = 0;
+            totalPhysMemory = 0;
         }
 
-        if(TVPTotalPhysMemory < 128 * 1024 * 1024) {
+        if(totalPhysMemory < 128 * 1024 * 1024) {
             // extra low memory
             if(TJSObjectHashBitsLimit > 0)
                 TJSObjectHashBitsLimit = 0;
@@ -223,7 +223,7 @@ void krkr::base::TVPBeforeSystemInit() {
             krkr::io::segmentCacheLimitOverridden = true;
             krkr::io::segmentCacheLimitOverrideBytes = 0;
             TVPFreeUnusedLayerCache = true; // in LayerIntf.cpp
-        } else if(TVPTotalPhysMemory < 256 * 1024 * 1024) {
+        } else if(totalPhysMemory < 256 * 1024 * 1024) {
             // low memory
             if(TJSObjectHashBitsLimit > 4)
                 TJSObjectHashBitsLimit = 4;
@@ -232,29 +232,29 @@ void krkr::base::TVPBeforeSystemInit() {
 }
 
 //---------------------------------------------------------------------------
-static void TVPDumpOptions();
+static void DumpOptions();
 
 //---------------------------------------------------------------------------
-extern bool TVPEnableGlobalHeapCompaction;
+extern bool enableGlobalHeapCompaction;
 
-extern void TVPGL_SSE2_Init();
+extern void GL_SSE2_Init();
 
-extern "C" void TVPGL_ASM_Init();
-extern bool TVPAutoSaveBookMark;
-static bool TVPHighTimerPeriod = false;
-static uint32_t TVPTimeBeginPeriodRes = 0;
+extern "C" void InitGLAsm();
+extern bool autoSaveBookMark;
+static bool highTimerPeriod = false;
+static uint32_t timeBeginPeriodRes = 0;
 
 //---------------------------------------------------------------------------
-void krkr::base::TVPAfterSystemInit() {
+void AfterSystemInit() {
     // check CPU type
-    TVPDetectCPU();
+    DetectCPU();
 
     TVPAllocGraphicCacheOnHeap = false; // always false since beta 20
 
     // determine maximum graphic cache limit
     tTJSVariant opt;
     tjs_int64 limitmb = -1;
-    if(TVPGetCommandLine(TJS_W("-gclim"), &opt)) {
+    if(GetCommandLine(TJS_W("-gclim"), &opt)) {
         ttstr str(opt);
         if(str == TJS_W("auto"))
             limitmb = -1;
@@ -263,25 +263,25 @@ void krkr::base::TVPAfterSystemInit() {
     }
 
     if(limitmb == -1) {
-        if(TVPTotalPhysMemory <= 32 * 1024 * 1024)
+        if(totalPhysMemory <= 32 * 1024 * 1024)
             TVPGraphicCacheSystemLimit = 0;
-        else if(TVPTotalPhysMemory <= 48 * 1024 * 1024)
+        else if(totalPhysMemory <= 48 * 1024 * 1024)
             TVPGraphicCacheSystemLimit = 0;
-        else if(TVPTotalPhysMemory <= 64 * 1024 * 1024)
+        else if(totalPhysMemory <= 64 * 1024 * 1024)
             TVPGraphicCacheSystemLimit = 0;
-        else if(TVPTotalPhysMemory <= 96 * 1024 * 1024)
+        else if(totalPhysMemory <= 96 * 1024 * 1024)
             TVPGraphicCacheSystemLimit = 4;
-        else if(TVPTotalPhysMemory <= 128 * 1024 * 1024)
+        else if(totalPhysMemory <= 128 * 1024 * 1024)
             TVPGraphicCacheSystemLimit = 8;
-        else if(TVPTotalPhysMemory <= 192 * 1024 * 1024)
+        else if(totalPhysMemory <= 192 * 1024 * 1024)
             TVPGraphicCacheSystemLimit = 12;
-        else if(TVPTotalPhysMemory <= 256 * 1024 * 1024)
+        else if(totalPhysMemory <= 256 * 1024 * 1024)
             TVPGraphicCacheSystemLimit = 20;
-        else if(TVPTotalPhysMemory <= 512 * 1024 * 1024)
+        else if(totalPhysMemory <= 512 * 1024 * 1024)
             TVPGraphicCacheSystemLimit = 40;
         else
             TVPGraphicCacheSystemLimit =
-                tjs_uint64(TVPTotalPhysMemory /
+                tjs_uint64(totalPhysMemory /
                            (1024 * 1024 * 10)); // cachemem = physmem / 10
         TVPGraphicCacheSystemLimit *= 1024 * 1024;
     } else {
@@ -291,22 +291,22 @@ void krkr::base::TVPAfterSystemInit() {
     if(TVPGraphicCacheSystemLimit >= 256 * 1024 * 1024)
         TVPGraphicCacheSystemLimit = 256 * 1024 * 1024;
 
-    if(TVPTotalPhysMemory <= 64 * 1024 * 1024)
+    if(totalPhysMemory <= 64 * 1024 * 1024)
         TVPSetFontCacheForLowMem();
 
     //	TVPGraphicCacheSystemLimit = 1*1024*1024; // DEBUG
 
-    if(TVPGetCommandLine(TJS_W("-autosave"), &opt)) {
+    if(GetCommandLine(TJS_W("-autosave"), &opt)) {
         ttstr str(opt);
         if(str == TJS_W("yes")) {
-            TVPAutoSaveBookMark = true;
+            autoSaveBookMark = true;
         }
     }
     // check TVPGraphicSplitOperation option
     // Prefer command-line option set via engine_set_option
     std::string _val;
     tTJSVariant renderer_opt;
-    if(TVPGetCommandLine(TJS_W("renderer"), &renderer_opt)) {
+    if(GetCommandLine(TJS_W("renderer"), &renderer_opt)) {
         _val = ttstr(renderer_opt).AsStdString();
     }
     if(_val.empty()) {
@@ -319,7 +319,7 @@ void krkr::base::TVPAfterSystemInit() {
         TVPDrawThreadNum =
             IndividualConfigManager::GetInstance()->GetValue<int>(
                 "software_draw_thread", 0);
-        if(TVPGetCommandLine(TJS_W("-gsplit"), &opt)) {
+        if(GetCommandLine(TJS_W("-gsplit"), &opt)) {
             ttstr str(opt);
             if(str == TJS_W("no"))
                 TVPGraphicSplitOperationType = gsotNone;
@@ -333,7 +333,7 @@ void krkr::base::TVPAfterSystemInit() {
     }
 
     // check TVPDefaultHoldAlpha option
-    if(TVPGetCommandLine(TJS_W("-holdalpha"), &opt)) {
+    if(GetCommandLine(TJS_W("-holdalpha"), &opt)) {
         ttstr str(opt);
         if(str == TJS_W("yes") || str == TJS_W("true"))
             TVPDefaultHoldAlpha = true;
@@ -342,7 +342,7 @@ void krkr::base::TVPAfterSystemInit() {
     }
 
     // check TVPJPEGFastLoad option
-    if(TVPGetCommandLine(TJS_W("-jpegdec"),
+    if(GetCommandLine(TJS_W("-jpegdec"),
                          &opt)) // this specifies precision for JPEG decoding
     {
         ttstr str(opt);
@@ -355,20 +355,20 @@ void krkr::base::TVPAfterSystemInit() {
     }
 
     // dump option
-    TVPDumpOptions();
+    DumpOptions();
 
     // initilaize x86 graphic routines
 #if 0
 #ifndef TJS_64BIT_OS
     TVPGL_IA32_Init();
 #endif
-    TVPGL_SSE2_Init();
+    GL_SSE2_Init();
 #endif
-    //	TVPGL_ASM_Init();
+    //	InitGLAsm();
 
     // timer precision
     uint32_t prectick = 1;
-    if(TVPGetCommandLine(TJS_W("-timerprec"), &opt)) {
+    if(GetCommandLine(TJS_W("-timerprec"), &opt)) {
         ttstr str(opt);
         if(str == TJS_W("high"))
             prectick = 1;
@@ -380,7 +380,7 @@ void krkr::base::TVPAfterSystemInit() {
 
     // draw thread num
     tjs_int drawThreadNum = 0;
-    if(TVPGetCommandLine(TJS_W("-drawthread"), &opt)) {
+    if(GetCommandLine(TJS_W("-drawthread"), &opt)) {
         ttstr str(opt);
         if(str == TJS_W("auto"))
             drawThreadNum = 0;
@@ -391,24 +391,24 @@ void krkr::base::TVPAfterSystemInit() {
 }
 
 //---------------------------------------------------------------------------
-void krkr::base::TVPBeforeSystemUninit() {
-    // TVPDumpHWException(); // dump cached hw exceptoin
+void BeforeSystemUninit() {
+    // DumpHWException(); // dump cached hw exceptoin
 }
 
 //---------------------------------------------------------------------------
-void krkr::base::TVPAfterSystemUninit() {}
+void AfterSystemUninit() {}
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
-bool TVPTerminated = false;
+bool terminated = false;
 // 终止是否由"游戏关掉了自己的窗口"引起（与脚本直接 System.exit() 区分开）：
 // 前者窗口已经没了，宿主即便确认"继续游戏"也只是在空场景上继续跑（实测就是卡死），
 // engine_tick 会用不同的结果码告诉宿主，见 ENGINE_RESULT_WINDOW_CLOSED。
-bool TVPTerminateWindowClosed = false;
-bool TVPTerminateOnWindowClose = true;
-bool TVPTerminateOnNoWindowStartup = true;
-int TVPTerminateCode = 0;
-bool TVPHostSuppressProcessExit = false;
+bool terminateWindowClosed = false;
+bool terminateOnWindowClose = true;
+bool terminateOnNoWindowStartup = true;
+int terminateCode = 0;
+bool hostSuppressProcessExit = false;
 
 //---------------------------------------------------------------------------
 // 关窗确认闸门状态（见 SysInitImpl.h 的说明）。原子即可：写方是宿主线程
@@ -473,7 +473,7 @@ void ConfirmWindowClose() {
     g_windowClosePending.store(false, std::memory_order_relaxed);
     // 不走 HostWindowLayer::Close()（那会再次撞上闸门）：宿主已经确认，
     // 这里直接按"关窗退出"处理，engine_tick 下一帧会报 WINDOW_CLOSED。
-    TVPTerminateWindowClosed = true;
+    terminateWindowClosed = true;
     TVPTerminateAsync(0);
 }
 
@@ -503,25 +503,25 @@ void PumpModalInput() {
 //---------------------------------------------------------------------------
 void krkr::base::TVPTerminateAsync(int code) {
     // do "A"synchronous temination of application
-    TVPTerminated = true;
-    TVPTerminateCode = code;
+    terminated = true;
+    terminateCode = code;
 
     // posting dummy message will prevent "missing WM_QUIT bug" in
     // Direct3D framework.
-    if(TVPSystemControl)
-        TVPSystemControl->CallDeliverAllEventsOnIdle();
+    if(GetSystemControl)
+        GetSystemControl->CallDeliverAllEventsOnIdle();
 
     Application->Terminate();
 
-    if(TVPSystemControl)
-        TVPSystemControl->CallDeliverAllEventsOnIdle();
+    if(GetSystemControl)
+        GetSystemControl->CallDeliverAllEventsOnIdle();
 }
 
 //---------------------------------------------------------------------------
-void krkr::base::TVPTerminateSync(int code) {
+void TerminateSync(int code) {
     // do synchronous temination of application (never return)
-    if(TVPHostSuppressProcessExit) {
-        // In embedded host mode, calling TVPSystemUninit() here
+    if(hostSuppressProcessExit) {
+        // In embedded host mode, calling SystemUninit() here
         // would destroy the TJS engine while still inside a TJS call stack,
         // causing undefined behavior (hang/crash) since exit() is suppressed.
         // Instead, mark as terminated and throw EAbort to safely unwind the
@@ -529,19 +529,19 @@ void krkr::base::TVPTerminateSync(int code) {
         TVPTerminateAsync(code);
         throw EAbort(TJS_W("application exit"));
     }
-    TVPSystemUninit();
-    TVPExitApplication(code);
+    SystemUninit();
+    ExitApplication(code);
 }
 
 //---------------------------------------------------------------------------
-void krkr::base::TVPMainWindowClosed() {
+void MainWindowClosed() {
     // called from WindowIntf.cpp, caused by closing all window.
-    if(TVPTerminateOnWindowClose) {
+    if(terminateOnWindowClose) {
         // 记下"由窗口关闭引起"：宿主据此不提供"继续游戏"（窗口已经没了）。
         // 这条日志用来区分两种关窗来路：Window.close()（走 HostWindowLayer::Close，
         // 可被确认闸门拦下）与窗口注销（走这里，窗口已经注销，拦不住）。
-        spdlog::debug("TVPMainWindowClosed: 主窗口已注销，按关窗退出处理");
-        TVPTerminateWindowClosed = true;
+        spdlog::debug("MainWindowClosed: 主窗口已注销，按关窗退出处理");
+        terminateWindowClosed = true;
         TVPTerminateAsync();
     }
 }
@@ -550,7 +550,7 @@ void krkr::base::TVPMainWindowClosed() {
 //---------------------------------------------------------------------------
 // GetCommandLine
 //---------------------------------------------------------------------------
-static std::vector<std::string> *TVPGetEmbeddedOptions() { return nullptr; }
+static std::vector<std::string> *GetEmbeddedOptions() { return nullptr; }
 
 //---------------------------------------------------------------------------
 static std::vector<std::string> *
@@ -558,7 +558,7 @@ TVPGetConfigFileOptions(const ttstr &filename) {
     return nullptr;
 }
 
-static ttstr TVPParseCommandLineOne(const ttstr &i) {
+static ttstr ParseCommandLineOne(const ttstr &i) {
     // value is specified
     const tjs_char *p, *o;
     p = o = i.c_str();
@@ -585,23 +585,23 @@ static ttstr TVPParseCommandLineOne(const ttstr &i) {
 }
 
 //---------------------------------------------------------------------------
-std::vector<ttstr> TVPProgramArguments;
-static bool TVPProgramArgumentsInit = false;
-static tjs_int TVPCommandLineArgumentGeneration = 0;
-static bool TVPDataPathDirectoryEnsured = false;
+std::vector<ttstr> programArguments;
+static bool programArgumentsInit = false;
+static tjs_int commandLineArgumentGeneration = 0;
+static bool dataPathDirectoryEnsured = false;
 
 //---------------------------------------------------------------------------
-tjs_int krkr::base::TVPGetCommandLineArgumentGeneration() {
-    return TVPCommandLineArgumentGeneration;
+tjs_int GetCommandLineArgumentGeneration() {
+    return commandLineArgumentGeneration;
 }
 
 //---------------------------------------------------------------------------
-void TVPEnsureDataPathDirectory() {
-    if(!TVPDataPathDirectoryEnsured) {
-        TVPDataPathDirectoryEnsured = true;
+void EnsureDataPathDirectory() {
+    if(!dataPathDirectoryEnsured) {
+        dataPathDirectoryEnsured = true;
         // ensure data path existence
-        if(!krkr::io::CheckExistentLocalFolder(TVPNativeDataPath.c_str())) {
-            if(TVPCreateFolders(TVPNativeDataPath.c_str()))
+        if(!krkr::io::CheckExistentLocalFolder(nativeDataPath.c_str())) {
+            if(TVPCreateFolders(nativeDataPath.c_str()))
                 krkr::utils::AddImportantLog(
                     TVPFormatMessage(TVPInfoDataPathDoesNotExistTryingToMakeIt,
                                      (const tjs_char *)TVPOk));
@@ -622,18 +622,18 @@ static void PushConfigFileOptions(const std::vector<std::string> *options) {
         return;
     for(const auto &option : *options) {
         if(option.c_str()[0] != ';') // unless comment
-            TVPProgramArguments.push_back(
-                TVPParseCommandLineOne(TJS_W("-") + ttstr(option.c_str())));
+            programArguments.push_back(
+                ParseCommandLineOne(TJS_W("-") + ttstr(option.c_str())));
     }
 }
 
 //---------------------------------------------------------------------------
-// Options set via engine_set_option before TVPProgramArguments is initialized
-static std::vector<std::pair<ttstr, ttstr>> TVPEarlySetOptions;
+// Options set via engine_set_option before programArguments is initialized
+static std::vector<std::pair<ttstr, ttstr>> earlySetOptions;
 
-static void TVPInitProgramArgumentsAndDataPath(bool stop_after_datapath_got) {
-    if(!TVPProgramArgumentsInit) {
-        TVPProgramArgumentsInit = true;
+static void InitProgramArgumentsAndDataPath(bool stop_after_datapath_got) {
+    if(!programArgumentsInit) {
+        programArgumentsInit = true;
 
         // find options from self executable image
         const int num_option_layers = 3;
@@ -642,7 +642,7 @@ static void TVPInitProgramArgumentsAndDataPath(bool stop_after_datapath_got) {
             option = nullptr;
         try {
             // read embedded options and default configuration file
-            options[0] = TVPGetEmbeddedOptions();
+            options[0] = GetEmbeddedOptions();
             //			options[1] =
             // TVPGetConfigFileOptions(ApplicationSpecialPath::GetConfigFileName(ExePath()));
 
@@ -655,10 +655,10 @@ static void TVPInitProgramArgumentsAndDataPath(bool stop_after_datapath_got) {
             // read datapath
             tTJSVariant val;
             ttstr config_datapath;
-            // 			if(TVPGetCommandLine(TJS_W("-datapath"),
+            // 			if(GetCommandLine(TJS_W("-datapath"),
             // &val)) 				config_datapath =
             // ((ttstr)val).AsStdString();
-            TVPNativeDataPath = ApplicationSpecialPath::GetDataPathDirectory(
+            nativeDataPath = ApplicationSpecialPath::GetDataPathDirectory(
                 config_datapath, ExePath());
 
             if(stop_after_datapath_got)
@@ -670,9 +670,9 @@ static void TVPInitProgramArgumentsAndDataPath(bool stop_after_datapath_got) {
             // ExePath()));
 
             // push each options into option stock
-            // we need to clear TVPProgramArguments first because of
+            // we need to clear programArguments first because of
             // the option priority order.
-            TVPProgramArguments.clear();
+            programArguments.clear();
             PushAllCommandlineArguments();
             PushConfigFileOptions(options[2]); // has more priority
             PushConfigFileOptions(options[1]); // has more priority
@@ -688,31 +688,31 @@ static void TVPInitProgramArgumentsAndDataPath(bool stop_after_datapath_got) {
                 delete option;
 
         // set data path
-        TVPDataPath = krkr::io::NormalizeStorageName(TVPNativeDataPath);
-        krkr::utils::AddImportantLog(TVPFormatMessage(TVPInfoDataPath, TVPDataPath));
+        dataPath = krkr::io::NormalizeStorageName(nativeDataPath);
+        krkr::utils::AddImportantLog(TVPFormatMessage(TVPInfoDataPath, dataPath));
 
         // set log output directory
-        krkr::utils::SetLogLocation(TVPNativeDataPath);
+        krkr::utils::SetLogLocation(nativeDataPath);
 
         // merge early-set options (from engine_set_option before init)
-        for(auto it = TVPEarlySetOptions.rbegin();
-            it != TVPEarlySetOptions.rend(); ++it) {
-            TVPProgramArguments.insert(TVPProgramArguments.begin(),
+        for(auto it = earlySetOptions.rbegin();
+            it != earlySetOptions.rend(); ++it) {
+            programArguments.insert(programArguments.begin(),
                                        it->first + TJS_W("=") + it->second);
         }
-        TVPEarlySetOptions.clear();
+        earlySetOptions.clear();
 
-        // increment TVPCommandLineArgumentGeneration
-        TVPCommandLineArgumentGeneration++;
+        // increment commandLineArgumentGeneration
+        commandLineArgumentGeneration++;
     }
 }
 
 //---------------------------------------------------------------------------
-static void TVPDumpOptions() {
+static void DumpOptions() {
     std::vector<ttstr>::const_iterator i;
     ttstr options(TVPInfoSpecifiedOptionEarlierItemHasMorePriority);
-    if(TVPProgramArguments.size()) {
-        for(i = TVPProgramArguments.begin(); i != TVPProgramArguments.end();
+    if(programArguments.size()) {
+        for(i = programArguments.begin(); i != programArguments.end();
             i++) {
             options += TJS_W(" ");
             options += *i;
@@ -724,12 +724,12 @@ static void TVPDumpOptions() {
 }
 
 //---------------------------------------------------------------------------
-bool krkr::base::TVPGetCommandLine(const tjs_char *name, tTJSVariant *value) {
-    TVPInitProgramArgumentsAndDataPath(false);
+bool GetCommandLine(const tjs_char *name, tTJSVariant *value) {
+    InitProgramArgumentsAndDataPath(false);
 
     tjs_int namelen = (tjs_int)TJS_strlen(name);
     std::vector<ttstr>::const_iterator i;
-    for(i = TVPProgramArguments.begin(); i != TVPProgramArguments.end(); i++) {
+    for(i = programArguments.begin(); i != programArguments.end(); i++) {
         if(!TJS_strncmp(i->c_str(), name, namelen)) {
             if(i->c_str()[namelen] == TJS_W('=')) {
                 // value is specified
@@ -751,78 +751,78 @@ bool krkr::base::TVPGetCommandLine(const tjs_char *name, tTJSVariant *value) {
 //---------------------------------------------------------------------------
 void krkr::base::TVPSetCommandLine(const tjs_char *name, const ttstr &value) {
     // If not yet initialized, store in early options to be merged after init
-    if(!TVPProgramArgumentsInit) {
+    if(!programArgumentsInit) {
         ttstr nameStr(name);
         // Update existing early option or add new one
-        for(auto &opt : TVPEarlySetOptions) {
+        for(auto &opt : earlySetOptions) {
             if(opt.first == nameStr) {
                 opt.second = value;
                 return;
             }
         }
-        TVPEarlySetOptions.push_back({ nameStr, value });
+        earlySetOptions.push_back({ nameStr, value });
         return;
     }
 
     tjs_int namelen = (tjs_int)TJS_strlen(name);
     std::vector<ttstr>::iterator i;
-    for(i = TVPProgramArguments.begin(); i != TVPProgramArguments.end(); i++) {
+    for(i = programArguments.begin(); i != programArguments.end(); i++) {
         if(!TJS_strncmp(i->c_str(), name, namelen)) {
             if(i->c_str()[namelen] == TJS_W('=') || i->c_str()[namelen] == 0) {
                 // value found
                 *i = ttstr(i->c_str(), namelen) + TJS_W("=") + value;
-                TVPCommandLineArgumentGeneration++;
-                if(TVPCommandLineArgumentGeneration == 0)
-                    TVPCommandLineArgumentGeneration = 1;
+                commandLineArgumentGeneration++;
+                if(commandLineArgumentGeneration == 0)
+                    commandLineArgumentGeneration = 1;
                 return;
             }
         }
     }
 
     // value not found; insert argument into front
-    TVPProgramArguments.insert(TVPProgramArguments.begin(),
+    programArguments.insert(programArguments.begin(),
                                ttstr(name) + TJS_W("=") + value);
-    TVPCommandLineArgumentGeneration++;
-    if(TVPCommandLineArgumentGeneration == 0)
-        TVPCommandLineArgumentGeneration = 1;
+    commandLineArgumentGeneration++;
+    if(commandLineArgumentGeneration == 0)
+        commandLineArgumentGeneration = 1;
 }
 
-bool TVPCheckPrintDataPath() { return false; }
+bool CheckPrintDataPath() { return false; }
 
-bool TVPCheckAbout() { return false; }
+bool CheckAbout() { return false; }
 
-static void TVPExecuteAsync(const std::wstring &progname) {}
+static void ExecuteAsync(const std::wstring &progname) {}
 
-static bool TVPWaitWritePermit(const std::wstring &fn) { return false; }
+static bool WaitWritePermit(const std::wstring &fn) { return false; }
 
-bool TVPExecuteUserConfig() { return false; }
+bool ExecuteUserConfig() { return false; }
 
 //---------------------------------------------------------------------------
-// TVPResetSysInitImplForRestart : Reset impl-level state for restart
+// ResetSysInitImplForRestart : Reset impl-level state for restart
 //---------------------------------------------------------------------------
-extern bool TVPSystemControlAlive; // SystemControl.cpp
+extern bool systemControlAlive; // SystemControl.cpp
 
-void TVPResetSysInitImplForRestart() {
-    TVPProgramArgumentsInit = false;
-    TVPDataPathDirectoryEnsured = false;
-    TVPProgramArguments.clear();
-    TVPEarlySetOptions.clear();
-    TVPCommandLineArgumentGeneration = 0;
+void ResetSysInitImplForRestart() {
+    programArgumentsInit = false;
+    dataPathDirectoryEnsured = false;
+    programArguments.clear();
+    earlySetOptions.clear();
+    commandLineArgumentGeneration = 0;
 
-    TVPTerminated = false;
-    TVPTerminateWindowClosed = false;
-    TVPTerminateCode = 0;
+    terminated = false;
+    terminateWindowClosed = false;
+    terminateCode = 0;
 
     // 上一局的未决关窗请求不能带到新启动的引擎里（否则新游戏一 tick 就被报成
     // "请求关窗"）。闸门开关由宿主在 engine_create 里重新打开。
     krkr::base::CancelWindowClose();
 
-    TVPProjectDirSelected = false;
-    TVPNativeProjectDir.Clear();
-    TVPNativeDataPath.Clear();
+    projectDirSelected = false;
+    nativeProjectDir.Clear();
+    nativeDataPath.Clear();
 
-    // Reset SystemControl alive flag (set in tTVPSystemControl constructor,
+    // Reset SystemControl alive flag (set in SystemControl constructor,
     // never cleared by destructor).
-    TVPSystemControlAlive = false;
+    systemControlAlive = false;
 }
 //---------------------------------------------------------------------------

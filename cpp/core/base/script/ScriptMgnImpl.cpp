@@ -188,7 +188,7 @@
 // }
 // //---------------------------------------------------------------------------
 // static tTVPAtExit TVPReportUnfreedObjectsAtExit
-//     (TVP_ATEXIT_PRI_CLEANUP - 1, TVPStartObjectHashMapLog);
+//     (KRKR_ATEXIT_PRI_CLEANUP - 1, TVPStartObjectHashMapLog);
 // //---------------------------------------------------------------------------
 
 // //---------------------------------------------------------------------------
@@ -202,7 +202,7 @@
 //     for(i=1; i<argc; i++)
 //     {
 //         if(!strcmp(argv[i], "-@processohmlog")) // this does not refer
-//         TVPGetCommandLine
+//         krkr::base::GetCommandLine
 //         {
 //             // create object hash map
 //             TJSAddRefObjectHashMap();

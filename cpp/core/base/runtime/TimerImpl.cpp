@@ -322,7 +322,7 @@ void TimerThread::Uninit() {
 }
 
 //---------------------------------------------------------------------------
-static tTVPAtExit TVPTimerThreadUninitAtExit(TVP_ATEXIT_PRI_SHUTDOWN,
+static tTVPAtExit TVPTimerThreadUninitAtExit(KRKR_ATEXIT_PRI_SHUTDOWN,
                                              TimerThread::Uninit);
 
 //---------------------------------------------------------------------------

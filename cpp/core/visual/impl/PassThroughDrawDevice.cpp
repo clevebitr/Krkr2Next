@@ -75,9 +75,9 @@ static tTVPPassThroughDrawDevice::tDrawerType TVPPreferredDrawType =
     tTVPPassThroughDrawDevice::dtNone;
 //---------------------------------------------------------------------------
 static void TVPInitPassThroughOptions() {
-    if(TVPPassThroughOptionsGeneration == TVPGetCommandLineArgumentGeneration())
+    if(TVPPassThroughOptionsGeneration == krkr::base::GetCommandLineArgumentGeneration())
         return;
-    TVPPassThroughOptionsGeneration = TVPGetCommandLineArgumentGeneration();
+    TVPPassThroughOptionsGeneration = krkr::base::GetCommandLineArgumentGeneration();
 
     TVPZoomInterpolation = true;
 }

@@ -17,7 +17,7 @@
 //---------------------------------------------------------------------------
 namespace krkr::environ {
 
-class tTVPSystemControl {
+class SystemControl {
 private: // ÉÜÅ[ÉUÅ[êÈåæ
     bool ContinuousEventCalling;
     bool AutoShowConsoleOnError;
@@ -44,7 +44,7 @@ private: // ÉÜÅ[ÉUÅ[êÈåæ
     krkr::utils::Timer SystemWatchTimer;
 
 public:
-    tTVPSystemControl();
+    SystemControl();
 
     void InvokeEvents();
     void CallDeliverAllEventsOnIdle();
@@ -68,18 +68,14 @@ private:
 public:
     void SystemWatchTimerTimer();
 };
-extern tTVPSystemControl *TVPSystemControl;
-extern bool TVPSystemControlAlive;
+extern SystemControl *GetSystemControl;
+extern bool systemControlAlive;
 
-void TVPRegisterPSBCacheInfoCallback(bool (*cb)(size_t &usedBytes,
+void RegisterPSBCacheInfoCallback(bool (*cb)(size_t &usedBytes,
                                                 size_t &limitBytes));
 
 } // namespace krkr::environ
 
 // TODO: 过渡兼容，调用点迁移完成后删除
-using krkr::environ::tTVPSystemControl;
-using krkr::environ::TVPSystemControl;
-using krkr::environ::TVPSystemControlAlive;
-using krkr::environ::TVPRegisterPSBCacheInfoCallback;
 
 #endif

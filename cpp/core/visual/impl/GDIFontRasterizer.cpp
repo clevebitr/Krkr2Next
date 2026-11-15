@@ -19,7 +19,7 @@ void GDIFontRasterizer::InitChAntialiasMethod() {
     ChAntialiasMethod = camAPI; // default
 
     tTJSVariant val;
-    if(TVPGetCommandLine(TJS_W("-aamethod"), &val)) {
+    if(krkr::base::GetCommandLine(TJS_W("-aamethod"), &val)) {
         ttstr str(val);
 #if 0 // まったく意味のないコード？
 		if(str == TJS_W("auto"))

@@ -457,7 +457,7 @@ void tvpLoadPlugins() {
     // (exepath)\plugin
     std::vector<FoundPlugin> list;
 
-    std::string exepath = ExtractFileDir(TVPNativeProjectDir.AsStdString());
+    std::string exepath = ExtractFileDir(nativeProjectDir.AsStdString());
 
     SearchPluginsAt(list, exepath);
     SearchPluginsAt(list, exepath + "/system");

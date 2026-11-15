@@ -15,7 +15,7 @@
 #include <sstream>
 #include <spdlog/spdlog.h>
 #include "SysInitIntf.h"
-// TVPExitApplication 要落 TVPTerminated / TVPTerminateCode（同 platform_linux.cpp
+// ExitApplication 要落 terminated / terminateCode（同 platform_linux.cpp
 // 的同名实现），这两个全局量声明在 SysInitImpl.h（base/impl 是 PUBLIC include 目录，
 // 与 Application.cpp 的包含方式一致）。
 #include "SysInitImpl.h"
@@ -51,7 +51,7 @@ extern "C" jobject krkr_GetApplicationContext();
 
 extern unsigned int __page_size = getpagesize();
 
-void TVPPrintLog(const char *str) {
+void PrintLog(const char *str) {
     __android_log_print(ANDROID_LOG_INFO, "kr2 debug info", "%s", str);
 }
 
@@ -70,21 +70,21 @@ static bool _memInfoViaJni = true;
 // /proc 回退：**只读遥测**，不参与任何内存分配/回收决策。
 //
 // 为什么要它：这两个函数返回 0 时后果不止"日志难看"——
-//   * `TVPCheckMemory()`（Application.cpp，_DEBUG 下由 RenderManager 调用）在
+//   * `CheckMemory()`（Application.cpp，_DEBUG 下由 RenderManager 调用）在
 //     freeMem < 24MB 时弹 "No Memory Warning"，于是**每次进游戏都误报没内存**；
-//   * `tTVPSystemControl::RunMemoryGovernor()` 里 `free_mb < 512` 直接判
+//   * `SystemControl::RunMemoryGovernor()` 里 `free_mb < 512` 直接判
 //     `pressure=3`（严重），也就是说引擎会**长期以"内存危急"状态运行**并据此
 //     收紧缓存。真机日志实测 35/35 行都是 pressure=3，正是这个原因。
 //
-// 单位必须与声明一致（Platform.h：`TVPGetSystemFreeMemory` 以 MB 计，
-// `tTVPSystemControl` 也按 MB 消费），所以这里两条路都产出 MB。
+// 单位必须与声明一致（Platform.h：`GetSystemFreeMemory` 以 MB 计，
+// `SystemControl` 也按 MB 消费），所以这里两条路都产出 MB。
 static void readMemoryInfoFromProc() {
     unsigned long availKb = _meminfo_value("MemAvailable:");
     if(availKb == 0)
         availKb = _meminfo_value("MemFree:"); // 老内核没有 MemAvailable
     _availMemory = static_cast<tjs_int>(availKb / 1024);
 
-    // ⚠️ 必须换算到 **MB**：`Platform.h` 的声明与消费方（tTVPSystemControl 把
+    // ⚠️ 必须换算到 **MB**：`Platform.h` 的声明与消费方（SystemControl 把
     // 它当 self_used_mb 用、壳的内存面板也按 MB 显示）都按 MB。`_proc_self_mem`
     // 返回的是 /proc/self/status 的原始 kB，直接当 MB 用会把用量放大 1024 倍 ——
     // 真机实测 `(mem) used=699572MB`（并且一直涨）、壳面板显示成天文数字，
@@ -118,7 +118,7 @@ static void updateMemoryInfo() {
 
             if(JniHelper::getStaticMethodInfo(methodInfo, KR2ActJavaPath,
                                               "getUsedMemory", "()J")) {
-                // 契约是 MB（Platform.h / tTVPSystemControl 都按 MB 消费）。
+                // 契约是 MB（Platform.h / SystemControl 都按 MB 消费）。
                 // 旧写法只除到 kB，会让消费方把用量放大 1024 倍并直接判 pressure=3。
                 usedMemory = static_cast<tjs_int>(
                     methodInfo.env->CallStaticLongMethod(
@@ -143,12 +143,12 @@ static void updateMemoryInfo() {
     }
 }
 
-tjs_int TVPGetSystemFreeMemory() {
+tjs_int GetSystemFreeMemory() {
     updateMemoryInfo();
     return _availMemory;
 }
 
-tjs_int TVPGetSelfUsedMemory() {
+tjs_int GetSelfUsedMemory() {
     updateMemoryInfo();
     return usedMemory;
 }
@@ -182,7 +182,7 @@ static tjs_int _proc_self_mem(const char *key) {
     return static_cast<tjs_int>(v);
 }
 
-void TVPGetMemoryInfo(TVPMemoryInfo &m) {
+void GetMemoryInfo(TVPMemoryInfo &m) {
     m.MemTotal = _meminfo_value("MemTotal:");
     m.MemFree = _meminfo_value("MemFree:");
     m.SwapTotal = _meminfo_value("SwapTotal:");
@@ -191,9 +191,9 @@ void TVPGetMemoryInfo(TVPMemoryInfo &m) {
     m.VirtualUsed = static_cast<unsigned long>(_proc_self_mem("VmRSS:"));
 }
 
-void TVPRelinquishCPU() { sched_yield(); }
+void RelinquishCPU() { sched_yield(); }
 
-void TVPForceSwapBuffer() {
+void ForceSwapBuffer() {
     // Use the engine's EGL context manager instead of eglGetCurrentDisplay(),
     // which may return EGL_NO_DISPLAY in headless Pbuffer mode.
     // Only swap when a WindowSurface is attached (Android SurfaceTexture mode)
@@ -214,14 +214,14 @@ void TVPForceSwapBuffer() {
         if(ok != EGL_TRUE) {
             __android_log_print(
                 ANDROID_LOG_WARN, "krkr2",
-                "TVPForceSwapBuffer: eglSwapBuffers failed err=0x%x",
+                "ForceSwapBuffer: eglSwapBuffers failed err=0x%x",
                 eglGetError());
         }
     }
     // In Pbuffer mode, swap is a no-op — engine_tick handles readback.
 }
 
-std::string TVPGetDeviceID() {
+std::string GetDeviceID() {
     std::string ret;
 
     // use pure jni to avoid java code
@@ -309,7 +309,7 @@ static jobject GetKR2ActInstance() {
     // 顺序颠倒的理由：KR2ActJavaPath 是 Kirikiroid2 形态的宿主类名，
     // KiriNext 的壳（org.dpdns.clevebitr）没有这个类，直接查必然失败，
     // 并在 logcat 留一条 "class not found"。而这个函数在每次存储路径
-    // 解析时都会被调到（TVPGetAppStoragePath 内部就两次），实测每次
+    // 解析时都会被调到（GetAppStoragePath 内部就两次），实测每次
     // 触摸触发的资源访问刷三条错误——既做无用功，又违反 README
     // 「硬约束」的"高频日志必须限频/去重"，还会把真正的报错淹掉。
     //
@@ -383,7 +383,7 @@ static std::string GetPackageName() {
 
 // from unzip.cpp
 #define FLAG_UTF8 (1 << 11)
-extern zlib_filefunc64_def TVPZlibFileFunc;
+extern zlib_filefunc64_def zlibFileFunc;
 class ZipFile {
     unzFile uf;
     bool utf8{};
@@ -450,7 +450,7 @@ private:
     unzFile zipFile{};
 };
 
-std::string TVPGetDeviceLanguage() {
+std::string GetDeviceLanguage() {
     // use pure jni to avoid java code
     JniMethodInfo methodInfo;
     if(!JniHelper::getStaticMethodInfo(methodInfo, "java/util/Locale",
@@ -467,7 +467,7 @@ std::string TVPGetDeviceLanguage() {
     return JniHelper::jstring2string(languageID);
 }
 
-std::string TVPGetPackageVersionString() {
+std::string GetPackageVersionString() {
     JniMethodInfo methodInfo;
     if(JniHelper::getStaticMethodInfo(methodInfo, KR2ActJavaPath, "GetVersion",
                                       "()Ljava/lang/String;")) {
@@ -564,14 +564,14 @@ static int GetExternalStoragePath(std::vector<std::string> &ret) {
     return count;
 }
 
-std::vector<std::string> TVPGetAppStoragePath() {
+std::vector<std::string> GetAppStoragePath() {
     std::vector<std::string> ret;
     ret.emplace_back(GetInternalStoragePath());
     GetExternalStoragePath(ret);
     return ret;
 }
 
-std::vector<std::string> TVPGetDriverPath() {
+std::vector<std::string> GetDriverPath() {
     std::vector<std::string> ret;
     jobject sInstance = GetKR2ActInstance();
     JniMethodInfo methodInfo;
@@ -595,7 +595,7 @@ std::vector<std::string> TVPGetDriverPath() {
 
     // Host-shell mode fallback: prefer app-scoped directories from Context
     // APIs.
-    std::vector<std::string> app_paths = TVPGetAppStoragePath();
+    std::vector<std::string> app_paths = GetAppStoragePath();
     for(const auto &p : app_paths) {
         if(!p.empty())
             ret.emplace_back(p);
@@ -688,11 +688,11 @@ namespace kr2android {
 } // namespace kr2android
 using namespace kr2android;
 
-int TVPShowSimpleMessageBox(const char *pszText, const char *pszTitle,
+int ShowSimpleMessageBox(const char *pszText, const char *pszTitle,
                             unsigned int nButton, const char **btnText) {
     // 诊断：游戏弹系统消息框时留下指纹（低频，不需要限频）。内置弹窗不显示时
     // 这条能区分"根本没走到系统消息框"与"走了但宿主没显示"。
-    spdlog::info("TVPShowSimpleMessageBox: title='{}' buttons={} text='{}'",
+    spdlog::info("ShowSimpleMessageBox: title='{}' buttons={} text='{}'",
                  pszTitle ? pszTitle : "", nButton, pszText ? pszText : "");
     JniMethodInfo methodInfo;
     if(JniHelper::getStaticMethodInfo(
@@ -723,7 +723,7 @@ int TVPShowSimpleMessageBox(const char *pszText, const char *pszTitle,
         while(MsgBoxRet == -2) {
             MessageBoxCond.wait_for(lk, std::chrono::milliseconds(200));
             if(MsgBoxRet == -2) {
-                TVPForceSwapBuffer(); // update opengl events
+                ForceSwapBuffer(); // update opengl events
             }
         }
         return MsgBoxRet;
@@ -731,7 +731,7 @@ int TVPShowSimpleMessageBox(const char *pszText, const char *pszTitle,
     // 壳没提供 org/tvp/kirikiri2/KR2Activity（KiriNext 的落点是同名 Kotlin
     // object，见 KR2Activity.kt）：静默返回 -1 会让"消息框不弹"无迹可循。
     spdlog::warn(
-        "TVPShowSimpleMessageBox: KR2Activity 不可用，按 -1 返回 text={}",
+        "ShowSimpleMessageBox: KR2Activity 不可用，按 -1 返回 text={}",
         pszText ? pszText : "");
     return -1;
 }
@@ -758,7 +758,7 @@ Java_org_tvp_kirikiri2_KR2Activity_nativeOnInputBoxResult(JNIEnv * /* env */,
 }
 #endif
 
-int TVPShowSimpleMessageBox(const ttstr &text, const ttstr &caption,
+int ShowSimpleMessageBox(const ttstr &text, const ttstr &caption,
                             const std::vector<ttstr> &vecButtons) {
     tTJSNarrowStringHolder pszText(text.c_str());
     tTJSNarrowStringHolder pszTitle(caption.c_str());
@@ -777,11 +777,11 @@ int TVPShowSimpleMessageBox(const ttstr &text, const ttstr &caption,
             LocaleConfigManager::GetInstance()->GetText("msgbox_ok"));
         btnText.emplace_back(btnTextHold.back().c_str());
     }
-    return TVPShowSimpleMessageBox(pszText, pszTitle, btnText.size(),
+    return ShowSimpleMessageBox(pszText, pszTitle, btnText.size(),
                                    &btnText[0]);
 }
 
-int TVPShowSimpleInputBox(ttstr &text, const ttstr &caption,
+int ShowSimpleInputBox(ttstr &text, const ttstr &caption,
                           const ttstr &prompt,
                           const std::vector<ttstr> &vecButtons) {
     JniMethodInfo methodInfo;
@@ -822,13 +822,13 @@ int TVPShowSimpleInputBox(ttstr &text, const ttstr &caption,
         while(MsgBoxRet == -2) {
             MessageBoxCond.wait_for(lk, std::chrono::milliseconds(200));
             if(MsgBoxRet == -2) {
-                TVPForceSwapBuffer(); // update opengl events
+                ForceSwapBuffer(); // update opengl events
             }
         }
         text = MessageBoxRetText;
         return MsgBoxRet;
     }
-    spdlog::warn("TVPShowSimpleInputBox: KR2Activity 不可用，按 -1 返回");
+    spdlog::warn("ShowSimpleInputBox: KR2Activity 不可用，按 -1 返回");
     return -1;
 }
 
@@ -922,13 +922,13 @@ void Android_PushEvents(const std::function<void()> &func) {
     }
 }
 
-void TVPCheckAndSendDumps(const std::string &dumpdir,
+void CheckAndSendDumps(const std::string &dumpdir,
                           const std::string &packageName,
                           const std::string &versionStr);
-bool TVPCheckStartupArg() {
+bool CheckStartupArg() {
     // check dump
-    TVPCheckAndSendDumps(Android_GetDumpStoragePath(), GetPackageName(),
-                         TVPGetPackageVersionString());
+    CheckAndSendDumps(Android_GetDumpStoragePath(), GetPackageName(),
+                         GetPackageVersionString());
 
     // Event processing is now driven by engine_api tick loop.
     // The old cocos2d Scheduler-based _processEvents registration
@@ -938,7 +938,7 @@ bool TVPCheckStartupArg() {
     return false;
 }
 
-void TVPControlAdDialog(int adType, int arg1, int arg2) {
+void ControlAdDialog(int adType, int arg1, int arg2) {
     JniMethodInfo methodInfo;
     if(JniHelper::getStaticMethodInfo(methodInfo,
                                       "org/tvp/kirikiri2/KR2Activity",
@@ -966,7 +966,7 @@ static bool IsOreo() { return GetAndroidSDKVersion() >= 26; }
 
 // 这里的编码就要使用locale编码了
 // 因为调用了tjstr参数的函数 tjstr处理不了utf-8编码
-bool TVPCheckStartupPath(const std::string &path) {
+bool CheckStartupPath(const std::string &path) {
     // check writing permission first
     size_t pos = path.find_last_of('/');
     if(pos == std::string::npos)
@@ -1016,7 +1016,7 @@ bool TVPCheckStartupPath(const std::string &path) {
         else
             btns.emplace_back(
                 LocaleConfigManager::GetInstance()->GetText("cancel"));
-        int result = TVPShowSimpleMessageBox(
+        int result = ShowSimpleMessageBox(
             msg,
             LocaleConfigManager::GetInstance()->GetText("readonly_storage"),
             btns);
@@ -1066,7 +1066,7 @@ bool TVPCreateFolders(const ttstr &folder) {
     return _posix_mkdirs(folder.AsStdString());
 }
 
-static bool TVPWriteDataToFileJava(const std::string &filename,
+static bool WriteDataToFileJava(const std::string &filename,
                                    const void *data, unsigned int size) {
     JniMethodInfo methodInfo;
     if(JniHelper::getStaticMethodInfo(methodInfo,
@@ -1114,9 +1114,9 @@ bool krkr::io::WriteDataToFile(const ttstr &filepath, const void *data,
                 return ret;
             }
         }
-        bool ret = TVPWriteDataToFileJava(filename, data, size);
+        bool ret = WriteDataToFileJava(filename, data, size);
         if(access(tempname.c_str(), F_OK) == 0) {
-            TVPDeleteFile(tempname);
+            DeleteLocalFile(tempname);
         }
         return ret;
     }
@@ -1127,10 +1127,10 @@ bool krkr::io::WriteDataToFile(const ttstr &filepath, const void *data,
         fclose(fp);
         return writed == size;
     }
-    return TVPWriteDataToFileJava(filename, data, size);
+    return WriteDataToFileJava(filename, data, size);
 }
 
-std::string TVPGetCurrentLanguage() {
+std::string GetCurrentLanguage() {
     JniMethodInfo t;
     std::string ret("");
 
@@ -1146,18 +1146,18 @@ std::string TVPGetCurrentLanguage() {
 
     // Fallback for host-shell mode: use standard Java Locale API
     if(ret.empty()) {
-        ret = TVPGetDeviceLanguage();
+        ret = GetDeviceLanguage();
     }
 
     return ret;
 }
 
-void TVPExitApplication(int code) {
+void ExitApplication(int code) {
     // 与 stubs/platform_linux.cpp 的同名实现保持一致：先落"已终止"状态，再释放
     // 资源、再通知宿主。少了这一步时，走 ShowException 等直接调用本函数的路径
     // 不会置位，engine_tick 就永远看不到终止（宿主既不退出、画面也不再更新）。
-    TVPTerminated = true;
-    TVPTerminateCode = code;
+    terminated = true;
+    terminateCode = code;
     TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
     // Guard: only recycle textures if the render manager was already
     // initialised.  Calling TVPIsSoftwareRenderManager() when no
@@ -1182,14 +1182,14 @@ void TVPExitApplication(int code) {
         return;
     }
     // 找不到宿主落点：明确记一条，否则"退出游戏没反应"完全无迹可循。
-    spdlog::warn("TVPExitApplication: KR2Activity.exit() 不可用，退出请求无人接手"
+    spdlog::warn("ExitApplication: KR2Activity.exit() 不可用，退出请求无人接手"
                  "（engine_tick 将一直返回 ENGINE_RESULT_GAME_TERMINATED）");
     // In Android host-shell mode, forcing process-wide exit can race with
     // worker threads and trigger FORTIFY mutex checks.
     (void)code;
 }
 
-void TVPHideIME() {
+void HideIME() {
     JniMethodInfo methodInfo;
     if(JniHelper::getStaticMethodInfo(methodInfo,
                                       "org/tvp/kirikiri2/KR2Activity",
@@ -1199,7 +1199,7 @@ void TVPHideIME() {
     }
 }
 
-void TVPShowIME(int x, int y, int w, int h) {
+void ShowIME(int x, int y, int w, int h) {
     JniMethodInfo methodInfo;
     if(JniHelper::getStaticMethodInfo(methodInfo,
                                       "org/tvp/kirikiri2/KR2Activity",
@@ -1209,9 +1209,9 @@ void TVPShowIME(int x, int y, int w, int h) {
     }
 }
 
-void TVPProcessInputEvents() {}
+void ProcessInputEvents() {}
 
-bool TVPDeleteFile(const std::string &filename) {
+bool DeleteLocalFile(const std::string &filename) {
     JniMethodInfo methodInfo;
     if(JniHelper::getStaticMethodInfo(methodInfo,
                                       "org/tvp/kirikiri2/KR2Activity",
@@ -1227,7 +1227,7 @@ bool TVPDeleteFile(const std::string &filename) {
     return remove(filename.c_str()) == 0;
 }
 
-bool TVPRenameFile(const std::string &from, const std::string &to) {
+bool RenameLocalFile(const std::string &from, const std::string &to) {
     JniMethodInfo methodInfo;
     if(JniHelper::getStaticMethodInfo(
            methodInfo, "org/tvp/kirikiri2/KR2Activity", "RenameFile",
@@ -1256,9 +1256,9 @@ namespace krkr::utils {
 } // namespace krkr::utils
 
 
-bool TVP_stat(const tjs_char *name, tTVP_stat &s) {
+bool KRKR_stat(const tjs_char *name, tTVP_stat &s) {
     tTJSNarrowStringHolder holder(name);
-    return TVP_stat(holder, s);
+    return KRKR_stat(holder, s);
 }
 
 #undef st_atime
@@ -1266,7 +1266,7 @@ bool TVP_stat(const tjs_char *name, tTVP_stat &s) {
 #undef st_mtime
 // int stat64(const char* __path, struct stat64* __buf)
 // __INTRODUCED_IN(21); // force link it !
-bool TVP_stat(const char *name, tTVP_stat &s) {
+bool KRKR_stat(const char *name, tTVP_stat &s) {
     struct stat t;
     // static_assert(sizeof(t.st_size) == 4, "");
     static_assert(sizeof(t.st_size) == 8, "");
@@ -1279,11 +1279,11 @@ bool TVP_stat(const char *name, tTVP_stat &s) {
     return ret;
 }
 
-bool TVP_utime(const char *name, time_t modtime) {
+bool KRKR_utime(const char *name, time_t modtime) {
     timeval mt[2] = {};
     mt[0].tv_sec = modtime;
     mt[1].tv_sec = modtime;
     return utimes(name, mt) == 0;
 }
 
-void TVPSendToOtherApp(const std::string &filename) {}
+void SendToOtherApp(const std::string &filename) {}

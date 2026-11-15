@@ -20,7 +20,7 @@ const tjs_char *TVPGetDefaultFontName() {
 
     // コマンドラインで指定がある場合、そのフォントを使用する
     tTJSVariant opt;
-    if(TVPGetCommandLine(TJS_W("-deffont"), &opt)) {
+    if(krkr::base::GetCommandLine(TJS_W("-deffont"), &opt)) {
         ttstr str(opt);
         TVPDefaultFontName.AssignMessage(str.c_str());
     }

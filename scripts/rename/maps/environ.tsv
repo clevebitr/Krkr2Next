@@ -2,139 +2,37 @@
 # qualify: krkr::environ
 # owner: cpp/core/environ
 #
-# 由 rename_symbols.py --draft 生成：只做前缀剥离，未做语义审阅。
-# 第 4 列是提示（冲突/无变化），apply 时忽略；人工确认后请删掉或改掉。
-TVPAddAtExitHandler	AddAtExitHandler	fn	
-TVPAfterSystemInit	AfterSystemInit	fn	
-TVPAfterSystemUninit	AfterSystemUninit	fn	
-TVPBeforeSystemInit	BeforeSystemInit	fn	
-TVPBeforeSystemUninit	BeforeSystemUninit	fn	
-TVPCauseAtExit	CauseAtExit	fn	
-TVPCheckAbout	CheckAbout	fn	
-TVPCheckAndSendDumps	CheckAndSendDumps	fn	
-TVPCheckMemory	CheckMemory	fn	
-TVPCheckPrintDataPath	CheckPrintDataPath	fn	
-TVPCheckStartupArg	CheckStartupArg	fn	
-TVPCheckStartupPath	CheckStartupPath	fn	
-TVPClampInt	ClampInt	fn	
-TVPClearShellOptions	ClearShellOptions	fn	
-TVPConsoleLog	ConsoleLog	fn	
-TVPControlAdDialog	ControlAdDialog	fn	
-TVPCopyFile	CopyFile	fn	
-TVPCreateAndAddWindow	CreateAndAddWindow	fn	
-TVPCreateFolders	CreateFolders	fn	
-TVPDeleteAcceleratorKeyTable	DeleteAcceleratorKeyTable	fn	冲突:cpp/core/environ/intf/Application.h
-TVPDeleteFile	DeleteFile	fn	
-TVPDetectCPU	DetectCPU	fn	
-TVPDisableCPU	DisableCPU	fn	
-TVPDrawSceneOnce	DrawSceneOnce	fn	
-TVPDumpCPUFeatures	DumpCPUFeatures	fn	
-TVPDumpCPUInfo	DumpCPUInfo	fn	
-TVPDumpHWException	DumpHWException	fn	
-TVPDumpOptions	DumpOptions	fn	
-TVPEngineBootstrap	EngineBootstrap	type	
-TVPEnsureDataPathDirectory	EnsureDataPathDirectory	fn	
-TVPExecuteAsync	ExecuteAsync	fn	
-TVPExecuteUserConfig	ExecuteUserConfig	fn	
-TVPExitApplication	ExitApplication	fn	
-TVPForceRegisterOpenGLRenderManager	ForceRegisterOpenGLRenderManager	fn	
-TVPForceSwapBuffer	ForceSwapBuffer	fn	
-TVPGL_C_Init	GL_C_Init	fn	
-TVPGL_SSE2_Init	GL_SSE2_Init	fn	
-TVPGetAppPath	GetAppPath	fn	
-TVPGetAppStoragePath	GetAppStoragePath	fn	
-TVPGetApplicationHomeDirectory	GetApplicationHomeDirectory	fn	
-TVPGetCPUType	GetCPUType	fn	
-TVPGetCPUTypeForOne	GetCPUTypeForOne	fn	
-TVPGetCurrentLanguage	GetCurrentLanguage	fn	
-TVPGetDeviceID	GetDeviceID	fn	
-TVPGetDeviceLanguage	GetDeviceLanguage	fn	
-TVPGetDriverPath	GetDriverPath	fn	
-TVPGetEmbeddedOptions	GetEmbeddedOptions	fn	
-TVPGetErrorDialogTitle	GetErrorDialogTitle	fn	
-TVPGetIntegerOption	GetIntegerOption	fn	
-TVPGetInternalPreferencePath	GetInternalPreferencePath	fn	
-TVPGetJoyPadAsyncState	GetJoyPadAsyncState	fn	
-TVPGetKeyMouseAsyncState	GetKeyMouseAsyncState	fn	
-TVPGetLayerCount	GetLayerCount	fn	
-TVPGetLocallyAccessibleName	GetLocallyAccessibleName	fn	冲突:cpp/core/base/core/StorageIntf.h,cpp/core/io/storage/IoStorage.cpp,cpp/core/io/storage/IoStorageLocal.cpp
-TVPGetMainThreadPriorityControl	GetMainThreadPriorityControl	fn	
-TVPGetMemoryInfo	GetMemoryInfo	fn	
-TVPGetMessageByLocale	GetMessageByLocale	fn	
-TVPGetOSName	GetOSName	fn	
-TVPGetPackageVersionString	GetPackageVersionString	fn	
-TVPGetPlatformName	GetPlatformName	fn	
-TVPGetRoughTickCount32	GetRoughTickCount32	fn	
-TVPGetSelfUsedMemory	GetSelfUsedMemory	fn	
-TVPGetShellOption	GetShellOption	fn	
-TVPGetSystemFreeMemory	GetSystemFreeMemory	fn	
-TVPGetSystemTotalMemoryMB	GetSystemTotalMemoryMB	fn	
-TVPHideIME	HideIME	fn	
-TVPHostClearVideoOverlayFrame	HostClearVideoOverlayFrame	fn	
-TVPHostSubmitVideoOverlayFrame	HostSubmitVideoOverlayFrame	fn	
-TVPHostVideoOverlayFrameActive	HostVideoOverlayFrameActive	fn	
-TVPInitCompatibleNativeFunctions	InitCompatibleNativeFunctions	fn	
-TVPInitProgramArgumentsAndDataPath	InitProgramArgumentsAndDataPath	fn	
-TVPInitRandomGenerator	InitRandomGenerator	fn	
-TVPInitUIExtension	InitUIExtension	fn	
-TVPInitWindowOptions	InitWindowOptions	fn	
-TVPInitializeBaseSystems	InitializeBaseSystems	fn	
-TVPLoadMessage	LoadMessage	fn	
-TVPLockSoundMixer	LockSoundMixer	fn	
-TVPMainScene	MainScene	type	
-TVPMainWindowClosed	MainWindowClosed	fn	
-TVPOnError	OnError	fn	
-TVPOpenPatchLibUrl	OpenPatchLibUrl	fn	
-TVPParseCommandLineOne	ParseCommandLineOne	fn	
-TVPPrintLog	PrintLog	fn	
-TVPProcessInputEvents	ProcessInputEvents	fn	
-TVPRegisterAcceleratorKey	RegisterAcceleratorKey	fn	冲突:cpp/core/environ/intf/Application.h
-TVPRegisterPSBCacheInfoCallback	RegisterPSBCacheInfoCallback	fn	
-TVPRelinquishCPU	RelinquishCPU	fn	
-TVPRenameFile	RenameFile	fn	
-TVPResetApplicationForRestart	ResetApplicationForRestart	fn	
-TVPResetDrawSceneOnceTimingForRestart	ResetDrawSceneOnceTimingForRestart	fn	
-TVPResetRuntimeForRestart	ResetRuntimeForRestart	fn	
-TVPResetSysInitImplForRestart	ResetSysInitImplForRestart	fn	
-TVPResolveBudgetMB	ResolveBudgetMB	fn	
-TVPSavePVRv3	SavePVRv3	fn	
-TVPSendToOtherApp	SendToOtherApp	fn	
-TVPSetPostDrawHook	SetPostDrawHook	fn	
-TVPSetPostUpdateEvent	SetPostUpdateEvent	fn	
-TVPSetRenderTarget	SetRenderTarget	fn	冲突:cpp/core/visual/ogl/RenderManager_ogl.cpp
-TVPSetShellOption	SetShellOption	fn	
-TVPSetXP3FilterScript	SetXP3FilterScript	fn	
-TVPShowFileSelector	ShowFileSelector	fn	
-TVPShowIME	ShowIME	fn	
-TVPShowPopMenu	ShowPopMenu	fn	
-TVPShowSimpleInputBox	ShowSimpleInputBox	fn	
-TVPShowSimpleMessageBox	ShowSimpleMessageBox	fn	
-TVPShowSimpleMessageBoxYesNo	ShowSimpleMessageBoxYesNo	fn	
-TVPStopAllWaveSoundsForRestart	StopAllWaveSoundsForRestart	fn	
-TVPSystemInit	SystemInit	fn	
-TVPSystemUninit	SystemUninit	fn	
-TVPTerminateSync	TerminateSync	fn	
-TVPUnlockSoundMixer	UnlockSoundMixer	fn	
-TVPUnregisterAcceleratorKey	UnregisterAcceleratorKey	fn	冲突:cpp/core/environ/intf/Application.h
-TVPWaitWritePermit	WaitWritePermit	fn	
-TVPWriteDataToFile	WriteDataToFile	fn	
-TVPWriteDataToFileJava	WriteDataToFileJava	fn	
-TVP_ATEXIT_PRI_CLEANUP	KRKR_ATEXIT_PRI_CLEANUP	macro	
-TVP_ATEXIT_PRI_PREPARE	KRKR_ATEXIT_PRI_PREPARE	macro	
-TVP_ATEXIT_PRI_RELEASE	KRKR_ATEXIT_PRI_RELEASE	macro	
-TVP_ATEXIT_PRI_SHUTDOWN	KRKR_ATEXIT_PRI_SHUTDOWN	macro	
-TVP_MAIN_DEBUG	KRKR_MAIN_DEBUG	macro	
-TVP_stat	KRKR_stat	macro	
-TVP_utime	KRKR_utime	macro	
-tTVPApplication	Application	type	
-tTVPAsyncImageLoader	AsyncImageLoader	type	
-tTVPAtExit	AtExit	type	
-tTVPAtExitInfo	AtExitInfo	type	
-tTVPBaseBitmap	BaseBitmap	fn	
-tTVPBorderStyle	BorderStyle	type	
-tTVPCPUClockAccuracy	CPUClockAccuracy	type	
-tTVPOnMouseWheelInputEvent	OnMouseWheelInputEvent	fn	
-tTVPSystemControl	SystemControl	type	
-tTVPWMRRegMode	WMRRegMode	type	
-tTVPWindow	Window	type	冲突:cpp/core/visual/WindowIntf.cpp
-tTVPXP3ArchiveEx	XP3ArchiveEx	type	
+# environ 第 7 轮（A/B/C 三张 map 的第一张）：**声明在 `namespace krkr::environ`**
+# 的那几个符号。可以安全用工具（owner 短名 / 别处全限定）。
+#
+# environ 的特殊性：它是"实现提供方"模块 —— 大多数符号的声明在 base/visual 的头里
+# （很多还是**全局作用域**），实现在 environ 的全局作用域。所以按声明所处的
+# namespace 拆成三张 map：
+#   environ.tsv          qualify krkr::environ   （本文件）
+#   environ-base.tsv     qualify krkr::base      （sysinit / detectcpu / 配置管理器）
+#   environ-globals.tsv  kind=global，**不加任何限定**（声明就在全局作用域）
+#
+# 不做的（登记在 docs/NAMING.md §4）：
+#   · TVPSetRenderTarget                 定义在 visual/ogl/RenderManager_ogl.cpp（environ 只是就地 extern 调用）
+#   · TVPCreateFolders                   声明在 base 的 StorageIntf.h（`krkr::io`），实现却在 environ 全局 —— 名字归 io
+#   · TVPGetLocallyAccessibleName        environ 里没有定义（只有插件注释提到）
+#   · tTVPBaseBitmap                     visual 的类型，environ 只是前置声明
+#   · tTVPAtExit                         base 的类型（SysInitIntf.h）
+#   · TVPConsoleLog                      AGENTS.md 登记的全局例外（定义在 stubs/ui_stubs.cpp 全局作用域）
+#   · tTVPApplication                    新名 `Application` 会撞全局指针变量 `Application`（AGENTS.md 登记例外）
+#   · TVPGetAppPath                      io 的符号（已在前几轮改名）
+#   · TVPGetApplicationHomeDirectory     io/平台符号，不归 environ
+#   · TVPGetRoughTickCount32             utils 的符号（已改名）
+#   · TVPOnError                         utils 的符号（已改名）
+#   · TVPLockSoundMixer                  sound 的符号（第 6 轮已改名）
+#   · TVPUnlockSoundMixer                sound 的符号（第 6 轮已改名）
+#   · TVPStopAllWaveSoundsForRestart     sound 的符号（第 6 轮已改名）
+#   · TVPWriteDataToFile                 io/base 的符号，不归 environ
+
+TVPDrawSceneOnce	DrawSceneOnce	fn
+TVPGetJoyPadAsyncState	GetJoyPadAsyncState	fn
+TVPGetKeyMouseAsyncState	GetKeyMouseAsyncState	fn
+TVPRegisterPSBCacheInfoCallback	RegisterPSBCacheInfoCallback	fn
+TVPResetApplicationForRestart	ResetApplicationForRestart	fn
+TVPResetDrawSceneOnceTimingForRestart	ResetDrawSceneOnceTimingForRestart	fn
+TVPSetPostUpdateEvent	SetPostUpdateEvent	fn

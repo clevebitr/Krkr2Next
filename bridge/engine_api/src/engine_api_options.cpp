@@ -90,7 +90,7 @@ engine_result_t engine_set_option(engine_handle_t handle, const engine_option_t 
         };
         for (const char *graphics_key : kGraphicsOptions) {
             if (key != graphics_key) continue;
-            TVPSetShellOption(key, option->value_utf8);
+            krkr::base::SetShellOption(key, option->value_utf8);
             TVPInvalidateGraphicsOptionCaches();
             spdlog::info("engine_set_option: {}={}", key, option->value_utf8);
             break;

@@ -38,7 +38,7 @@ enum tTVPUpdateType {
     utEntire // entire of window
 };
 //---------------------------------------------------------------------------
-enum tTVPBorderStyle {
+enum BorderStyle {
     bsNone = 0,
     bsSingle = 1,
     bsSizeable = 2,
@@ -548,7 +548,7 @@ public:
     }
 };
 //---------------------------------------------------------------------------
-class tTVPOnMouseWheelInputEvent : public tTVPBaseInputEvent {
+class OnMouseWheelInputEvent : public tTVPBaseInputEvent {
     static tTVPUniqueTagForInputEvent Tag;
     tjs_uint32 Shift;
     tjs_int WheelDelta;
@@ -556,7 +556,7 @@ class tTVPOnMouseWheelInputEvent : public tTVPBaseInputEvent {
     tjs_int Y;
 
 public:
-    tTVPOnMouseWheelInputEvent(tTJSNI_BaseWindow *win, tjs_uint32 shift,
+    OnMouseWheelInputEvent(tTJSNI_BaseWindow *win, tjs_uint32 shift,
                                tjs_int wheeldelta, tjs_int x, tjs_int y) :
         tTVPBaseInputEvent(win, Tag), Shift(shift), WheelDelta(wheeldelta),
         X(x), Y(y) {};

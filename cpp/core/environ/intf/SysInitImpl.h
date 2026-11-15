@@ -14,34 +14,34 @@
 //---------------------------------------------------------------------------
 #include <functional>
 
-extern void TVPDumpHWException();
+extern void DumpHWException();
 
-extern void TVPInitializeBaseSystems();
+extern void InitializeBaseSystems();
 
-extern ttstr TVPNativeProjectDir;
-extern ttstr TVPNativeDataPath;
+extern ttstr nativeProjectDir;
+extern ttstr nativeDataPath;
 
-extern bool TVPProjectDirSelected;
+extern bool projectDirSelected;
 
-extern void TVPEnsureDataPathDirectory();
+extern void EnsureDataPathDirectory();
 
-extern bool TVPExecuteUserConfig();
+extern bool ExecuteUserConfig();
 
-extern bool TVPTerminated;
-extern bool TVPTerminateWindowClosed;
-extern bool TVPTerminateOnWindowClose;
-extern bool TVPTerminateOnNoWindowStartup;
-extern int TVPTerminateCode;
-extern bool TVPHostSuppressProcessExit;
+extern bool terminated;
+extern bool terminateWindowClosed;
+extern bool terminateOnWindowClose;
+extern bool terminateOnNoWindowStartup;
+extern int terminateCode;
+extern bool hostSuppressProcessExit;
 
-extern void TVPResetSysInitImplForRestart();
+extern void ResetSysInitImplForRestart();
 
 //---------------------------------------------------------------------------
 // "游戏请求关窗"的宿主确认闸门（Android 壳用）。
 //
 // 原逻辑：KAG 的退出菜单（`kag.close()` → `MainWindow.close()` →
 // `Window.close()` → `HostWindowLayer::Close()`）一进来就置
-// TVPTerminateWindowClosed 并终止，宿主只能直接回库 —— 用户要求的"先问一句
+// terminateWindowClosed 并终止，宿主只能直接回库 —— 用户要求的"先问一句
 // 要不要退出、选继续就接着玩"没有落点。这里把**终止之前的窗口关闭**挂起来：
 // 窗口不拆、closing_ 不置、也不终止，engine_tick 用独立结果码告诉宿主
 // （ENGINE_RESULT_WINDOW_CLOSE_REQUESTED），宿主弹确认框后再调

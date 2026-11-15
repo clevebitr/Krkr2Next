@@ -8,7 +8,7 @@
  *   - Forward input events from engine_api → engine core (TVPPostInputEvent)
  *   - Maintain async key state (_scancode[]) for TJS2 System.getKeyState
  *
- * This class is the Phase 3 replacement for TVPMainScene.
+ * This class is the Phase 3 replacement for MainScene.
  */
 #pragma once
 

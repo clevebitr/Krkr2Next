@@ -18,7 +18,11 @@ map 文件格式（TSV，`#` 开头是注释）：
     TVPAddClassHandler	AddClassHandler	fn
     tTVPAtInstallClass	AtInstallClass	type
 
-第三列 kind ∈ fn|type|macro|var：`macro` 不做 namespace 限定（宏没有 namespace）。
+第三列 kind ∈ fn|type|macro|var|global：`macro` / `global` 不做 namespace 限定。
+
+`global` 是给"名字就活在全局作用域"的符号用的（`environ` 的多数函数都属于这种：
+声明在 base/visual 的全局头里，实现在 environ 的全局作用域）。这类符号不能加
+`krkr::environ::` 前缀 —— 加了在调用点就是"另一个符号"。
 
 为什么外部调用点替换成**全限定名**（`krkr::extension::AddClassHandler`）而不是短名：
 全限定在 C++ 里总是合法（哪怕调用点已经在那个 namespace 内），所以工具不需要
@@ -168,7 +172,7 @@ def parse_map(path: Path) -> tuple[str, str, str, list[MapEntry]]:
             print(f"{path}:{lineno}: 需要 3 列（old/new/kind），跳过", file=sys.stderr)
             continue
         old, new, kind = parts[0], parts[1], parts[2]
-        if kind not in ("fn", "type", "macro", "var"):
+        if kind not in ("fn", "type", "macro", "var", "global"):
             print(f"{path}:{lineno}: 未知 kind={kind}，跳过", file=sys.stderr)
             continue
         entries.append(MapEntry(old, new, kind))
@@ -332,7 +336,9 @@ def run_map(map_path: Path, roots: list[str], apply: bool, in_strings: bool,
                 # macro 没有 namespace；冲突条目（新名与已有声明同名，例如与某个类的
                 # 成员函数同名）在 owner 内也必须全限定，否则会被成员函数遮蔽 ——
                 # 这类遮蔽在 C++ 里是静默改语义，比编译错误更危险。
-                if e.kind == "macro":
+                if e.kind in ("macro", "global"):
+                    # macro：宏没有 namespace；global：符号本身就在全局作用域
+                    # （environ 的多数函数/变量属于这种，见 docs/NAMING.md §6）
                     repl = e.new
                 elif in_owner and e.new not in conflicts:
                     repl = e.new

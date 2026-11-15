@@ -87,11 +87,11 @@ static void TVPLoadGraphicAsync_MetaInfoPushCallback(void *callbackdata,
 }
 //---------------------------------------------------------------------------
 
-tTVPAsyncImageLoader::tTVPAsyncImageLoader() :
-    EventQueue(this, &tTVPAsyncImageLoader::Proc), krkr::utils::Thread(true) {
+AsyncImageLoader::AsyncImageLoader() :
+    EventQueue(this, &AsyncImageLoader::Proc), krkr::utils::Thread(true) {
     EventQueue.Allocate();
 }
-tTVPAsyncImageLoader::~tTVPAsyncImageLoader() {
+AsyncImageLoader::~AsyncImageLoader() {
     ExitRequest();
     WaitFor();
     EventQueue.Deallocate();
@@ -106,27 +106,27 @@ tTVPAsyncImageLoader::~tTVPAsyncImageLoader() {
         delete cmd;
     }
 }
-void tTVPAsyncImageLoader::ExitRequest() {
+void AsyncImageLoader::ExitRequest() {
     Terminate();
     PushCommandQueueEvent.Set();
 }
-void tTVPAsyncImageLoader::Execute() {
+void AsyncImageLoader::Execute() {
     // プライオリティは最低にする
     SetPriority(ttpIdle);
     LoadingThread();
 }
-void tTVPAsyncImageLoader::SendToLoadFinish() {
+void AsyncImageLoader::SendToLoadFinish() {
     NativeEvent ev(TVP_EV_IMAGE_LOAD_THREAD);
     EventQueue.PostEvent(ev);
 }
-void tTVPAsyncImageLoader::Proc(NativeEvent &ev) {
+void AsyncImageLoader::Proc(NativeEvent &ev) {
     if(ev.Message != TVP_EV_IMAGE_LOAD_THREAD) {
         EventQueue.HandlerDefault(ev);
         return;
     }
     HandleLoadedImage();
 }
-void tTVPAsyncImageLoader::HandleLoadedImage() {
+void AsyncImageLoader::HandleLoadedImage() {
     bool loading;
     do {
         loading = false;
@@ -202,7 +202,7 @@ void tTVPAsyncImageLoader::HandleLoadedImage() {
 
 // onLoaded( dic, is_async, is_error, error_mes ); エラーは
 // sync ( main thead )
-void tTVPAsyncImageLoader::LoadRequest(iTJSDispatch2 *owner, tTJSNI_Bitmap *bmp,
+void AsyncImageLoader::LoadRequest(iTJSDispatch2 *owner, tTJSNI_Bitmap *bmp,
                                        const ttstr &name) {
     // tTVPBaseBitmap* dest = new tTVPBaseBitmap( 32, 32, 32 );
     tTVPBaseBitmap dest(TVPGetInitialBitmap());
@@ -244,7 +244,7 @@ void tTVPAsyncImageLoader::LoadRequest(iTJSDispatch2 *owner, tTJSNI_Bitmap *bmp,
 //	tTJSBinaryStream* stream = krkr::io::CreateStream(nname, TJS_BS_READ);
 // krkr::io::CreateStream はロックされているので、非同期で実行可能
 
-void tTVPAsyncImageLoader::PushLoadQueue(iTJSDispatch2 *owner,
+void AsyncImageLoader::PushLoadQueue(iTJSDispatch2 *owner,
                                          tTJSNI_Bitmap *bmp,
                                          const ttstr &nname) {
     auto *cmd = new tTVPImageLoadCommand();
@@ -263,7 +263,7 @@ void tTVPAsyncImageLoader::PushLoadQueue(iTJSDispatch2 *owner,
     // 追加したことをイベントで通知
     PushCommandQueueEvent.Set();
 }
-void tTVPAsyncImageLoader::LoadingThread() {
+void AsyncImageLoader::LoadingThread() {
     while(!GetTerminated()) {
         // キュー追加イベント待ち
         PushCommandQueueEvent.WaitFor(0);
@@ -295,7 +295,7 @@ void tTVPAsyncImageLoader::LoadingThread() {
     }
 }
 tTVPGraphicHandlerType *TVPGuessGraphicLoadHandler(ttstr &name);
-void tTVPAsyncImageLoader::LoadImageFromCommand(tTVPImageLoadCommand *cmd) {
+void AsyncImageLoader::LoadImageFromCommand(tTVPImageLoadCommand *cmd) {
     ttstr ext = krkr::io::ExtractStorageExt(cmd->path_);
     tTVPGraphicHandlerType *handler = nullptr;
     ttstr name(cmd->path_);

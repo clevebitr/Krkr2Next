@@ -74,7 +74,7 @@ bool TVPFreeUnusedLayerCache = false;
 static std::atomic<tjs_int> TVPLayerInstanceCount{ 0 };
 static std::atomic<int64_t> TVPLayerBitmapTotalBytes{ 0 };
 
-tjs_int TVPGetLayerCount() {
+tjs_int GetLayerCount() {
     return TVPLayerInstanceCount.load(std::memory_order_relaxed);
 }
 tjs_uint64 TVPGetLayerTotalBitmapBytes() {

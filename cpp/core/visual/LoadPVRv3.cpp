@@ -342,7 +342,7 @@ void TVPLoadHeaderPVRv3(void *formatdata, tTJSBinaryStream *src,
     (*dic)->PropSet(TJS_MEMBERENSURE, TJS_W("bpp"), 0, &val, (*dic));
 }
 
-void TVPSavePVRv3(void *formatdata, tTJSBinaryStream *dst,
+void SavePVRv3(void *formatdata, tTJSBinaryStream *dst,
                   const iTVPBaseBitmap *image, const ttstr &mode,
                   iTJSDispatch2 *meta) {
     std::vector<std::pair<ttstr, tTJSVariant>> tags;

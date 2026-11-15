@@ -261,7 +261,7 @@ TJS_END_NATIVE_PROP_DECL(mode)
 TJS_END_NATIVE_MEMBERS
 
 tTJSVariant val;
-if(TVPGetCommandLine(TJS_W("-laxtimer"), &val)) {
+if(krkr::base::GetCommandLine(TJS_W("-laxtimer"), &val)) {
     ttstr str(val);
     if(str == TJS_W("yes"))
         krkr::utils::limitTimerCapacity = true;

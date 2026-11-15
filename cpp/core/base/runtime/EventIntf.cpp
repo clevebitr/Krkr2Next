@@ -194,7 +194,7 @@ static void TVPDestroyEventQueue() {
     }
 }
 
-static tTVPAtExit TVPDestroyEventQueueAtExit(TVP_ATEXIT_PRI_PREPARE,
+static tTVPAtExit TVPDestroyEventQueueAtExit(KRKR_ATEXIT_PRI_PREPARE,
                                              TVPDestroyEventQueue);
 
 bool TVPEventDisabled = false;
@@ -768,7 +768,7 @@ static void TVPDestroyContinuousHandlerVector() {
 }
 
 static tTVPAtExit
-    TVPDestroyContinuousHandlerVectorAtExit(TVP_ATEXIT_PRI_PREPARE,
+    TVPDestroyContinuousHandlerVectorAtExit(KRKR_ATEXIT_PRI_PREPARE,
                                             TVPDestroyContinuousHandlerVector);
 
 //---------------------------------------------------------------------------
@@ -936,7 +936,7 @@ void TVPRemoveContinuousHandler(tTJSVariantClosure clo) {
 // cleaning, or etc ...
 //---------------------------------------------------------------------------
 static std::vector<tTVPCompactEventCallbackIntf *> TVPCompactEventVector;
-bool TVPEnableGlobalHeapCompaction = false;
+bool enableGlobalHeapCompaction = false;
 
 //---------------------------------------------------------------------------
 void TVPAddCompactEventHook(tTVPCompactEventCallbackIntf *cb) {
@@ -992,7 +992,7 @@ void TVPDeliverCompactEvent(tjs_int level) {
     }
     TVPDoSaveSystemVariables();
 #if 0
-    if( level >= TVP_COMPACT_LEVEL_MAX && TVPEnableGlobalHeapCompaction )
+    if( level >= TVP_COMPACT_LEVEL_MAX && enableGlobalHeapCompaction )
     {	// Do compact CRT and Global Heap
         HANDLE hHeap = ::GetProcessHeap();
         if( hHeap ) {

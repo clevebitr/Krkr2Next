@@ -1576,7 +1576,7 @@ NCB_ATTACH_FUNCTION(breathe, System, TVPBreathe);
 NCB_ATTACH_FUNCTION(isBreathing, System, TVPGetBreathing);
 NCB_ATTACH_FUNCTION(clearGraphicCache, System, TVPClearGraphicCache);
 NCB_ATTACH_FUNCTION(getAboutString, System, TVPGetAboutString);
-NCB_ATTACH_FUNCTION(getCPUType, System, TVPGetCPUType);
+NCB_ATTACH_FUNCTION(getCPUType, System, krkr::base::GetCPUType);
 
 ////////////////////////////////////////////////////////////////
 

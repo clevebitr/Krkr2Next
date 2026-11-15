@@ -8,10 +8,10 @@
  * 链接失败 （undefined reference）。
  *
  * 本文件为 Linux 提供这些平台函数的实现：
- *  - 文件操作（TVP_stat/TVP_utime/TVPCreateFolders/krkr::io::WriteDataToFile）
+ *  - 文件操作（KRKR_stat/KRKR_utime/TVPCreateFolders/krkr::io::WriteDataToFile）
  *  - 时钟（krkr::utils::GetRoughTickCount32）
  *  - 内存信息（用 /proc 解析）
- *  - 应用生命周期（TVPExitApplication 等）
+ *  - 应用生命周期（ExitApplication 等）
  *  - UI 桩（无头环境，TVPShow* 仅打日志并返回默认值）
  *
  * 文件体用 `#if defined(__linux__)` 守卫，在 Apple/Android 上为等价空翻译单元，
@@ -109,7 +109,7 @@ bool krkr::io::WriteDataToFile(const ttstr &filepath, const void *data,
     return false;
 }
 
-bool TVP_stat(const char *name, tTVP_stat &s) {
+bool KRKR_stat(const char *name, tTVP_stat &s) {
     struct stat t{}; // NOLINT
     if(stat(name, &t) != 0) {
         return false;
@@ -126,11 +126,11 @@ bool TVP_stat(const char *name, tTVP_stat &s) {
     return true;
 }
 
-bool TVP_stat(const tjs_char *name, tTVP_stat &s) {
-    return TVP_stat(ttstr{ name }.AsStdString().c_str(), s);
+bool KRKR_stat(const tjs_char *name, tTVP_stat &s) {
+    return KRKR_stat(ttstr{ name }.AsStdString().c_str(), s);
 }
 
-bool TVP_utime(const char *name, time_t modtime) {
+bool KRKR_utime(const char *name, time_t modtime) {
     timeval mt[2] = {};
     mt[0].tv_sec = modtime;
     mt[1].tv_sec = modtime;
@@ -185,7 +185,7 @@ static tjs_int _proc_self_mem(const char *key) {
     return static_cast<tjs_int>(v);
 }
 
-void TVPGetMemoryInfo(TVPMemoryInfo &m) {
+void GetMemoryInfo(TVPMemoryInfo &m) {
     m.MemTotal = _meminfo_value("MemTotal:");
     m.MemFree = _meminfo_value("MemFree:");
     m.SwapTotal = _meminfo_value("SwapTotal:");
@@ -194,11 +194,11 @@ void TVPGetMemoryInfo(TVPMemoryInfo &m) {
     m.VirtualUsed = static_cast<unsigned long>(_proc_self_mem("VmRSS:"));
 }
 
-tjs_int TVPGetSelfUsedMemory() { // in MB
+tjs_int GetSelfUsedMemory() { // in MB
     return _proc_self_mem("VmRSS:") / 1024;
 }
 
-tjs_int TVPGetSystemFreeMemory() { // in MB
+tjs_int GetSystemFreeMemory() { // in MB
     return static_cast<tjs_int>(_meminfo_value("MemAvailable:") / 1024);
 }
 
@@ -206,51 +206,51 @@ tjs_int TVPGetSystemFreeMemory() { // in MB
 // 应用生命周期
 // ---------------------------------------------------------------------------
 
-void TVPForceSwapBuffer() { /* pass */ }
+void ForceSwapBuffer() { /* pass */ }
 
-bool TVPCheckStartupPath(const std::string &) { return true; }
+bool CheckStartupPath(const std::string &) { return true; }
 
-void TVPExitApplication(int code) {
+void ExitApplication(int code) {
     TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
-    TVPTerminated = true;
-    TVPTerminateCode = code;
-    if(TVPHostSuppressProcessExit) {
+    terminated = true;
+    terminateCode = code;
+    if(hostSuppressProcessExit) {
         return;
     }
     exit(code);
 }
 
-void TVPRelinquishCPU() { sched_yield(); }
+void RelinquishCPU() { sched_yield(); }
 
-std::string TVPGetPackageVersionString() { return "linux"; }
+std::string GetPackageVersionString() { return "linux"; }
 
 // ---------------------------------------------------------------------------
 // UI 桩（无头 CI 环境，仅打日志）
 // ---------------------------------------------------------------------------
 
-extern "C" int TVPShowSimpleMessageBox(const char *pszText,
+extern "C" int ShowSimpleMessageBox(const char *pszText,
                                        const char *pszTitle,
                                        unsigned int nButton,
                                        const char **btnText) {
-    spdlog::warn("[platform_linux] TVPShowSimpleMessageBox stub: {} ({})",
+    spdlog::warn("[platform_linux] ShowSimpleMessageBox stub: {} ({})",
                  pszText, pszTitle);
     (void)nButton;
     (void)btnText;
     return 0;
 }
 
-int TVPShowSimpleMessageBox(const ttstr &text, const ttstr &caption,
+int ShowSimpleMessageBox(const ttstr &text, const ttstr &caption,
                             const std::vector<ttstr> &vecButtons) {
     spdlog::warn(
-        "[platform_linux] TVPShowSimpleMessageBox stub: {} ({}, {} btns)",
+        "[platform_linux] ShowSimpleMessageBox stub: {} ({}, {} btns)",
         text.AsStdString(), caption.AsStdString(), vecButtons.size());
     return 0;
 }
 
-int TVPShowSimpleInputBox(ttstr &text, const ttstr &caption,
+int ShowSimpleInputBox(ttstr &text, const ttstr &caption,
                           const ttstr &prompt,
                           const std::vector<ttstr> &vecButtons) {
-    spdlog::warn("[platform_linux] TVPShowSimpleInputBox stub");
+    spdlog::warn("[platform_linux] ShowSimpleInputBox stub");
     (void)caption;
     (void)prompt;
     (void)vecButtons;

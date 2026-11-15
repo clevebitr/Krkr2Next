@@ -345,7 +345,7 @@ static void TVPDestroySusiePluginList()
 	}
 }
 static tTVPAtExit TVPDestroySusiePluginListAtExit
-	(TVP_ATEXIT_PRI_CLEANUP, TVPDestroySusiePluginList);
+	(KRKR_ATEXIT_PRI_CLEANUP, TVPDestroySusiePluginList);
 
 //---------------------------------------------------------------------------
 

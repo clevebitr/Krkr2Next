@@ -66,7 +66,7 @@ bool EnsureEngineRuntimeInitialized(uint32_t width, uint32_t height) {
     if (g_engine_bootstrapped) {
         return true;
     }
-    if (!TVPEngineBootstrap::Initialize(width, height)) {
+    if (!EngineBootstrap::Initialize(width, height)) {
         return false;
     }
     g_engine_bootstrapped = true;
