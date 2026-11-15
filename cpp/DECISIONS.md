@@ -1260,3 +1260,44 @@ void krkr::utils::AddLog(const ttstr &line) { }   // explicit qualification in d
 
 `check_naming.py` 合计遗留：1297 → 1101 → 1080 → 1043 → 1026 → **913**。
 桥接 393 → **369**（`utils` 84 → 42）。
+
+## 2026-11-15 — base 轮的坑：base/runtime 里有 ~30 个 namespace krkr::utils 的内部符号
+
+\## 现象
+
+`cpp/core/base/runtime/*.cpp` 里有 **~30 个 `namespace krkr::utils` 的内部符号**（多为
+文件内 static），例如：
+
+```
+DebugIntf.cpp : TVPLoggingHandlerVector(21) TVPLogDeque(14) TVPImportantLogs(12)
+                TVPDumpOutFile(11) TVPLogLocation(6) TVPOnLog(4) TVPLogMaxLines(4)
+                tTVPLogItem tTVPLogStreamHolder TVPInDeliverLoggingEvent …
+TickCount.cpp : tTVPWatchThread TVPWatchThread TVPWatchLastTick TVPTickCountBias
+                TVPCheckTickOverflow TVPTickWatchCS
+TimerImpl.cpp : TVPTimerCS、TimerIntf.cpp : TVPLimitTimerCapacity 等
+```
+
+它们体现在 `check_naming.py` 里被算到 **base**（因为文件在 base 目录），但名字的归属是
+`krkr::utils`（namespace 决定归属）。第 5 轮只处理了其中一个 `TVPAddLoggingHandler`
+（紧跟 `AddLog` 家族，2 处 static，手工改）。
+
+\## 为什么这会影响 base 轮
+
+`rename_symbols.py` 的规则是"owner 目录内短名、别处全限定"。如果 base 轮的 map 按
+**目录**把这些符号收进去（owner = `cpp/core/base`），那么：
+
+1. 它们会被改成 `krkr::utils::NewName`，而**同一文件就在 `namespace krkr::utils` 里**
+   → `explicit qualification`（见上一条决策），`static` 的还会变成
+   `static void krkr::utils::X()`（非法）；
+2. 它们的声明其实在 `utils/intf/*.h`，按目录切会把声明和定义拆到两轮。
+
+\## 结论（base 轮开工前先做）
+
+1. base 轮的 map 要**按 namespace 切，不按目录切**：能加 `# qualify: krkr::utils`
+   的条目单独成一张 map（owner 指到实际定义目录），并且 apply 之后跑
+   `scripts/check_qualification.py`（已进 `check_static.sh`）；
+2. 文件内 `static` 的符号（`TVPLogDeque`、`TVPTimerCS`、`tTVPWatchThread` …）
+   **不要进 map**：工具会给出 `krkr::utils::X` 前缀，对 static 是硬错误。
+   这类只能手工改（或用 `--roots` 收窄 + owner 指到 base/runtime）；
+3. base 现有 367 个遗留里，属于 `namespace krkr::utils` 的有 ~30 个（本文件临时统计），
+   其余才是真正的 base 符号（`TVPThrowExceptionMessage` 46、`TVPMsg*` 等）。
