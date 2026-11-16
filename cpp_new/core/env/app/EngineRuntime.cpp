@@ -7,6 +7,8 @@
 #include <system_error>
 #include <utility>
 
+#include "core/log/Logger.h"
+
 namespace krkr::env {
 
   // Game path handling
@@ -51,32 +53,40 @@ namespace krkr::env {
 
   EngineRuntime *EngineRuntime::Create() { return new EngineRuntime(); }
 
-  void EngineRuntime::Destroy(EngineRuntime *engine) { delete engine; }
+  void EngineRuntime::Destroy(EngineRuntime *engine) {
+    delete engine;
+    krkr::log::Logger::Instance().Flush();
+  }
 
   EngineResult EngineRuntime::OpenGame(const char *gameRootUtf8) {
     if (gameRootUtf8 == nullptr || gameRootUtf8[0] == '\0') {
       lastError_ = "game root is empty";
+      krkr::log::Error(lastError_);
       return EngineResult::InvalidArgument;
     }
     if (gameOpen_) {
       lastError_ = "game already open";
+      krkr::log::Error(lastError_);
       return EngineResult::InvalidState;
     }
 
     const std::string requested = gameRootUtf8;
     const std::filesystem::path requestedPath = PathFromUtf8(requested);
+    krkr::log::Info("OpenGame requested=", requested);
 
     std::error_code ec;
 
     const bool exists = std::filesystem::exists(requestedPath, ec);
     
     if (ec) {
-      lastError_ = "cannot stat \"" + requested + "\"" + ec.message();
+      lastError_ = "cannot stat \"" + requested + "\": " + ec.message();
+      krkr::log::Error(lastError_);
       return EngineResult::IoError;
     }
 
     if (!exists) {
-      lastError_ = "\"" + requested + "\" does not exists";
+      lastError_ = "\"" + requested + "\" does not exist";
+      krkr::log::Error(lastError_);
       return EngineResult::IoError;
     }
 
@@ -94,6 +104,7 @@ namespace krkr::env {
     const bool isDirectory = std::filesystem::is_directory(resolved, ec);
     if (ec) {
       lastError_ = "cannot inspect \"" + requested + "\": " + ec.message();
+      krkr::log::Error(lastError_);
       return EngineResult::IoError;
     }
 
@@ -104,6 +115,7 @@ namespace krkr::env {
     }
     if (kind == GameKind::None) {
       lastError_ = "\"" + requested + "\" is neither a directory nor a known archive (.xp3/.zip/.7z/.tar)";
+      krkr::log::Error(lastError_);
       return EngineResult::IoError;
     }
 
@@ -116,19 +128,29 @@ namespace krkr::env {
     gameKind_ = kind;
     gameOpen_ = true;
     lastError_.clear();
+    krkr::log::Info("OpenGame ok: root=", gameRoot_, " kind=", static_cast<int>(kind));
     return EngineResult::Ok;
   }
 
   EngineResult EngineRuntime::Tick(double deltaSeconds) {
     if (!gameOpen_) {
       lastError_ = "Tick before OpenGame";
+      krkr::log::Error(lastError_);
       return EngineResult::InvalidState;
     }
     if (deltaSeconds < 0.0) {
       lastError_ = "negative delta";
+      krkr::log::Error(lastError_);
       return EngineResult::InvalidArgument;
     }
+
     ++frameCount_;
+    // 帧号交给日志器，之后所有日志行都会自动带上它。
+    krkr::log::Logger::Instance().SetFrame(frameCount_);
+    // TODO(第 7 步): 接上脚本/渲染后去掉这条每帧日志，只保留状态边沿。
+    krkr::log::Debug("tick dt=", deltaSeconds);
+    // info/debug 攒着，每帧结束时统一落盘一次：崩溃最多丢一帧。
+    krkr::log::Logger::Instance().Flush();
     return EngineResult::Ok;
   }
 } // namespace krkr::env
