@@ -1,12 +1,16 @@
 #include "core/log/Logger.h"
 
 #include <cstdio>
+#include <cstring>
+#include <deque>
 #include <mutex>
 #include <string>
 
 namespace krkr::log {
     constexpr std::size_t kDefaultMaxFileBytes = 4u * 1024u * 1024u;
     constexpr int kRotateFiles = 3;
+
+    constexpr std::size_t kRingCapacity = 256;
 
     struct Logger::Impl {
         mutable std::mutex mutex;
@@ -20,6 +24,15 @@ namespace krkr::log {
         std::string fileError;
 
         std::string pending;
+
+        std::deque<std::string> ring;
+
+        void PushRing(const std::string &line) {
+            ring.push_back(line);
+            while(ring.size() > kRingCapacity) {
+                ring.pop_front();
+            }
+        }
 
         static std::string RotatePath(const std::string &base, int index) {
             return base + "." + std::to_string(index);
@@ -167,7 +180,9 @@ namespace krkr::log {
            static_cast<std::int32_t>(impl_->level)) {
             return;
         }
-        impl_->pending += impl_->ComposeLine(level, message);
+        const std::string line = impl_->ComposeLine(level, message);
+        impl_->pending += line;
+        impl_->PushRing(line);
 
         if(level == Level::Warn || level == Level::Error) {
             impl_->FlushLocked();
@@ -177,5 +192,23 @@ namespace krkr::log {
     void Logger::Flush() {
         std::lock_guard<std::mutex> lock(impl_->mutex);
         impl_->FlushLocked();
+    }
+
+    std::size_t Logger::Drain(char *out, std::size_t capacity) {
+        if(out == nullptr || capacity == 0) {
+            return 0;
+        }
+        std::lock_guard<std::mutex> lock(impl_->mutex);
+        std::size_t written = 0;
+        while(!impl_->ring.empty()) {
+            const std::string &line = impl_->ring.front();
+            if(written + line.size() > capacity) {
+                break;
+            }
+            std::memcpy(out + written, line.data(), line.size());
+            written += line.size();
+            impl_->ring.pop_front();
+        }
+        return written;
     }
 } // namespace krkr::log

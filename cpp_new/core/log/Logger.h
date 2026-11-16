@@ -31,6 +31,8 @@ namespace krkr::log {
       void SetFrame(std::uint64_t frame);
       std::uint64_t GetFrame() const;
 
+      std::size_t Drain(char *out, std::size_t capacity);
+
       void Write(Level level, const std::string &message);
       void Flush();
     

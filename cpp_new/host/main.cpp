@@ -4,6 +4,7 @@
 
 #include "core/env/app/EngineRuntime.h"
 #include "core/log/Logger.h"
+
 namespace {
     void ApplyEnvOverrides(krkr::log::Logger &logger) {
         if(const char *levelText = std::getenv("KRKR_LOG_LEVEL");
@@ -25,6 +26,31 @@ namespace {
             }
         }
     }
+} // namespace
+
+namespace {
+
+void PrintStartupLogs(krkr::log::Logger &logger) {
+    std::fflush(stdout);
+    char buffer[4096];
+    const std::size_t written = logger.Drain(buffer, sizeof(buffer));
+    if(written == 0) {
+        std::fprintf(stderr, "[drain] (empty)\n");
+        return;
+    }
+    std::size_t start = 0;
+    for(std::size_t i = 0; i < written; ++i) {
+        if(buffer[i] != '\n') {
+            continue;
+        }
+        std::fprintf(stderr, "[drain] %.*s\n", static_cast<int>(i - start), buffer + start);
+        start = i + 1;
+    }
+    if(start < written) {
+        std::fprintf(stderr, "[drain] %.*s\n", static_cast<int>(written - start), buffer + start);
+    }
+}
+
 } // namespace
 
 
@@ -52,19 +78,23 @@ int main(int argc, char **argv) {
 
     krkr::env::EngineResult res = engine->OpenGame(argv[1]);
     if(res != krkr::env::EngineResult::Ok) {
-        std::printf("open failed (%d):%s\n", static_cast<int>(res),
+        std::printf("open failed (%d): %s\n", static_cast<int>(res),
                     engine->GetLastErrorText());
+        std::printf("startup = %u\n", static_cast<unsigned>(engine->GetStartupState()));
+        PrintStartupLogs(logger);
         krkr::env::EngineRuntime::Destroy(engine);
         return 1;
     }
 
     std::printf("root = \"%s\" kind = %d\n", engine->GetGameRoot().c_str(),
                 static_cast<int>(engine->GetGameKind()));
+    std::printf("startup = %u\n", static_cast<unsigned>(engine->GetStartupState()));
+    PrintStartupLogs(logger);
 
     for(int i = 0; i < 180; ++i) {
         res = engine->Tick(1.0 / 60.0);
         if(res != krkr::env::EngineResult::Ok) {
-            std::printf("tick %d failed (%d):%s\n", i, static_cast<int>(res),
+            std::printf("tick %d failed (%d): %s\n", i, static_cast<int>(res),
                         engine->GetLastErrorText());
             break;
         }

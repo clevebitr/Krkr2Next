@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 
@@ -10,12 +11,20 @@ namespace krkr::env {
     InvalidState    = -2,
     IoError         = -4,
     InternalError   = -5,
+    StartupPending  = -7,
   };
 
   enum class GameKind : std::int32_t {
     None            =  0,
     Directory       =  1,
     Archive         =  2,
+  };
+
+  enum class EngineStartupState : std::uint32_t {
+    Idle            =  0,
+    Running         =  1,
+    Succeeded       =  2,
+    Failed          =  3,
   };
 
   class EngineRuntime final {
@@ -35,16 +44,24 @@ namespace krkr::env {
       GameKind GetGameKind() const { return gameKind_; }
       const std::string &GetGameRoot() const { return gameRoot_; }
 
+      EngineStartupState GetStartupState() const {
+        return static_cast<EngineStartupState>(startupState_.load());
+      }
+
       const char *GetLastErrorText() const { return lastError_.c_str(); }
 
     private:
       EngineRuntime()  = default;
       ~EngineRuntime() = default;
 
+      void RunStartupWork();
+
       std::string   gameRoot_;
       std::string   lastError_;
       std::uint64_t frameCount_ = 0;
       GameKind      gameKind_   = GameKind::None;
       bool          gameOpen_   = false;
+      std::atomic<std::uint32_t> startupState_{
+          static_cast<std::uint32_t>(EngineStartupState::Idle)};
   };
 } // namespace krkr::env

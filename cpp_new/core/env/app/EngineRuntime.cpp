@@ -129,7 +129,38 @@ namespace krkr::env {
     gameOpen_ = true;
     lastError_.clear();
     krkr::log::Info("OpenGame ok: root=", gameRoot_, " kind=", static_cast<int>(kind));
+
+    RunStartupWork();
+    if (GetStartupState() == EngineStartupState::Failed) {
+      return EngineResult::IoError; // lastError_ 已由 RunStartupWork 写好
+    }
     return EngineResult::Ok;
+  }
+
+  void EngineRuntime::RunStartupWork() {
+    startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Running));
+    krkr::log::Info("startup: running");
+
+    if (gameKind_ == GameKind::Archive) {
+      krkr::log::Warn("startup script check skipped: archive backend not available until step 6");
+      startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Succeeded));
+      krkr::log::Info("startup: succeeded (archive, script unchecked)");
+      return;
+    }
+
+    const std::string scriptPath = gameRoot_ + "startup.tjs";
+    std::error_code ec;
+    const bool exists = std::filesystem::exists(PathFromUtf8(scriptPath), ec);
+    if (ec || !exists) {
+      lastError_ = ec ? ("cannot stat \"" + scriptPath + "\": " + ec.message())
+                      : ("startup script not found: \"" + scriptPath + "\"");
+      startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Failed));
+      krkr::log::Error(lastError_);
+      return;
+    }
+
+    startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Succeeded));
+    krkr::log::Info("startup: succeeded, script=", scriptPath);
   }
 
   EngineResult EngineRuntime::Tick(double deltaSeconds) {
@@ -144,12 +175,15 @@ namespace krkr::env {
       return EngineResult::InvalidArgument;
     }
 
+    if (GetStartupState() != EngineStartupState::Succeeded) {
+      lastError_ = "engine startup is still running";
+      return EngineResult::StartupPending;
+    }
+
     ++frameCount_;
-    // 帧号交给日志器，之后所有日志行都会自动带上它。
     krkr::log::Logger::Instance().SetFrame(frameCount_);
     // TODO(第 7 步): 接上脚本/渲染后去掉这条每帧日志，只保留状态边沿。
     krkr::log::Debug("tick dt=", deltaSeconds);
-    // info/debug 攒着，每帧结束时统一落盘一次：崩溃最多丢一帧。
     krkr::log::Logger::Instance().Flush();
     return EngineResult::Ok;
   }
