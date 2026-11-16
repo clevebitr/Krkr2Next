@@ -8,16 +8,16 @@ int main(int argc,char** argv) {
     return 2;
   }
 
-  krkr::environ::EngineRuntime *engine = krkr::environ::EngineRuntime::Create();
+  krkr::env::EngineRuntime *engine = krkr::env::EngineRuntime::Create();
   if (engine == nullptr) {
     std::printf("create failed\n");
     return 1;
   }
 
-  krkr::environ::EngineResult res = engine -> OpenGame(argv[1]);
-  if (res != krkr::environ::EngineResult::Ok) {
-    std::printf("open failed (%d):%s\n",static_cast<int>(res),engine -> GetLastError());
-    krkr::environ::EngineRuntime::Destroy(engine);
+  krkr::env::EngineResult res = engine -> OpenGame(argv[1]);
+  if (res != krkr::env::EngineResult::Ok) {
+    std::printf("open failed (%d):%s\n",static_cast<int>(res),engine -> GetLastErrorText());
+    krkr::env::EngineRuntime::Destroy(engine);
     return 1;
   }
  
@@ -26,11 +26,11 @@ int main(int argc,char** argv) {
 
   for (int i = 0; i < 180; ++i) {
     res = engine -> Tick(1.0 / 60.0);
-    if (res != krkr::environ::EngineResult::Ok) {
+    if (res != krkr::env::EngineResult::Ok) {
       std::printf("tick %d failed (%d):%s\n",
           i,
           static_cast<int>(res),
-          engine -> GetLastError()
+          engine -> GetLastErrorText()
       );
       break;
     }
@@ -41,7 +41,7 @@ int main(int argc,char** argv) {
       argv[1]
   );
 
-  krkr::environ::EngineRuntime::Destroy(engine);
+  krkr::env::EngineRuntime::Destroy(engine);
 
   return 0;
 }
