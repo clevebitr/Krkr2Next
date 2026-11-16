@@ -8,8 +8,8 @@
 
 ## 0. 一句话现状
 
-入口容器 + 路径校验 + 日志 + 启动状态都立起来了：**能创建、能校验并规范化游戏路径、能落盘日志、能回答「起来了吗」、能跑帧、能销毁**。
-还没有线程、存储、脚本、渲染 —— 第 6 步（存储层）起才碰真内容。
+入口容器 + 路径校验 + 日志 + 启动状态 + 目录存储都立起来了：**能校验路径、能落盘日志、能回答「起来了吗」、能按名字读到文件字节**。
+还没有 XP3 包、线程、脚本、渲染 —— 6b（XP3 索引）是下一步。
 
 ---
 
@@ -22,11 +22,21 @@ clang++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp_new \
   cpp_new/host/main.cpp \
   cpp_new/core/env/app/EngineRuntime.cpp \
   cpp_new/core/log/Logger.cpp \
+  cpp_new/core/io/PathUtil.cpp \
+  cpp_new/core/io/DirectoryBackend.cpp \
+  cpp_new/core/io/Storage.cpp \
   -o $TMPDIR/krkr_next
 
 $TMPDIR/krkr_next <game_dir> [log_file]
 # 环境变量：KRKR_LOG_LEVEL=debug|info|warn|error|off
 #           KRKR_LOG_MAX_BYTES=<数字>   （仅测轮转用，生产固定 4 MiB）
+
+# io 的独立测试台（18 条检查）
+clang++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp_new \
+  cpp_new/host/StorageProbe.cpp \
+  cpp_new/core/io/PathUtil.cpp cpp_new/core/io/DirectoryBackend.cpp cpp_new/core/io/Storage.cpp \
+  -o $TMPDIR/storage_probe
+$TMPDIR/storage_probe <game_dir>
 ```
 
 只用 Termux 里的 `clang++`，**不需要 NDK / cmake / Gradle / 手机**。反馈时间 < 10 秒。
@@ -59,10 +69,17 @@ cpp_new/
     ├── env/app/
     │   ├── EngineRuntime.h           入口契约（不透明句柄 + 启动状态机）
     │   └── EngineRuntime.cpp         实现
+    ├── io/
+    │   ├── IOStream.h                IStream 接口（Read/Seek/GetSize/GetPosition）
+    │   ├── DirectoryBackend.h/.cpp   目录后端：一个路径 -> 一个只读流
+    │   ├── Storage.h/.cpp            门面：根目录 + 名字 -> 流（名字归一化在这里）
+    │   └── PathUtil.h/.cpp           UTF-8 <-> filesystem::path（全引擎唯一实现）
     └── log/
         ├── LogLevel.h                级别枚举 + 名字/解析
         ├── Logger.h                  进程内唯一日志器（pimpl，只露接口）
         └── Logger.cpp                文件 sink / 轮转 / 内存环
+
+host/StorageProbe.cpp                 io 的独立测试台（不进引擎，单独编一个可执行）
 ```
 
 - `host/main.cpp` **不属于引擎**，它扮演的是 `NativeEngine.kt` 的角色。引擎永远是库，不是可执行文件。
@@ -85,7 +102,9 @@ cpp_new/
 | 3 | 文件系统校验 | 存在性 / 目录 vs 包 / 路径规范化 / `GameKind` | ✅ 完成 |
 | 4 | 日志 | 级别 + 帧号 + 4MiB×3 轮转 + 写盘失败降级（std-only，无 spdlog） | ✅ 完成 |
 | 5 | 启动状态 | `StartupState` 状态机 + `startup.tjs` 检查 + 日志内存环 `Drain`（**无线程**，见 §4） | ✅ 完成 |
-| 6 | **存储层** | 目录读取 + XP3 索引解析（`OpenArchive` / `FindFile`） | ⬅ **下一步**（大） |
+| 6a | 存储层·目录后端 | `IStream` + `Storage` + 名字归一化 + 目录读取 | ✅ 完成 |
+| 6b | **存储层·XP3 索引** | 解析 XP3 目录表：文件名 → 偏移/大小（能列文件） | ⬅ **下一步** |
+| 6c | 存储层·XP3 读取 | 段表 + Cx 解压；从包里读出的字节要与目录一致 | 待做 |
 | 7 | 脚本虚拟机 | 接 TJS2，跑 `startup.tjs` | 待做（大） |
 | 8 | 渲染 | EGL + GLES3 surface，一帧提交给宿主（零拷贝 SurfaceTexture） | 待做（大） |
 | 9 | 输入 | 指针 / 按键 / 文本 → 脚本事件 | 待做 |
@@ -96,7 +115,7 @@ cpp_new/
 
 ---
 
-## 4. 已完成的步骤记录（第 3–5 步）
+## 4. 已完成的步骤记录（第 3–6a 步）
 
 ### 4.1 第 3 步：文件系统校验（`6c1c0a2` 一类的提交）
 
@@ -149,6 +168,35 @@ Destroy():   Flush 日志 → delete
    所以引擎在调用线程上同步做启动 = 阻塞 tick。今天这点耗时无所谓，真接 TJS 就未必；
 3. 引入线程的动机必须是**实测数据**，不是"接口看起来该有"。触发条件见 §5 技术债 #10。
 
+### 4.4 第 6a 刀：存储层·目录后端（`cpp_new/core/io/`，`krkr::io`）
+
+```text
+Storage(root)  ──名字归一化──►  root / name  ──►  OpenDirectoryFile  ──►  IStream
+                 (\→/ 合 //)                              (ifstream, 只读)
+```
+
+- 接口：`IStream` 只有 `Read` / `Seek`（绝对偏移）/ `GetSize` / `GetPosition`。
+- 所有权：`Open()` 返回 `std::unique_ptr<IStream>`，**调用方持有**。不用 AddRef/Release。
+- 错误模型：不抛异常。`Open` 返回 `nullptr` + `GetLastErrorText()`；`Read` 返回 -1 失败 / 0 EOF。
+- 名字规则：`\` → `/`、合并重复 `/`、去掉开头 `./`；**`..` 放行**（见 §5 #13）。
+- 目录后端必须区分「不存在」「是目录」「打不开」三种错误，不能返回 `GetSize()==0` 的假流。
+- `PathFromUtf8/PathToUtf8` 搬到 `io/PathUtil`，`EngineRuntime` 改成 `using krkr::io::...`，全引擎只有一份编码实现。
+- 独立测试台 `host/StorageProbe.cpp`（18 条检查，含哨兵字节查越界）。
+
+这一刀**没做**（有意，不要顺手加）：XP3/ZIP/7z 后端、目录列举、写文件、
+段缓存、`tTVPStorageMedia` 那套多媒体注册表 / auto-path / 补丁优先级。
+
+### 4.5 第 6a 刀的验收（两个测试台）
+
+`storage_probe`（18 条检查）：mount / 尺寸 == 实读字节 / EOF 返回 0 / `Seek(0)` 后逐字节一致 /
+读超尾部只返回剩余且不碰哨兵字节 / `Seek(size+1)` 与 `Seek(-1)` 被拒 /
+`sub\\a.tjs` 分隔符归一化 / 不存在的名字 / 目录当文件开 / `../escape.txt` 放行。
+
+`krkr_next`：目录模式日志出现 `startup: script size=23 head=// Demo startup script.`；
+缺脚本 → `-4` + `startup=3`；包模式 → warn + `startup=2`。
+
+---
+
 ## 5. 已知问题 / 技术债
 
 | # | 问题 | 处理 |
@@ -165,6 +213,11 @@ Destroy():   Flush 日志 → delete
 | 10 | **启动仍在 tick 线程上同步执行** | 见下方「触发条件」。现在只做一次 `exists()`，微秒级；第 7 步接 TJS 后若实测 `OpenGame` 耗时超过一帧预算（>50 ms @60fps），就必须把启动挪到 worker 线程 —— 判据是实测数据，不是接口形状 |
 | 11 | 启动期日志在 `Drain` 时可能已被 tick 日志挤出 256 行环（`KRKR_LOG_LEVEL=debug` + 跑很多帧后才 drain） | 真宿主是启动结束立刻 drain，不会发生；如果将来要保底，把启动期日志单独存一份 |
 | 12 | 日志文件没有 fsync，只 flush 到 libc 缓冲 | 进程被 kill 时可能丢最后几行。第 11 步与 `engine_set_log_file_path` 一起评估 |
+| 13 | **`Storage::Open` 放行 `..`**（本步拍板的决定：完全跟随系统路径语义） | 后果：接上 TJS 后脚本可以用 `../` 读到游戏目录外面。若要收紧，在 `Storage::Open` 里加一句“解析后必须仍在 root 内”的检查即可（+3 行），调用方不用改。兼容性需届时用真游戏测 |
+| 14 | `Storage::Open` 传入**绝对路径**时，`root / name` 会整体替换 root | 与 #13 同一个决定的另一面。测试台没覆盖；若要拒绝，同样在 `NormalizeName`/`Open` 里加一条检查 |
+| 15 | `Storage` 不加锁 | 现在只有 tick 线程用它。真出现多线程访问再加（届时先量一把锁的代价，别直接上 `shared_mutex`） |
+| 16 | 每次 `Open` 都重新 `stat` + `file_size`，没有缓存 | 第 6c 刀做 XP3 段缓存时一并考虑目录后端的缓存；现在每帧只开一次文件，不对性能负责 |
+| 17 | 名字大小写敏感 | `A.tjs` ≠ `a.tjs`。与 XP3 一致；若真机出现“目录能跑、包不能跑”的游戏，先查名字大小写 |
 
 ### 技术债 #10 的触发条件（写下来，免得以后变成"当年为什么没人想过"）
 

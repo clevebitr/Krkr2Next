@@ -7,22 +7,17 @@
 #include <system_error>
 #include <utility>
 
+#include "core/io/PathUtil.h"
 #include "core/log/Logger.h"
 
 namespace krkr::env {
 
+  // 编码规则全引擎只该有一份实现，这里只是把名字引进来，不重复定义。
+  using krkr::io::PathFromUtf8;
+  using krkr::io::PathToUtf8;
+
   // Game path handling
   namespace {
-    std::filesystem::path PathFromUtf8(const std::string &utf8) {
-      const auto *raw = reinterpret_cast<const char8_t *>(utf8.data());
-      return std::filesystem::path(std::u8string(raw, utf8.size()));
-    }
-
-    std::string PathToUtf8(const std::filesystem::path &path) {
-      const std::u8string u8 = path.generic_u8string();
-      return std::string(reinterpret_cast<const char *>(u8.data()),u8.size());
-    }
-
     bool EndsWithIgnoreCase(std::string_view text, std::string_view suffix) {
       if (text.size() < suffix.size()) {
         return false;
@@ -148,19 +143,45 @@ namespace krkr::env {
       return;
     }
 
-    const std::string scriptPath = gameRoot_ + "startup.tjs";
-    std::error_code ec;
-    const bool exists = std::filesystem::exists(PathFromUtf8(scriptPath), ec);
-    if (ec || !exists) {
-      lastError_ = ec ? ("cannot stat \"" + scriptPath + "\": " + ec.message())
-                      : ("startup script not found: \"" + scriptPath + "\"");
+    // 第 6a 刀：从“只知道文件存在”升级成“真把内容读出来”。
+    // 尺寸 + 开头 64 字节打进日志，一次验收同时盯住 GetSize 和 Read。
+    storage_ = std::make_unique<krkr::io::Storage>(gameRoot_);
+    if (!storage_->Mounted()) {
+      lastError_ = storage_->GetLastErrorText();
       startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Failed));
       krkr::log::Error(lastError_);
       return;
     }
 
+    std::unique_ptr<krkr::io::IStream> stream = storage_->Open("startup.tjs");
+    if (stream == nullptr) {
+      lastError_ = storage_->GetLastErrorText();
+      startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Failed));
+      krkr::log::Error(lastError_);
+      return;
+    }
+
+    const std::int64_t size = stream->GetSize();
+    char head[64];
+    const std::int64_t got = stream->Read(head, static_cast<std::int64_t>(sizeof(head)));
+    if (got < 0) {
+      lastError_ = "cannot read startup script";
+      startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Failed));
+      krkr::log::Error(lastError_);
+      return;
+    }
+
+    // 日志必须是一行可读的：控制字符 / 非 ASCII 都换成 '.'（尺寸另外打，不会丢信息）
+    std::string headText(head, static_cast<std::size_t>(got));
+    for (char &ch : headText) {
+      const unsigned char uc = static_cast<unsigned char>(ch);
+      if (uc < 0x20 || uc > 0x7e) {
+        ch = '.';
+      }
+    }
+
     startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Succeeded));
-    krkr::log::Info("startup: succeeded, script=", scriptPath);
+    krkr::log::Info("startup: script size=", size, " head=", headText);
   }
 
   EngineResult EngineRuntime::Tick(double deltaSeconds) {

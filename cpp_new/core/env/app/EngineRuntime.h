@@ -2,7 +2,10 @@
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
 #include <string>
+
+#include "core/io/Storage.h"
 
 namespace krkr::env {
   enum class EngineResult : std::int32_t {
@@ -58,6 +61,7 @@ namespace krkr::env {
 
       std::string   gameRoot_;
       std::string   lastError_;
+      std::unique_ptr<krkr::io::Storage> storage_;
       std::uint64_t frameCount_ = 0;
       GameKind      gameKind_   = GameKind::None;
       bool          gameOpen_   = false;
