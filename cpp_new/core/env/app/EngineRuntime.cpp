@@ -141,13 +141,6 @@ namespace krkr::env {
     startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Running));
     krkr::log::Info("startup: running");
 
-    if (gameKind_ == GameKind::Archive) {
-      krkr::log::Warn("startup script check skipped: archive backend not available until step 6");
-      startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Succeeded));
-      krkr::log::Info("startup: succeeded (archive, script unchecked)");
-      return;
-    }
-
     storage_ = std::make_unique<krkr::io::Storage>(gameRoot_);
     if (!storage_->Mounted()) {
       lastError_ = storage_->GetLastErrorText();
@@ -155,6 +148,8 @@ namespace krkr::env {
       krkr::log::Error(lastError_);
       return;
     }
+    krkr::log::Info("startup: storage mounted (archive=",
+                    storage_->IsArchive() ? 1 : 0, ")");
 
     std::unique_ptr<krkr::io::IStream> stream = storage_->Open("startup.tjs");
     if (stream == nullptr) {

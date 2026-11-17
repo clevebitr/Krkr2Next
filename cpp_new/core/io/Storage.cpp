@@ -7,6 +7,8 @@
 #include "core/io/DirectoryBackend.h"
 #include "core/io/IoName.h"
 #include "core/io/PathUtil.h"
+#include "core/io/archive/Xp3Index.h"
+#include "core/io/archive/Xp3Stream.h"
 
 namespace krkr::io {
 
@@ -16,6 +18,7 @@ namespace krkr::io {
         std::string rootUtf8;
         std::string lastError;
         bool mounted = false;
+        std::unique_ptr<Xp3Index> index;
     };
 
     Storage::Storage(const std::string &rootUtf8) :
@@ -34,8 +37,22 @@ namespace krkr::io {
                 : ("root does not exist: \"" + rootUtf8 + "\"");
             return;
         }
+
+        if(std::filesystem::is_regular_file(impl_->root, ec) && !ec) {
+            auto index = std::make_unique<Xp3Index>();
+            if(!index->Load(rootUtf8)) {
+                impl_->lastError = index->GetLastErrorText();
+                return;
+            }
+            impl_->index = std::move(index);
+            impl_->mounted = true;
+            impl_->lastError.clear();
+            return;
+        }
+
         if(!std::filesystem::is_directory(impl_->root, ec) || ec) {
-            impl_->lastError = "root is not a directory: \"" + rootUtf8 + "\"";
+            impl_->lastError = "root is neither a directory nor an XP3 archive: \"" +
+                               rootUtf8 + "\"";
             return;
         }
 
@@ -47,6 +64,8 @@ namespace krkr::io {
 
     bool Storage::Mounted() const { return impl_->mounted; }
 
+    bool Storage::IsArchive() const { return impl_->index != nullptr; }
+
     std::unique_ptr<IStream> Storage::Open(const std::string &nameUtf8) {
         if(!impl_->mounted) {
             impl_->lastError = "storage is not mounted";
@@ -57,6 +76,20 @@ namespace krkr::io {
         if(name.empty()) {
             impl_->lastError = "empty file name";
             return nullptr;
+        }
+
+        if(impl_->index != nullptr) {
+            const Xp3Entry *entry = impl_->index->Find(nameUtf8);
+            if(entry == nullptr) {
+                impl_->lastError = "\"" + nameUtf8 +
+                                   "\" is not in the archive \"" +
+                                   impl_->rootUtf8 + "\"";
+                return nullptr;
+            }
+            std::string error;
+            auto stream = Xp3Stream::Open(impl_->root, *entry, error);
+            impl_->lastError = error;
+            return stream;
         }
         const std::filesystem::path namePath = PathFromUtf8(name);
         if(namePath.empty()) {

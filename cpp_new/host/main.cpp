@@ -1,6 +1,8 @@
-#include <cstdio>
 #include <cstddef>
+#include <cstdio>
 #include <cstdlib>
+#include <fstream>
+#include <string>
 
 #include "core/env/app/EngineRuntime.h"
 #include "core/log/Logger.h"
@@ -56,15 +58,36 @@ void PrintStartupLogs(krkr::log::Logger &logger) {
 
 int main(int argc, char **argv) {
     if(argc < 2) {
-        std::printf("usage:krkr_next <game_dir> [log_file]\n");
+        std::printf("usage:krkr_next <game_dir|game.xp3> [log_file]\n");
+        std::printf("      krkr_next --path-file <file> [log_file]\n");
         return 2;
+    }
+
+    std::string gameRoot = argv[1];
+    const char *logFilePath = argc >= 3 ? argv[2] : nullptr;
+    if(gameRoot == "--path-file") {
+        if(argc < 3) {
+            std::printf("--path-file needs a file argument\n");
+            return 2;
+        }
+        std::ifstream pathFile(argv[2], std::ios::binary);
+        if(!pathFile.is_open()) {
+            std::printf("cannot open path file: %s\n", argv[2]);
+            return 2;
+        }
+        std::getline(pathFile, gameRoot);
+        while(!gameRoot.empty() &&
+              (gameRoot.back() == '\r' || gameRoot.back() == '\n')) {
+            gameRoot.pop_back();
+        }
+        logFilePath = argc >= 4 ? argv[3] : nullptr;
     }
 
     krkr::log::Logger &logger = krkr::log::Logger::Instance();
     ApplyEnvOverrides(logger);
 
-    if (argc >= 3 && argv[2][0] != '\0') {
-        if(!logger.SetFile(argv[2])){
+    if (logFilePath != nullptr && logFilePath[0] != '\0') {
+        if(!logger.SetFile(logFilePath)){
             std::fprintf(stderr,"log file disabled: %s\n",logger.GetFileError().c_str());
         }
     }
@@ -76,7 +99,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    krkr::env::EngineResult res = engine->OpenGame(argv[1]);
+    krkr::env::EngineResult res = engine->OpenGame(gameRoot.c_str());
     if(res != krkr::env::EngineResult::Ok) {
         std::printf("open failed (%d): %s\n", static_cast<int>(res),
                     engine->GetLastErrorText());
@@ -102,7 +125,7 @@ int main(int argc, char **argv) {
 
     std::printf("frames = %llu,game = %s\n",
                 static_cast<unsigned long long>(engine->GetFrameCount()),
-                argv[1]);
+                gameRoot.c_str());
 
     krkr::env::EngineRuntime::Destroy(engine);
 

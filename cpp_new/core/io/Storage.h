@@ -16,6 +16,8 @@ namespace krkr::io {
 
         bool Mounted() const;
 
+        bool IsArchive() const;
+
         std::unique_ptr<IStream> Open(const std::string &nameUtf8);
 
         const std::string &GetRootUtf8() const;

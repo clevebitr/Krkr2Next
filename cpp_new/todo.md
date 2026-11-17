@@ -8,8 +8,9 @@
 
 ## 0. 一句话现状
 
-入口容器 + 路径校验 + 日志 + 启动状态 + 目录存储 + **XP3 索引**都立起来了：能校验路径、能落盘日志、能回答「起来了吗」、能按名字读到目录里的文件字节、能读懂 4.7 GB 真包的文件表。
-还没有：从**包里**读字节（6c，需要 zlib）、线程、脚本、渲染。
+入口容器 + 路径校验 + 日志 + 启动状态 + 目录存储 + XP3 索引 + **XP3 读取**都立起来了：
+能从 4.7 GB 真包里把 `startup.tjs` 读出来（字节与 zlib 参照实现一致）。
+还没有：目录模式自动挂载盘上的 `.xp3`（6d）、线程、脚本、渲染。
 
 ---
 
@@ -18,32 +19,39 @@
 ```bash
 cd /storage/emulated/0/Download/AppProjects/Krkr2Next
 
+# 归档后端（6b/6c）的源文件。从 6c 起主程序也必须带它们，
+# 否则启 .xp3 包时链接不上。puff.c 是 zlib 官方参考实现（zlib license）。
+ARCH="cpp_new/core/io/archive/Xp3Index.cpp cpp_new/core/io/archive/Xp3Stream.cpp \
+      cpp_new/core/io/archive/Inflate.cpp cpp_new/core/io/archive/third_party/puff.c"
+
 clang++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp_new \
   cpp_new/host/main.cpp \
   cpp_new/core/env/app/EngineRuntime.cpp \
   cpp_new/core/log/Logger.cpp \
   cpp_new/core/io/PathUtil.cpp cpp_new/core/io/IoName.cpp \
-  cpp_new/core/io/DirectoryBackend.cpp cpp_new/core/io/Storage.cpp \
+  cpp_new/core/io/DirectoryBackend.cpp cpp_new/core/io/Storage.cpp $ARCH \
   -o $TMPDIR/krkr_next
 
-$TMPDIR/krkr_next <game_dir> [log_file]
+$TMPDIR/krkr_next <game_dir|game.xp3> [log_file]
+$TMPDIR/krkr_next --path-file <file> [log_file]   # 日文/中文路径在 Windows 上走这个
 # 环境变量：KRKR_LOG_LEVEL=debug|info|warn|error|off
 #           KRKR_LOG_MAX_BYTES=<数字>   （仅测轮转用，生产固定 4 MiB）
 
-# io 的独立测试台（18 条检查）
+# io 的独立测试台（目录模式 18 条检查 + 归档模式 --extract）
 clang++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp_new \
   cpp_new/host/StorageProbe.cpp \
   cpp_new/core/io/PathUtil.cpp cpp_new/core/io/IoName.cpp \
-  cpp_new/core/io/DirectoryBackend.cpp cpp_new/core/io/Storage.cpp \
+  cpp_new/core/io/DirectoryBackend.cpp cpp_new/core/io/Storage.cpp $ARCH \
   -o $TMPDIR/storage_probe
 $TMPDIR/storage_probe <game_dir>
+$TMPDIR/storage_probe --path-file <file> --extract <name> <out>
 
 # XP3 索引测试台（6b）
 clang++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp_new \
   cpp_new/host/Xp3Probe.cpp \
   cpp_new/core/io/archive/Xp3Index.cpp cpp_new/core/io/IoName.cpp cpp_new/core/io/PathUtil.cpp \
   -o $TMPDIR/xp3_probe
-$TMPDIR/xp3_probe <archive> [--list | --find <name>]
+$TMPDIR/xp3_probe <archive> [--list | --find <name>] [--path-file <file>]
 ```
 
 只用 Termux 里的 `clang++`，**不需要 NDK / cmake / Gradle / 手机**。反馈时间 < 10 秒。
@@ -56,7 +64,7 @@ $TMPDIR/xp3_probe <archive> [--list | --find <name>]
 | 2 | `games/demo/` | 与 1 **逐字相同** | ✅ |
 | 3 | `games/demo/../demo` | 与 1 **逐字相同**（`..` 被吃掉） | ✅ |
 | 4 | `games/nope`（不存在） | `-4 does not exist`，`startup=0` | ✅ |
-| 5 | `GAME.XP3` | `kind=2`、`startup=2` + 一条 warn（包内文件等第 6 步） | ✅ |
+| 5 | `GAME.XP3`（0 字节假包） | `-4 file is too short to be an XP3 archive`、`startup=3` | ✅ 6c 后的正确行为 |
 | 6 | `readme.txt` | `-4 既不是目录也不是已知包` | ✅ |
 | 7 | `""` | `-1 game root is empty` rc=1 | ✅ |
 | 8 | 无参数 | usage rc=2 | ✅ |
@@ -83,7 +91,11 @@ cpp_new/
     │   ├── IoName.h/.cpp             名字归一化（目录后端和归档后端共用）
     │   ├── PathUtil.h/.cpp           UTF-8 <-> filesystem::path（全引擎唯一实现）
     │   └── archive/
-    │       └── Xp3Index.h/.cpp       XP3 索引解析（只读目录表，不读数据）
+    │       ├── Xp3Index.h/.cpp       XP3 索引解析（只读目录表）
+    │       ├── Xp3Stream.h/.cpp      从包里按条目读字节（段缓存 + 解压）
+    │       ├── Inflate.h/.cpp        zlib/deflate 解压封装（以后换实现只改这里）
+    │       └── third_party/
+    │           └── puff.c/.h         zlib 官方参考实现（840 行，zlib license）
     └── log/
         ├── LogLevel.h                级别枚举 + 名字/解析
         ├── Logger.h                  进程内唯一日志器（pimpl，只露接口）
@@ -115,7 +127,8 @@ host/Xp3Probe.cpp                     XP3 索引测试台（6b）
 | 5 | 启动状态 | `StartupState` 状态机 + `startup.tjs` 检查 + 日志内存环 `Drain`（**无线程**，见 §4） | ✅ 完成 |
 | 6a | 存储层·目录后端 | `IStream` + `Storage` + 名字归一化 + 目录读取 | ✅ 完成 |
 | 6b | 存储层·XP3 索引 | 解析 XP3 目录表：文件名 → 偏移/大小（`Xp3Index` + `xp3_probe`） | ✅ 完成 |
-| 6c | **存储层·XP3 读取** | 段表 + zlib 解压；从包里读出的字节要与目录一致 | ⬅ **下一步** |
+| 6c | 存储层·XP3 读取 | 段表 + zlib 解压（puff）+ `Xp3Stream`；包内字节与 zlib 参照一致 | ✅ 完成 |
+| 6d | **存储层·auto-path** | 目录模式自动挂载根目录里的 `*.xp3`（含 `patch*.xp3` 优先级） | ⬅ **下一步** |
 | 7 | 脚本虚拟机 | 接 TJS2，跑 `startup.tjs` | 待做（大） |
 | 8 | 渲染 | EGL + GLES3 surface，一帧提交给宿主（零拷贝 SurfaceTexture） | 待做（大） |
 | 9 | 输入 | 指针 / 按键 / 文本 → 脚本事件 | 待做 |
@@ -126,7 +139,7 @@ host/Xp3Probe.cpp                     XP3 索引测试台（6b）
 
 ---
 
-## 4. 已完成的步骤记录（第 3–6a 步）
+## 4. 已完成的步骤记录（第 3–6c 步）
 
 ### 4.1 第 3 步：文件系统校验（`6c1c0a2` 一类的提交）
 
@@ -250,6 +263,60 @@ chunk 长度越界 / 魔数错 / 非 XP3 文件。
 
 这也是“入口层不抛异常”这条铁律第一次被真正踩到 —— 之前只是写在文档里。
 
+### 4.8 第 6c 刀：从包里读字节（`Inflate` + `Xp3Stream` + `Storage` 归档后端）
+
+```text
+Storage(data.xp3) ──► Xp3Index（目录表）
+Open("startup.tjs") ─► Xp3Stream ─► 逐段：seekg(start) + read(arcSize)
+                                    └► Inflate(Zlib) ─► puff ─► 解压后的段
+                                          （raw 段直接 memcpy）
+```
+
+**解压器的选择**（你拍板“若跨平台好且小就引入”）：
+
+| 方案 | 源码 | 跨平台一致 | 构建影响 |
+|---|---|---|---|
+| **puff（已选）** | 840 行 / 38 KB / ~4 KB 目标码 | ✅ 三平台完全一致 | 零：一个 .c 直接进编译命令 |
+| 系统 zlib（`-lz`） | 0 | ❌ **本机 MinGW 没有**，NDK/Termux 有 | 打断“一条命令编译” |
+| zlib inflate 子集自带 | ~200 KB | ✅ | 零 |
+
+选 puff 的真正理由不是体积，而是“链系统库 ≠ 跨平台一致”：
+Windows 上没装 zlib 就编不过，而 vendored 源码在哪都一样。速度慢 2–4 倍，
+但只影响解压，不影响正确性；将来要提速只改 `Inflate.cpp`。
+
+实现要点：
+
+- XP3 的段是 **zlib 格式**（2 字节头 + deflate + adler32），不是裸 deflate；
+  `Inflate` 里校验了 `CM=8`、头校验位、不支持 preset dictionary，并**校验 adler32**。
+- `puff.c` 用 C++ 编译器编，所以 `Inflate.cpp` 里**不能写 `extern "C"`**（符号名对不上）。
+- `Xp3Stream` **拷贝**段表，不持有 `Xp3Entry*` —— 否则流比索引活得久就是悬空指针。
+- 打开时校验“段表必须连续且总和 == orgSize”，不连续直接报错，不带着矛盾去读。
+
+**真实包验收（与 Python `zlib.decompress` 参照逐字节 `cmp`）**：
+
+| 条目 | 大小 | 类型 | 结果 |
+|---|---:|---|---|
+| `startup.tjs` | 13022 | zlib | ✅ 一致 |
+| `system\\initialize.tjs` | 33916 | zlib、反斜杠名 | ✅ 一致 |
+| `title_bg.png` | 3159521 | zlib | ✅ 一致 |
+| `ev_mv001_02_01.mpg` | 3287441 | **未压缩（raw）** | ✅ 一致 |
+| `cha027_up.pimg` | 34866852 | zlib、34 MB | ✅ 一致 |
+| 上述最大文件的中间 1000 字节 | 1000 | `Seek+Read` 越段片段 | ✅ 一致 |
+
+损坏输入：段数据被改坏 → `read error mid-stream`（adler32 拦住），不 crash；
+包被截断 → `index offset out of range`。
+
+**引擎端到端**（把 `data.xp3` 直接当 game root）：
+
+```
+startup: storage mounted (archive=1)
+startup: script size=13022 head=..t.h.i.s...k.i.r.i.k.i.r.i.z. .=. .+.S.c.r.i.p.t.s...e.v.a.l.(
+startup = 2
+```
+
+head 里那些 `.` 是因为 `startup.tjs` 本身是 **UTF-16LE** TJS 源码（第 7 步接 TJS 时才会真正解），
+字节本身已与 zlib 参照逐字节一致。
+
 ---
 
 ## 5. 已知问题 / 技术债
@@ -278,6 +345,12 @@ chunk 长度越界 / 魔数错 / 非 XP3 文件。
 | 20 | 段表只校验了 `start <= indexOffset` 与累加不溢出，**没校验 `start + arcSize <= indexOffset`** | 6c 真读数据时补（读之前必然要知道边界，那里一并做） |
 | 21 | Windows 上 `main` 的 argv 是 **ANSI 代码页**（中文系统 = GBK），带日文的路径传不进来 | 测试台靠 `--path-file <file>` 从文件读 UTF-8 绕开。**Android 走 JNI、引擎侧走 `const char*` UTF-8，不受影响**；但它反向证明了 6b 修的那个非法 UTF-8 abort 是真问题 |
 | 22 | 归档重名只保留第一条（`Find` 返回先到先得） | 真实包里 `duplicates = 0`，暂不处理；若某个游戏靠后出现的重名覆盖前面的，先查这里 |
+| 23 | `IStream` 没有错误文本：解压失败时上层只知“Read 返回 -1”，不知原因 | 6c 已把原因写在局部变量里但丢掉了。后续给 `IStream` 加 `GetLastErrorText()`（接口加法，不破调用方） |
+| 24 | `Xp3Stream` 按段**整段解压到内存**；`profile_main.pimg` 这类 48 MB 的段会直接占 48 MB | 真实游戏暂时能跑（包内最大条目 ~48MB）。等渲染/音频开始拉大文件时再做“分段流式 + LRU 缓存”，与老树的段缓存对齐 |
+| 25 | **多段条目没有被真实数据覆盖**：`data.xp3` / `patch@r484.xp3` 都是 `multi-segment = 0` | 代码已按多段写（`offsetInFile` 累加、跨段 Read），但没被真包验证；需要 OggVorbis 共享码本的那类包才能验 |
+| 26 | 每个 `Xp3Stream` 自己开一个 `ifstream`（一个 fd） | 21k 条目同时打开会耗尽 fd。等真的出现“同时开很多文件”时改成共享一个文件句柄 + 锁（或 pread） |
+| 27 | **目录模式不会自动挂载盘上的 `*.xp3`** | 这就是 6d。真实游戏目录里只有 `data.xp3`，所以现在把**目录**传给引擎会 `-4 no such file: .../startup.tjs`；传 **`data.xp3` 本身** 则正常（已实测读出了 `startup.tjs` 13022 字节） |
+| 28 | `puff` 的速度约为 zlib 的 1/2–1/4，且是**整段一次性**解压 | 6c 只要“解对”。真要提速度只改 `Inflate.cpp`（换成 zlib 的 inflate 或 miniz），调用方不动 |
 
 ### 技术债 #10 的触发条件（写下来，免得以后变成"当年为什么没人想过"）
 

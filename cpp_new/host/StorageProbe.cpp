@@ -2,13 +2,21 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <memory>
 #include <string>
 
 #include "core/io/Storage.h"
 
 // 独立的 io 测试台：只测 krkr::io，不碰引擎。
-// 用法：storage_probe <game_root_dir>
+//
+//   storage_probe <root>                                     目录/归档模式 18 条检查
+//   storage_probe --path-file <file>                         同上，路径从文件第一行读（UTF-8）
+//   storage_probe --path-file <file> --extract <name> <out>  把一个条目写成文件（和参照实现 cmp）
+//
+// --path-file 存在的理由：Windows 上 main 的 argv 会被 CRT 转成 ANSI 代码页，
+// 带日文的路径根本传不进来。Android 走 JNI，不受影响。
+//
 // 退出码：0 = 全过，1 = 有 FAIL。
 
 namespace {
@@ -34,13 +42,89 @@ std::string ReadAll(krkr::io::IStream &stream) {
 
 } // namespace
 
+namespace {
+
+// 把一个条目完整读出来写到文件；返回 0 表示成功。
+int ExtractEntry(const std::string &root, const std::string &name, const char *outPath) {
+  krkr::io::Storage storage(root);
+  if (!storage.Mounted()) {
+    std::fprintf(stderr, "mount failed: %s\n", storage.GetLastErrorText());
+    return 1;
+  }
+  std::printf("root      = \"%s\" mounted=%d archive=%d\n", root.c_str(),
+              storage.Mounted() ? 1 : 0, storage.IsArchive() ? 1 : 0);
+
+  std::unique_ptr<krkr::io::IStream> stream = storage.Open(name);
+  if (stream == nullptr) {
+    std::fprintf(stderr, "open failed: %s\n", storage.GetLastErrorText());
+    return 1;
+  }
+
+  std::ofstream out(outPath, std::ios::binary);
+  if (!out.is_open()) {
+    std::fprintf(stderr, "cannot write %s\n", outPath);
+    return 1;
+  }
+
+  const std::int64_t size = stream->GetSize();
+  char buffer[64 * 1024];
+  std::int64_t total = 0;
+  std::int64_t got = 0;
+  while ((got = stream->Read(buffer, static_cast<std::int64_t>(sizeof(buffer)))) > 0) {
+    out.write(buffer, static_cast<std::streamsize>(got));
+    total += got;
+  }
+  out.close();
+
+  std::printf("name      = %s\n", name.c_str());
+  std::printf("size      = %lld\n", static_cast<long long>(size));
+  std::printf("read      = %lld\n", static_cast<long long>(total));
+  if (got < 0) {
+    std::fprintf(stderr, "read error mid-stream\n");
+    return 1;
+  }
+  return total == size ? 0 : 1;
+}
+
+} // namespace
+
 int main(int argc, char **argv) {
   if (argc < 2) {
-    std::fprintf(stderr, "usage: storage_probe <game_root_dir>\n");
+    std::fprintf(stderr,
+                 "usage: storage_probe <root>\n"
+                 "       storage_probe --path-file <file>\n"
+                 "       storage_probe --path-file <file> --extract <name> <out>\n");
     return 2;
   }
 
-  krkr::io::Storage storage(argv[1]);
+  std::string root = argv[1];
+  int index = 2;
+  if (root == "--path-file") {
+    if (argc < 3) {
+      std::fprintf(stderr, "--path-file needs a file argument\n");
+      return 2;
+    }
+    std::ifstream listFile(argv[2], std::ios::binary);
+    if (!listFile.is_open()) {
+      std::fprintf(stderr, "cannot open path file: %s\n", argv[2]);
+      return 2;
+    }
+    std::getline(listFile, root);
+    while (!root.empty() && (root.back() == '\r' || root.back() == '\n')) {
+      root.pop_back();
+    }
+    index = 3;
+  }
+
+  if (index < argc && std::strcmp(argv[index], "--extract") == 0) {
+    if (index + 2 >= argc) {
+      std::fprintf(stderr, "--extract needs <name> <out-file>\n");
+      return 2;
+    }
+    return ExtractEntry(root, argv[index + 1], argv[index + 2]);
+  }
+
+  krkr::io::Storage storage(root);
   std::printf("root = \"%s\" mounted=%d\n", storage.GetRootUtf8().c_str(),
               storage.Mounted() ? 1 : 0);
   Check(storage.Mounted(), "mount demo dir");
