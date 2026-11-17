@@ -5,35 +5,10 @@
 #include <system_error>
 
 #include "core/io/DirectoryBackend.h"
+#include "core/io/IoName.h"
 #include "core/io/PathUtil.h"
 
 namespace krkr::io {
-
-    namespace {
-        std::string NormalizeName(const std::string &rawName) {
-            std::string slashed;
-            slashed.reserve(rawName.size());
-            for(const char ch : rawName) {
-                slashed.push_back(ch == '\\' ? '/' : ch);
-            }
-
-            std::string cleaned;
-            cleaned.reserve(slashed.size());
-            for(const char ch : slashed) {
-                if(ch == '/' && !cleaned.empty() && cleaned.back() == '/') {
-                    continue;
-                }
-                cleaned.push_back(ch);
-            }
-
-            while(cleaned.size() >= 2 && cleaned[0] == '.' &&
-                  cleaned[1] == '/') {
-                cleaned.erase(0, 2);
-            }
-            return cleaned;
-        }
-
-    } // namespace
 
     class Storage::Impl {
     public:
@@ -47,6 +22,10 @@ namespace krkr::io {
         impl_(std::make_unique<Impl>()) {
         impl_->rootUtf8 = rootUtf8;
         impl_->root = PathFromUtf8(rootUtf8);
+        if(impl_->root.empty()) {
+            impl_->lastError = "root is not valid UTF-8: \"" + rootUtf8 + "\"";
+            return;
+        }
 
         std::error_code ec;
         if(!std::filesystem::exists(impl_->root, ec) || ec) {
@@ -74,13 +53,19 @@ namespace krkr::io {
             return nullptr;
         }
 
-        const std::string name = NormalizeName(nameUtf8);
+        const std::string name = NormalizeStorageName(nameUtf8);
         if(name.empty()) {
             impl_->lastError = "empty file name";
             return nullptr;
         }
+        const std::filesystem::path namePath = PathFromUtf8(name);
+        if(namePath.empty()) {
+            impl_->lastError = "file name is not valid UTF-8: \"" + nameUtf8 +
+                               "\"";
+            return nullptr;
+        }
 
-        const std::filesystem::path fullPath = impl_->root / PathFromUtf8(name);
+        const std::filesystem::path fullPath = impl_->root / namePath;
 
         std::string error;
         auto stream = OpenDirectoryFile(fullPath, error);

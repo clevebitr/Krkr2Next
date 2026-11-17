@@ -67,6 +67,11 @@ namespace krkr::env {
 
     const std::string requested = gameRootUtf8;
     const std::filesystem::path requestedPath = PathFromUtf8(requested);
+    if (requestedPath.empty()) {
+      lastError_ = "game root is not valid UTF-8";
+      krkr::log::Error(lastError_);
+      return EngineResult::InvalidArgument;
+    }
     krkr::log::Info("OpenGame requested=", requested);
 
     std::error_code ec;
@@ -143,8 +148,6 @@ namespace krkr::env {
       return;
     }
 
-    // 第 6a 刀：从“只知道文件存在”升级成“真把内容读出来”。
-    // 尺寸 + 开头 64 字节打进日志，一次验收同时盯住 GetSize 和 Read。
     storage_ = std::make_unique<krkr::io::Storage>(gameRoot_);
     if (!storage_->Mounted()) {
       lastError_ = storage_->GetLastErrorText();
@@ -171,7 +174,6 @@ namespace krkr::env {
       return;
     }
 
-    // 日志必须是一行可读的：控制字符 / 非 ASCII 都换成 '.'（尺寸另外打，不会丢信息）
     std::string headText(head, static_cast<std::size_t>(got));
     for (char &ch : headText) {
       const unsigned char uc = static_cast<unsigned char>(ch);

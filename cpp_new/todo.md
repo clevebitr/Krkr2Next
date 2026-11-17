@@ -8,8 +8,8 @@
 
 ## 0. 一句话现状
 
-入口容器 + 路径校验 + 日志 + 启动状态 + 目录存储都立起来了：**能校验路径、能落盘日志、能回答「起来了吗」、能按名字读到文件字节**。
-还没有 XP3 包、线程、脚本、渲染 —— 6b（XP3 索引）是下一步。
+入口容器 + 路径校验 + 日志 + 启动状态 + 目录存储 + **XP3 索引**都立起来了：能校验路径、能落盘日志、能回答「起来了吗」、能按名字读到目录里的文件字节、能读懂 4.7 GB 真包的文件表。
+还没有：从**包里**读字节（6c，需要 zlib）、线程、脚本、渲染。
 
 ---
 
@@ -22,9 +22,8 @@ clang++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp_new \
   cpp_new/host/main.cpp \
   cpp_new/core/env/app/EngineRuntime.cpp \
   cpp_new/core/log/Logger.cpp \
-  cpp_new/core/io/PathUtil.cpp \
-  cpp_new/core/io/DirectoryBackend.cpp \
-  cpp_new/core/io/Storage.cpp \
+  cpp_new/core/io/PathUtil.cpp cpp_new/core/io/IoName.cpp \
+  cpp_new/core/io/DirectoryBackend.cpp cpp_new/core/io/Storage.cpp \
   -o $TMPDIR/krkr_next
 
 $TMPDIR/krkr_next <game_dir> [log_file]
@@ -34,9 +33,17 @@ $TMPDIR/krkr_next <game_dir> [log_file]
 # io 的独立测试台（18 条检查）
 clang++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp_new \
   cpp_new/host/StorageProbe.cpp \
-  cpp_new/core/io/PathUtil.cpp cpp_new/core/io/DirectoryBackend.cpp cpp_new/core/io/Storage.cpp \
+  cpp_new/core/io/PathUtil.cpp cpp_new/core/io/IoName.cpp \
+  cpp_new/core/io/DirectoryBackend.cpp cpp_new/core/io/Storage.cpp \
   -o $TMPDIR/storage_probe
 $TMPDIR/storage_probe <game_dir>
+
+# XP3 索引测试台（6b）
+clang++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp_new \
+  cpp_new/host/Xp3Probe.cpp \
+  cpp_new/core/io/archive/Xp3Index.cpp cpp_new/core/io/IoName.cpp cpp_new/core/io/PathUtil.cpp \
+  -o $TMPDIR/xp3_probe
+$TMPDIR/xp3_probe <archive> [--list | --find <name>]
 ```
 
 只用 Termux 里的 `clang++`，**不需要 NDK / cmake / Gradle / 手机**。反馈时间 < 10 秒。
@@ -73,13 +80,17 @@ cpp_new/
     │   ├── IOStream.h                IStream 接口（Read/Seek/GetSize/GetPosition）
     │   ├── DirectoryBackend.h/.cpp   目录后端：一个路径 -> 一个只读流
     │   ├── Storage.h/.cpp            门面：根目录 + 名字 -> 流（名字归一化在这里）
-    │   └── PathUtil.h/.cpp           UTF-8 <-> filesystem::path（全引擎唯一实现）
+    │   ├── IoName.h/.cpp             名字归一化（目录后端和归档后端共用）
+    │   ├── PathUtil.h/.cpp           UTF-8 <-> filesystem::path（全引擎唯一实现）
+    │   └── archive/
+    │       └── Xp3Index.h/.cpp       XP3 索引解析（只读目录表，不读数据）
     └── log/
         ├── LogLevel.h                级别枚举 + 名字/解析
         ├── Logger.h                  进程内唯一日志器（pimpl，只露接口）
         └── Logger.cpp                文件 sink / 轮转 / 内存环
 
 host/StorageProbe.cpp                 io 的独立测试台（不进引擎，单独编一个可执行）
+host/Xp3Probe.cpp                     XP3 索引测试台（6b）
 ```
 
 - `host/main.cpp` **不属于引擎**，它扮演的是 `NativeEngine.kt` 的角色。引擎永远是库，不是可执行文件。
@@ -103,8 +114,8 @@ host/StorageProbe.cpp                 io 的独立测试台（不进引擎，单
 | 4 | 日志 | 级别 + 帧号 + 4MiB×3 轮转 + 写盘失败降级（std-only，无 spdlog） | ✅ 完成 |
 | 5 | 启动状态 | `StartupState` 状态机 + `startup.tjs` 检查 + 日志内存环 `Drain`（**无线程**，见 §4） | ✅ 完成 |
 | 6a | 存储层·目录后端 | `IStream` + `Storage` + 名字归一化 + 目录读取 | ✅ 完成 |
-| 6b | **存储层·XP3 索引** | 解析 XP3 目录表：文件名 → 偏移/大小（能列文件） | ⬅ **下一步** |
-| 6c | 存储层·XP3 读取 | 段表 + Cx 解压；从包里读出的字节要与目录一致 | 待做 |
+| 6b | 存储层·XP3 索引 | 解析 XP3 目录表：文件名 → 偏移/大小（`Xp3Index` + `xp3_probe`） | ✅ 完成 |
+| 6c | **存储层·XP3 读取** | 段表 + zlib 解压；从包里读出的字节要与目录一致 | ⬅ **下一步** |
 | 7 | 脚本虚拟机 | 接 TJS2，跑 `startup.tjs` | 待做（大） |
 | 8 | 渲染 | EGL + GLES3 surface，一帧提交给宿主（零拷贝 SurfaceTexture） | 待做（大） |
 | 9 | 输入 | 指针 / 按键 / 文本 → 脚本事件 | 待做 |
@@ -195,6 +206,50 @@ Storage(root)  ──名字归一化──►  root / name  ──►  OpenDirec
 `krkr_next`：目录模式日志出现 `startup: script size=23 head=// Demo startup script.`；
 缺脚本 → `-4` + `startup=3`；包模式 → warn + `startup=2`。
 
+### 4.6 第 6b 刀：XP3 索引（`cpp_new/core/io/archive/Xp3Index`）
+
+只读目录表，**不读数据、不解压**。格式按老树 `XP3Archive.cpp` 的布局实现：
+
+```text
+magic(11) + index_offset(u64)
+  index_offset 处: flag(1) + index_size(u64) + payload
+  payload: “File”+u64 size { “info”+u64 size { flags(4) org(8) arc(8) nameLen(2, 有符号) name(UTF-16LE) }
+                                “segm”+u64 size { n × 28: flags(4) start(8) org(8) arc(8) }
+                                “aldr”+u64 size { adler32 } }
+```
+
+实现要点（全部是“被伪造的包也不能崩”的告警）：
+
+- 每个读偏移都做边界检查；名字长度是**有符号** 16 位，负值/越界直接判损坏。
+- 索引上限 64 MiB（真包 2.7 MiB / 21123 条），防止伪造长度变成一次大 malloc。
+- 段 `start > indexOffset` 判损坏；`offsetInFile` 累加防溢出。
+- 重名：保留第一条，但计数暴露（`GetDuplicateCount`），不静默吞。
+- 名字一律 UTF-16LE → UTF-8（含代理对），查表时两侧都过 `NormalizeStorageName`。
+
+**真实包验收（用户提供的游戏）**：
+
+| 包 | 大小 | 条目 | 结果 |
+|---|---:|---:|---|
+| `patch@r484.xp3` | 3.4 KB | 12 | 与 Python 参照实现**逐字节一致** |
+| `data.xp3` | 4.7 GB | 21123 | 与 Python 参照实现**逐字节一致**（含 9 个日文名、3 个带 `\\` 的子目录名） |
+
+损坏输入全部干净报错（不 crash）：截断 / index_offset 越界 / index_size 超限 /
+chunk 长度越界 / 魔数错 / 非 XP3 文件。
+
+### 4.7 第 6b 刀顺带修掉的真 bug
+
+`PathFromUtf8` 在 Windows 上遇到**非法 UTF-8** 会抛 `std::range_error`
+（`path(u8string)` 要做 UTF-8 → UTF-16 转换），而调用方没接 → `std::terminate` → 进程 `abort()`。
+发现方式：用带日文的路径跑测试台，发现退出码 3、零输出（abort 的退出码）。
+
+修法：`PathFromUtf8` 内部 `try/catch` 吞掉，返回**空路径**；所有调用方必须检查 `path.empty()`：
+
+- `EngineRuntime::OpenGame` → `-1 game root is not valid UTF-8`
+- `Storage` 根目录/文件名 → 同样挡在 `path` 构造之前
+- `Xp3Index::Load` → `archive path is not valid UTF-8`
+
+这也是“入口层不抛异常”这条铁律第一次被真正踩到 —— 之前只是写在文档里。
+
 ---
 
 ## 5. 已知问题 / 技术债
@@ -218,6 +273,11 @@ Storage(root)  ──名字归一化──►  root / name  ──►  OpenDirec
 | 15 | `Storage` 不加锁 | 现在只有 tick 线程用它。真出现多线程访问再加（届时先量一把锁的代价，别直接上 `shared_mutex`） |
 | 16 | 每次 `Open` 都重新 `stat` + `file_size`，没有缓存 | 第 6c 刀做 XP3 段缓存时一并考虑目录后端的缓存；现在每帧只开一次文件，不对性能负责 |
 | 17 | 名字大小写敏感 | `A.tjs` ≠ `a.tjs`。与 XP3 一致；若真机出现“目录能跑、包不能跑”的游戏，先查名字大小写 |
+| 18 | XP3 **索引只支持 raw**（`flag & 0x07 == 0`）；压缩索引直接报错 | 本测试的 `data.xp3` / `patch@r484.xp3` 都是 raw。若真遇到 zlib 索引的包，6c 时顺便把这条补上（那时已经有 inflate） |
+| 19 | XP3 **数据段全部是 zlib**（`data.xp3` 里 20953/21123 条） | 这是 6c 的核心工作；没有 inflate 就只能读 170 个未压缩条目 |
+| 20 | 段表只校验了 `start <= indexOffset` 与累加不溢出，**没校验 `start + arcSize <= indexOffset`** | 6c 真读数据时补（读之前必然要知道边界，那里一并做） |
+| 21 | Windows 上 `main` 的 argv 是 **ANSI 代码页**（中文系统 = GBK），带日文的路径传不进来 | 测试台靠 `--path-file <file>` 从文件读 UTF-8 绕开。**Android 走 JNI、引擎侧走 `const char*` UTF-8，不受影响**；但它反向证明了 6b 修的那个非法 UTF-8 abort 是真问题 |
+| 22 | 归档重名只保留第一条（`Find` 返回先到先得） | 真实包里 `duplicates = 0`，暂不处理；若某个游戏靠后出现的重名覆盖前面的，先查这里 |
 
 ### 技术债 #10 的触发条件（写下来，免得以后变成"当年为什么没人想过"）
 
