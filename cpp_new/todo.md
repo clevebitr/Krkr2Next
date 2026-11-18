@@ -9,25 +9,22 @@
 ## 0. 一句话现状
 
 四层结构已落地（`tjs` / `shim` / `platform` / `core`），脚本引擎可执行真实游戏的启动脚本：
-`startup.tjs` 通过 `Scripts.eval`、`Storages`、`System` 三个桥接类，已推进到加载
-`system/Initialize.tjs`（该文件第 1 行触发当前未知缺口）。渲染层尚未动工，规格见
+`startup.tjs` 通过 `Scripts.eval`、`Storages`、`System`、`Debug`、`Plugins` 五个桥接类，
+已能加载并执行 `system/Initialize.tjs`（该文件是 TJS2 字节码）。当前缺口是
+`Initialize.tjs` 需要的 `System` 成员（首个为 `System.exePath`）。渲染层尚未动工，规格见
 `cpp_new/docs/render-spec.md`。
 
 ## 1. 现在能跑什么
 
+```bash
+bash cpp_new/tools/run_probes.sh            # CMake 配置 + 构建 + CTest 全部断言
+python cpp_new/tools/check_layer_deps.py cpp_new   # 期望 0 违规
 ```
-TJS=生成清单: cpp_new/tjs/*.cpp 去除 tjsDebug.cpp 与 tjsRegExp.cpp
-SHIM=cpp_new/shim/engine/TjsEngine.cpp
-     cpp_new/shim/tjs_host/{TjsHostShim,TjsRegExpShim}.cpp
-     cpp_new/shim/classes/{TjsStorages,TjsScripts,TjsSystem}.cpp
-     cpp_new/shim/TjsBridge.cpp cpp_new/shim/text/TjsText.cpp
-IO =cpp_new/core/io/{PathUtil,IoName,DirectoryBackend,Storage}.cpp
-     cpp_new/core/io/archive/{Xp3Index,Xp3Stream,Inflate}.cpp
-     cpp_new/core/io/archive/third_party/puff.c
-FLAGS=-std=c++20 -w -fpermissive -DUNICODE -D_UNICODE -DTJS_NO_REGEXP
-      -include cpp_new/shim/tjs_host/tjs_prelude.h
-      -I cpp_new -I cpp_new/shim/tjs_host/generated -I cpp_new/shim/tjs_host
-```
+
+CMake 目标与分层一一对应（`cpp_new/CMakeLists.txt`）：`krkr_tjs` / `krkr_tjs_host` /
+`krkr_core` / `krkr_platform` / `krkr_shim` / `krkr_engine`。**不要再手敲编译命令**；
+旧的手写构建脚本已删除（技术债 #38 收口）。预设见 `cpp_new/CMakePresets.json`
+（`desktop-debug` / `desktop-release`）。
 
 四个产物：
 
@@ -37,6 +34,11 @@ FLAGS=-std=c++20 -w -fpermissive -DUNICODE -D_UNICODE -DTJS_NO_REGEXP
 | `build/krkr_next.exe` | `host/main.cpp` + `core/api` + `core/log` + IO | 引擎入口与路径校验 |
 | `build/storage_probe.exe` | `host/StorageProbe.cpp` + `core/log` + IO | 存储层断言（18 项） |
 | `build/xp3_probe.exe`、`build/xp3pack.exe` | `host/Xp3Probe.cpp`、`host/Xp3Pack.cpp` | 包解析与夹具生成 |
+
+断言脚本在 `cpp_new/host/fixtures/demo/`（夹具根目录，同时被 `storage_probe` 使用），
+`tjs_probe <script> <root-path-file>` 的第二个参数是**内容为根路径的文本文件**，
+不是路径本身（Windows 命令行是 ANSI 代码页，见技术债 #21）。脚本以抛出
+`"<name>-ok"` 结尾表示通过，`tjs_probe` 据此决定退出码。
 
 静态检查：`python cpp_new/tools/check_layer_deps.py cpp_new`（要求 0 违规）。
 
@@ -50,19 +52,27 @@ cpp_new/
 ├── tjs/                        权威实现（krkrz 原样，差异见 tjs/VENDOR.md 待补）
 ├── shim/                       垫层
 │   ├── engine/TjsEngine.*      tjs 引擎门面（编码入口、异常映射）
+│   ├── engine/ScriptLoader.*   脚本装载唯一入口（解码 / 字节码 / 异常映射）
+│   ├── engine/NativeClass.*    原生类注册样板（objthis 为空）
 │   ├── text/TjsText.*          编码转换（UTF-8 <-> tjs_char、脚本源解码）
-│   ├── classes/Tjs{System,Scripts,Storages}.*   TJS 原生类桥接
-│   ├── tjs_host/               宿主符号、prelude、targetver、生成的日期词表
-│   └── TjsBridge.*             原生类共享上下文
-├── platform/                   抽象层（android / desktop / stubs）
+│   ├── classes/Tjs{System,Scripts,Storages,Debug,Plugins}.*   TJS 原生类桥接
+│   ├── tjs_host/               宿主符号、prelude、targetver、生成的日期词表与消息表
+│   ├── TjsBridge.*             装配上下文（唯一写入点是 engine/ScriptRuntime）
+│   └── TjsDiagnostics.*        异常定位文本、内置消息表安装、桥接失败抛出
+├── engine/                     装配层（唯一同时依赖 shim 与 core 的地方）
+│   ├── ScriptRuntime.*         引擎 + 原生类 + 兼容声明的装配，实现 core 的 IScriptRuntime
+│   └── CompatProfile.*         "声称支持什么"：预处理器值、原生类列表、脚本前奏
+├── platform/                   抽象层（当前仅有目标骨架，见技术债 #39）
 ├── core/
-│   ├── contracts/IScriptHost.h 脚本层对宿主的契约
-│   ├── api/EngineRuntime.*     对外 API 与生命周期
-│   ├── io/                     存储、XP3、名字与路径
-│   ├── log/                    日志
-│   └── module/ debug/          预留：模块注册表、调试接线
+│   ├── contracts/ScriptServices.h  宿主能力的小接口集合
+│   ├── contracts/IScriptRuntime.h  脚本运行时对引擎的契约
+│   ├── api/EngineRuntime.*         对外 API 与生命周期（实现能力接口）
+│   ├── io/                         存储、XP3、名字与路径
+│   ├── log/                        日志
+│   └── module/ debug/              预留：模块注册表、调试接线
 ├── host/                       测试台（不属于引擎产物）
-├── tools/                      代码生成与静态检查
+│   └── fixtures/demo/          断言脚本与存储层夹具
+├── tools/                      代码生成、构建与静态检查
 └── docs/                       ARCHITECTURE.md、render-spec.md
 ```
 
@@ -86,7 +96,9 @@ cpp_new/
 | 7b | TJS ↔ 引擎桥 | `Storages`、`Scripts`（eval/exec/evalStorage/execStorage）已接入 | ✅ 完成 |
 | 7c | TJS ↔ 引擎桥（System） | `getArgument` / `inform` / `informError` / `exit` / `title` / `versionInformation` / `desktopWidth·Height` | ✅ 完成 |
 | 7d | TJS ↔ 引擎桥（缺口修复） | 原生类注册方式修正（`tTJSVariant` 的 objthis 必须为空）+ XP3 大小写回退 | ✅ 完成 |
-| 7e | **TJS ↔ 引擎桥（续）** | `Console`、`Debug`，随后定位 `system/Initialize.tjs` 第 1 行缺口，再 `Plugins` | ⬅ **下一步** |
+| 7e | **TJS ↔ 引擎桥（续）** | 诊断上下文（#40）、字节码脚本、`Debug`/`Console`、`Plugins` | ✅ 完成 |
+| 7f | **装配根与 CMake** | `engine/` 装配层、`ScriptLoader`、能力接口拆分、`CompatProfile`、CMake 目标 + CTest；产品入口与测试台共用装配 | ✅ 完成 |
+| 7g | **`Initialize.tjs` 的运行面** | `Storages` 挂载面（`addAutoPath`、`addArchive`、`commitSavedata`…）、`System` 其余成员；当前首个缺口是 `Window`（渲染第 8 步的最小面） | ⬅ **下一步** |
 | 8 | 渲染 | 见 **`cpp_new/docs/render-spec.md`**（需求书已就绪）：DrawList + 软件后端 + GLES3 后端 + EGL/SurfaceTexture，分 8a–8e | 待做（大） |
 | 9 | 输入 | 指针 / 按键 / 文本 → 脚本事件 | 待做 |
 | 10 | 音频 | 至少 WAVE + OGG | 待做 |
@@ -401,6 +413,134 @@ Scripts.execStorage = function(arg0) { Scripts.new9Storage(*); };
 同时修正：`Xp3Index` 增加大小写不敏感回退，对齐 Windows 文件系统语义
 （真脚本请求 `system/Initialize.tjs`，包内为 `system\initialize.tjs`）。
 
+### 4.15 测试台恢复：桥接层重新接上（`host/TjsProbe.cpp`）
+
+三层重构后的 `tjs_probe` 只创建裸 `tTJS`，没有注册任何原生类，断言脚本全部失败。
+现在它承担 "宿主" 角色：读根路径文件 → 挂载 `krkr::io::Storage` → 创建 `Engine` →
+注册 `Storages` / `Scripts` / `System` / `Debug` / `Plugins`，并提供一个
+`IScriptHost` 实现（启动参数、`inform`、退出请求、标题、表面尺寸）。
+
+同时把测试基础设施入库：
+
+| 文件 | 作用 |
+|---|---|
+| `tools/build_probes.sh` | 四个产物的唯一构建入口（清单不再手敲） |
+| `tools/run_probes.sh` | 构建 + 全部断言（目录/包存储、启动状态、8+2 个脚本、可选真游戏） |
+| `host/fixtures/demo/` | 断言脚本与存储层夹具（`storage_probe` 直接用这个目录） |
+
+脚本以抛出 `"<name>-ok"` 结尾表示通过；`tjs_probe` 据此返回 0/1，使脚本断言可被 CI 直接使用。
+
+### 4.16 空消息的根因与修法（技术债 #40）
+
+两层原因，分别处理：
+
+1. **消息表为空**。`cpp_new/tjs/tjsErrorInc.h` 是上游 gentext 的产物，默认文本全部是
+   `NULL`，所以 `TJS_eTJSError` / `TJSThrowFrom_tjs_error` 抛出的异常消息恒为空串
+   （`Member "Plugins" does not exist` 也无法显示）。上游为此提供运行期接口
+   `TJSAssignMessage`，于是把消息文本从参照实现取出来，由
+   `tools/gen_tjs_message_map.py` 生成 `shim/tjs_host/generated/tjsMessageMap.inc`，
+   `Engine` 构造时安装。**`tjs/` 未作任何修改**。
+2. **桥接层丢失定位信息**。`shim/TjsDiagnostics` 统一把异常格式化为
+   `上下文 + 消息 + [script=<块名> line=<行号> trace=<调用链>]`；`Scripts` 的
+   `RunSource` 只记录上下文，然后把异常**原样重抛**，由虚拟机转成脚本侧异常，
+   内层 trace 不再被吞掉。存储打开/读取失败改用 `ThrowScriptException`，
+   脚本侧看到的是 `Scripts.execStorage("名字"): 原因`，而不是空消息。
+
+实测：迁移前 `Scripts: system/Initialize.tjs:`（空），迁移后
+
+```
+Scripts.execStorage("system/Initialize.tjs"): Syntax error (syntax error)
+  [script=system/Initialize.tjs line=1]
+exec = script exception: build/py_startup.utf8.tjs: ...
+  trace=build/py_startup.utf8.tjs(6)[(function expression) (anonymous)]
+    <-- build/py_startup.utf8.tjs(147)[(top level script) global]
+```
+
+### 4.17 第 1 行缺口的真实身份：`Initialize.tjs` 是字节码
+
+有了 4.16 的诊断，缺口直接现形：包里 `system/Initialize.tjs` 的头 4 字节是 `TJS2`、
+版本头 `100\0`，是预编译字节码而不是文本源码。`execStorage` 按文本解析必然第 1 行语法错误。
+
+修法：`RunSource` 先用上游自带的 `tTJSByteCodeLoader::IsTJS2ByteCode` 判定，字节码走
+`tTJS::LoadByteCode(buffer, size, result, context, name)`，文本仍走 `ExecScript` /
+`EvalExpression`。解码从调用点移入 `RunSource`，两条路径各自保持原样。
+
+推进结果：字节码加载成功，失败点后移到 `Member "Debug" does not exist`，即
+`Initialize.tjs` 第 1 行需要 `Debug`。
+
+### 4.18 `Console` / `Debug` 与 `Plugins`
+
+`shim/classes/TjsDebug`：
+
+| 成员 | 行为 |
+|---|---|
+| `message` / `notice` / `logAsError` | 映射到 `core/log` 的 info / warn / error |
+| `logLocation` | 保存路径；`startLogToFile` 用它调 `Logger::SetFile` |
+| `logToFileOnError` / `clearLogFileOnError` | 只保存取值（错误触发重定向属宿主管辖） |
+| `getLastLog(n)` | 新增 `Logger::GetRecentLines` 契约（不消耗内存环） |
+| `console` / `controller` | 返回 `Console` / `Controller` 类对象，`visible` 恒为 0；写入时记录"平台无窗口" |
+| `addLoggingHandler` / `removeLoggingHandler` | 需要日志→脚本的回调契约，显式返回 `TJS_E_NOTIMPL` 并记录 |
+
+`shim/classes/TjsPlugins`：静态注册表先行（`RegisterStaticPlugin` 供以后的静态插件调用），
+`link` 命中即成功、未命中抛带名字的异常；`unlink` 对静态插件返回 false 并记录原因；
+`getList` 返回名字数组（不区分大小写的基名，重复登记去重）。动态库加载（`.dll` / `.so`）
+尚未实现，`linkZ` / `CanLoadPlugin` 也未提供，见 §5。
+
+验收：新增 `t_debug.tjs` / `t_plugins.tjs` 两个断言脚本（正常路径 + 错误路径），与既有
+8 个脚本一起在 `run_probes.sh` 中运行，`tjs/` 零修改。
+
+### 4.19 装配根（`cpp_new/engine/`）与 CMake
+
+三层落地后出现一个结构性问题：**"谁把引擎装起来"没有家**。装配逻辑留在测试台里，
+重构时随旧 `core/script` 一起消失，`tjs_probe` 变成裸 `tTJS` 且无人发现；
+产品入口 `EngineRuntime` 至今不会跑脚本，第 11 步没有落脚点。
+
+新增 `cpp_new/engine/`（装配层），依赖方向变成：
+
+```
+core ← platform      core ← shim ← engine ← host
+                         ↑
+                        tjs
+```
+
+| 文件 | 职责 |
+|---|---|
+| `engine/ScriptRuntime.*` | 装配引擎 + 原生类 + 兼容声明；实现 `core/contracts/IScriptRuntime` |
+| `engine/CompatProfile.*` | 兼容声明：预处理器值（`kirikiriz=0`）、原生类列表、脚本前奏 |
+| `shim/engine/ScriptLoader.*` | 脚本装载唯一入口：解码、字节码分流、异常格式化 |
+| `shim/engine/NativeClass.*` | 原生类注册样板（`tTJSVariant(cls, nullptr)`，objthis 为空） |
+| `shim/TjsBridge.*` | 装配上下文；**唯一写入点**是 `ScriptRuntime::Startup` |
+
+`EngineRuntime` 通过 `AttachScriptRuntime()` 接收运行时，自身只认识 `IScriptRuntime`，
+不引用 shim/tjs。`host/main.cpp`（产品入口）与 `host/TjsProbe.cpp`（测试台）现在共用同一条装配，
+装配再被删就会在 CTest 里立刻变红。
+
+CMake（技术债 #38）与分层一一对应：`krkr_tjs`、`krkr_tjs_host`（宿主符号，链接期由 shim 提供）、
+`krkr_core`、`krkr_platform`（当前为 INTERFACE 占位）、`krkr_shim`、`krkr_engine`；
+测试台链接 `krkr_engine`。全部断言注册进 CTest（14 项，`real_startup` 暂 DISABLED，见 §5 #49）。
+
+### 4.20 能力接口拆分与 `System` 路径成员
+
+`IScriptHost` 已删除，改为 `core/contracts/ScriptServices.h` 的小接口：
+`ILaunchArguments` / `IOutput` / `IAppControl` / `IPlatformInfo` / `IPathProvider` / `IWindowInfo`，
+由 `HostServices` 聚合。空指针 = 能力未提供，桥接层抛带上下文的异常，不再用 0 / 空串代替
+"未实现"。
+
+`System` 因此补齐了 `Initialize.tjs` 需要的成员：`exePath` / `arcPath` / `dataPath` /
+`personalPath` / `savedGamesPath` / `osName` / `platformName` / `versionString` /
+`getTickCount` / `setArgument`。语义对齐参照实现：
+
+| 成员 | 来源 | 约定 |
+|---|---|---|
+| `exePath` / `arcPath` | `IPathProvider::GetExecutableDirectory` | 可执行文件目录，以分隔符结尾（参照实现两者同值） |
+| `dataPath` | `GetDataDirectory` | 目录模式 = 游戏目录；包模式 = 包所在目录；以 `/` 结尾 |
+| `personalPath` / `savedGamesPath` | 宿主注入 | 未注入时显式失败（Android 由第 11 步接） |
+| `osName` / `platformName` | 编译期常量 | `Windows` / `Android` / `Linux`；`ARM64` / `x86_64` |
+| `getTickCount` | `steady_clock` | 进程启动为 0 的毫秒数 |
+| `setArgument` | `ILaunchArguments::SetLaunchArgument` | 覆盖同名项（`-k v` 与 `-k=v` 两种形式） |
+
+实测：真游戏从 `System.arcPath` 一路推进到 `Member "Window" does not exist`（第 8 步的门槛）。
+
 ## 5. 已知问题 / 技术债
 
 | # | 问题 | 处理 |
@@ -442,9 +582,19 @@ Scripts.execStorage = function(arg0) { Scripts.new9Storage(*); };
 | 35 | `TjsEngine` 的脚本执行发生在调用线程（当前为测试台主线程） | 第 8 步之后若接入 tick 线程需重新评估取消与超时 |
 | 36 | tjs2 以 `-fpermissive -w` 编译 | 上游为 MSVC 编写，GCC 下存在大量无害告警；收敛告警属独立任务 |
 | 37 | 大小写不敏感回退只作用于 XP3，目录挂载仍严格区分大小写 | 目录模式命中失败时未做枚举比对；若游戏目录混用大小写会暴露 |
-| 38 | 尚未建立 CMake 目标，仅以脚本检查层间依赖 | 四层可独立编译的目标待补（`krkr_tjs`/`krkr_core`/`krkr_platform`/`krkr_shim`） |
+| 38 | 尚未建立 CMake 目标，仅以脚本检查层间依赖 | ✅ 已修：`cpp_new/CMakeLists.txt` + 预设，目标与分层一一对应；手写构建脚本已删除 |
 | 39 | `platform/` 仅有空目录 | 首个落地项为平台信息与剪贴板；渲染表面接线属第 8 步 |
-| 40 | 脚本错误消息可能为空串 | 原生方法返回 `TJS_E_FAIL` 时脚本侧得到无消息异常，排查困难；需在桥接层补充上下文 |
+| 40 | 脚本错误消息可能为空串 | ✅ 已修：消息表由 `tools/gen_tjs_message_map.py` 从上游参照实现生成到 shim，异常文本带上下文/块名/行号/trace（见 §4.16） |
+| 41 | `Debug.addLoggingHandler` / `removeLoggingHandler` 未实现 | 需要 `core/log` 到脚本层的回调契约（且要防重入：处理函数里再写日志）。当前显式返回 `TJS_E_NOTIMPL` 并记录 |
+| 42 | `Debug.startLogToFile(clear)` 不支持清空；`logToFileOnError` / `clearLogFileOnError` 只保存取值 | 日志文件由宿主设定（ABI `engine_set_log_file_path`）；错误触发的重定向/清空需要与第 11 步的宿主管辖一起设计 |
+| 43 | `Plugins` 只支持静态注册表 | 动态模块加载（`.dll`/`.so`）、`linkZ`（`bres://` 资源）、`bootStrap`、`CanLoadPlugin` 均未实现；未命中名字显式失败并带名字 |
+| 44 | `System` 只覆盖已出现过的成员 | ✅ 已补 `Initialize.tjs` 需要的路径/平台/参数成员；`screenWidth`、`createAppLock`、`system(...)`、DLL 目录相关成员尚未实现（未命中时显式报错） |
+| 45 | 字节码只验证了真游戏的 `system/Initialize.tjs` | `LoadByteCode` 的返回值未用于区分「字节码」与「二进制字典数组」；目前只在 `IsTJS2ByteCode` 命中时调用，不会把文本误当字节码 |
+| 46 | `Window` / `Layer` / `Bitmap` 未实现 | `Initialize.tjs` 第 1 行即需要 `Window`（VM ip 400 处），属第 8 步；`real_startup` 测试因此 DISABLED（#49） |
+| 47 | `System.personalPath` / `savedGamesPath` 需要宿主注入 | `EngineRuntime` 提供了 `SetPersonalDirectory` / `SetSavedGamesDirectory`，Android 侧由第 11 步的 JNI 填；未注入时脚本读取显式失败 |
+| 48 | `CompatProfile.preludeScript` 为空 | 参照实现会注入 `CompoundStorageMedia` 一类脚本级 stub；按"有证据才加"的原则留空，加之前先确认触发它的游戏与行为 |
+| 49 | CTest 的 `real_startup` 处于 DISABLED | 与 #46 同一件事：`Window` 落地后改为启用，作为真游戏的回归闸门 |
+| 50 | CTest 的断言以仓库根为工作目录 | 断言脚本里的相对路径（`build/debug_probe.log`）依赖这一点，改工作目录会破坏 `t_debug` |
 
 
 
@@ -505,31 +655,44 @@ Scripts.execStorage = function(arg0) { Scripts.new9Storage(*); };
 ### 当前可运行状态
 
 ```
+bash cpp_new/tools/run_probes.sh                        # CMake + ctest，期望 14/14 通过
 python cpp_new/tools/check_layer_deps.py cpp_new        # 期望 0 违规
 ```
 
-四个测试台的构建命令见 §1。断言脚本位于 `build/games/demo/`：`t_scripts.tjs`、`t_system.tjs`、
-`t_repro.tjs`，通过 `build/tjs_probe.exe <脚本> build/demo_root.txt` 执行；末尾主动抛出
-`<name>-ok` 表示全部断言通过。
+断言脚本在 `cpp_new/host/fixtures/demo/`（同时是 `storage_probe` 的夹具根目录）：
+`t_scripts.tjs`、`t_system.tjs`、`t_debug.tjs`、`t_plugins.tjs`、`t_repro.tjs`、
+`t_alias.tjs`、`t_spread.tjs`、`t_exit.tjs`（以及被它们 `execStorage` 引用的
+`t_exec.tjs` / `t_expr.tjs`）。末尾主动抛出 `<name>-ok` 表示通过。
 
-真实游戏验证：`build/tjs_probe.exe build/py_startup.tjs build/real_root.txt`
-（`build/py_startup.tjs` 为真包 `startup.tjs` 的 UTF-8 转码副本，`build/real_root.txt` 内为游戏目录）。
+真实游戏验证（测试台与产品入口两条链路都指向同一装配）：
+
+```bash
+build/cmake/debug/bin/tjs_probe.exe build/py_startup.utf8.tjs build/real_root.txt
+build/cmake/debug/bin/krkr_next.exe --path-file build/real_root.txt
+```
 
 ### 已知失败点与下一步
 
-真脚本当前停在 `system/Initialize.tjs` 第 1 行，桥接层日志：
+真脚本已进入 `system/Initialize.tjs`（字节码），`System` 的路径与平台成员已通过，当前停在：
 
 ```
-[error] Scripts: system/Initialize.tjs:            （消息为空，见技术债 #40）
+[error] Scripts.execStorage("system/Initialize.tjs"): Member "Window" does not exist
+       [script=system/Initialize.tjs line=1]
 ```
 
-建议顺序：
+`Window` / `Layer` / `Bitmap` 属于 visual 层，即第 8 步的最小面。下一步（行 7g）：
 
-1. 在桥接层补充空消息场景的上下文（脚本名、行号、被调用名），否则后续每个缺口都难以定位；
-2. 定位 `system/Initialize.tjs` 第 1 行所需的能力（极可能是 `Plugins`）；
-3. 实现 `Console` 与 `Debug`（映射日志层，无控制台窗口时显式记录"平台不支持"）；
-4. 实现 `Plugins.link/unlink/getList`（静态注册先行，`.so` 加载后置）；
-5. 补 CMake 目标与 `platform` 首个能力（技术债 #38、#39）。
+1. 先按 `cpp_new/docs/render-spec.md` 落 `Window` 的最小成员（`width`/`height`/`visible`/`title`
+   与 `Layer` 的构造），因为 `Initialize.tjs` 在第 1 行就用它做屏幕参数初始化；
+2. 再按同样顺序过 `Storages` 挂载面（`addAutoPath` / `addArchive` / `commitSavedata`…）与
+   `Plugins.CanLoadPlugin` 一类 Z 分支探测点；`kirikiriz` 预处理器值保持 0（不声称 Z 扩展），
+   与老树 `RegisterStartupCompatGlobals` 的策略一致；
+3. `platform` 首个能力（技术债 #39）：Android 的 `personalPath` / `savedGamesPath` 尚未由宿主注入，
+   脚本读取时按设计显式失败。
+
+新增宿主能力的固定顺序（不要颠倒）：`core/contracts/ScriptServices.h` 加小接口 →
+`core/api/EngineRuntime` 实现 → `engine/CompatProfile` 里不需要改（能力不是类）→
+`shim/classes/Tjs*` 读取 `GetContext().services`。
 
 ### 纪律提醒
 

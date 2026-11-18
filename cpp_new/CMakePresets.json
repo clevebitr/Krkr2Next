@@ -1,0 +1,40 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "desktop-debug",
+      "displayName": "Desktop Debug (cpp_new)",
+      "binaryDir": "${sourceDir}/../build/cmake/debug",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "desktop-release",
+      "displayName": "Desktop Release (cpp_new)",
+      "binaryDir": "${sourceDir}/../build/cmake/release",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "desktop-debug", "configurePreset": "desktop-debug" },
+    { "name": "desktop-release", "configurePreset": "desktop-release" }
+  ],
+  "testPresets": [
+    {
+      "name": "desktop-debug",
+      "configurePreset": "desktop-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "desktop-release",
+      "configurePreset": "desktop-release",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

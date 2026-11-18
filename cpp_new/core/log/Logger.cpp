@@ -211,4 +211,14 @@ namespace krkr::log {
         }
         return written;
     }
+
+    std::string Logger::GetRecentLines(std::size_t maxLines) const {
+        std::lock_guard<std::mutex> lock(impl_->mutex);
+        const std::size_t count = maxLines < impl_->ring.size() ? maxLines : impl_->ring.size();
+        std::string out;
+        for(std::size_t i = impl_->ring.size() - count; i < impl_->ring.size(); ++i) {
+            out += impl_->ring[i];
+        }
+        return out;
+    }
 } // namespace krkr::log

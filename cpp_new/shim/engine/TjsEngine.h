@@ -33,6 +33,13 @@ namespace krkr::script {
       // 从文件读脚本并执行（测试台用；引擎内部走存储层）。
       bool RunScriptFile(const char *pathUtf8, std::string *errorOutUtf8);
 
+      // 从当前存储执行脚本（startup.tjs 等）。失败时把带定位信息的错误写进 errorOutUtf8。
+      bool RunStorageScript(const std::string &nameUtf8, std::string *errorOutUtf8,
+                            bool evaluate = false);
+
+      // 预处理器值（脚本的 @if(...)）。兼容层用它声明"支持什么"。
+      void SetPreprocessorValue(const std::string &nameUtf8, int value);
+
       // 暴露 TJS 全局对象，供垫层注册原生类使用；上层代码不应直接使用。
       void *GetGlobalObjectRaw();
 

@@ -2,9 +2,13 @@
 
 namespace krkr::script {
 
-Bridge &GetBridge() {
-  static Bridge instance;
+ScriptContext &GetContext() {
+  static ScriptContext instance;
   return instance;
+}
+
+void SetContext(const ScriptContext &context) {
+  GetContext() = context;
 }
 
 } // namespace krkr::script

@@ -1,0 +1,7 @@
+Scripts.new9 = Scripts.execStorage;
+Scripts.execStorage = function(arg0) {
+    Scripts.new9(*);
+};
+Scripts.execStorage("t_exec.tjs");
+if(Scripts.eval("probe_from_storage") != "ok") throw new Exception("repro failed");
+throw new Exception("repro-ok");

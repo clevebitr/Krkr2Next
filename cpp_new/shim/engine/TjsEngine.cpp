@@ -25,50 +25,15 @@
 #endif
 
 #include "core/log/Logger.h"
+#include "shim/TjsDiagnostics.h"
+#include "shim/engine/ScriptLoader.h"
+#include "shim/text/TjsText.h"
 #include "tjs/tjs.h"
 #include "tjs/tjsError.h"
 
 namespace krkr::script {
 
 namespace {
-
-// UTF-8 与 tjs_char 的转换。tjs_char 的宽度由平台决定（Windows 为 2 字节），
-// 该差异仅在此处处理。
-std::wstring Utf8ToTjsString(const std::string &utf8) {
-  std::wstring out;
-  out.reserve(utf8.size());
-  std::size_t i = 0;
-  while (i < utf8.size()) {
-    const unsigned char lead = static_cast<unsigned char>(utf8[i]);
-    std::uint32_t cp = lead;
-    std::size_t extra = 0;
-    if (lead >= 0xf0) {
-      cp = lead & 0x07;
-      extra = 3;
-    } else if (lead >= 0xe0) {
-      cp = lead & 0x0f;
-      extra = 2;
-    } else if (lead >= 0xc0) {
-      cp = lead & 0x1f;
-      extra = 1;
-    }
-    if (i + extra >= utf8.size()) {
-      break;
-    }
-    for (std::size_t k = 1; k <= extra; ++k) {
-      cp = (cp << 6) | (static_cast<unsigned char>(utf8[i + k]) & 0x3f);
-    }
-    i += extra + 1;
-    if (sizeof(wchar_t) == 2 && cp > 0xffff) {
-      cp -= 0x10000;
-      out.push_back(static_cast<wchar_t>(0xd800 + (cp >> 10)));
-      out.push_back(static_cast<wchar_t>(0xdc00 + (cp & 0x3ff)));
-    } else {
-      out.push_back(static_cast<wchar_t>(cp));
-    }
-  }
-  return out;
-}
 
 void AppendUtf8(std::string &out, std::uint32_t cp) {
   if (cp < 0x80) {
@@ -107,10 +72,6 @@ std::string TjsStringToUtf8(const tjs_char *text) {
   return out;
 }
 
-std::string ToUtf8(const ttstr &text) {
-  return TjsStringToUtf8(text.c_str());
-}
-
 // tjs2 通过该接口回传脚本输出与异常文本
 class ConsoleSink final : public TJS::iTJSConsoleOutput {
   public:
@@ -138,43 +99,6 @@ class ConsoleSink final : public TJS::iTJSConsoleOutput {
     }
 };
 
-// KiriKiri 的 .tjs 为 UTF-16LE（带 FF FE BOM）。入口统一转成 UTF-8，
-// 使后续流程只处理单一编码。
-std::string DecodeScriptSource(const std::string &bytes) {
-  if (bytes.size() >= 2 && static_cast<unsigned char>(bytes[0]) == 0xff &&
-      static_cast<unsigned char>(bytes[1]) == 0xfe) {
-    std::string out;
-    out.reserve((bytes.size() - 2) / 2);
-    std::size_t i = 2;
-    while (i + 1 < bytes.size()) {
-      const std::uint32_t unit = static_cast<unsigned char>(bytes[i]) |
-                                 (static_cast<std::uint32_t>(
-                                      static_cast<unsigned char>(bytes[i + 1]))
-                                  << 8);
-      i += 2;
-      if (unit >= 0xd800 && unit <= 0xdbff && i + 1 < bytes.size()) {
-        const std::uint32_t low = static_cast<unsigned char>(bytes[i]) |
-                                  (static_cast<std::uint32_t>(
-                                       static_cast<unsigned char>(bytes[i + 1]))
-                                   << 8);
-        if (low >= 0xdc00 && low <= 0xdfff) {
-          i += 2;
-          AppendUtf8(out, 0x10000 + ((unit - 0xd800) << 10) + (low - 0xdc00));
-          continue;
-        }
-      }
-      AppendUtf8(out, unit);
-    }
-    return out;
-  }
-  if (bytes.size() >= 3 && static_cast<unsigned char>(bytes[0]) == 0xef &&
-      static_cast<unsigned char>(bytes[1]) == 0xbb &&
-      static_cast<unsigned char>(bytes[2]) == 0xbf) {
-    return bytes.substr(3);
-  }
-  return bytes;
-}
-
 } // namespace
 
 class Engine::Impl {
@@ -184,6 +108,7 @@ class Engine::Impl {
 };
 
 Engine::Engine() : impl_(std::make_unique<Impl>()) {
+  InstallTjsMessageMap();
   impl_->tjs = new TJS::tTJS();
   impl_->tjs->SetConsoleOutput(&impl_->console);
 }
@@ -212,9 +137,7 @@ void Engine::SetPrinter(void (*printer)(const char *lineUtf8, void *user), void 
 
 bool Engine::RunScript(std::string_view sourceUtf8, const char *scriptName,
                        std::string *errorOutUtf8) {
-  const std::string source = DecodeScriptSource(std::string(sourceUtf8));
-  const std::wstring wide = Utf8ToTjsString(source);
-  const std::wstring name = Utf8ToTjsString(scriptName == nullptr ? "script" : scriptName);
+  const std::string name = scriptName == nullptr ? "script" : scriptName;
 
   impl_->console.hadError = false;
   if (errorOutUtf8 != nullptr) {
@@ -222,20 +145,13 @@ bool Engine::RunScript(std::string_view sourceUtf8, const char *scriptName,
   }
 
   try {
-    impl_->tjs->ExecScript(wide.c_str(), nullptr, nullptr, name.c_str());
-  } catch (const TJS::eTJSScriptException &e) {
-    if (errorOutUtf8 != nullptr) {
-      *errorOutUtf8 = ToUtf8(e.GetMessage());
-    }
-    return false;
-  } catch (const TJS::eTJSScriptError &e) {
-    if (errorOutUtf8 != nullptr) {
-      *errorOutUtf8 = ToUtf8(e.GetMessage());
-    }
-    return false;
+    RunScriptBytes(*this, std::string(sourceUtf8), name, name, ScriptMode::Execute, nullptr,
+                   nullptr);
   } catch (const TJS::eTJS &e) {
+    // 脚本名在此已知，异常自带块名与行号；两者一起写进错误文本，
+    // 否则上层只能看到一条没有定位信息的消息。
     if (errorOutUtf8 != nullptr) {
-      *errorOutUtf8 = ToUtf8(e.GetMessage());
+      *errorOutUtf8 = DescribeScriptException(e, name);
     }
     return false;
   } catch (...) {
@@ -245,6 +161,35 @@ bool Engine::RunScript(std::string_view sourceUtf8, const char *scriptName,
     return false;
   }
   return true;
+}
+
+bool Engine::RunStorageScript(const std::string &nameUtf8, std::string *errorOutUtf8,
+                              bool evaluate) {
+  if (errorOutUtf8 != nullptr) {
+    errorOutUtf8->clear();
+  }
+  try {
+    RunScriptFromStorage(*this, nameUtf8, evaluate ? ScriptMode::Evaluate : ScriptMode::Execute,
+                         "Engine.runStorage", nullptr, nullptr);
+  } catch (const TJS::eTJS &e) {
+    if (errorOutUtf8 != nullptr) {
+      *errorOutUtf8 = DescribeScriptException(e, nameUtf8);
+    }
+    return false;
+  } catch (...) {
+    if (errorOutUtf8 != nullptr) {
+      *errorOutUtf8 = "unknown TJS exception while running " + nameUtf8;
+    }
+    return false;
+  }
+  return true;
+}
+
+void Engine::SetPreprocessorValue(const std::string &nameUtf8, int value) {
+  if (impl_->tjs == nullptr) {
+    return;
+  }
+  impl_->tjs->SetPPValue(WideFromUtf8(nameUtf8).c_str(), value);
 }
 
 bool Engine::RunScriptFile(const char *pathUtf8, std::string *errorOutUtf8) {

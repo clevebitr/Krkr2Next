@@ -1,0 +1,5 @@
+Scripts.probeAlias = Scripts.execStorage;
+function fwd(){ return Scripts.probeAlias(*); }
+fwd("t_exec.tjs");
+if(Scripts.eval("probe_from_storage") != "ok") throw new Exception("spread failed");
+throw new Exception("spread-ok");

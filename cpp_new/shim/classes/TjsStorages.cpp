@@ -6,7 +6,7 @@
 #include "core/io/Storage.h"
 #include "core/log/Logger.h"
 #include "shim/TjsBridge.h"
-#include "shim/engine/TjsEngine.h"
+#include "shim/engine/NativeClass.h"
 #include "shim/text/TjsText.h"
 #include "tjs/tjs.h"
 #include "tjs/tjsError.h"
@@ -35,8 +35,8 @@ class StoragesClass final : public TJS::tTJSNativeClass {
         const ttstr nameText = *param[0];
         const std::string name = Utf8FromWide(nameText.c_str());
         bool existent = false;
-        if (GetBridge().storage != nullptr) {
-          const std::unique_ptr<krkr::io::IStream> stream = GetBridge().storage->Open(name);
+        if (GetContext().storage != nullptr) {
+          const std::unique_ptr<krkr::io::IStream> stream = GetContext().storage->Open(name);
           existent = stream != nullptr;
           krkr::log::Debug("Storages.isExistentStorage(\"", name, "\") = ",
                            existent ? "true" : "false");
@@ -57,8 +57,8 @@ class StoragesClass final : public TJS::tTJSNativeClass {
         const ttstr nameText = *param[0];
         const std::string name = Utf8FromWide(nameText.c_str());
         std::string placed;
-        if (GetBridge().storage != nullptr) {
-          const std::unique_ptr<krkr::io::IStream> stream = GetBridge().storage->Open(name);
+        if (GetContext().storage != nullptr) {
+          const std::unique_ptr<krkr::io::IStream> stream = GetContext().storage->Open(name);
           if (stream != nullptr) {
             placed = name;
           }
@@ -151,30 +151,12 @@ class StoragesClass final : public TJS::tTJSNativeClass {
 
 tjs_uint32 StoragesClass::ClassID = static_cast<tjs_uint32>(-1);
 
-void RegisterStoragesClass(Engine *engine, krkr::io::Storage *storage) {
-  GetBridge().engine = engine;
-  GetBridge().storage = storage;
-  if (engine == nullptr || !engine->IsReady()) {
-    krkr::log::Warn("RegisterStoragesClass: engine not ready");
+void RegisterStoragesClass(const ScriptContext &context) {
+  if (!ExposeNativeClass(context.engine, TJS_W("Storages"), new StoragesClass())) {
     return;
   }
-
-  auto *global = static_cast<TJS::iTJSDispatch2 *>(engine->GetGlobalObjectRaw());
-  if (global == nullptr) {
-    krkr::log::Warn("RegisterStoragesClass: global object unavailable");
-    return;
-  }
-
-  auto *nativeClass = new StoragesClass();
-  TJS::tTJSVariant value(nativeClass, nullptr);
-  const tjs_error error =
-      global->PropSet(TJS_MEMBERENSURE, TJS_W("Storages"), nullptr, &value, global);
-  nativeClass->Release();
-  if (TJS_FAILED(error)) {
-    krkr::log::Error("RegisterStoragesClass: failed to expose Storages, code=", error);
-    return;
-  }
-  krkr::log::Info("script: Storages registered (storage attached=", storage != nullptr, ")");
+  krkr::log::Info("script: Storages registered (storage attached=",
+                  context.storage != nullptr, ")");
 }
 
 } // namespace krkr::script

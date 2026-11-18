@@ -1,0 +1,10 @@
+if(System.getArgument("-debugwin") != "no") throw new Exception("getArgument failed");
+if(System.getArgument("-absent") != "") throw new Exception("getArgument absent failed");
+if(System.getArgument("-probe") != "1") throw new Exception("getArgument value form failed");
+if(System.desktopWidth <= 0 || System.desktopHeight <= 0) throw new Exception("desktop size failed");
+if(System.versionInformation == "") throw new Exception("versionInformation failed");
+System.title = "probe title";
+if(System.title != "probe title") throw new Exception("title failed");
+System.inform("system bridge ok");
+System.informError("intentional error line");
+throw new Exception("system-ok");

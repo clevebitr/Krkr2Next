@@ -12,11 +12,12 @@
 
 ```
 tjs/        权威实现。krkrz 原样拷贝，不承载适配逻辑。
-shim/       垫层。连接抽象层与权威实现，并承载 TJS 原生类桥接。
+shim/       垫层。连接抽象层与权威实现，承载 TJS 原生类桥接与脚本装载。
 platform/   抽象层。实现平台能力（Android / 桌面），不感知 TJS。
-core/       基座。日志、存储、线程与运行时、模块注册表、对外 API、能力契约。
+core/       基座。日志、存储、能力契约、对外 API。
+engine/     装配层。装配脚本引擎、兼容声明与原生类注册表；引擎侧唯一的"接线处"。
 host/       测试台。不属于引擎产物。
-tools/      代码生成与静态检查。
+tools/      代码生成、构建与静态检查。
 docs/       规格与约束文档。
 ```
 
@@ -27,24 +28,30 @@ docs/       规格与约束文档。
 | `tjs/` | 提供脚本解释器与内置类 | 承载平台适配、引擎调用、日志输出 |
 | `shim/` | TJS 原生类注册、编码转换、宿主符号提供 | 直接访问文件系统、窗口、线程原语 |
 | `platform/` | 实现 `core/contracts` 的能力接口 | 引用 `shim/` 或 `tjs/` 的任何头 |
-| `core/` | 基座服务、能力契约、模块注册、对外 API | 引用 `shim/`、`platform/`、`tjs/` |
+| `core/` | 基座服务、能力契约、模块注册、对外 API | 引用 `shim/`、`platform/`、`tjs/`、`engine/` |
+| `engine/` | 装配引擎与原生类、应用兼容声明、把脚本运行时注入 `core/api` | 承载平台或 TJS 适配逻辑（那属于 `shim/`） |
 | `host/` | 可执行的测试台与断言脚本 | 被引擎产物链接 |
 
 ## 3. 依赖方向
 
 ```
 platform ──► core
-shim     ──► core (contracts, log, module) 、tjs
-tjs      ──► 无（宿主符号在链接期由 shim 提供）
+shim     ──► core (contracts, log) 、tjs
+tjs      ──► 无源码依赖（宿主符号在链接期由 shim 提供）
 core     ──► 无上层依赖
+engine   ──► shim、core、platform
+host     ──► engine、core
 ```
 
 规则：
 
 1. 任何方向相反的引用均为缺陷，优先改设计而不是加临时声明。
-2. 需要"逆向调用"时使用 `core/module` 的注册表按接口取服务，不直接引用实现。
+2. 需要"逆向调用"时使用 `core/contracts` 的接口：`engine/` 实现、`core/api` 通过接口调用
+   （`IScriptRuntime`）。不得让 `core` 反向引用 `shim`、`tjs` 或 `engine`。
 3. `shim/` 不依赖 `platform/` 的源码；平台能力通过 `core/contracts` 接口取得，
    因此缺少平台实现时 `shim/` 仍可独立编译与测试。
+4. 装配只发生在 `engine/`：`shim/` 提供"装什么"的入口（注册函数），`engine/` 决定"装哪些、按什么顺序"。
+   新增原生类时改 `engine/CompatProfile.cpp` 的列表，不要在 `shim/` 里做自注册。
 
 ## 4. 权威实现的约束
 
@@ -70,6 +77,18 @@ core     ──► 无上层依赖
 2. 模块对外只暴露契约接口；新增模块需在 `core/module` 登记名称、依赖与初始化顺序。
 3. 模块初始化顺序由注册表解析，不允许在构造函数中隐式完成跨模块调用。
 
+## 5.1 能力接口
+
+宿主能力按用途拆成 `core/contracts/ScriptServices.h` 中的小接口（启动参数、输出、退出、
+平台信息、路径、窗口）。`HostServices` 用空指针表达"该能力未提供"，桥接层必须显式失败，
+不得用默认值代替。宿主（`core/api`、测试台）实现接口集合，`shim` 只读。
+
+## 5.2 兼容声明
+
+"引擎声称支持什么"由 `engine/CompatProfile` 的 `Profile` 表达：预处理器值
+（如 `kirikiriz=0`）、原生类列表、脚本前奏。脚本因此走对应分支，而不是在运行期逐个探测。
+新增兼容行为时改 profile，不写进 `shim` 的 `if`。
+
 ## 6. 新增或修复功能的固定流程
 
 1. **判定归属**：功能属于 `core`、`platform`、`shim` 还是插件。
@@ -88,7 +107,28 @@ core     ──► 无上层依赖
 3. 注释遵循 `AGENTS.md` §11：书面语、适量、无分隔线、不复述代码。
 4. 头文件只包含本层及其下方层的头；跨层包含视为缺陷。
 
-## 8. 静态检查
+## 8. 静态检查与构建
+
+```bash
+bash cpp_new/tools/run_probes.sh          # CMake 配置 + 构建 + CTest 全部断言
+python cpp_new/tools/check_layer_deps.py cpp_new
+```
+
+CMake 目标与分层一一对应：`krkr_tjs` / `krkr_tjs_host` / `krkr_core` / `krkr_platform` /
+`krkr_shim` / `krkr_engine`，测试台链接 `krkr_engine`（产品入口与测试台共用同一段装配）。
 
 `tools/check_layer_deps.py` 校验第 3 节的依赖方向，作为提交前的强制检查。
 违规输出现式形如 `core/io/Storage.cpp: include "shim/..." 违反分层（core 不得引用 shim）`。
+
+## 9. 诊断与调试
+
+分层之后，"出错时能不能定位"是独立的设计对象。约束：
+
+1. **失败必须带上下文**：跨层返回值以"码 + 文本"表达；脚本异常统一经
+   `shim/TjsDiagnostics` 格式化为 `调用上下文 + 消息 + [script=块名 line=行号 trace=调用链]`。
+2. **不得吞异常**：桥接层只记录上下文，随后原样重抛，由虚拟机转成脚本侧异常并保留 trace。
+3. **空消息视为缺陷**：TJS2 的内置消息表在 vendored 源码里为 NULL，必须由垫层安装
+   （`tools/gen_tjs_message_map.py` 生成），不允许出现无消息异常。
+4. **脚本入口唯一**：所有脚本装载走 `shim/engine/ScriptLoader`（解码、字节码、异常映射集中一处）。
+5. **测试台与产品同源**：装配只在 `engine/ScriptRuntime`；测试台不得自行拼装引擎，否则装配缺失
+   无法被回归发现。

@@ -1,10 +1,9 @@
 #pragma once
 
 namespace krkr::script {
-  class Engine;
-  class IScriptHost;
+  struct ScriptContext;
 
-  // 注册 TJS 侧 System 类：getArgument / inform / informError / exit，
-  // 以及 title / versionInformation / desktopWidth / desktopHeight 属性。
-  void RegisterSystemClass(Engine *engine, IScriptHost *host);
+  // 注册 TJS 侧 System 类。
+  // 成员通过 ScriptContext.services 取得宿主能力；能力缺失时显式失败，不用默认值。
+  void RegisterSystemClass(const ScriptContext &context);
 } // namespace krkr::script

@@ -1,11 +1,14 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <utility>
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include "core/api/EngineRuntime.h"
 #include "core/log/Logger.h"
+#include "engine/ScriptRuntime.h"
 
 namespace {
     void ApplyEnvOverrides(krkr::log::Logger &logger) {
@@ -97,12 +100,25 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    // 装配根与产品入口共用：脚本运行时由宿主注入，引擎侧不引用 shim/tjs。
+    krkr::engine::ScriptRuntime scriptRuntime;
+    engine->AttachScriptRuntime(&scriptRuntime);
+    engine->SetExecutablePath(argv[0]);
+    if(argc >= 3) {
+        std::vector<std::string> arguments;
+        for(int i = 3; i < argc; ++i) {
+            arguments.emplace_back(argv[i]);
+        }
+        engine->SetLaunchArguments(std::move(arguments));
+    }
+
     krkr::env::EngineResult res = engine->OpenGame(gameRoot.c_str());
     if(res != krkr::env::EngineResult::Ok) {
         std::printf("open failed (%d): %s\n", static_cast<int>(res),
                     engine->GetLastErrorText());
         std::printf("startup = %u\n", static_cast<unsigned>(engine->GetStartupState()));
         PrintStartupLogs(logger);
+        engine->DetachScriptRuntime();
         krkr::env::EngineRuntime::Destroy(engine);
         return 1;
     }
@@ -125,6 +141,7 @@ int main(int argc, char **argv) {
                 static_cast<unsigned long long>(engine->GetFrameCount()),
                 gameRoot.c_str());
 
+    engine->DetachScriptRuntime();
     krkr::env::EngineRuntime::Destroy(engine);
 
     return 0;

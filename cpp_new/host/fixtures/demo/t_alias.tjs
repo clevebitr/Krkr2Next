@@ -1,0 +1,4 @@
+Scripts.probeAlias = Scripts.execStorage;
+Scripts.probeAlias("t_exec.tjs");
+if(Scripts.eval("probe_from_storage") != "ok") throw new Exception("side effect missing");
+throw new Exception("alias-call-ok");

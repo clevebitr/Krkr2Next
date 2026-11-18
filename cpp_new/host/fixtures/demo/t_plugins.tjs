@@ -1,0 +1,15 @@
+if(typeof Plugins.getList() != "Object") throw new Exception("getList type");
+Plugins.link("probe_static.dll");
+Plugins.link("PROBE_STATIC.DLL");
+Plugins.link("path/Probe_Static.DLL");
+var list = Plugins.getList();
+if(list.count != 1) throw new Exception("getList should hold one static plugin");
+if(list[0] != "probe_static.dll") throw new Exception("getList entry mismatch");
+if(Plugins.unlink("probe_static.dll") != 0) throw new Exception("static plugin must not unload");
+try {
+    Plugins.link("missing.dll");
+    throw new Exception("link of an unregistered plugin must fail");
+} catch(e) {
+    if(e.message.indexOf("missing.dll") < 0) throw new Exception("link failure lacks context");
+}
+throw new Exception("plugins-ok");

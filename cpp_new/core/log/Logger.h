@@ -33,6 +33,9 @@ namespace krkr::log {
 
       std::size_t Drain(char *out, std::size_t capacity);
 
+      // 取最近若干条完整日志行（不消耗环形缓冲），供脚本侧 Debug.getLastLog 使用。
+      std::string GetRecentLines(std::size_t maxLines) const;
+
       void Write(Level level, const std::string &message);
       void Flush();
     

@@ -2,10 +2,12 @@
 """校验 cpp_new 的层间依赖方向（见 docs/ARCHITECTURE.md 第 3 节）。
 
 规则：
-  core     不得引用 shim/ platform/ tjs/
-  platform 不得引用 shim/ tjs/
-  shim     不得引用 platform/（通过 core/contracts 取得能力）
+  core     不得引用 shim/ platform/ tjs/ engine/
+  platform 不得引用 shim/ tjs/ engine/
+  shim     不得引用 platform/ engine/（通过 core/contracts 取得能力）
   tjs      不得引用任何 cpp_new 内其他层
+  engine   装配根：可引用 shim/ tjs/ core/ platform/，不得引用 host/
+  host     测试台：不受限
 
 用法：python cpp_new/tools/check_layer_deps.py [cpp_new 根目录]
 退出码：0 通过，1 存在违规。
@@ -15,10 +17,12 @@ import re
 import sys
 
 FORBIDDEN = {
-    'core': ('shim/', 'platform/', 'tjs/'),
-    'platform': ('shim/', 'tjs/'),
-    'shim': ('platform/',),
-    'tjs': ('shim/', 'platform/', 'core/'),
+    'core': ('shim/', 'platform/', 'tjs/', 'engine/', 'host/'),
+    'platform': ('shim/', 'tjs/', 'engine/', 'host/'),
+    'shim': ('platform/', 'engine/', 'host/'),
+    'tjs': ('shim/', 'platform/', 'core/', 'engine/', 'host/'),
+    'engine': ('host/',),
+    'host': (),
 }
 
 INCLUDE = re.compile(r'^\s*#\s*include\s+"([^"]+)"')

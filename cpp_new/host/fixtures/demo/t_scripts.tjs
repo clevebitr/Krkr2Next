@@ -1,0 +1,9 @@
+if(Scripts.eval("1+1") != 2) throw new Exception("eval arithmetic failed");
+if(Scripts.eval("'a'+'b'") != "ab") throw new Exception("eval concat failed");
+Scripts.exec("var probe_value = 41;");
+if(Scripts.eval("probe_value") != 41) throw new Exception("exec did not define variable");
+if(Scripts.evalStorage("t_expr.tjs") != 12345) throw new Exception("evalStorage failed");
+Scripts.execStorage("t_exec.tjs");
+if(Scripts.eval("probe_from_storage") != "ok") throw new Exception("execStorage failed");
+if(typeof Scripts.getTraceString() != "String") throw new Exception("getTraceString type");
+throw new Exception("scripts-ok");

@@ -1,166 +1,227 @@
-#include <cstddef>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
-#include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <vector>
 
-#include "tjs/tjs.h"
-#include "tjs/tjsError.h"
+#include "core/contracts/ScriptServices.h"
+#include "core/io/PathUtil.h"
+#include "core/io/Storage.h"
+#include "core/log/Logger.h"
+#include "engine/ScriptRuntime.h"
+#include "shim/classes/TjsPlugins.h"
+#include "shim/engine/TjsEngine.h"
 
-// TJS2 测试台：验证上游实现可直接编译并执行脚本。
+// TJS2 测试台：宿主角色的最小实现。
 //
-//   tjs_probe <script.tjs>
+//   tjs_probe <script.tjs> <root-path-file> [launch arguments...]
 //
-// 脚本可以是 UTF-16LE（KiriKiri 的 .tjs 默认，带 FF FE BOM）或 UTF-8（带/不带 BOM）。
-// 只做三件事：初始化 TJS2、执行脚本、把 console 输出和异常打到 stdout/stderr。
+// 装配（引擎 + 原生类 + 兼容声明）由 cpp_new/engine 的 ScriptRuntime 完成，
+// 与产品入口共用同一条链路；本文件只提供宿主能力与断言约定：
+// 脚本正常结束、或抛出的异常消息含有 "-ok"，视为通过。
 
 namespace {
 
-// 打给 TJS 的 console（System.inform / 异常都会走到这里）
-class Console final : public TJS::iTJSConsoleOutput {
+// 断言脚本默认使用的启动参数（t_system.tjs 依赖这两组键值）。
+const char *const kDefaultArguments[] = { "-debugwin", "no", "-probe", "1" };
+
+class ProbeHost final : public krkr::script::ILaunchArguments,
+                        public krkr::script::IOutput,
+                        public krkr::script::IAppControl,
+                        public krkr::script::IPlatformInfo,
+                        public krkr::script::IPathProvider,
+                        public krkr::script::IWindowInfo {
   public:
-    void Print(const tjs_char *msg) override { PrintLine("[tjs] ", msg); }
-
-    void ExceptionPrint(const tjs_char *msg) override {
-        PrintLine("[tjs:exception] ", msg);
-        hadException = true;
-    }
-
-    bool hadException = false;
-
-    // tjs_char 转 UTF-8，仅处理 BMP；脚本错误信息不涉及增补平面字符。
-    static std::string ToUtf8(const tjs_char *text) {
-        std::string out;
-        for (const tjs_char *p = text; p != nullptr && *p != 0; ++p) {
-            const std::uint32_t cp = *p;
-            if (cp < 0x80) {
-                out.push_back(static_cast<char>(cp));
-            } else if (cp < 0x800) {
-                out.push_back(static_cast<char>(0xc0 | (cp >> 6)));
-                out.push_back(static_cast<char>(0x80 | (cp & 0x3f)));
-            } else {
-                out.push_back(static_cast<char>(0xe0 | (cp >> 12)));
-                out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3f)));
-                out.push_back(static_cast<char>(0x80 | (cp & 0x3f)));
-            }
+    ProbeHost(int argc, char **argv) {
+      if (argc > 3) {
+        for (int i = 3; i < argc; ++i) {
+          arguments_.emplace_back(argv[i]);
         }
-        return out;
+        return;
+      }
+      for (const char *item : kDefaultArguments) {
+        arguments_.emplace_back(item);
+      }
     }
 
-    static std::string Utf16ToUtf8(const std::u16string &text) {
-        return ToUtf8(reinterpret_cast<const tjs_char *>(text.c_str()));
+    krkr::script::HostServices Services() {
+      krkr::script::HostServices services;
+      services.arguments = this;
+      services.output = this;
+      services.appControl = this;
+      services.platform = this;
+      services.paths = this;
+      services.window = this;
+      return services;
+    }
+
+    std::vector<std::string> GetLaunchArguments() const override { return arguments_; }
+
+    bool SetLaunchArgument(const std::string &key, const std::string &value) override {
+      arguments_.push_back(key);
+      if (!value.empty()) {
+        arguments_.push_back(value);
+      }
+      return true;
+    }
+
+    void Inform(const std::string &text) override {
+      std::fprintf(stdout, "[script] %s\n", text.c_str());
+      std::fflush(stdout);
+    }
+
+    void InformError(const std::string &text) override {
+      std::fprintf(stderr, "[script:error] %s\n", text.c_str());
+      std::fflush(stderr);
+    }
+
+    void RequestExit() override { exitRequested_ = true; }
+
+    std::string GetOSName() const override { return "probe"; }
+    std::string GetPlatformName() const override { return "probe"; }
+    std::string GetVersionString() const override { return "cpp_new probe"; }
+    std::int64_t GetTickCount() const override {
+      const auto elapsed = std::chrono::steady_clock::now() - startTime_;
+      return std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+    }
+
+    // 与 EngineRuntime 同语义：可执行文件目录以分隔符结尾，数据目录是游戏根。
+    std::string GetExecutableDirectory() const override {
+      const std::filesystem::path executable = krkr::io::PathFromUtf8(executablePath_);
+      if (executable.empty()) {
+        return {};
+      }
+      std::string directory = krkr::io::PathToUtf8(executable.parent_path());
+      if (!directory.empty() && directory.back() != '/' && directory.back() != '\\') {
+        directory.push_back('/');
+      }
+      return directory;
+    }
+    std::string GetDataDirectory() const override { return dataDirectory_; }
+    std::string GetPersonalDirectory() const override { return {}; }
+    std::string GetSavedGamesDirectory() const override { return {}; }
+
+    int GetWidth() const override { return 1280; }
+    int GetHeight() const override { return 720; }
+    int GetDesktopLeft() const override { return 0; }
+    int GetDesktopTop() const override { return 0; }
+    int GetDesktopWidth() const override { return 1280; }
+    int GetDesktopHeight() const override { return 720; }
+    std::string GetTitle() const override { return title_; }
+    void SetTitle(const std::string &title) override { title_ = title; }
+
+    bool IsExitRequested() const { return exitRequested_; }
+
+    void SetExecutablePath(const std::string &path) { executablePath_ = path; }
+    void SetDataDirectory(const std::string &path) {
+      dataDirectory_ = path;
+      if (!dataDirectory_.empty() && dataDirectory_.back() != '/' &&
+          dataDirectory_.back() != '\\') {
+        dataDirectory_.push_back('/');
+      }
     }
 
   private:
-    static void PrintLine(const char *prefix, const tjs_char *msg) {
-        std::fprintf(stdout, "%s%s\n", prefix, ToUtf8(msg).c_str());
-        std::fflush(stdout);
-    }
+    std::vector<std::string> arguments_;
+    std::string executablePath_;
+    std::string dataDirectory_;
+    std::string title_;
+    bool exitRequested_ = false;
+    std::chrono::steady_clock::time_point startTime_ = std::chrono::steady_clock::now();
 };
 
 bool ReadWholeFile(const char *path, std::string &out) {
-    std::ifstream file(path, std::ios::binary);
-    if (!file.is_open()) {
-        return false;
-    }
-    out.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
-    return true;
+  std::ifstream file(path, std::ios::binary);
+  if (!file.is_open()) {
+    return false;
+  }
+  out.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+  return true;
 }
 
-// UTF-8 转 UTF-16，含代理对
-void AppendUtf16(std::u16string &out, std::uint32_t cp) {
-    if (cp <= 0xffff) {
-        out.push_back(static_cast<char16_t>(cp));
-    } else {
-        cp -= 0x10000;
-        out.push_back(static_cast<char16_t>(0xd800 + (cp >> 10)));
-        out.push_back(static_cast<char16_t>(0xdc00 + (cp & 0x3ff)));
-    }
+// 路径文件避免 Windows 命令行 ANSI 代码页破坏非 ASCII 路径（技术债 #21）。
+bool ReadRootPath(const char *path, std::string &out) {
+  std::string bytes;
+  if (!ReadWholeFile(path, bytes)) {
+    return false;
+  }
+  if (bytes.size() >= 3 && static_cast<unsigned char>(bytes[0]) == 0xef &&
+      static_cast<unsigned char>(bytes[1]) == 0xbb &&
+      static_cast<unsigned char>(bytes[2]) == 0xbf) {
+    bytes.erase(0, 3);
+  }
+  while (!bytes.empty() && (bytes.back() == '\r' || bytes.back() == '\n' ||
+                            bytes.back() == ' ' || bytes.back() == '\t')) {
+    bytes.pop_back();
+  }
+  out = bytes;
+  return true;
 }
 
-std::u16string Utf8ToUtf16(const std::string &utf8) {
-    std::u16string out;
-    out.reserve(utf8.size());
-    std::size_t i = 0;
-    while (i < utf8.size()) {
-        const unsigned char lead = static_cast<unsigned char>(utf8[i]);
-        std::uint32_t cp = lead;
-        std::size_t extra = 0;
-        if (lead >= 0xf0) {
-            cp = lead & 0x07;
-            extra = 3;
-        } else if (lead >= 0xe0) {
-            cp = lead & 0x0f;
-            extra = 2;
-        } else if (lead >= 0xc0) {
-            cp = lead & 0x1f;
-            extra = 1;
-        }
-        if (i + extra >= utf8.size()) {
-            break;
-        }
-        for (std::size_t k = 1; k <= extra; ++k) {
-            cp = (cp << 6) | (static_cast<unsigned char>(utf8[i + k]) & 0x3f);
-        }
-        i += extra + 1;
-        AppendUtf16(out, cp);
-    }
-    return out;
-}
-
-// 解出脚本文本（UTF-16LE 或 UTF-8）
-std::u16string DecodeScript(const std::string &bytes) {
-    const auto *raw = reinterpret_cast<const unsigned char *>(bytes.data());
-    if (bytes.size() >= 2 && raw[0] == 0xff && raw[1] == 0xfe) {
-        std::u16string text;
-        text.resize((bytes.size() - 2) / 2);
-        std::memcpy(text.data(), bytes.data() + 2, text.size() * 2);
-        return text;
-    }
-    if (bytes.size() >= 3 && raw[0] == 0xef && raw[1] == 0xbb && raw[2] == 0xbf) {
-        return Utf8ToUtf16(bytes.substr(3));
-    }
-    return Utf8ToUtf16(bytes);
+// 断言脚本以抛出 "<name>-ok" 结束；失败路径的异常文本不含这个标记。
+bool IsAssertionPass(const std::string &message) {
+  return message.find("-ok") != std::string::npos;
 }
 
 } // namespace
 
 int main(int argc, char **argv) {
-    if (argc < 2) {
-        std::fprintf(stderr, "usage: tjs_probe <script.tjs>\n");
-        return 2;
-    }
+  if (argc < 3) {
+    std::fprintf(stderr, "usage: tjs_probe <script.tjs> <root-path-file> [args...]\n");
+    return 2;
+  }
 
-    std::string bytes;
-    if (!ReadWholeFile(argv[1], bytes)) {
-        std::fprintf(stderr, "cannot read %s\n", argv[1]);
-        return 2;
-    }
-    const std::u16string script = DecodeScript(bytes);
-    std::printf("script   = %s\n", argv[1]);
-    std::printf("bytes    = %zu (UTF-16 单元 %zu)\n", bytes.size(), script.size());
+  std::string script;
+  if (!ReadWholeFile(argv[1], script)) {
+    std::fprintf(stderr, "cannot read script: %s\n", argv[1]);
+    return 2;
+  }
 
-    Console console;
-    auto *tjs = new TJS::tTJS();
-    tjs->SetConsoleOutput(&console);
+  std::string root;
+  if (!ReadRootPath(argv[2], root) || root.empty()) {
+    std::fprintf(stderr, "cannot read root path file: %s\n", argv[2]);
+    return 2;
+  }
 
-    try {
-        tjs->ExecScript(reinterpret_cast<const tjs_char *>(script.c_str()), nullptr, nullptr,
-                        reinterpret_cast<const tjs_char *>(u"probe"));
-        std::printf("exec     = ok\n");
-    } catch (const TJS::eTJSScriptException &e) {
-        std::printf("exec     = script exception: %s\n", e.GetMessage().AsStdString().c_str());
-    } catch (const TJS::eTJSScriptError &e) {
-        std::printf("exec     = script error: %s\n", e.GetMessage().AsStdString().c_str());
-    } catch (...) {
-        std::printf("exec     = unknown exception\n");
-    }
+  krkr::io::Storage storage(root);
+  if (!storage.Mounted()) {
+    std::fprintf(stderr, "cannot mount %s: %s\n", root.c_str(), storage.GetLastErrorText());
+    return 2;
+  }
 
-    tjs->SetConsoleOutput(nullptr);
-    tjs->Shutdown();
-    tjs->Release();
+  std::printf("script   = %s\n", argv[1]);
+  std::printf("root     = %s\n", root.c_str());
+  std::printf("bytes    = %zu\n", script.size());
 
-    return console.hadException ? 1 : 0;
+  // 断言用的静态插件：覆盖 Plugins.link 的命中路径（注册表与 TJS 无关）。
+  krkr::script::RegisterStaticPlugin("probe_static.dll");
+
+  ProbeHost host(argc, argv);
+  host.SetExecutablePath(argv[0]);
+  host.SetDataDirectory(root);
+  krkr::engine::ScriptRuntime runtime;
+  std::string error;
+  if (!runtime.Startup(&storage, host.Services(), &error)) {
+    std::fprintf(stderr, "script runtime startup failed: %s\n", error.c_str());
+    return 2;
+  }
+
+  const bool ok = runtime.GetEngine()->RunScript(script, argv[1], &error);
+  if (ok) {
+    std::printf("exec     = ok\n");
+  } else {
+    std::printf("exec     = script exception: %s\n", error.c_str());
+  }
+  if (host.IsExitRequested()) {
+    std::printf("exit     = requested\n");
+  }
+
+  krkr::log::Logger::Instance().Flush();
+  if (ok) {
+    return 0;
+  }
+  return IsAssertionPass(error) ? 0 : 1;
 }
