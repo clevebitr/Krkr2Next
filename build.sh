@@ -23,6 +23,16 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# bridge/ 与 app/ 是独立仓库（git submodule）。克隆父仓库后必须先初始化子模块，
+# 否则下面找不到 app/gradlew 与 bridge/engine_api。
+for sub in bridge app; do
+    if [ ! -e "$SCRIPT_DIR/$sub/.git" ]; then
+        echo "子模块未初始化：$sub" >&2
+        echo "  git submodule update --init --recursive" >&2
+        exit 2
+    fi
+done
+
 BUILD_TYPE="debug"
 ENGINE_ONLY=false
 APK_ONLY=false

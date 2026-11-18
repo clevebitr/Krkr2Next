@@ -15,6 +15,25 @@ C++ 引擎核心，直连平台 EGL/GLES3 渲染，通过零拷贝 SurfaceTextur
 
 不使用 ANGLE；仅 `arm64-v8a`，`minSdk 24`。
 
+## 克隆
+
+`bridge/`（引擎 ABI + JNI 薄壳）与 `app/`（Kotlin/Compose 宿主）是**独立仓库**，
+以 submodule 挂在父仓库下：
+
+```bash
+git clone --recurse-submodules https://github.com/clevebitr/Krkr2Next.git
+# 已经克隆过的话：
+git submodule update --init --recursive
+```
+
+| 子仓库 | 内容 | 何时单独提交 |
+|---|---|---|
+| `bridge/` | `engine_api`：C ABI、JNI 薄壳 | 改 ABI/入口时 |
+| `app/` | Kotlin/Compose 宿主、Gradle 工程 | 改 UI/宿主行为时 |
+
+日常改子仓库后，父仓库要**再提交一次指针**（`git add bridge app && git commit`），
+这样 `clone --recurse-submodules` 才能拿到对应版本。
+
 ## 构建
 
 引擎在 Gradle **之外**独立构建：根 `CMakeLists.txt` 会设置 vcpkg 的

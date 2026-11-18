@@ -1,0 +1,6 @@
+[submodule "bridge"]
+	path = bridge
+	url = https://github.com/clevebitr/Krkr2Next-bridge.git
+[submodule "app"]
+	path = app
+	url = https://github.com/clevebitr/Krkr2Next-app.git

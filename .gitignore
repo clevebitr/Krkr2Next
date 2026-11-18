@@ -4,8 +4,8 @@
 /**/bin/
 vcpkg_installed/
 
-# 引擎共享库由 scripts/build_engine_android.sh 投放，不入库
-app/app/src/main/jniLibs/
+# 引擎共享库由 scripts/build_engine_android.sh 投放，不入库。
+# app/ 现在是独立仓库（git submodule），忽略规则在 app 仓库自己的 .gitignore 里。
 
 __pycache__/
 
