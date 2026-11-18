@@ -105,8 +105,8 @@ cpp_new/
 | 7e | **TJS ↔ 引擎桥（续）** | 诊断上下文（#40）、字节码脚本、`Debug`/`Console`、`Plugins` | ✅ 完成 |
 | 7f | **装配根与 CMake** | `engine/` 装配层、`ScriptLoader`、能力接口拆分、`CompatProfile`、CMake 目标 + CTest；产品入口与测试台共用装配 | ✅ 完成 |
 | 7h | **调试器子包** | `debugger/`：事件契约 + JSONL 录制 + `krkr_debug` 前端（D1 精简版）；断点/单步/DAP 见规格 §5、§9 | ✅ D1 完成 |
-| 7g | **`Initialize.tjs` 的运行面** | `Storages` 挂载面（`addAutoPath`、`addArchive`、`commitSavedata`…）、`System` 其余成员；当前首个缺口是 `Window`（渲染第 8 步的最小面） | ⬅ **下一步** |
-| 8 | 渲染 | 见 **`cpp_new/docs/render-spec.md`**：8a 软件后端、8b GLES3 后端、8c EGL/ANativeWindow 代码完成；8c 真机一帧仍待 JNI 接线 | 🔄 8c 待真机 |
+| 7g | **`Initialize.tjs` 的运行面** | `Window` / `Layer` 脚本桥接（当前闸门），随后 `Storages` 挂载面、`System` 其余成员 | ⬅ **下一步** |
+| 8 | 渲染 | 见 **`cpp_new/docs/render-spec.md`**：8a 软件后端 + 图片解码、8b GLES3（桌面逐像素对齐）、8c EGL 代码完成；8c 真机一帧待 JNI 接线 | 🔄 8c 待真机 |
 | 9 | 输入 | 指针 / 按键 / 文本 → 脚本事件 | 待做 |
 | 10 | 音频 | 至少 WAVE + OGG | 待做 |
 | 11 | 换回去 | 用 `cpp_new` 替换 `bridge/engine_api/` 的实现，签名不变，Kotlin 不动 | 待做 |
@@ -617,6 +617,14 @@ CMake（技术债 #38）与分层一一对应：`krkr_tjs`、`krkr_tjs_host`（�
 验证：Android arm64 构建通过，`libkrkr_platform.a` 内含 `krkr_android_surface_attach` 与
 `GetAndroidGLContext()`；桌面 `render_gl` 仍 21/21 通过。
 
+### 4.26 图片解码（8a 验收）
+
+- `visual/Image` + `visual/ImageDecoder`：按 magic 分派，只吃字节；PNG/JPEG/BMP 由
+  `stb_image` v2.32（vendored，单文件，仅启用三种格式）解码。
+- 真包验收：`title_bg.png` 1920×1080 解码结果与 Pillow 逐像素一致（FNV-1a 相同），
+  再经软件后端合成写 PPM；`ctest` 项 `image_decode`。
+- Windows 运行验证：`image_window <root-path-file> title_bg.png 120`（窗口显示真素材 + 半透明条）。
+
 ## 5. 已知问题 / 技术债
 
 | # | 问题 | 处理 |
@@ -677,6 +685,8 @@ CMake（技术债 #38）与分层一一对应：`krkr_tjs`、`krkr_tjs_host`（�
 | 61 | EGL surface 生命周期没有跨线程保护 | `AndroidSurface` 用互斥锁保护 attach/detach，但渲染线程与 UI 线程的时序需在 JNI 层按 Android 约定串行化 |
 | 54 | 8a 只支持轴对齐 + 最近邻；旋转/斜切项被跳过 | 双线性与仿射属 8b/8d；跳过会记入 `RenderStats::itemsSkipped`，不会画错 |
 | 55 | Android 呈现目标未接 ERenderTarget 到 ANativeWindow/EGL | 8c；当前 `Present` 返回 false 并记录一次原因 |
+| 62 | TLG5/TLG6 未实现 | KiriKiri 自有格式，命中时 `DecodeImage` 显式返回 "not implemented"；参照 `LoadTLG.cpp` 另做 |
+| 63 | 解码缓存与尺寸上限未做 | 每次解码都整文件读入内存；真机立绘需要"名字+尺寸"为键的 LRU，等接 `Window/Layer` 时一并做 |
 | 56 | 没有图像解码与字体 | 8a 用程序生成的纹理验证管线；PNG 需引入 stb_image（vendored），TLG 参照 `LoadTLG.cpp` |
 | 51 | 调试器只有观察平面（事件流），没有断点/单步 | `ENABLE_DEBUGGER` 钩子已验证可编译（规格 §8），但暂停语义需要与 tick 模型一起设计；当前定位问题靠事件 + trace |
 | 52 | `krkr_debug` 只支持 `--summary` / `--filter`，无 `--follow` | 事件文件在进程退出后才有完整内容；实时跟随等 D4 的会话层 |
@@ -741,49 +751,60 @@ CMake（技术债 #38）与分层一一对应：`krkr_tjs`、`krkr_tjs_host`（�
 
 ### 当前可运行状态
 
-```
-bash cpp_new/tools/run_probes.sh                        # CMake + ctest，期望 14/14 通过
-python cpp_new/tools/check_layer_deps.py cpp_new        # 期望 0 违规
-```
-
-断言脚本在 `cpp_new/host/fixtures/demo/`（同时是 `storage_probe` 的夹具根目录）：
-`t_scripts.tjs`、`t_system.tjs`、`t_debug.tjs`、`t_plugins.tjs`、`t_repro.tjs`、
-`t_alias.tjs`、`t_spread.tjs`、`t_exit.tjs`（以及被它们 `execStorage` 引用的
-`t_exec.tjs` / `t_expr.tjs`）。末尾主动抛出 `<name>-ok` 表示通过。
-
-真实游戏验证（测试台与产品入口两条链路都指向同一装配）：
-
 ```bash
-build/cmake/debug/bin/tjs_probe.exe build/py_startup.utf8.tjs build/real_root.txt
+bash cpp_new/tools/run_probes.sh                        # CMake + ctest，期望 22/22 通过
+python cpp_new/tools/check_layer_deps.py cpp_new        # 期望 0 违规
+
+# 真游戏（两条链路共用同一装配）
 build/cmake/debug/bin/krkr_next.exe --path-file build/real_root.txt
+build/cmake/debug/bin/tjs_probe.exe build/py_startup.utf8.tjs build/real_root.txt
+
+# 渲染 / 解码 / 调试事件
+build/cmake/debug/bin/image_probe  build/real_root.txt title_bg.png build/title_bg.ppm
+build/cmake/debug/bin/image_window build/real_root.txt title_bg.png 120
+KRKR_DEBUG_EVENTS=build/events.jsonl build/cmake/debug/bin/krkr_next.exe --path-file build/real_root.txt
 ```
 
-### 已知失败点与下一步
+| CTest | 覆盖 |
+|---|---|
+| `storage_*`、`xp3_*` | 目录/包挂载、XP3 索引与解压字节一致 |
+| `script_*`（9 项） | Storages / Scripts / System / Debug / Plugins / 别名调用 / 退出 |
+| `startup_state` | 启动状态机 |
+| `render_surface`、`render_gl` | 软件合成断言；GL 与软件逐像素 ±1（无 GL 环境 skip） |
+| `image_decode` | 真包 `title_bg.png` 解码 + 合成（无游戏包时 skip） |
+| `debug_*`（5 项） | 调试事件录制与筛选 |
+| `real_startup` | **DISABLED**（见下） |
 
-真脚本已进入 `system/Initialize.tjs`（字节码），`System` 的路径与平台成员已通过，当前停在：
+### 已知失败点
+
+真脚本已进入 `system/Initialize.tjs`（TJS2 字节码），`System` 路径/平台成员已通过，当前停在：
 
 ```
 [error] Scripts.execStorage("system/Initialize.tjs"): Member "Window" does not exist
        [script=system/Initialize.tjs line=1]
 ```
 
-`Window` / `Layer` / `Bitmap` 属于 visual 层，即第 8 步的最小面。下一步（行 7g）：
+### 下一步（按顺序，行 7g / 8d）
 
-1. 先按 `cpp_new/docs/render-spec.md` 落 `Window` 的最小成员（`width`/`height`/`visible`/`title`
-   与 `Layer` 的构造），因为 `Initialize.tjs` 在第 1 行就用它做屏幕参数初始化；
-2. 再按同样顺序过 `Storages` 挂载面（`addAutoPath` / `addArchive` / `commitSavedata`…）与
-   `Plugins.CanLoadPlugin` 一类 Z 分支探测点；`kirikiriz` 预处理器值保持 0（不声称 Z 扩展），
-   与老树 `RegisterStartupCompatGlobals` 的策略一致；
-3. `platform` 首个能力（技术债 #39）：Android 的 `personalPath` / `savedGamesPath` 尚未由宿主注入，
-   脚本读取时按设计显式失败。
-
-新增宿主能力的固定顺序（不要颠倒）：`core/contracts/ScriptServices.h` 加小接口 →
-`core/api/EngineRuntime` 实现 → `engine/CompatProfile` 里不需要改（能力不是类）→
-`shim/classes/Tjs*` 读取 `GetContext().services`。
+1. **`Window` / `Layer` 脚本桥接（下一步）**
+   - `shim/classes/TjsWindow.cpp`：`Window.width/height/visible/title/layer`，
+     几何读 `HostServices::window`，绘制入口在 8b 前显式失败；
+   - `shim/classes/TjsLayer.cpp`：`Layer` 的构造 + `left/top/width/height/opacity/visible/type`，
+     位图来自 `visual/Image`（`LoadImage`）；`Window.add/remove` 只维护列表；
+   - `visual` 新增 `Scene`（窗口 → 图层树 → DrawList 合成），用 `image_probe` 的断言方式
+     验证"脚本设参数 → 出图"，然后启用 `real_startup`（技术债 #49）。
+2. **字体**：`Font` 需要字形位图（FreeType 或系统字体），是 KAG 文本的硬依赖；
+   先定"字形位图从哪来"，再决定 `Layer.drawText` 的最小面。
+3. **8c 真机**：`bridge/engine_api` 接 `krkr_android_surface_attach/resize/detach`，
+   按 Android 约定串行化 UI 线程与渲染线程；`render-spec.md` §14.2 记录了两条约束。
+4. **解码补齐**：TLG5（真游戏立绘大量使用，技术债 #62）与"名字+尺寸"LRU 缓存（#63）。
+5. **Storages 挂载面**：`addAutoPath` / `addArchive` / `commitSavedata` 等（当前接受并记录，
+   不改变挂载表）；顺序放在 `Window` 之后，因为它们要等脚本能跑到对应分支。
 
 ### 纪律提醒
 
-- 修改前先读 `cpp_new/docs/ARCHITECTURE.md`：判定归属层，先补下层契约，再写桥接。
-- 不修改 `tjs/`；新增补丁需附"上游在目标工具链无法编译"的证据，并登记于 §4.10。
+- 修改前先读 `cpp_new/docs/ARCHITECTURE.md`、`docs/render-spec.md`、`docs/debugger-spec.md`；
+  先补下层契约，再写桥接。
+- 不修改 `tjs/`；新增补丁登记到 `tjs/VENDOR.md`（已登记 3 条）。
 - 注释遵循 `AGENTS.md` §11。
-- 每步结束运行层间检查与全部测试台，回归不过不得继续。
+- 每步结束跑 `tools/run_probes.sh`、`check_layer_deps.py`，以及 `cmake --preset android-debug`（只编库）。

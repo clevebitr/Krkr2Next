@@ -83,7 +83,10 @@ target_include_directories(krkr_core PUBLIC "${KRKR_ROOT}")
 # visual：合成与位图（渲染第 8a 片）。软件后端是像素权威，GL 后端后补。
 # -----------------------------------------------------------------------------
 add_library(krkr_visual STATIC
-  visual/Surface.cpp visual/Blend.cpp visual/SoftwareBackend.cpp visual/GLBackend.cpp)
+  visual/Surface.cpp visual/Blend.cpp visual/SoftwareBackend.cpp visual/GLBackend.cpp
+  visual/ImageDecoder.cpp visual/third_party/stb_image_impl.cpp)
+# 第三方单文件库：只对本文件关告警，不污染其它目标。
+set_source_files_properties(visual/third_party/stb_image_impl.cpp PROPERTIES COMPILE_OPTIONS "-w")
 target_include_directories(krkr_visual PUBLIC "${KRKR_ROOT}")
 target_link_libraries(krkr_visual PUBLIC krkr_core)
 
@@ -175,12 +178,18 @@ target_link_libraries(xp3pack PRIVATE krkr_core)
 add_executable(render_probe host/RenderProbe.cpp)
 target_link_libraries(render_probe PRIVATE krkr_visual krkr_platform)
 
+add_executable(image_probe host/ImageProbe.cpp)
+target_link_libraries(image_probe PRIVATE krkr_visual krkr_core)
+
 if(WIN32)
   add_executable(render_window host/RenderWindow.cpp)
   target_link_libraries(render_window PRIVATE krkr_visual krkr_platform)
 
   add_executable(render_gl_probe host/RenderGlProbe.cpp)
   target_link_libraries(render_gl_probe PRIVATE krkr_visual krkr_platform)
+
+  add_executable(image_window host/ImageWindow.cpp)
+  target_link_libraries(image_window PRIVATE krkr_visual krkr_platform)
 endif()
 
 endif() # KRKR_BUILD_TOOLS
@@ -223,6 +232,15 @@ add_test(NAME startup_state COMMAND krkr_next --path-file "${KRKR_FIXTURE_ROOT_F
 
 add_test(NAME render_surface
   COMMAND render_probe "${CMAKE_BINARY_DIR}/render_probe.ppm")
+
+# 图片解码：有真游戏包时跑真实素材（title_bg.png），否则 skip。
+set(KRKR_REAL_ROOT_FILE_IMAGE "${KRKR_ROOT}/../build/real_root.txt")
+if(EXISTS "${KRKR_REAL_ROOT_FILE_IMAGE}")
+  add_test(NAME image_decode
+    COMMAND image_probe "${KRKR_REAL_ROOT_FILE_IMAGE}" title_bg.png
+            "${CMAKE_BINARY_DIR}/title_bg.ppm")
+  set_tests_properties(image_decode PROPERTIES SKIP_RETURN_CODE 77)
+endif()
 
 if(WIN32)
   # 没有可用 GL 的环境（CI 无显示）记 skip，而不是失败。

@@ -338,6 +338,25 @@ struct DrawList { std::vector<DrawItem> items; std::uint32_t clearColor; };
 11. **SDL 的位置**：如果以后接 SDL，它是 `IRenderTarget` 的另一个实现（+ GL context provider），
     不改渲染核心；不要为了 SDL 把它的类型引进 `visual/`。
 
+### 14.3 图像解码（8a 验收路径）
+
+| 决定 | 内容 |
+|---|---|
+| 位置 | `visual/Image`（纯数据，ARGB8888）+ `visual/ImageDecoder`；**不依赖 Storage**，只吃字节 |
+| 格式判定 | 按 magic，不看扩展名（包内扩展名与内容不一致真实存在）；TLG5/TLG6 显式报未实现 |
+| 依赖 | `visual/third_party/stb_image.h`（v2.32，public domain，仅启用 PNG/JPEG/BMP） |
+| 像素约定 | 解码结果统一成 `0xAARRGGBB`，与 Surface/Texture 一致，避免上层再转一次 |
+| 验证 | 真包 `title_bg.png`（3.1 MB / 1920×1080）：本解码器的 FNV-1a 与 Pillow 对同一文件的解码结果**逐像素一致**（`0xC2B8E3C192CEA9EC`） |
+
+用法：
+
+```bash
+# 断言：Storage → 解码 → 软件合成 → PPM（没有游戏包时退出码 77，CTest 记 skip）
+build/cmake/debug/bin/image_probe build/real_root.txt title_bg.png build/title_bg.ppm
+# Windows 运行：解码 → 合成 → 窗口呈现（半透明条确认混合路径）
+build/cmake/debug/bin/image_window build/real_root.txt title_bg.png 120
+```
+
 ### 14.2 8c 的边界
 
 - 代码侧完成：EGL 上下文、surface 生命周期接口、两个平台共用一份 GL 入口点清单
