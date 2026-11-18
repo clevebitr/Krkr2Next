@@ -12,8 +12,12 @@
 
 ```
 tjs/        权威实现。krkrz 原样拷贝，不承载适配逻辑。
+vendor/     权威实现的第二个来源（krkrz 的 visual 切片 + 我们补的 msg 实现，见 docs/visual-vendor.md）。
+            上游源码原样拷贝；「平台 porting」实现也放在这里，但用 §4 的命名区分。
 shim/       垫层。连接抽象层与权威实现，承载 TJS 原生类桥接与脚本装载。
-visual/     合成与位图。软件后端是像素权威；GL 后端后补（docs/render-spec.md）。
+visual/     合成与位图。图层树 → DrawList、软件后端；混合数学不在这里（见 pixel/）。
+pixel/      混合操作的抽象层。把 vendor 的上游像素函数收成 `krkr::pixel` 的窄接口。
+            渲染的现状与目标见 docs/rendering-architecture.md。
 platform/   抽象层。实现平台能力（Android / 桌面），不感知 TJS。
 core/       基座。日志、存储、能力契约、对外 API。
 engine/     装配层。装配脚本引擎、兼容声明与原生类注册表；引擎侧唯一的"接线处"。
@@ -28,8 +32,11 @@ docs/       规格与约束文档。
 | 层 | 必须做 | 禁止做 |
 |---|---|---|
 | `tjs/` | 提供脚本解释器与内置类 | 承载平台适配、引擎调用、日志输出 |
+| `vendor/` | 提供渲染的像素与图层语义（tvpgl、Layer/Bitmap、字体、图片解码） | 被 `vendor/` 之外的层直接包含；修改上游源码而不登记 |
 | `shim/` | TJS 原生类注册、编码转换、宿主符号提供 | 直接访问文件系统、窗口、线程原语 |
-| `visual/` | 位图、合成算子、场景数据；软件后端作为像素权威 | 引用 `shim/`、`tjs/`、平台实现 |
+| `pixel/` | 单像素混合、操作词汇表（`krkr::pixel::LayerOp`）与上游函数映射 | 引用 `visual/`、`shim/`、`tjs/`、平台实现 |
+| `legacy_support` | 上游 visual 依赖、但必须由本仓库实现的那一层：消息文案、存储媒体、时间/线程、位图内存、字体 | 引用上游 `visual/` 或 `shim/` |
+| `visual/` | 位图、场景数据、DrawList 合成与软件后端 | 引用 `shim/`、`tjs/`、`vendor/`、平台实现 |
 | `platform/` | 实现 `core/contracts` 的能力接口 | 引用 `shim/` 或 `tjs/` 的任何头 |
 | `core/` | 基座服务、能力契约、模块注册、对外 API | 引用 `shim/`、`platform/`、`tjs/`、`engine/` |
 | `engine/` | 装配引擎与原生类、应用兼容声明、把脚本运行时注入 `core/api` | 承载平台或 TJS 适配逻辑（那属于 `shim/`） |
@@ -40,8 +47,11 @@ docs/       规格与约束文档。
 
 ```
 platform ──► core
-shim     ──► core (contracts, log) 、tjs、visual
-visual   ──► core
+vendor   ──► tjs（只允许 tjs 与自身；平台能力通过 vendor 的 porting 实现注入）
+pixel    ──► vendor、core (log)
+visual   ──► pixel、core
+shim     ──► core (contracts, log) 、tjs、visual、pixel、vendor
+legacy   ──► tjs、core（上游 visual 需要的消息/存储/时间/线程/内存/字体由本层实现）
 tjs      ──► 无源码依赖（宿主符号在链接期由 shim 提供）
 core     ──► 无上层依赖
 engine   ──► shim、core、platform
@@ -52,14 +62,19 @@ host     ──► engine、debugger、core
 规则：
 
 1. 任何方向相反的引用均为缺陷，优先改设计而不是加临时声明。
-2. 需要"逆向调用"时使用 `core/contracts` 的接口：`engine/` 实现、`core/api` 通过接口调用
+2. `vendor/` 是唯一允许包含「老树头」（`tjsCommHead.h`、`MsgIntf.h`、`StorageIntf.h` …）的地方；
+   铁律「不 include 老树任何头」的适用范围是 `vendor/` 之外的层。`vendor/` 只对 `shim/` 暴露
+   稳定接口，不得让 `core/`、`engine/` 出现 `vendor/` 的包含。
+3. 需要"逆向调用"时使用 `core/contracts` 的接口：`engine/` 实现、`core/api` 通过接口调用
    （`IScriptRuntime`）。不得让 `core` 反向引用 `shim`、`tjs` 或 `engine`。
-3. `shim/` 不依赖 `platform/` 的源码；平台能力通过 `core/contracts` 接口取得，
+4. `shim/` 不依赖 `platform/` 的源码；平台能力通过 `core/contracts` 接口取得，
    因此缺少平台实现时 `shim/` 仍可独立编译与测试。
-4. 装配只发生在 `engine/`：`shim/` 提供"装什么"的入口（注册函数），`engine/` 决定"装哪些、按什么顺序"。
+5. 装配只发生在 `engine/`：`shim/` 提供"装什么"的入口（注册函数），`engine/` 决定"装哪些、按什么顺序"。
    新增原生类时改 `engine/CompatProfile.cpp` 的列表，不要在 `shim/` 里做自注册。
-5. 调试与可观测性走 `core/contracts/DebugServices.h`：下层只发事件/读控制接口，
+6. 调试与可观测性走 `core/contracts/DebugServices.h`：下层只发事件/读控制接口，
    实现全部在 `debugger/`（规格见 `docs/debugger-spec.md`）。缝合点必须"空指针即跳过"。
+7. 同一时刻只有一个组件回答「这个像素应该是什么颜色」：R1 完成后 `visual/Scene`、
+   自写混合数学与自建图层树必须退场，不允许保留第二条合成路径（`docs/visual-vendor.md` §3）。
 
 ## 4. 权威实现的约束
 
@@ -68,6 +83,8 @@ host     ──► engine、debugger、core
 2. 平台与工具链差异一律通过 `shim/` 解决：预置头文件、宿主符号、生成的源文件、编译参数。
 3. 上游不提交的生成文件（如日期词表）由 `tools/` 生成，产物落在 `shim/`，不得写回 `tjs/`。
 4. 上游同步流程：重新拷贝 `tjs/`，重放 `tjs/VENDOR.md` 中的补丁，运行 `host/` 下的全部测试台。
+5. `vendor/krkrz/` 适用同样的规则（原样、补丁登记在 `vendor/krkrz/VENDOR.md`、逐文件 sha256），
+   版本以 `docs/visual-vendor.md` 记录的上游 tag 为准。
 
 ## 5. 模块与生命周期
 
@@ -114,6 +131,10 @@ host     ──► engine、debugger、core
 2. 异常不得穿过层边界：跨层接口以返回值与错误文本表达失败。
 3. 注释遵循 `AGENTS.md` §11：书面语、适量、无分隔线、不复述代码。
 4. 头文件只包含本层及其下方层的头；跨层包含视为缺陷。
+5. **命名**：抽象层用抽象层的名字（`pixel::LayerOp`、`krkr::io::Storage`），不要用上游前缀
+   （`TVP`/`tTVP`/`iTVP`）给新东西命名 —— 那些前缀只属于 `vendor/` 里的上游代码。
+   文件名与职责一致（`LayerOps.h` 是词汇表、`Blend.cpp` 是混合映射），不出现
+   `Impl`/`Compat`/`Util` 这类无信息后缀。
 
 ## 8. 静态检查与构建
 
@@ -125,7 +146,7 @@ python cpp_new/tools/check_layer_deps.py cpp_new
 CMake 目标与分层一一对应：`krkr_tjs` / `krkr_tjs_host` / `krkr_core` / `krkr_platform` /
 `krkr_shim` / `krkr_engine`，测试台链接 `krkr_engine`（产品入口与测试台共用同一段装配）。
 
-`tools/check_layer_deps.py` 校验第 3 节的依赖方向，作为提交前的强制检查。
+`tools/check_layer_deps.py` 校验第 3 节的依赖方向（含 `vendor/` 规则），作为提交前的强制检查。
 违规输出现式形如 `core/io/Storage.cpp: include "shim/..." 违反分层（core 不得引用 shim）`。
 
 ## 9. 诊断与调试

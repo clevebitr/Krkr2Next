@@ -79,8 +79,10 @@ int main(int argc, char **argv) {
   Surface target(2, 2);
   target.Clear(0xffff0000u);
   target.Composite(overlay, {0, 0, 2, 2}, {0, 0, 2, 2}, ltAlpha, 255);
-  // a = 128；keep = 127；r = 255*128/255 + 255*127/255 = 255；g = 255*128/255 = 128
-  CheckPixel(target, 0, 0, 0xffff8080u, "alpha blend mixes source over destination");
+  // 混合数学来自 vendor/krkrz（tvpgl）。它用 `(x*255)>>8` 这类 ÷256 的定点近似：
+  // src alpha 128 时 g = (255*128)>>8 = 127，因此期望值是 0x7F 而不是手算的 0x80。
+  // 语义断言（与官方公式比对）在 host/BlendMatrixProbe.cpp，这里只钉住合成接线。
+  CheckPixel(target, 0, 0, 0xffff7f7fu, "alpha blend mixes source over destination");
   target.Composite(overlay, {0, 0, 2, 2}, {0, 0, 2, 2}, ltOpaque, 255);
   CheckPixel(target, 0, 0, 0xffffffffu, "opaque copies source rgb");
 

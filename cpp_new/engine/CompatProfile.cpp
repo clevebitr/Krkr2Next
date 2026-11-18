@@ -1,10 +1,12 @@
 #include "engine/CompatProfile.h"
 
 #include "shim/classes/TjsDebug.h"
+#include "shim/classes/TjsLayer.h"
 #include "shim/classes/TjsPlugins.h"
 #include "shim/classes/TjsScripts.h"
 #include "shim/classes/TjsStorages.h"
 #include "shim/classes/TjsSystem.h"
+#include "shim/classes/TjsWindow.h"
 
 namespace krkr::engine {
 
@@ -23,6 +25,9 @@ Profile MakeKiriKiri2Profile() {
     &krkr::script::RegisterSystemClass,
     &krkr::script::RegisterDebugClass,
     &krkr::script::RegisterPluginsClass,
+    // 窗口与图层：Window 是场景树的根，Layer 只能挂在已有的 Window 下。
+    &krkr::script::RegisterWindowClass,
+    &krkr::script::RegisterLayerClass,
   };
 
   // 脚本前奏留给"必须由脚本层提供、引擎无法实现"的兼容 stub。

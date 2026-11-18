@@ -8,16 +8,18 @@
 
 ## 0. 一句话现状
 
-四层结构已落地（`tjs` / `shim` / `platform` / `core`），脚本引擎可执行真实游戏的启动脚本：
-`startup.tjs` 通过 `Scripts.eval`、`Storages`、`System`、`Debug`、`Plugins` 五个桥接类，
-已能加载并执行 `system/Initialize.tjs`（该文件是 TJS2 字节码）。当前缺口是
-`Initialize.tjs` 需要的 `System` 成员（首个为 `System.exePath`）。渲染层尚未动工，规格见
-`cpp_new/docs/render-spec.md`。
+分层结构已落地（`tjs` / `shim` / `platform` / `core` / `visual` / `engine` / `debugger`），
+脚本引擎可执行真实游戏的启动脚本：`startup.tjs` 经 `Scripts` / `Storages` / `System` /
+`Debug` / `Plugins` / `Window` / `Layer` 七个桥接类推进，`system/Initialize.tjs`
+（TJS2 字节码）已能加载。窗口与图层现在是真场景树：`visual/Scene` 合成成 DrawList，
+软件后端出像素，GLES3 后端在桌面与软件逐像素一致（8a/8b/8c 代码完成，真机一帧待 JNI）。
+**当前缺口未知**：最后一个测量点是 `Member "Window" does not exist`，该成员已补齐，
+新的缺口需要在有游戏数据的开发机上重新测（§11）。
 
 ## 1. 现在能跑什么
 
 ```bash
-bash cpp_new/tools/run_probes.sh            # CMake 配置 + 构建 + CTest 全部断言（19 项）
+bash cpp_new/tools/run_probes.sh            # CMake 配置 + 构建 + CTest 全部断言（21 项）
 python cpp_new/tools/check_layer_deps.py cpp_new   # 期望 0 违规
 
 # 调试事件（可选）：录制 → 汇总 / 过滤
@@ -27,7 +29,7 @@ build/cmake/debug/bin/krkr_debug --filter "ev=script.fail" build/events.jsonl
 ```
 
 CMake 目标与分层一一对应（`cpp_new/CMakeLists.txt`）：`krkr_tjs` / `krkr_tjs_host` /
-`krkr_core` / `krkr_platform` / `krkr_shim` / `krkr_engine`。**不要再手敲编译命令**；
+`krkr_core` / `krkr_visual` / `krkr_platform` / `krkr_shim` / `krkr_engine` / `krkr_debugger`。**不要再手敲编译命令**；
 旧的手写构建脚本已删除（技术债 #38 收口）。预设见 `cpp_new/CMakePresets.json`
 （`desktop-debug` / `desktop-release`）。
 
@@ -39,6 +41,7 @@ CMake 目标与分层一一对应（`cpp_new/CMakeLists.txt`）：`krkr_tjs` / `
 | `build/krkr_next.exe` | `host/main.cpp` + `core/api` + `core/log` + IO | 引擎入口与路径校验 |
 | `build/storage_probe.exe` | `host/StorageProbe.cpp` + `core/log` + IO | 存储层断言（18 项） |
 | `build/xp3_probe.exe`、`build/xp3pack.exe` | `host/Xp3Probe.cpp`、`host/Xp3Pack.cpp` | 包解析与夹具生成 |
+| `build/window_probe.exe` | `host/WindowProbe.cpp` + `host/ProbeHost.h` + 场景合成 | 脚本建窗口/图层 → 逐像素断言 |
 
 断言脚本在 `cpp_new/host/fixtures/demo/`（夹具根目录，同时被 `storage_probe` 使用），
 `tjs_probe <script> <root-path-file>` 的第二个参数是**内容为根路径的文本文件**，
@@ -61,6 +64,8 @@ cpp_new/
 │   ├── engine/NativeClass.*    原生类注册样板（objthis 为空）
 │   ├── text/TjsText.*          编码转换（UTF-8 <-> tjs_char、脚本源解码）
 │   ├── classes/Tjs{System,Scripts,Storages,Debug,Plugins}.*   TJS 原生类桥接
+│   ├── classes/Tjs{Window,Layer}.*                            窗口/图层桥接（写场景树）
+│   ├── classes/TjsWindowInternals.h                           两个原生实例类型 + 窗口存活标记
 │   ├── tjs_host/               宿主符号、prelude、targetver、生成的日期词表与消息表
 │   ├── TjsBridge.*             装配上下文（唯一写入点是 engine/ScriptRuntime）
 │   └── TjsDiagnostics.*        异常定位文本、内置消息表安装、桥接失败抛出
@@ -69,6 +74,10 @@ cpp_new/
 │   └── CompatProfile.*         "声称支持什么"：预处理器值、原生类列表、脚本前奏
 ├── debugger/                   调试器子包（规格见 docs/debugger-spec.md，尚未实现）
 ├── platform/                   抽象层（当前仅有目标骨架，见技术债 #39）
+├── visual/
+│   ├── Surface/Blend/DrawList/SoftwareBackend/GLBackend   合成与后端
+│   ├── Scene.*                 图层树 → DrawList（窗口 → 图层，无 TJS 依赖）
+│   └── Image.*/ImageDecoder.*  图片解码（stb_image）
 ├── core/
 │   ├── contracts/ScriptServices.h  宿主能力的小接口集合
 │   ├── contracts/IScriptRuntime.h  脚本运行时对引擎的契约
@@ -77,7 +86,9 @@ cpp_new/
 │   ├── log/                        日志
 │   └── module/ debug/              预留：模块注册表、调试接线
 ├── host/                       测试台（不属于引擎产物）
-│   └── fixtures/demo/          断言脚本与存储层夹具
+│   ├── ProbeHost.h             测试台共用的宿主实现（tjs_probe / window_probe）
+│   ├── WindowProbe.cpp         场景合成与像素断言
+│   └── fixtures/demo/          断言脚本、存储层夹具与位图夹具（layer.bmp）
 ├── tools/                      代码生成、构建与静态检查
 └── docs/                       ARCHITECTURE.md、render-spec.md、debugger-spec.md
 ```
@@ -105,8 +116,8 @@ cpp_new/
 | 7e | **TJS ↔ 引擎桥（续）** | 诊断上下文（#40）、字节码脚本、`Debug`/`Console`、`Plugins` | ✅ 完成 |
 | 7f | **装配根与 CMake** | `engine/` 装配层、`ScriptLoader`、能力接口拆分、`CompatProfile`、CMake 目标 + CTest；产品入口与测试台共用装配 | ✅ 完成 |
 | 7h | **调试器子包** | `debugger/`：事件契约 + JSONL 录制 + `krkr_debug` 前端（D1 精简版）；断点/单步/DAP 见规格 §5、§9 | ✅ D1 完成 |
-| 7g | **`Initialize.tjs` 的运行面** | `Window` / `Layer` 脚本桥接（当前闸门），随后 `Storages` 挂载面、`System` 其余成员 | ⬅ **下一步** |
-| 8 | 渲染 | 见 **`cpp_new/docs/render-spec.md`**：8a 软件后端 + 图片解码、8b GLES3（桌面逐像素对齐）、8c EGL 代码完成；8c 真机一帧待 JNI 接线 | 🔄 8c 待真机 |
+| 7g | **`Initialize.tjs` 的运行面** | `Window` / `Layer` 桥接 + `visual/Scene` 合成（7g-1，见 §4.27）；随后 `Storages` 挂载面、`System` 其余成员 | 🔄 7g-1 完成 |
+| 8 | 渲染 | 见 **`cpp_new/docs/render-spec.md`**；8a 软件后端 + 图片解码、8b GLES3（桌面逐像素对齐）、8c EGL 代码完成。**8d 起改走 R1：像素与图层语义交由 krkrz 权威实现（`docs/visual-vendor.md`）** | 🔄 8c 待真机 / 8d 转 R1 |
 | 9 | 输入 | 指针 / 按键 / 文本 → 脚本事件 | 待做 |
 | 10 | 音频 | 至少 WAVE + OGG | 待做 |
 | 11 | 换回去 | 用 `cpp_new` 替换 `bridge/engine_api/` 的实现，签名不变，Kotlin 不动 | 待做 |
@@ -625,6 +636,56 @@ CMake（技术债 #38）与分层一一对应：`krkr_tjs`、`krkr_tjs_host`（�
   再经软件后端合成写 PPM；`ctest` 项 `image_decode`。
 - Windows 运行验证：`image_window <root-path-file> title_bg.png 120`（窗口显示真素材 + 半透明条）。
 
+### 4.27 第 7g-1 刀：`Window` / `Layer` 桥接与场景合成
+
+`Initialize.tjs` 的门槛是脚本要创建窗口与图层。这一刀把"脚本参数 → 图层树 → 像素"
+整条链路接上，验收方式是"脚本设参数 → 宿主逐像素断言"，不是"脚本没报错"。
+
+| 位置 | 内容 |
+|---|---|
+| `visual/Scene.*` | 场景树 `SceneNode` 与 `Scene::BuildDrawList`（窗口根 → 图层树 → DrawList），附 `SceneBuildStats` |
+| `shim/classes/TjsWindow.*` | `Window` 类（几何、caption、visible、zoom、`add`/`remove`、`primaryLayer`、`mainWindow`）+ 窗口登记表 `GetPrimaryScene()` |
+| `shim/classes/TjsLayer.*` | `Layer` 类（构造、几何、opacity、type、clip、`loadImages`、`setSizeToImageSize`、`bringToFront`/`moveBefore` 等） |
+| `shim/classes/TjsWindowInternals.h` | 两个原生实例类型与窗口存活标记（跨文件共享，不进公开头） |
+| `host/ProbeHost.h` | 从 `tjs_probe` 抽出的宿主实现，`window_probe` 与之共用 |
+| `host/WindowProbe.cpp` | 跑场景脚本 → 合成 → 软件后端 → 手算像素断言 + PPM |
+| `host/fixtures/demo/layer.bmp`、`t_window.tjs` | 8×8 四色位图与"两层 + 错误路径"的场景脚本 |
+
+语义按参照实现对齐（不是自创）：
+
+| 规则 | 取值 | 依据 |
+|---|---|---|
+| 图层默认值 | `type = ltAlpha`、`visible = false`、32×32、全透明默认位图 | `tTJSNI_BaseLayer` 构造函数 |
+| 顶点语义 | `new Layer(window, null)` = 主图层；`new Layer(window, parent)` = 父层的子层 | `tTJSNI_BaseLayer::Construct` |
+| `Window.add(obj)` | 只钉住对象不让它被回收，不改变树结构 | `tTJSNI_BaseWindow::Add`（ObjectVector） |
+| `left`/`top` | 相对父层原点 | 参照实现的图层几何 |
+| `clip` | 只作用于本层四边形，不下传给子层 | `SetClip` 是图层自身属性 |
+| `visible` | 为假时本层与子层都不画 | 参照实现的 `nodeVisible` |
+| `opacity` | 只作用于本层，不向子层累积 | 图层 opacity 的定义 |
+| 未实现的混合算子 | 跳过自身 + 计入 `nodesUnsupported`，子层照画 | "宁可少画，不可画错" |
+
+三个踩过的点：
+
+1. **`CreateNativeInstance()` 必须 override**。不写它，`tTJSNativeClass::CreateNew` 会把空实例登记进对象，
+   构造时 `NativeInstanceSupport(GETINSTANCE)` 取回空指针，脚本只看到一句 `Invalid object context`
+   （`TJS_E_NATIVECLASSCRASH`）。此前只有静态方法的类（`System` 等）不会暴露这个问题。
+2. **断言脚本要 `throw new Exception(...)`**，不能 `throw "字符串"`。纯字符串抛出到达宿主只剩
+   `script exception`，`-ok` 标记会丢，CTest 因此变红（此前 `t_*` 恰好都用了 Exception）。
+3. **`Window` / `Layer` 互相持引用**。`layer.window` 是 AddRef 的 TJS 对象，`window.add(layer)` 又钉住图层，
+   构成环。参照实现同样不回收窗口（窗口活到进程结束），这里接受，记入技术债 #65。
+
+验收（CTest `window_scene`，全部 21 项通过）：
+
+```
+nodes=3 emitted=2 hidden=0 unsupported=0 clipped=0
+PASS  opaque layer paints its red quadrant (pixel 4,2 = 0xFFFF0000, expected 0xFFFF0000)
+PASS  clip drops the green quadrant (pixel 8,2 = 0xFF000000, expected 0xFF000000)
+PASS  child layer blends red at opacity 128 (pixel 12,10 = 0xFF800000, expected 0xFF800000)
+```
+
+期望值是手算的（`ltAlpha` 下 `a = (255*128+127)/255 = 128`，`out = a`），
+不是拿另一份渲染结果对照——那样两边会一起错。
+
 ## 5. 已知问题 / 技术债
 
 | # | 问题 | 处理 |
@@ -674,10 +735,10 @@ CMake（技术债 #38）与分层一一对应：`krkr_tjs`、`krkr_tjs_host`（�
 | 43 | `Plugins` 只支持静态注册表 | 动态模块加载（`.dll`/`.so`）、`linkZ`（`bres://` 资源）、`bootStrap`、`CanLoadPlugin` 均未实现；未命中名字显式失败并带名字 |
 | 44 | `System` 只覆盖已出现过的成员 | ✅ 已补 `Initialize.tjs` 需要的路径/平台/参数成员；`screenWidth`、`createAppLock`、`system(...)`、DLL 目录相关成员尚未实现（未命中时显式报错） |
 | 45 | 字节码只验证了真游戏的 `system/Initialize.tjs` | `LoadByteCode` 的返回值未用于区分「字节码」与「二进制字典数组」；目前只在 `IsTJS2ByteCode` 命中时调用，不会把文本误当字节码 |
-| 46 | `Window` / `Layer` / `Bitmap` 未实现 | `Initialize.tjs` 第 1 行即需要 `Window`（VM ip 400 处），属第 8 步；`real_startup` 测试因此 DISABLED（#49） |
+| 46 | `Window` / `Layer` 只覆盖 `Initialize.tjs` 需要的形状 | ✅ 7g-1 已落地几何/可见性/opacity/type/clip/loadImages/层级移动（§4.27）；`Bitmap`、事件派发、`children`、字体绘制仍未做（#64） |
 | 47 | `System.personalPath` / `savedGamesPath` 需要宿主注入 | `EngineRuntime` 提供了 `SetPersonalDirectory` / `SetSavedGamesDirectory`，Android 侧由第 11 步的 JNI 填；未注入时脚本读取显式失败 |
 | 48 | `CompatProfile.preludeScript` 为空 | 参照实现会注入 `CompoundStorageMedia` 一类脚本级 stub；按"有证据才加"的原则留空，加之前先确认触发它的游戏与行为 |
-| 49 | CTest 的 `real_startup` 处于 DISABLED | 与 #46 同一件事：`Window` 落地后改为启用，作为真游戏的回归闸门 |
+| 49 | CTest 的 `real_startup` 处于 DISABLED | `Window` 已注册，**下一个缺口未测量**（本机没有游戏数据）。在有 `build/real_root.txt` 的机器上先跑 `tjs_probe build/py_startup.utf8.tjs` 得到新缺口，再决定启用时机 |
 | 57 | GL 后端只覆盖 5 种算子 | `ltPs*` 家族 16 种按规格需软件兜底（离屏合成后再上传）；在此之前这些图层会被跳过并计数 |
 | 58 | 纹理缓存以 `Texture*` 为键，无 LRU、无句柄复用 | 8b 只验证正确性；等接入真实素材（8d/图片解码）时改成"纹理对象 + 引用计数 + LRU" |
 | 59 | Android 的 EGL 路径只做过编译验证 | 缺 JNI 接线（`surfaceCreated/Changed/Destroyed` → `krkr_android_surface_*`）与真机一帧；`IGLContext` 已在桌面被完整验证 |
@@ -692,6 +753,15 @@ CMake（技术债 #38）与分层一一对应：`krkr_tjs`、`krkr_tjs_host`（�
 | 52 | `krkr_debug` 只支持 `--summary` / `--filter`，无 `--follow` | 事件文件在进程退出后才有完整内容；实时跟随等 D4 的会话层 |
 | 53 | 事件未带线程标识 | 目前单线程（脚本在调用线程执行）；第 8/9 步引入 worker 后补 `thread` 字段 |
 | 50 | CTest 的断言以仓库根为工作目录 | 断言脚本里的相对路径（`build/debug_probe.log`）依赖这一点，改工作目录会破坏 `t_debug` |
+| 64 | `Window` / `Layer` 只有部分成员 | 已落地：几何、`visible`、`opacity`、`type`、`clip`、`loadImages`、层级移动、`primaryLayer`；未做：事件派发（`onResize`/`onClick` 能被脚本赋值，但引擎不会调用）、`children`、`face`、`hitType`、`drawText`、滤镜/转场、`Bitmap` |
+| 65 | 窗口与图层互相持有 TJS 引用（`layer.window` + `window.add`），会话内不回收 | 参照实现的窗口同样活到进程结束；若要支持关闭窗口并释放，需把钉住改成弱引用并在失效时显式拆子树 |
+| 66 | 只呈现"主窗口"（第一个 `new Window()`） | `GetPrimaryScene()` 取登记表首项；`showModal`、子窗口、多窗口布局未实现 |
+| 67 | 场景只覆盖 5 种算子、轴对齐、无脏矩形差分 | 与 8a/8b 的边界一致；`SceneBuildStats` 已区分 hidden/unsupported/clipped，8d/8e 在此之上补 |
+| 68 | `Layer.loadImages` 每次都整文件解码，无缓存 | 与 #63 同一件事；真素材上量时按"存储名 + 尺寸"做 LRU |
+| 69 | 断言脚本必须 `throw new Exception("...")` | 纯字符串抛出到宿主只剩 `script exception`，`-ok` 会丢；原因见 §4.27 第 2 点 |
+| 70 | 老树 `cpp/**` 已决定废弃，但仍在仓库里与 `cpp_new` 并存 | 冻结：不新增功能、不修非阻塞 bug；R1-5 删除整树（`docs/legacy-gap.md` §6）。期间唯一用途是"行为参考" |
+| 71 | 第 9/10 步（输入/音频）尚无契约 | 按 `docs/legacy-gap.md` §3 与 `ARCHITECTURE` §6：先加 `core/contracts` 小接口，再写 Android 后端；不抄老树 `sound`/`WindowImpl` |
+| 72 | 消息表白手抄风险（83 条 vendor 需要的消息常量） | 用 `tools/gen_legacy_msg.py` 从上游 `msg/MsgIntfInc.h` 生成 `.inc`（与 `gen_tjs_message_map.py` 同一模式），禁止手抄 |
 
 
 
@@ -747,12 +817,77 @@ CMake（技术债 #38）与分层一一对应：`krkr_tjs`、`krkr_tjs_host`（�
 | 宿主每帧轮询启动状态 | `engine_get_startup_state` + `pollStartupState()` | 引擎只需一个可查询的字段，**不需要回调/事件管道** |
 | 启动期 tick 返回 `-7` 会被宿主忽略而不算失败 | `EngineSession.kt:369` | `StartupPending` 必须是 `-7`，不能用 `InvalidState` |
 
+## 12. R1 路线：渲染底层改由 krkrz 权威实现（2025-11 决定）
+
+完整计划见 **`cpp_new/docs/visual-vendor.md`**。要点：
+
+- 权威源 = `krkrz/krkrz` `1.4.0r2`（本地 `~/AppProjects/krkrz`），`cpp_new/tjs/` 与它同 tag（仅 CRLF 差异），
+  因此 `visual/` 可以直接编在这份 tjs 上。
+- 取：`visual/tvpgl.c`（6,658 行纯 C，自带 `TVPInitTVPGL()`）、`drawable.h`（29 种算子）、
+  `LayerBitmapIntf` / `LayerIntf` / `LayerManager` / `TransIntf` / `ImageFunction`、字体（FreeType）、
+  `LoadPNG/LoadJPEG/LoadTLG`、`msg/base/utils` 的接口头。
+- 不取：`visual/win32/`、`visual/IA32/`、`visual/gl/`、`visual/glgen/`、`tjs2/`（已对齐）；
+- 也**不从本仓库 `cpp/core/visual` 取任何文件**（Kirikiroid2 后裔已漂移：`tvpgl.cpp` 14,139 行、
+  `LayerBitmapIntf.cpp` 与上游 diff 9,025 行、多出 5,278 行自研 GL 渲染）。
+- 我们只写 seam 与 porting：`iTVPDrawDevice`（无 HWND 子集）、`iTVPWindow`/`iTVPLayerTreeOwner`、
+  `iTVPStorageMedia`（接 `krkr::io::Storage`）、`iTVPSysFont`（FreeType）、`BitmapBitsAlloc`（~80 行）、
+  tick/event/msg 适配。
+
+分片（每片可编、可贴输出、可回滚）：
+
+| 片 | 内容 | 验收 |
+|---|---|---|
+| R1-0 | 清单与 sha256（`vendor/krkrz/VENDOR.md`）、`tools/verify_vendor.py` | ✅ 完成：9 个上游文件 + 2 个适配文件，校验通过 |
+| R1-1 | `tvpgl.c` + `blend_function.cpp` + `pixel/` 抽象层；`Blend.cpp` 改成映射 | ✅ 完成：`blend_matrix` 300 项断言，22/22 CTest |
+| R1-2 | 位图 + 字体 + 解码（`BitmapBitsAlloc`/`SysFont`/`StorageMedia` 重写） | `loadImages` → `saveLayerImage` 与 Windows 逐字节相同 |
+| R1-3 | 图层模型 + 转场；删掉 `visual/Scene` 与自建图层树 | 29 type 全矩阵 + 淡入淡出与 Windows 逐像素一致 |
+| R1-4 | Android `VisualDrawDevice`（BGRA 上传 + 脏矩形 + 一 quad + Y 翻转） | 真机一帧；与软件落盘图 ±1 |
+| R1-5 | 收口：删 `ImageDecoder/stb`、`GLBackend`；`check_layer_deps` 加 vendor 规则 | `ctest` 全绿，文档同步 |
+
+铁律调整（已写入 `docs/ARCHITECTURE.md` §3）：`vendor/` 是唯一允许包含老树头的地方；
+其余层仍然禁止。**不允许保留第二条合成路径。**
+
+### 12.0 R1 进度
+
+- **R1-0 / R1-1 已完成**（详见 `docs/visual-vendor.md` §7.1）：`vendor/krkrz` 落地 `tvpgl.c` +
+  `blend_function.cpp`（29 种算子）与两个适配头；新增抽象层 `pixel/`（`LayerOp` 词汇表 +
+  `BlendPixel`）；`host/BlendMatrixProbe.cpp` 做 29 × 5 alpha × 5 opacity 的语义断言（300 项）。
+- 过程中发现并修复了**上游便携路径的真 bug**：`screen_blend_func` 少了 `~`（Windows 走 SSE2
+  掩盖了它），已登记为 `vendor/krkrz/VENDOR.md` 补丁 #2。
+- 定点舍入带来的 ±1～±2 属于上游行为：`render_surface` / `window_scene` 的期望值已按
+  `pixel` 的实际输出更新并注明原因（不再用手算的 ÷255 值）。
+- R1-2 已开工：**消息 seam 完成**（`tools/gen_legacy_messages.py` 从上游 `Messages.xlsx` 生成
+  344 条中/日/英文案 → `vendor/krkrz/msg/generated/messages.inc`，`legacy_message` 断言通过）；
+  `toolchain_compat.h` 补齐 `BITMAPINFO`/`HRGN`/`MAX_PATH`/`OutputDebugString`；
+  补丁 #3（`class TJS::...` 前置声明）。**编译驱动盘点**：`ComplexRect`/`FontSystem`/
+  `PrerenderedFont` 0 错误，`LayerBitmapIntf`/`LayerBitmapImpl`/`GraphicsLoaderIntf`/
+  `LoadTLG`/`SaveTLG5` 各差 1 个 porting 头，`LoadPNG` 差 libpng、`FreeType` 差 freetype。
+  剩余估计见 `docs/visual-vendor.md` §7.1（R1-2a/b + R1-3/4/5 合计 19–30 人日；
+  “单帧出图”7–11 人日）。
+
+### 12.1 老树（`cpp/core/**`）零复用
+
+完整盘点见 **`docs/legacy-gap.md`**。三条结论：
+
+1. **从 `cpp/` 复用代码 = 0 行**。老树只作行为参考、兼容补丁需求清单、ABI 需求书。
+   老树规模：`visual` 104k 行、`utils` 71k、`movie` 22k、`sound` 17.6k、`base` 17.3k、`environ` 9.7k、`io` 9.2k。
+2. **seam 预算实测**（对 19 个 vendor 候选文件做符号扫描）：引用 634 个 `TVP*` 符号 →
+   108 个来自 `base/utils/msg` → 其中 **20 个函数 + 83 条消息常量**；消息表由
+   `msg/MsgIntfInc.h`（X-macro，152 条）生成，不手抄。另加 4 个接口类
+   （`iTVPStorageMedia` / `iTVPSysFont` / `iTVPDrawDevice` / `iTVPLayerTreeOwner`+`iTVPWindow`）。
+3. **缺的功能按 `ARCHITECTURE` §6 新写**：先 `core/contracts` 契约 → 再 `platform` 实现 →
+   再 `shim` 桥接 → `host` 断言 → 文档同步。明确不做的：视频（`movie` 22k 行）、
+   动态插件/Susie/ncbind、PhaseVocoder 循环平滑。
+
+删除节奏：现在起冻结 `cpp/**`（不新增功能）；R1-5 删除整棵老树与草稿
+`cpp/core/extension/krkrMsgImpl.cpp`（技术债 #6），保留 `bridge/engine_api`、`app/`。
+
 ## 11. 交接：新对话起点
 
 ### 当前可运行状态
 
 ```bash
-bash cpp_new/tools/run_probes.sh                        # CMake + ctest，期望 22/22 通过
+bash cpp_new/tools/run_probes.sh                        # CMake + ctest，期望 21/21 通过
 python cpp_new/tools/check_layer_deps.py cpp_new        # 期望 0 违规
 
 # 真游戏（两条链路共用同一装配）
@@ -763,6 +898,10 @@ build/cmake/debug/bin/tjs_probe.exe build/py_startup.utf8.tjs build/real_root.tx
 build/cmake/debug/bin/image_probe  build/real_root.txt title_bg.png build/title_bg.ppm
 build/cmake/debug/bin/image_window build/real_root.txt title_bg.png 120
 KRKR_DEBUG_EVENTS=build/events.jsonl build/cmake/debug/bin/krkr_next.exe --path-file build/real_root.txt
+
+# 场景合成（不需要游戏包，用夹具）
+build/cmake/debug/bin/window_probe host/fixtures/demo/t_window.tjs \
+    build/fixtures_root.txt build/window_scene.ppm
 ```
 
 | CTest | 覆盖 |
@@ -771,34 +910,43 @@ KRKR_DEBUG_EVENTS=build/events.jsonl build/cmake/debug/bin/krkr_next.exe --path-
 | `script_*`（9 项） | Storages / Scripts / System / Debug / Plugins / 别名调用 / 退出 |
 | `startup_state` | 启动状态机 |
 | `render_surface`、`render_gl` | 软件合成断言；GL 与软件逐像素 ±1（无 GL 环境 skip） |
+| `window_scene` | 脚本建窗口/图层 → 合成 → 手算像素断言（7g-1） |
 | `image_decode` | 真包 `title_bg.png` 解码 + 合成（无游戏包时 skip） |
 | `debug_*`（5 项） | 调试事件录制与筛选 |
 | `real_startup` | **DISABLED**（见下） |
 
 ### 已知失败点
 
-真脚本已进入 `system/Initialize.tjs`（TJS2 字节码），`System` 路径/平台成员已通过，当前停在：
+`Window` / `Layer` 已注册（§4.27），所以下面这条旧缺口已过期：
 
 ```
-[error] Scripts.execStorage("system/Initialize.tjs"): Member "Window" does not exist
-       [script=system/Initialize.tjs line=1]
+[error] Scripts.execStorage("system/Initialize.tjs"): Member "Window" does not exist   ← 已越过
 ```
+
+**新缺口尚未测量**：当前开发机没有游戏数据（`build/real_root.txt` 不存在），
+`real_startup` 仍 DISABLED（#49）。下次在有游戏数据的环境里先跑
+
+```bash
+build/cmake/debug/bin/tjs_probe build/py_startup.utf8.tjs build/real_root.txt
+```
+
+取到新的 `Member "..." does not exist` 或语法/求值错误，再决定补哪个成员——
+不要凭猜测补 `Initialize.tjs` 的成员（#48 的理由同样适用）。
 
 ### 下一步（按顺序，行 7g / 8d）
 
-1. **`Window` / `Layer` 脚本桥接（下一步）**
-   - `shim/classes/TjsWindow.cpp`：`Window.width/height/visible/title/layer`，
-     几何读 `HostServices::window`，绘制入口在 8b 前显式失败；
-   - `shim/classes/TjsLayer.cpp`：`Layer` 的构造 + `left/top/width/height/opacity/visible/type`，
-     位图来自 `visual/Image`（`LoadImage`）；`Window.add/remove` 只维护列表；
-   - `visual` 新增 `Scene`（窗口 → 图层树 → DrawList 合成），用 `image_probe` 的断言方式
-     验证"脚本设参数 → 出图"，然后启用 `real_startup`（技术债 #49）。
-2. **字体**：`Font` 需要字形位图（FreeType 或系统字体），是 KAG 文本的硬依赖；
+1. **R1-1（下一步）**：把 `krkrz/visual/tvpgl.c` 取进来，`Blend.cpp` 改成薄适配，
+   建 `blend_matrix` 算子矩阵（29 type × opacity × alpha）。同期做 R1-0 的清单与 sha256。
+   理由见 §12 与 `docs/visual-vendor.md`：这一片不依赖 vendor 全量，一周内就能消掉画面差异的主因。
+2. **`Window` / `Layer` 桥接（7g-1，已完成，见 §4.27）**：R1-3 时其合成职责退场，
+   `Window` 改为 `iTVPWindow` / `iTVPLayerTreeOwner` 的实现。
+3. **量下一个缺口**：在有游戏数据的开发机上跑 `real_startup`，按实际错误补成员（#64）。
+4. **字体**（R1-2 一并解决）：`Font` 需要字形位图（FreeType 或系统字体），是 KAG 文本的硬依赖；
    先定"字形位图从哪来"，再决定 `Layer.drawText` 的最小面。
-3. **8c 真机**：`bridge/engine_api` 接 `krkr_android_surface_attach/resize/detach`，
+5. **8c 真机**（R1-4 一并做）：`bridge/engine_api` 接 `krkr_android_surface_attach/resize/detach`，
    按 Android 约定串行化 UI 线程与渲染线程；`render-spec.md` §14.2 记录了两条约束。
-4. **解码补齐**：TLG5（真游戏立绘大量使用，技术债 #62）与"名字+尺寸"LRU 缓存（#63）。
-5. **Storages 挂载面**：`addAutoPath` / `addArchive` / `commitSavedata` 等（当前接受并记录，
+6. **解码补齐**（R1-2 一并解决）：TLG5/TLG6 由 legacy `LoadTLG.cpp` 提供；LRU 缓存仍按 #63、#68 单列。
+7. **Storages 挂载面**：`addAutoPath` / `addArchive` / `commitSavedata` 等（当前接受并记录，
    不改变挂载表）；顺序放在 `Window` 之后，因为它们要等脚本能跑到对应分支。
 
 ### 纪律提醒

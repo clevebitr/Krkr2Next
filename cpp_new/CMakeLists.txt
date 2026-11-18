@@ -80,15 +80,77 @@ add_library(krkr_core STATIC ${KRKR_CORE_SOURCES})
 target_include_directories(krkr_core PUBLIC "${KRKR_ROOT}")
 
 # -----------------------------------------------------------------------------
+# vendor：krkrz 的像素与图层语义（原样拷贝，来源与补丁见 vendor/krkrz/VENDOR.md）。
+# 与 tjs/ 同等待遇：本目录只承载上游代码，我们的适配放在 visual/porting（后续）。
+#
+# 非 Windows 下上游头缺一组宏（只在 #ifdef _WIN32 里定义），由
+# vendor/krkrz/visual/porting/toolchain_compat.h 在包含前补齐 —— 上游文件零修改。
+# -----------------------------------------------------------------------------
+set(KRKR_VENDOR_COMPAT "${KRKR_ROOT}/vendor/krkrz/visual/porting/toolchain_compat.h")
+
+add_library(krkr_vendor_visual STATIC
+  vendor/krkrz/visual/tvpgl.c
+  vendor/krkrz/visual/gl/blend_function.cpp)
+
+# tvpgl.c 是 C 参考实现，用 C 编译器编；以 C++ 编会改变符号名与语义（上游为 MSVC 的 .c）。
+set_source_files_properties(vendor/krkrz/visual/tvpgl.c PROPERTIES LANGUAGE C)
+
+target_include_directories(krkr_vendor_visual PUBLIC
+  "${KRKR_ROOT}" "${KRKR_ROOT}/vendor/krkrz/visual" "${KRKR_ROOT}/vendor/krkrz/visual/gl")
+target_include_directories(krkr_vendor_visual PRIVATE
+  "${KRKR_ROOT}/vendor/krkrz/visual/IA32" "${KRKR_ROOT}/tjs")
+# 上游头缺的宏在包含前补齐（见 VENDOR.md §3）。我们的 TU 走
+# vendor/krkrz/visual/porting/pixel_routines.h，同样会包含它。
+target_compile_options(krkr_vendor_visual PRIVATE
+  "$<$<COMPILE_LANG_AND_ID:C,GNU,Clang>:-w>"
+  "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang>:-w>"
+  "$<$<COMPILE_LANG_AND_ID:C,GNU,Clang>:-include>"
+  "$<$<COMPILE_LANG_AND_ID:C,GNU,Clang>:${KRKR_VENDOR_COMPAT}>"
+  "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang>:-include>"
+  "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang>:${KRKR_VENDOR_COMPAT}>"
+  "$<$<COMPILE_LANG_AND_ID:C,MSVC>:/FI${KRKR_VENDOR_COMPAT}>"
+  "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/FI${KRKR_VENDOR_COMPAT}>")
+# 只用到 tjs 的**类型**（tjsTypes.h），不链接 tjs：一旦链接就会继承 tjs 目标的
+# PUBLIC 编译参数（-include prelude 等），与本目标的 -include 冲突。
+# 需要 tjs 符号的是 shim/engine，不是像素函数。
+
+# -----------------------------------------------------------------------------
+# legacy_support：上游 visual/ 依赖、但必须由本仓库实现的那一层
+# （消息文本、存储媒体、时间/线程、位图内存、字体）。与 vendor 的界线：
+# vendor 是上游源码，本目标是我们写的适配实现，命名不用上游前缀。
+# -----------------------------------------------------------------------------
+add_library(krkr_legacy_support STATIC
+  vendor/krkrz/msg/MsgIntf.cpp
+  vendor/krkrz/visual/porting/debug_output.cpp)
+# 消费者（探针、后续的 vendor visual 目标）需要 tjs 头，因此一并公开。
+target_include_directories(krkr_legacy_support PUBLIC
+  "${KRKR_ROOT}" "${KRKR_ROOT}/tjs" "${KRKR_ROOT}/vendor/krkrz/msg")
+target_link_libraries(krkr_legacy_support PUBLIC krkr_tjs krkr_core)
+
+# -----------------------------------------------------------------------------
+# pixel：混合操作的抽象层。上游（vendor）用 tjs_* 类型与函数指针表，
+# 本层把它们收成 `krkr::pixel` 的窄接口，供 visual 使用；不向上游之外暴露任何
+# 上游类型或宏。分层位置：visual → pixel → vendor → tjs。
+# -----------------------------------------------------------------------------
+add_library(krkr_pixel STATIC pixel/LayerOps.cpp pixel/Blend.cpp)
+target_include_directories(krkr_pixel PUBLIC "${KRKR_ROOT}")
+# tjs 只提供类型（tjsTypes.h）；不链接 tjs 目标，避免继承它的 PUBLIC 编译参数。
+target_include_directories(krkr_pixel PRIVATE "${KRKR_ROOT}/tjs")
+target_compile_options(krkr_pixel PRIVATE
+  "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang>:${KRKR_TJS_NOISE}>")
+target_link_libraries(krkr_pixel PUBLIC krkr_core PRIVATE krkr_vendor_visual)
+
+# -----------------------------------------------------------------------------
 # visual：合成与位图（渲染第 8a 片）。软件后端是像素权威，GL 后端后补。
 # -----------------------------------------------------------------------------
 add_library(krkr_visual STATIC
-  visual/Surface.cpp visual/Blend.cpp visual/SoftwareBackend.cpp visual/GLBackend.cpp
+  visual/Surface.cpp visual/SoftwareBackend.cpp visual/GLBackend.cpp visual/Scene.cpp
   visual/ImageDecoder.cpp visual/third_party/stb_image_impl.cpp)
 # 第三方单文件库：只对本文件关告警，不污染其它目标。
 set_source_files_properties(visual/third_party/stb_image_impl.cpp PROPERTIES COMPILE_OPTIONS "-w")
 target_include_directories(krkr_visual PUBLIC "${KRKR_ROOT}")
-target_link_libraries(krkr_visual PUBLIC krkr_core)
+# 混合数学来自 pixel 层；visual 不直接认识 vendor。
+target_link_libraries(krkr_visual PUBLIC krkr_core PRIVATE krkr_pixel)
 
 # -----------------------------------------------------------------------------
 # platform：平台能力实现（呈现目标）。visual 与 platform 互不引用，
@@ -123,6 +185,8 @@ set(KRKR_SHIM_SOURCES
   shim/classes/TjsSystem.cpp
   shim/classes/TjsDebug.cpp
   shim/classes/TjsPlugins.cpp
+  shim/classes/TjsWindow.cpp
+  shim/classes/TjsLayer.cpp
   shim/TjsBridge.cpp
   shim/TjsDiagnostics.cpp
   shim/text/TjsText.cpp)
@@ -132,7 +196,9 @@ target_include_directories(krkr_shim PUBLIC
   "${KRKR_ROOT}" "${KRKR_ROOT}/shim/tjs_host" "${KRKR_ROOT}/shim/tjs_host/generated")
 target_compile_options(krkr_shim PRIVATE
   "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang>:${KRKR_TJS_NOISE}>")
-target_link_libraries(krkr_shim PUBLIC krkr_core PRIVATE krkr_tjs)
+# shim 引用 visual 是允许的方向（docs/ARCHITECTURE.md §3）：窗口/图层的桥接把脚本参数
+# 写进 krkr::visual::Scene，合成与呈现不经过 shim。
+target_link_libraries(krkr_shim PUBLIC krkr_core krkr_visual PRIVATE krkr_tjs)
 
 # -----------------------------------------------------------------------------
 # debugger：调试器子包（docs/debugger-spec.md）。实现 core 的调试契约，
@@ -180,6 +246,15 @@ target_link_libraries(render_probe PRIVATE krkr_visual krkr_platform)
 
 add_executable(image_probe host/ImageProbe.cpp)
 target_link_libraries(image_probe PRIVATE krkr_visual krkr_core)
+
+add_executable(window_probe host/WindowProbe.cpp)
+target_link_libraries(window_probe PRIVATE krkr_engine)
+
+add_executable(blend_matrix_probe host/BlendMatrixProbe.cpp)
+target_link_libraries(blend_matrix_probe PRIVATE krkr_visual)
+
+add_executable(legacy_message_probe host/LegacyMessageProbe.cpp)
+target_link_libraries(legacy_message_probe PRIVATE krkr_legacy_support)
 
 if(WIN32)
   add_executable(render_window host/RenderWindow.cpp)
@@ -232,6 +307,17 @@ add_test(NAME startup_state COMMAND krkr_next --path-file "${KRKR_FIXTURE_ROOT_F
 
 add_test(NAME render_surface
   COMMAND render_probe "${CMAKE_BINARY_DIR}/render_probe.ppm")
+
+# 混合算子：29 种 type × opacity × 源 alpha 的语义断言（R1-1 的验收）。
+add_test(NAME blend_matrix COMMAND blend_matrix_probe)
+
+# 旧渲染层的消息表（R1-2 的 seam）：文本非空、%1 替换、抛异常带文本。
+add_test(NAME legacy_message COMMAND legacy_message_probe)
+
+# 场景合成：脚本建窗口与图层 → 宿主对像素下断言（第 7g 步的验收）。
+add_test(NAME window_scene
+  COMMAND window_probe "${KRKR_FIXTURES}/demo/t_window.tjs" "${KRKR_FIXTURE_ROOT_FILE}"
+          "${CMAKE_BINARY_DIR}/window_scene.ppm")
 
 # 图片解码：有真游戏包时跑真实素材（title_bg.png），否则 skip。
 set(KRKR_REAL_ROOT_FILE_IMAGE "${KRKR_ROOT}/../build/real_root.txt")

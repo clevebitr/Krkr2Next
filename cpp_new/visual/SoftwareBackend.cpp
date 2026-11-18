@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "visual/Blend.h"
+#include "pixel/Blend.h"
 
 namespace krkr::visual {
 
@@ -77,7 +77,7 @@ void RenderItem(const DrawItem &item, const Texture *texture, Surface &target,
       const std::uint32_t dst = target.Get(x, y);
       target.Pixels()[static_cast<std::size_t>(y) * static_cast<std::size_t>(target.Width()) +
                        static_cast<std::size_t>(x)] =
-          BlendPixel(dst, source, item.blend, alpha);
+          krkr::pixel::BlendPixel(dst, source, item.blend, alpha);
       ++stats.pixelsWritten;
     }
   }

@@ -1,0 +1,56 @@
+// window_probe 的输入：建立一棵两层的场景树，宿主再对像素下断言。
+//
+// 期望的合成结果（32x24、黑底）：
+//   - base：8x8 四色位图位于 (4,2)，不透明，clip 只留左上 4x4 的红色象限；
+//   - overlay：相对 base 偏移 (8,8) → 绝对 (12,10)，opacity 128 的 alpha 混合。
+// 断言里刻意用标量读回（name/width/opacity），不比较对象引用——
+// 对象身份比较依赖实现细节，标量读回已经能证明桥接两边写读一致。
+
+var win = new Window();
+win.width = 32;
+win.height = 24;
+win.caption = "window probe";
+
+var base = new Layer(win, null);
+base.name = "base";
+base.loadImages("layer.bmp");
+base.setSizeToImageSize();
+base.left = 4;
+base.top = 2;
+base.type = 1;      // ltOpaque
+base.opacity = 255;
+base.setClip(0, 0, 4, 4);
+base.visible = true;
+
+var overlay = new Layer(win, base);
+overlay.name = "overlay";
+overlay.loadImages("layer.bmp");
+overlay.setSizeToImageSize();
+overlay.left = 8;
+overlay.top = 8;
+overlay.type = 2;   // ltAlpha
+overlay.opacity = 128;
+overlay.visible = true;
+
+win.add(base);
+win.add(overlay);
+
+if (win.width != 32 || win.height != 24) throw new Exception("window size did not stick");
+if (base.width != 8 || base.height != 8) throw new Exception("setSizeToImageSize did not resize the layer");
+if (base.imageWidth != 8 || base.imageHeight != 8) throw new Exception("image size is wrong");
+if (base.visible != 1) throw new Exception("layer.visible did not stick");
+if (base.type != 1) throw new Exception("layer.type did not stick");
+if (overlay.opacity != 128) throw new Exception("layer.opacity did not stick");
+if (overlay.parent.name != "base") throw new Exception("the parent layer is not the one passed in");
+if (base.window.width != 32) throw new Exception("layer.window is not the owning window");
+if (win.mainWindow != 1) throw new Exception("the first window must be the main window");
+if (win.primaryLayer.name != "base") throw new Exception("the parentless layer must become the primary layer");
+
+// 错误路径：能力缺失与参数错误必须显式失败，不能静默成功。
+var caught = 0;
+try { var orphan = new Layer(null); } catch (e) { caught = caught + 1; }
+try { base.loadImages("no-such-image.bmp"); } catch (e) { caught = caught + 1; }
+try { win.width = 0; } catch (e) { caught = caught + 1; }
+if (caught != 3) throw new Exception("expected 3 explicit failures, got " + caught);
+
+throw new Exception("window-ok");

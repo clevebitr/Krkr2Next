@@ -3,6 +3,11 @@
 ## 注意
 ### 项目正在重构！可能会出现大量错误以及兼容性问题  
 
+> **工程状态（2025-11）**：旧引擎 `cpp/` **已冻结**（见 [`cpp/FROZEN.md`](cpp/FROZEN.md)），
+> 后续引擎在 `cpp_new/` 重写中；渲染已开始把像素语义交给 krkrz 权威实现
+> （[`cpp_new/docs/rendering-architecture.md`](cpp_new/docs/rendering-architecture.md)）。
+> 当前可构建产物仍来自 `cpp/`，直到 `bridge/engine_api` 切换完成。
+
 
 ---
 面向 **Android** 的 KiriKiri2（吉里吉里2）运行环境：原生 Kotlin/Compose 宿主壳 +

@@ -82,8 +82,10 @@ def main() -> int:
     args = ap.parse_args()
 
     if not MANIFEST.is_file():
-        print(f"错误：找不到清单 {MANIFEST}", file=sys.stderr)
-        return 1
+        # 退出码 2 = 跳过（check_static.sh 会把它计入"跳过"而不是失败）。
+        # 老树冻结后移植溯源不再维护，清单已随仓库清理移除。
+        print(f"跳过：没有移植清单 {MANIFEST}（老树已冻结，移植溯源不再维护）", file=sys.stderr)
+        return 2
 
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     up_root = upstream_root(manifest)

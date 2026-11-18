@@ -124,7 +124,13 @@ AddAlpha    : out.rgb = min(dst.rgb + src.rgb*As, 255); out.a = min(dst.a + As, 
 Ps*         : 按 Photoshop 定义（tvpgl.c 里 TVPPs*Blend 逐个实现）
 ```
 
-⚠️ **定点舍入必须照抄 `tvpgl.c`**。KiriKiri 用的是 `(x + (x >> 8) + 128) >> 8` 之类的快速舍入，标准公式直接除 255 会**差 1**，逐像素断言会失败。软件后端先按 tvpgl 抄，GL 后端接受 ±1 的误差（断言时给容差）。
+⚠️ **定点舍入以 `vendor/krkrz` 为准，不自写**（R1-1 起）。上游用 `(x*a)>>8` 这类 ÷256 的快速近似，
+且 `_o` 变体先把 opacity 折进源 alpha 再 `>>8` 一次，因此与"标准公式除 255"相差 1～2，
+`opacity=128` 实际落在 126。语义断言（`host/BlendMatrixProbe.cpp`）与浮点模型比对时容差取 3；
+逐像素 0 容差只在同一条代码路径（R1-2 的 Windows 落盘 oracle）上才成立。
+
+实现位置：`pixel/`（`krkr::pixel::BlendPixel`）。29 种操作到上游函数指针的映射在
+`pixel/Blend.cpp` 里，`visual/` 只消费，不再持有混合数学。
 
 ---
 
@@ -338,6 +344,39 @@ struct DrawList { std::vector<DrawItem> items; std::uint32_t clearColor; };
 11. **SDL 的位置**：如果以后接 SDL，它是 `IRenderTarget` 的另一个实现（+ GL context provider），
     不改渲染核心；不要为了 SDL 把它的类型引进 `visual/`。
 
+### 14.4 场景合成（7g-1）
+
+`Layer` / `Window` 落地后，"谁画在谁上面"第一次有了真实数据源。接缝仍然只有一条：
+引擎侧把图层树合成成 DrawList，后端只做采样与混合（§14.1 第 1 条）。
+
+```
+Window（脚本） ──► visual::Scene（窗口根 + 图层树）
+                        │  BuildDrawList
+                        ▼
+                   DrawList ──► SoftwareBackend / GLBackend
+```
+
+语义（都对齐参照实现，逐条有依据）：
+
+| 项 | 取值 | 说明 |
+|---|---|---|
+| 坐标 | `left/top` 相对父层原点 | 子层原点 = 父层的绝对原点，不是父层位图左上角 |
+| `clip` | 只作用于本层四边形 | 不下传给子层（`SetClip` 是图层自身属性） |
+| `visible` | 为假则本层与子层都不画 | 对应参照实现的 `nodeVisible` |
+| `opacity` | 只作用于本层位图 | 不向子层累积；KAG 的分组淡入靠逐层设置 |
+| 混合算子 | 只支持 `ltOpaque/Alpha/Additive/Subtractive/Multiplicative` | 其余 24 种跳过自身、子层照画，并计入 `SceneBuildStats::nodesUnsupported` |
+| 默认值 | `type = ltAlpha`、`visible = false`、32×32 | 来自 `tTJSNI_BaseLayer` 构造函数 |
+
+`SceneBuildStats` 是给断言用的：`nodesVisited / itemsEmitted / nodesHidden /
+nodesUnsupported / itemsClippedOut`。没有它，"没画"与"算错"在测试里无法区分。
+
+混合数学的归属在 R1-1 之后变了：`Scene` / `SoftwareBackend` 只决定"画什么、画在哪"，
+算子本身来自 `pixel::BlendPixel`（上游 `tvpgl`）。29 种类型全部可画，只有 `ltEffect`/`ltFilter`
+仍需离屏（8d）。
+
+尚未做：遮罩（`dfMask`）、effect/filter 离屏层、脏矩形差分、仿射（矩阵）图层、
+`ltPs*` 家族。这些都在 8d/8e 的分片里，`Scene` 的结构已经能容纳（节点带 `clip`/`dirty`）。
+
 ### 14.3 图像解码（8a 验收路径）
 
 | 决定 | 内容 |
@@ -383,3 +422,8 @@ build/cmake/debug/bin/image_window build/real_root.txt title_bg.png 120
 | 窗口目标 | `platform/desktop/win32/Win32WindowTarget.*` | Win32 + GDI，`host/RenderWindow` 手工验证 |
 | Android 像素目标 | `platform/android/AndroidTarget.*` | 软件路径的占位：`Present` 显式失败（Android 走 GL 路径） |
 | 断言 | `host/RenderProbe.cpp` | 原语 + DrawList 两条通道，手算期望值 |
+| 混合数学 | `pixel/Blend.*`、`pixel/LayerOps.*` | 上游 `tvpgl` 的映射层（R1-1） |
+| 上游像素代码 | `vendor/krkrz/visual/*` | 原样 vendored，补丁见 `vendor/krkrz/VENDOR.md` |
+| 场景树 | `visual/Scene.*` | 窗口 → 图层树 → DrawList（见 §14.4） |
+| 窗口/图层桥接 | `shim/classes/Tjs{Window,Layer}.*` | 脚本参数写进 `SceneNode`；不参与合成 |
+| 场景断言 | `host/WindowProbe.cpp` | 脚本建场景 → 软件后端 → 手算像素 + PPM |

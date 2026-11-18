@@ -5,6 +5,7 @@
 #include "core/io/Storage.h"
 #include "core/log/Logger.h"
 #include "shim/TjsBridge.h"
+#include "shim/classes/TjsWindow.h"
 #include "shim/engine/TjsEngine.h"
 
 namespace krkr::engine {
@@ -47,6 +48,10 @@ bool ScriptRuntime::Startup(krkr::io::Storage *storage,
   context.services = services;
   krkr::script::SetContext(context);
 
+  // 上一次会话的窗口登记必须清掉：否则重启后 "主场景" 会指向上一次的对象。
+  // 脚本侧仍持有的场景不受影响，只是不再被当作主场景。
+  krkr::script::ResetWindowRegistry();
+
   for (const auto &[name, value] : impl_->profile.preprocessorValues) {
     impl_->engine->SetPreprocessorValue(name, value);
   }
@@ -88,6 +93,7 @@ void ScriptRuntime::Shutdown() {
     return;
   }
   krkr::script::SetContext(krkr::script::ScriptContext{});
+  krkr::script::ResetWindowRegistry();
   impl_->started = false;
 }
 

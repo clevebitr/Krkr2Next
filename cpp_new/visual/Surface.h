@@ -4,15 +4,9 @@
 #include <string>
 #include <vector>
 
+#include "visual/LayerTypes.h"
+
 namespace krkr::visual {
-  // 图层类型原值，与参照实现的 tTVPLayerType 对齐（不重新编号，便于对照）。
-  enum LayerType : std::uint32_t {
-    ltOpaque = 1,
-    ltAlpha = 2,
-    ltAdditive = 3,
-    ltSubtractive = 4,
-    ltMultiplicative = 5,
-  };
 
   struct Rect {
     int left = 0;

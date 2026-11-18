@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 
-#include "visual/Blend.h"
+#include "pixel/Blend.h"
 
 namespace krkr::visual {
 
@@ -70,7 +70,7 @@ void Surface::Composite(const Surface &source, const Rect &sourceRect,
       const std::uint32_t dst = Get(tx, ty);
       const std::uint32_t src = source.Get(sx, sy);
       Pixels()[static_cast<std::size_t>(ty) * width_ + static_cast<std::size_t>(tx)] =
-          BlendPixel(dst, src, type, opacity);
+          krkr::pixel::BlendPixel(dst, src, type, opacity);
     }
   }
 }

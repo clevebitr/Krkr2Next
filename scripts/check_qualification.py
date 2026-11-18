@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """check_qualification.py — 查出"在自己 namespace 里还写全限定名"的非法代码
 
-背景：`scripts/rename_symbols.py` 的策略是"owner 目录里用短名、别处用全限定名"，
+背景：本仓库的机械改名（已随老树冻结移除）曾采用"owner 目录里用短名、别处用全限定名"，
 因为全限定在 C++ 里**大多数**位置合法。但有一个位置例外，而且非常容易撞上：
 
     namespace krkr::utils {
