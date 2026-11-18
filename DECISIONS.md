@@ -115,3 +115,19 @@ bridge/ 与 app/ 拆为独立仓库（submodule），并删除废弃草稿。
 - 已取消当时在跑的 push 构建（run 44301886702），推送本次 YAML 改动后没有再产生新运行。
 - 恢复自动构建：把 `push: branches: [main]` 与 `pull_request:` 两行取消注释即可。
 - 静态检查不受影响：`scripts/check_static.sh` 仍可本地跑（它不依赖 CI 触发）。
+
+## 2026-11-18 — 兼容性文档并入 docs/，删除 tests/ 与 cmake/
+
+- `compat/` → `docs/compat/`：根目录只剩文档（README + recon/ 六份取证），代码/CMake/脚本均无引用。
+  相对链接与 `cpp_new/docs/legacy-render-failures.md` 的引用已同步；`docs/compat/recon/render-issues.md`
+  与 `legacy-render-failures.md` 互补（一个记"埋了哪些探针"，一个解释"为什么照不到"）。
+- 删除根 `tests/`（原本只在 `ENABLE_TESTS AND NOT ANDROID` 下构建，且 CI 已停）：
+  - `abi-layout.cpp` 的价值保留：迁入 `bridge/engine_api/src/abi_layout_guard.cpp`，
+    由 Catch2 运行期测试改为**纯 static_assert**，随 bridge 每次构建检查（已 push 到
+    `Krkr2Next-bridge` @ 39d7303）；父仓库 submodule 指针同步。
+  - `tvpgl_simd_compare.cpp`：测老树自研 SIMD 与标量的一致性，R1 用上游 krkrz 后不再适用 → 删。
+  - `tjs2/bytecode-loader.cpp`：测 vendored 上游 tjs2 的头部校验，已被 cpp_new 的真游戏/断言覆盖 → 删。
+  - 根 `CMakeLists.txt` 去 `ENABLE_TESTS` 选项与 tests 块；`CMakePresets.json` 同步；
+    `scripts/check_syntax.sh` 去掉该条目（bridge 构建已覆盖）。
+- 删除 `cmake/`（仅 `scripts/sync_folder.py`，全仓库无引用、无 `CMAKE_MODULE_PATH` 挂载）。
+- 验证：`check_static.sh` 通过（1 项显式跳过），`check_syntax.sh` 正常（0 文件）。
