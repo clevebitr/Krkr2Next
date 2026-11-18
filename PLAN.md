@@ -9,9 +9,12 @@ auto-breakpoint: false
 
 ## Milestones
 
-- [ ] M1 — R1 渲染转权威实现（像素已交上游，合成待换）
+- [ ] M1 — 渲染：像素语义交由上游、合成改用 legacy 图层模型
+- [ ] M2 — 输入：指针、按键、文本转脚本事件
+- [ ] M3 — 音频：WAVE 与 OGG 解码、混音、回调
+- [ ] M4 — 切换 ABI 实现并删除冻结的旧引擎
 
-## Current: M1 — R1 渲染转权威实现（像素已交上游，合成待换）
+## Current: M1 — 渲染：像素语义交由上游、合成改用 legacy 图层模型
 
-goal: 渲染像素交上游、合成换 legacy、真机出帧
-breakpoint: R1-2a：先写 porting/thread_impl.h（LayerBitmapIntf 只差它）
+goal: 像素语义由上游实现、合成改用 legacy 图层模型
+breakpoint: R1-2a：先实现 thread_impl.h（见 todo.md §4）

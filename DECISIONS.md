@@ -131,3 +131,18 @@ bridge/ 与 app/ 拆为独立仓库（submodule），并删除废弃草稿。
     `scripts/check_syntax.sh` 去掉该条目（bridge 构建已覆盖）。
 - 删除 `cmake/`（仅 `scripts/sync_folder.py`，全仓库无引用、无 `CMAKE_MODULE_PATH` 挂载）。
 - 验证：`check_static.sh` 通过（1 项显式跳过），`check_syntax.sh` 正常（0 文件）。
+
+## 2026-11-18 — 文档三层结构与写作规范（AGENTS.md）
+
+文档体系按三层重整，并确立写作规范（全文见仓库根 `AGENTS.md`）：
+
+- 项目级计划 → `PLAN.md`：M1 渲染（进行中）、M2 输入、M3 音频、M4 切换 ABI 并删除旧引擎。里程碑只写一行。
+- 问题与决策记录 → `DECISIONS.md`：结论、依据、放弃的方案、注意事项。
+- 阶段任务 → `cpp_new/todo.md`（88 行）与任务跟踪工具：只记录当前阶段（第 8 步 / R1-2a）的步骤与验收标准。
+- 技术债 → 新文件 `cpp_new/docs/tech-debt.md`：编号 #1–#80 保持稳定，不得重排或复用；已解决条目保留并标注。
+- 历史实施记录 → `cpp_new/docs/archive/todo-2025-11.md`：原 `todo.md` 的 §4 实施记录、§7 ABI 事实、§11 交接、§12 R1 路线长文，冻结不再维护。
+
+写作规范：中文书面语；禁止口语、语气词、感叹号与第一人称叙述；判断须给出依据；表格优先于长段落。
+本次已将 `visual-vendor.md` 的「刀 N」改为「阶段 R1-N」、「拍板」改为「决策」，并修正 `ARCHITECTURE.md` 对 `AGENTS.md` 的章节引用（注释风格由 §11 调整为 §5）。存量文档（`tech-debt.md` 历史条目、`archive/`）在相关代码被修改时一并规范化。
+
+提交准则：简化 Conventional Commits，中文，全角冒号，一句话概括变更结果，例如 `feat：新增视频解码支持`；一次提交只做一件事；子模块先在子仓库提交并推送，再提交父仓库指针。

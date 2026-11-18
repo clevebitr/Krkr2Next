@@ -115,7 +115,7 @@ Window 场景树 ──BuildDrawList──► DrawList{纹理表, DrawItem[]}
 3. **文本绘制路径**：走 `LayerBitmapImpl::InternalDrawText` / `DrawGlyph` + `tTVPCharacterData`（逐字形 `OriginX/Y`、`IncX/Y`、`AA`、像素数据）+ `PrerenderedFont` 图集 + 65 级 alpha（`TVPApplyColorMap65`），与 29 种 layer blend 是两套代码。
 4. **字体选择与回退**：`Face` 解析、缺字回退链、`mapPrerenderedFont`、Android 上的字体发现路径。
 
-**对 R1 的含义（必须先拍板的事）**：vendor 能带走的是**代码路径**（FreeType 光栅器 + `PrerenderedFont` + `InternalDrawText`），
+**对 R1 的含义（须先决策的事项）**：vendor 能带走的是**代码路径**（FreeType 光栅器 + `PrerenderedFont` + `InternalDrawText`），
 但**带不走光栅器本身** —— Windows oracle 默认是 GDI，所以文本**不会**因为「同一份代码」就逐像素一致。两个选项：
 
 - **A（真一致）**：Windows oracle 也切 `FONT_RASTER_FREE_TYPE`（上游代码里已有这条路径），并锁定
@@ -123,7 +123,7 @@ Window 场景树 ──BuildDrawList──► DrawList{纹理表, DrawItem[]}
 - **B（度量一致）**：接受字形差异，文本只断言**度量**（advance、行高、baseline、换行位置）与
   “不裁字/不重叠”，像素比对限定在非文本图层（图片、纯色、光效）。
 
-未拍板前，R1-2b 的文本 oracle 不要开工（否则会把 A/B 的选择混进断言里）。
+在决策形成之前，R1-2b 的文本 oracle 不得开工，否则选项 A/B 的选择会被混入断言。
 
 ## 4.2 老树的立绘/特殊 CG/Q 版动画问题在哪
 

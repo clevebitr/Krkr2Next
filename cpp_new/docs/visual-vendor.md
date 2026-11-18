@@ -78,13 +78,13 @@ cpp_new/
 
 ## 4. 分片计划（每片都能编译、能贴输出、可回滚）
 
-### 刀 0 — 版本与清单（0.5 天，只读）
+### 阶段 R1-0 — 清单与校验
 
 - 产出 `vendor/krkrz/VENDOR.md`：来源 tag、每个文件的三态（**取 / 不取 / 我们重写**）、sha256。
 - 用 `#include` 实测（不是猜）确认 `LayerIntf.cpp` 的编译依赖闭包，登记到本文件。
 - 验收：清单里没有「状态未知」的行；`doctor` 脚本能校验 sha256。
 
-### 刀 1 — 像素函数（1–2 天，收益最大、风险最低）
+### 阶段 R1-1 — 像素函数
 
 - 拷入 `visual/tvpgl.c`、`visual/tvpgl.h`、`visual/drawable.h`（29 值枚举 + `TVPIsTypeUsingAlpha`）。
 - `visual/Blend.cpp` 改成薄适配：`BlendPixel()` 用 1 像素 span 调 `TVP*Blend_o(dest, src, 1, opa)`
@@ -97,7 +97,7 @@ cpp_new/
 - 风险：`_(o)` 变体只接受 `tjs_int opa`，`opacity × 像素α` 的合成要用 `.*` 变体组合；第一天
   用 `tvpgl.h` 的实际签名验证，不要凭文档。
 
-### 刀 2 — 位图 + 字体 + 解码（3–5 天）
+### 阶段 R1-2 — 位图、字体与解码
 
 - vendor `LayerBitmapIntf.*`、`BitmapIntf.*`、`PrerenderedFont`、`FontSystem`、`FreeType*`、
   `GraphicsLoadThread`、`GraphicsLoaderIntf`、`LoadPNG/LoadJPEG/LoadTLG`、`SaveTLG5/6`。
@@ -108,7 +108,7 @@ cpp_new/
 - 验收：`Layer.loadImages("x.png"/"x.tlg")` → `Layer.saveLayerImage` 与 Windows krkrz 输出
   **逐字节相同**（第一批 oracle）。
 
-### 刀 3 — 图层模型（5–8 天，最大一片）
+### 阶段 R1-3 — 图层模型
 
 - vendor `LayerIntf.*`、`LayerManager.*`、`TransIntf.*`、`ImageFunction.*`、`ComplexRect.*`、
   `LayerTreeOwner*`、`RectItf`、`BitmapLayerTreeOwner`。
@@ -123,18 +123,18 @@ cpp_new/
 - 验收：`window_scene` 改为「legacy 合成 → `saveLayerImage` → 与 Windows 逐像素一致」；
   29 type 全矩阵 + `beginTransition` 淡入淡出一致。
 
-### 刀 4 — Android 呈现（3–5 天）
+### 阶段 R1-4 — Android 呈现
 
 - `VisualDrawDevice` 的 Android 实现：持久纹理 + `glTexSubImage2D`（**`GL_BGRA`**、脏矩形）+
   一个四边形；Y 轴翻转在 present 完成；复用 `AndroidGLContext` / `AndroidSurface`。
 - 验收：真机一帧；与软件落盘图 ±1；`render-spec.md` §14 更新。
 
-### 刀 5 — 收口（1 天）
+### 阶段 R1-5 — 收口
 
 - 删 `visual/ImageDecoder.cpp` + `third_party/stb_image`（与 `LoadPNG` 双解码 = 双 alpha 约定）、
   `visual/GLBackend.*`（或移入 `host/` 作对照工具）、`visual/DrawList.h`/`SoftwareBackend` 移入
   `host/`（仅作 oracle 落盘）。
-- `check_layer_deps.py` 新规则、`todo.md`/`ARCHITECTURE.md`/`render-spec.md` 同步，
+- `check_layer_deps.py` 新规则，以及 `tech-debt.md`、`ARCHITECTURE.md`、`render-spec.md` 同步更新，
   `tools/run_probes.sh` 覆盖新探针。
 
 ## 5. 验收矩阵（oracle）
@@ -168,10 +168,10 @@ for(var t = 0; t <= 28; t++) {
 
 | 风险 | 应对 | 回滚 |
 |---|---|---|
-| 依赖闭包比预期大（`EventIntf` 366 行、`StorageIntf` 302 行） | 用链接驱动：只实现被引用到的符号，登记成清单 | 刀 3 之前每片都是加法，回滚 = 不链接新目标 |
+| 依赖闭包比预期大（`EventIntf` 366 行、`StorageIntf` 302 行） | 用链接驱动：只实现被引用到的符号，登记成清单 | R1-3 之前的每个阶段都是增量改动，回滚 = 不链接新目标 |
 | `LayerIntf` 与 `WindowIntf` 双向依赖（`layerTreeOwnerInterface`） | 实现该接口，不改 legacy | 同上 |
-| 字体度量不一致 | 刀 2 就把 FreeType 路径接上，oracle 覆盖文本 | oracle 用例独立，可单独标记 |
-| CPU 合成上传带宽 | 刀 4 强制脏矩形 + 一帧一次上传 | 保留软件落盘路径做对照 |
+| 字体度量不一致 | 在 R1-2b 接入 FreeType 路径，oracle 覆盖文本 | oracle 用例独立，可单独标记 |
+| CPU 合成上传带宽 | R1-4 强制脏矩形 + 一帧一次上传 | 保留软件落盘路径做对照 |
 | 与 `tjs/` 的 ABI 差异 | 已核对：同 tag，仅 CRLF | — |
 
 ## 7.1 进度记录
@@ -237,7 +237,7 @@ ctest: 22/22 通过
 `TVP_GL_FUNC_*`/`TVP_GL_IA32_FUNC_*` 宏、`BITMAPINFO`/`BITMAPINFOHEADER`/`RGBQUAD`、`HRGN`、
 `MAX_PATH`、`OutputDebugString` 两个重载；外加 3 个 VENDOR 补丁（`##(`、`screen_blend`、`TJS::` 前置声明）。
 
-### 字体：不是算子/合成问题（必须先拍板）
+### 字体：不是算子/合成问题（须先决策）
 
 上游 Windows 默认 **GDI 光栅器**（`LayerBitmapImpl.cpp:66`），FreeType 是备选；Android 只能用
 FreeType，老树还为此重写了字体枚举与回退（`FontImpl.cpp`、`FontBaseline.h`）。
