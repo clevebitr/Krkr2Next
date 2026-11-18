@@ -105,3 +105,13 @@ bridge/ 与 app/ 拆为独立仓库（submodule），并删除废弃草稿。
 - `build.sh`：启动前检查 `bridge/.git`、`app/.git`，缺失即提示 `git submodule update --init --recursive` 并退出 2。
 - 已知耦合（暂不解决）：`bridge/engine_api` 仍 `#include` 老树头（`../../cpp/...`），因此子仓库不能脱离父仓库布局单独构建；第 11 步切到 `cpp_new` 后这条耦合自然消失。
 - 验证：`git clone --recurse-submodules` 落地正常（`app/gradlew`、`bridge/engine_api/include/engine_api.h` 存在）；父仓库已推送到 `origin/main`（`00b44dd`）。
+
+## 2026-11-18 — CI：暂停自动构建，仅保留手动触发
+
+- 原因：引擎正在换实现（cpp_new 的 R1 路线），自动构建没有可验收产物。最近 6 次 `push` 构建全部
+  failure，属于纯噪声；且 `bridge/engine_api` 仍指向老树（冻结中），构建结果不代表新引擎状态。
+- 做法：`.github/workflows/android_build.yml` 删除 `push`/`pull_request` 触发（注释保留在原位），
+  只保留 `workflow_dispatch`（全部 inputs 不变，可在 Actions 页面手动 Run workflow）。
+- 已取消当时在跑的 push 构建（run 44301886702），推送本次 YAML 改动后没有再产生新运行。
+- 恢复自动构建：把 `push: branches: [main]` 与 `pull_request:` 两行取消注释即可。
+- 静态检查不受影响：`scripts/check_static.sh` 仍可本地跑（它不依赖 CI 触发）。
