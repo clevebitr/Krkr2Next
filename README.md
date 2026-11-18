@@ -71,7 +71,10 @@ python3 scripts/check_gl_symbols.py   # 需平台 GL 库，按平台单独跑
 scripts/verify_engine_so.sh out/android/debug/bridge/engine_api/libengine_api.so "$ANDROID_NDK_HOME"
 ```
 
-CI：`.github/workflows/android_build.yml`
+CI：`.github/workflows/android_build.yml`。
+**自动构建已暂停**（引擎换实现期间没有可验收产物）：`push`/`pull_request` 触发已关闭，
+需要出包时在 Actions 页面手动「Run workflow」（`workflow_dispatch` 保留全部参数）。
+`check_static.sh` 等静态检查仍可本地跑，不受影响。
 
 ## 许可
 

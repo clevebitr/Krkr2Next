@@ -27,9 +27,13 @@ on:
           - err
           - critical
           - off
-  push:
-    branches: [main]
-  pull_request:
+  # 自动构建已暂停（2025-11）：引擎正在换实现（cpp_new 的 R1 路线），
+  # 当前自动构建没有可验收的产物，只会制造红色/噪声。
+  # 需要出包时用「Run workflow」手动触发（workflow_dispatch 保留全部 inputs）。
+  # 恢复自动构建：把下面两行取消注释即可。
+  # push:
+  #   branches: [main]
+  # pull_request:
 
 concurrency:
   group: android-build-${{ github.ref }}
