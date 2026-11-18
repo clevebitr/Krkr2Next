@@ -8,9 +8,9 @@
 
 ## 0. 一句话现状
 
-入口容器 + 路径校验 + 日志 + 启动状态 + 目录存储 + XP3 索引 + **XP3 读取**都立起来了：
-能从 4.7 GB 真包里把 `startup.tjs` 读出来（字节与 zlib 参照实现一致）。
-还没有：目录模式自动挂载盘上的 `.xp3`（6d）、线程、脚本、渲染。
+入口容器 + 路径校验 + 日志 + 启动状态 + 存储层（目录 / XP3 索引 / 读取 / auto-path）都立起来了：
+**真游戏（`おっぱいスパイ学園`，4.7 GB 的 `data.xp3`）能从文件夹启动，`startup.tjs` 13022 字节从包内读出。**
+还没有：脚本虚拟机、线程、渲染、输入、音频。
 
 ---
 
@@ -38,13 +38,20 @@ $TMPDIR/krkr_next --path-file <file> [log_file]   # 日文/中文路径在 Windo
 #           KRKR_LOG_MAX_BYTES=<数字>   （仅测轮转用，生产固定 4 MiB）
 
 # io 的独立测试台（目录模式 18 条检查 + 归档模式 --extract）
+# ⚠️ Storage.cpp 从 6d 起会打日志，必须带 Logger.cpp
 clang++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp_new \
-  cpp_new/host/StorageProbe.cpp \
+  cpp_new/host/StorageProbe.cpp cpp_new/core/log/Logger.cpp \
   cpp_new/core/io/PathUtil.cpp cpp_new/core/io/IoName.cpp \
   cpp_new/core/io/DirectoryBackend.cpp cpp_new/core/io/Storage.cpp $ARCH \
   -o $TMPDIR/storage_probe
 $TMPDIR/storage_probe <game_dir>
 $TMPDIR/storage_probe --path-file <file> --extract <name> <out>
+
+# XP3 夹具打包器（6d，只写 raw 段）
+clang++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp_new \
+  cpp_new/host/Xp3Pack.cpp cpp_new/core/io/PathUtil.cpp \
+  -o $TMPDIR/xp3pack
+$TMPDIR/xp3pack <out.xp3> <file> [<file> ...]
 
 # XP3 索引测试台（6b）
 clang++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp_new \
@@ -103,6 +110,7 @@ cpp_new/
 
 host/StorageProbe.cpp                 io 的独立测试台（不进引擎，单独编一个可执行）
 host/Xp3Probe.cpp                     XP3 索引测试台（6b）
+host/Xp3Pack.cpp                      XP3 夹具打包器（6d，只写 raw 段）
 ```
 
 - `host/main.cpp` **不属于引擎**，它扮演的是 `NativeEngine.kt` 的角色。引擎永远是库，不是可执行文件。
@@ -128,8 +136,8 @@ host/Xp3Probe.cpp                     XP3 索引测试台（6b）
 | 6a | 存储层·目录后端 | `IStream` + `Storage` + 名字归一化 + 目录读取 | ✅ 完成 |
 | 6b | 存储层·XP3 索引 | 解析 XP3 目录表：文件名 → 偏移/大小（`Xp3Index` + `xp3_probe`） | ✅ 完成 |
 | 6c | 存储层·XP3 读取 | 段表 + zlib 解压（puff）+ `Xp3Stream`；包内字节与 zlib 参照一致 | ✅ 完成 |
-| 6d | **存储层·auto-path** | 目录模式自动挂载根目录里的 `*.xp3`（含 `patch*.xp3` 优先级） | ⬅ **下一步** |
-| 7 | 脚本虚拟机 | 接 TJS2，跑 `startup.tjs` | 待做（大） |
+| 6d | 存储层·auto-path | 目录模式自动挂载 `*.xp3`；**散装 > 补丁包 > 其它包**（`Xp3Pack` 造夹具验证） | ✅ 完成 |
+| 7 | **脚本虚拟机** | 接 TJS2，跑 `startup.tjs` | ⬅ **下一步**（大） |
 | 8 | 渲染 | EGL + GLES3 surface，一帧提交给宿主（零拷贝 SurfaceTexture） | 待做（大） |
 | 9 | 输入 | 指针 / 按键 / 文本 → 脚本事件 | 待做 |
 | 10 | 音频 | 至少 WAVE + OGG | 待做 |
@@ -139,7 +147,7 @@ host/Xp3Probe.cpp                     XP3 索引测试台（6b）
 
 ---
 
-## 4. 已完成的步骤记录（第 3–6c 步）
+## 4. 已完成的步骤记录（第 3–6d 步）
 
 ### 4.1 第 3 步：文件系统校验（`6c1c0a2` 一类的提交）
 
@@ -317,6 +325,40 @@ startup = 2
 head 里那些 `.` 是因为 `startup.tjs` 本身是 **UTF-16LE** TJS 源码（第 7 步接 TJS 时才会真正解），
 字节本身已与 zlib 参照逐字节一致。
 
+### 4.9 第 6d 刀：auto-path（多挂载 + 包优先级）
+
+```text
+Storage(root)
+  ├─ root 是文件  ──► mounts = [ xp3 自己 ]
+  └─ root 是目录  ──► mounts = [ 目录本身, ★补丁包(名字含 patch)…, ★其它包… ]
+                                 先命中者优先（FirstRegisteredWins）
+```
+
+规则（与老层 `StoragePolicy` 默认值对齐）：
+
+| 规则 | 取值 | 依据 |
+|---|---|---|
+| 优先级顺序 | 散装（目录）> 补丁包 > 其它包 | 老层：`projectDir` 先注册；`BoostAutoMountPaths` 把补丁插到第一条**档案**条目之前 |
+| 补丁判定 | 文件名（小写）含 `patch` | `PatchNameRule::SubstringContainsPatch` |
+| 同级排序 | 自然序（`patch2` < `patch10`） | 老树用 `opendir` 顺序，不可复现；这里显式排序 |
+| 坏包 | 跳过 + warn，不影响其它包 | 一个坏补丁包不该让游戏开不了 |
+| 扫描深度 | **只扫根目录一层**，不递归 | 老层也只扫一层；递归会把存档目录里的包误挂 |
+| 失败语义 | 三态：NotFound 继续下一个；**找到了但读失败 → 立刻报错，不回落** | 静默回落会把“补丁损坏”伪装成“补丁未生效” |
+
+验收：
+
+| 场景 | 结果 |
+|---|---|
+| 真游戏目录（`data.xp3` + `patch@r484.xp3`） | `mount scan: 1 patch + 1 other` → `startup = 2`、`script size=13022` |
+| `data.xp3` 与 `patch.xp3` 都有 `a.txt` | 读到 `patch` |
+| 再加散装 `a.txt` | 读到 `disk`（散装赢过所有包） |
+| `patch.xp3` 截断到 100 字节 | `skipping bad archive patch.xp3: index (96 bytes) runs past end of file`，`a.txt` 回落读到 `data` |
+| 删掉 `patch.xp3` | 读到 `data` |
+
+测试基建：`host/Xp3Pack.cpp`（`xp3pack <out.xp3> <file>...`）造 **raw 段**的 XP3 夹具 ——
+因为真游戏的两个包没有同名文件，不造夹具就永远验证不了优先级。
+夹具自身先用 `xp3_probe` 反查（entries / 名字 / 大小）再拿去做断言。
+
 ---
 
 ## 5. 已知问题 / 技术债
@@ -351,6 +393,10 @@ head 里那些 `.` 是因为 `startup.tjs` 本身是 **UTF-16LE** TJS 源码（�
 | 26 | 每个 `Xp3Stream` 自己开一个 `ifstream`（一个 fd） | 21k 条目同时打开会耗尽 fd。等真的出现“同时开很多文件”时改成共享一个文件句柄 + 锁（或 pread） |
 | 27 | **目录模式不会自动挂载盘上的 `*.xp3`** | 这就是 6d。真实游戏目录里只有 `data.xp3`，所以现在把**目录**传给引擎会 `-4 no such file: .../startup.tjs`；传 **`data.xp3` 本身** 则正常（已实测读出了 `startup.tjs` 13022 字节） |
 | 28 | `puff` 的速度约为 zlib 的 1/2–1/4，且是**整段一次性**解压 | 6c 只要“解对”。真要提速度只改 `Inflate.cpp`（换成 zlib 的 inflate 或 miniz），调用方不动 |
+| 29 | auto-path **只扫根目录一层**，不递归 | 老层同行为。若遇到包在子目录里的游戏（如 `game/bgm/*.xp3`），再评估是否递归 |
+| 30 | 包内目录条目（`xxx.xp3>dir/` 形式的 auto-path 前缀）**未实现** | 这个语义属于 TJS `Storages` 的 `>` 分隔符，第 7 步以后才需要；目前 `ArchiveRootOrder` / `PatchPriorityEnd` 两个策略开关也只是文档级别 |
+| 31 | 目录挂载点每次 `Open` 都做一次 `exists()`，未缓存命中结果 | 每次开文件多一次 stat；现在每帧只开一两个文件，不管。等有目录枚举/大量小文件需求时再加缓存 |
+| 32 | `storage_probe` 的编译命令**必须带 `Logger.cpp`** | `Storage.cpp` 从 6d 起会打日志，漏了就是一片 `undefined reference to krkr::log::Logger::Instance()` |
 
 ### 技术债 #10 的触发条件（写下来，免得以后变成"当年为什么没人想过"）
 

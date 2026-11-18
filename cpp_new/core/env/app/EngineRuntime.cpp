@@ -131,6 +131,7 @@ namespace krkr::env {
     krkr::log::Info("OpenGame ok: root=", gameRoot_, " kind=", static_cast<int>(kind));
 
     RunStartupWork();
+    krkr::log::Logger::Instance().Flush();
     if (GetStartupState() == EngineStartupState::Failed) {
       return EngineResult::IoError; // lastError_ 已由 RunStartupWork 写好
     }
