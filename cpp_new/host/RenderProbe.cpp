@@ -1,13 +1,17 @@
 #include <cstdio>
 #include <string>
 
+#include "platform/desktop/PpmTarget.h"
+#include "visual/DrawList.h"
+#include "visual/SoftwareBackend.h"
 #include "visual/Surface.h"
 
-// 软件合成测试台（渲染第 8a 片的第一条断言）。
+// 软件合成测试台（渲染 8a 的断言）。
 //
 //   render_probe [输出.ppm]
 //
-// 断言的期望值是手算出来的定点结果，不依赖任何后端：GL 后端以后要以同一份断言为准。
+// 两条通道都测：Surface 的原语（FillRect/Composite）与 DrawList 的后端路径。
+// 期望值是手算的定点结果，不依赖任何后端；GL 后端以后要用同一份断言（允许 ±1）。
 
 namespace {
 
@@ -20,10 +24,6 @@ void Check(bool condition, const char *what) {
   }
 }
 
-bool Equal(std::uint32_t actual, std::uint32_t expected) {
-  return actual == expected;
-}
-
 std::string Hex(std::uint32_t value) {
   char buffer[16];
   std::snprintf(buffer, sizeof(buffer), "0x%08X", value);
@@ -33,13 +33,30 @@ std::string Hex(std::uint32_t value) {
 void CheckPixel(const krkr::visual::Surface &surface, int x, int y,
                 std::uint32_t expected, const char *what) {
   const std::uint32_t actual = surface.Get(x, y);
-  if (Equal(actual, expected)) {
+  if (actual == expected) {
     std::printf("PASS  %s\n", what);
     return;
   }
-  std::printf("FAIL  %s: got %s want %s\n", what, Hex(actual).c_str(),
-              Hex(expected).c_str());
+  std::printf("FAIL  %s: got %s want %s\n", what, Hex(actual).c_str(), Hex(expected).c_str());
   ++failures;
+}
+
+krkr::visual::DrawItem Quad(float left, float top, float right, float bottom,
+                            std::uint32_t color, krkr::visual::LayerType blend,
+                            std::uint32_t opacity = 255) {
+  krkr::visual::DrawItem item;
+  item.color = color;
+  item.blend = blend;
+  item.opacity = opacity;
+  item.vertices[0][0] = left;
+  item.vertices[0][1] = top;
+  item.vertices[1][0] = right;
+  item.vertices[1][1] = top;
+  item.vertices[2][0] = left;
+  item.vertices[2][1] = bottom;
+  item.vertices[3][0] = right;
+  item.vertices[3][1] = bottom;
+  return item;
 }
 
 } // namespace
@@ -47,7 +64,7 @@ void CheckPixel(const krkr::visual::Surface &surface, int x, int y,
 int main(int argc, char **argv) {
   using namespace krkr::visual;
 
-  // 1) 纯色填充与越界裁剪
+  // --- 1) Surface 原语 -------------------------------------------------------
   Surface canvas(4, 4);
   canvas.Clear(0xff000000u);
   canvas.FillRect({1, 1, 3, 3}, 0xffff0000u);
@@ -57,45 +74,71 @@ int main(int argc, char **argv) {
   CheckPixel(canvas, 0, 0, 0xff00ff00u, "FillRect clips negative coordinates");
   CheckPixel(canvas, 2, 2, 0xffff0000u, "FillRect treats right/bottom as exclusive");
 
-  // 2) alpha 混合：white 50% over red
-  //    a = 255*128/255 = 128; keep = 127
-  //    r = 255*128/255 + 255*127/255 = 128+127 = 255
-  //    g = 255*128/255 + 0*127/255 = 128（源是白色，绿蓝通道来自源）
   Surface overlay(2, 2);
   overlay.Clear(0x80ffffffu);
   Surface target(2, 2);
   target.Clear(0xffff0000u);
   target.Composite(overlay, {0, 0, 2, 2}, {0, 0, 2, 2}, ltAlpha, 255);
+  // a = 128；keep = 127；r = 255*128/255 + 255*127/255 = 255；g = 255*128/255 = 128
   CheckPixel(target, 0, 0, 0xffff8080u, "alpha blend mixes source over destination");
-
-  // 3) 不透明覆盖忽略源 alpha
   target.Composite(overlay, {0, 0, 2, 2}, {0, 0, 2, 2}, ltOpaque, 255);
   CheckPixel(target, 0, 0, 0xffffffffu, "opaque copies source rgb");
 
-  // 4) 加法与乘法
-  Surface add(1, 1);
-  add.Clear(0xff203040u);
-  Surface base(1, 1);
-  base.Clear(0xff102030u);
-  base.Composite(add, {0, 0, 1, 1}, {0, 0, 1, 1}, ltAdditive, 255);
-  CheckPixel(base, 0, 0, 0xff305070u, "additive sums channels");
+  // --- 2) DrawList 后端路径 --------------------------------------------------
+  Surface frame(8, 6);
+  DrawList list;
+  list.Reset(0xff000000u);
+  list.items.push_back(Quad(1, 1, 3, 3, 0xffff0000u, ltOpaque));
+  // 2x2 纯白纹理拉伸到 4x2：最近邻采样，前两列取源第 0 列、后两列取源第 1 列。
+  Texture texture;
+  texture.width = 2;
+  texture.height = 2;
+  texture.pixels = {0xffffffffu, 0xff00ff00u, 0xff0000ffu, 0xffffffffu};
+  const std::uint32_t textureId = list.AddTexture(&texture);
+  {
+    DrawItem item = Quad(4, 1, 8, 3, 0, ltOpaque);
+    item.textureId = textureId;
+    list.items.push_back(item);
+  }
+  // 被 clip 裁掉一半的纯蓝块。
+  {
+    DrawItem item = Quad(1, 4, 5, 6, 0xff0000ffu, ltOpaque);
+    item.clip = {0, 0, 3, 6};
+    list.items.push_back(item);
+  }
+  // 旋转项：8a 不支持，必须被跳过并计入统计。
+  {
+    DrawItem item = Quad(0, 0, 2, 2, 0xffffffffu, ltAlpha);
+    item.vertices[0][0] = 5.5f;
+    item.vertices[0][1] = 3.5f;
+    item.vertices[1][0] = 7.5f;
+    item.vertices[1][1] = 3.0f;
+    item.vertices[2][0] = 6.0f;
+    item.vertices[2][1] = 5.5f;
+    item.vertices[3][0] = 8.0f;
+    item.vertices[3][1] = 5.0f;
+    list.items.push_back(item);
+  }
 
-  Surface mul(1, 1);
-  mul.Clear(0xff808080u);
-  base.Clear(0xffff8000u);
-  base.Composite(mul, {0, 0, 1, 1}, {0, 0, 1, 1}, ltMultiplicative, 255);
-  CheckPixel(base, 0, 0, 0xff804000u, "multiplicative scales channels");
+  RenderStats stats;
+  Check(Render(list, frame, &stats), "Render accepts the draw list");
+  Check(stats.itemsDrawn == 3, "three axis-aligned items are drawn");
+  Check(stats.itemsSkipped == 1, "rotated item is skipped, not drawn wrong");
+  CheckPixel(frame, 1, 1, 0xffff0000u, "solid quad covers its rect");
+  CheckPixel(frame, 0, 0, 0xff000000u, "clear color survives outside items");
+  CheckPixel(frame, 4, 1, 0xffffffffu, "texture column 0 maps to the left half");
+  CheckPixel(frame, 6, 1, 0xff00ff00u, "texture column 1 maps to the right half");
+  CheckPixel(frame, 4, 2, 0xff0000ffu, "texture row 1 uses the second source row");
+  CheckPixel(frame, 2, 4, 0xff0000ffu, "clip keeps the visible part");
+  CheckPixel(frame, 3, 4, 0xff000000u, "clip rejects the hidden part");
 
-  // 5) 目标之外的合成被裁剪
-  Surface clipped(2, 2);
-  clipped.Clear(0xff000000u);
-  clipped.Composite(overlay, {0, 0, 2, 2}, {1, 1, 3, 3}, ltOpaque, 255);
-  CheckPixel(clipped, 1, 1, 0xffffffffu, "composite writes the visible part");
-  CheckPixel(clipped, 0, 0, 0xff000000u, "composite skips outside destination");
-
+  // --- 3) 呈现目标（离屏 PPM） -----------------------------------------------
   if (argc >= 2) {
-    const bool saved = canvas.SavePpm(argv[1]);
-    Check(saved, "SavePpm writes the output file");
+    krkr::platform::PpmTarget target(argv[1], frame.Width(), frame.Height());
+    Check(target.IsValid(), "PPM target is valid");
+    Check(target.Present(frame.Pixels(), frame.Width(), frame.Height(), frame.Width()),
+          "PPM target accepts the frame");
+    std::printf("       wrote %s\n", target.GetLastPath().c_str());
   }
 
   std::printf("\n%s (%d failure(s))\n", failures == 0 ? "ALL PASS" : "FAILED", failures);

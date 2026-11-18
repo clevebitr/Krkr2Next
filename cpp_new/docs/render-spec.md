@@ -309,3 +309,47 @@ struct DrawList { std::vector<DrawItem> items; std::uint32_t clearColor; };
 | 多线程合成 / 光栅化 | 先单线程跑对，再谈性能 |
 | `Province` 命中区域 | 属于输入/命中测试（第 9 步） |
 | 字体光栅化 | 第 7 步以后；第 8 步只吃现成字形位图 |
+
+---
+
+## 14. 实现约定（8a 起的行为准则）
+
+1. **DrawList 是唯一接缝**。引擎侧算好顶点与混合参数，后端只做"采样 + 混合 + 提交"。
+   后端不得读图层树、不得做变换决策——否则软件/GL 两条路径必然分叉。
+2. **软件后端是像素权威**。GL 后端的一切差异都以软件输出为参照；断言以"逐像素 ±1"
+   为单位，而不是整帧截图对比（整帧对比定位不到错在哪个算子）。
+3. **混合数学只有一份**：`visual/Blend.cpp`。`Surface::Composite` 与 `SoftwareBackend`
+   共用它；新增算子只改这一处并补断言。
+4. **采样路径可降级，但不能画错**。8a 只实现轴对齐 + 最近邻；顶点非轴对齐的项被跳过并
+   计入 `RenderStats::itemsSkipped`，等 8b/8d 的双线性与仿射路径。宁可少画一帧，
+   不可用错误采样污染像素断言。
+5. **脏矩形从现在就在接口里**（`DrawItem::dirty`），即使 8a 整屏重画；否则 8e 要改结构。
+6. **GL 入口点表放在 `core/contracts`**：平台装载、visual 消费，两边都不需要 include GL 头，
+   也不需要互相引用（`platform` 不能引用 `visual`，反之亦然）。
+7. **平台只认像素**：`core/contracts/IRenderTarget.h` 的 `Present(pixels, w, h, stride)`
+   是 visual 与 platform 的唯一交界。`platform/` 不引用 `visual/`，`visual/` 不引用
+   `platform/`，两者互不可见。
+8. **呈现失败必须显式**：Android 在 8c 之前 `Present` 返回 false 并记录一次原因；
+   不允许返回成功让上面以为画面已经出去。
+9. **GL 只用函数指针装载**（8b）：`visual` 不 include 任何 GL 头，由 platform 把
+   `glGenTextures/glDrawArrays/...` 注入后端。这样 CI 不需要 GL，Android 与 Windows 共用
+   同一份后端代码，SDL 之后只是"又一个 loader + target"。
+10. **呈现与合成单线程**：visual 不持有锁、不做线程同步；跨线程只在 engine 侧排队。
+11. **SDL 的位置**：如果以后接 SDL，它是 `IRenderTarget` 的另一个实现（+ GL context provider），
+    不改渲染核心；不要为了 SDL 把它的类型引进 `visual/`。
+
+### 14.1 当前落地（8a 第一刀）
+
+| 组成 | 位置 | 说明 |
+|---|---|---|
+| 表面与算子 | `visual/Surface.*`、`visual/Blend.*` | RGBA8888；Opaque/Alpha/Additive/Subtractive/Multiplicative |
+| 绘制表 | `visual/DrawList.h` | 纹理表 + `DrawItem`（顶点/uv/混合/opacity/clip/dirty） |
+| 软件后端 | `visual/SoftwareBackend.*` | 轴对齐 + 最近邻；返回 `RenderStats`（画了多少、跳过多少） |
+| GL 后端 | `visual/GLBackend.*` | GLES3 风格（shader + VAO + 缓冲区）；5 种算子 |
+| GL 入口点表 | `core/contracts/GLApi.h` | 平台装载、visual 消费；放在 core 是因为 visual 与 platform 互不引用 |
+| GL 上下文 | `platform/desktop/gl/GLContext.*` | WGL 3.3 core + 隐藏窗口 + 函数装载；Android 换成 EGL（8c），接口不变 |
+| GL 验收 | `host/RenderGlProbe.cpp` | 同一 DrawList 走软件/GL 两条路，逐像素比较；无 GL 环境退出码 77 → CTest skip |
+| 呈现目标 | `platform/desktop/PpmTarget.*` | 离屏 PPM，CI 用 |
+| 窗口目标 | `platform/desktop/win32/Win32WindowTarget.*` | Win32 + GDI，`host/RenderWindow` 手工验证 |
+| Android 目标 | `platform/android/AndroidTarget.*` | 8c 前显式失败（记录一次原因）；GL 后端已能在 NDK 下编译 |
+| 断言 | `host/RenderProbe.cpp` | 原语 + DrawList 两条通道，手算期望值 |

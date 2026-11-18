@@ -106,7 +106,7 @@ cpp_new/
 | 7f | **装配根与 CMake** | `engine/` 装配层、`ScriptLoader`、能力接口拆分、`CompatProfile`、CMake 目标 + CTest；产品入口与测试台共用装配 | ✅ 完成 |
 | 7h | **调试器子包** | `debugger/`：事件契约 + JSONL 录制 + `krkr_debug` 前端（D1 精简版）；断点/单步/DAP 见规格 §5、§9 | ✅ D1 完成 |
 | 7g | **`Initialize.tjs` 的运行面** | `Storages` 挂载面（`addAutoPath`、`addArchive`、`commitSavedata`…）、`System` 其余成员；当前首个缺口是 `Window`（渲染第 8 步的最小面） | ⬅ **下一步** |
-| 8 | 渲染 | 见 **`cpp_new/docs/render-spec.md`**：`visual/Surface` 软件合成已起（8a 起步），GLES3 后端与 EGL 未动 | 🔄 8a 进行中 |
+| 8 | 渲染 | 见 **`cpp_new/docs/render-spec.md`**：8a（软件后端）+ 8b（GLES3 后端，桌面 GL 逐像素对齐）完成；8c（EGL/ANativeWindow）待做 | 🔄 8c 待做 |
 | 9 | 输入 | 指针 / 按键 / 文本 → 脚本事件 | 待做 |
 | 10 | 音频 | 至少 WAVE + OGG | 待做 |
 | 11 | 换回去 | 用 `cpp_new` 替换 `bridge/engine_api/` 的实现，签名不变，Kotlin 不动 | 待做 |
@@ -573,6 +573,36 @@ CMake（技术债 #38）与分层一一对应：`krkr_tjs`、`krkr_tjs_host`（�
   尚未做：DrawList（等 `Window`/`Layer` 形状确定）、纹理与采样、其余 24 种图层类型、
   PNG 解码（需引入 stb_image）。
 
+### 4.23 渲染 8a：DrawList + 软件后端 + 平台呈现
+
+- `visual/`：`Surface`（RGBA8888）、`Blend`（算子唯一实现）、`DrawList`（纹理表 + DrawItem）、
+  `SoftwareBackend`（轴对齐 + 最近邻；非轴对齐项跳过并计数）。
+- `core/contracts/IRenderTarget.h`：`Present(pixels,w,h,stride)`，visual 与 platform 的唯一交界。
+- `platform/`：`PpmTarget`（离屏，CI）、`Win32WindowTarget`（GDI，`host/RenderWindow` 手工验证，
+  实测 60 帧无异常）、`AndroidTarget`（8c 前显式失败）。
+- 断言：`host/RenderProbe.cpp` 覆盖原语与 DrawList 两条通道（纯色 / 纹理 / 最近邻缩放 /
+  clip / 旋转项跳过 / PPM 输出），`ctest` 项 `render_surface`。
+
+尚未做：双线性与仿射采样、其余 24 种图层类型、遮罩（dfMask）、effect/filter、脏矩形差分、
+纹理上传与 GLES3 后端、图像解码（PNG/TLG）、字体。
+
+### 4.24 渲染 8b：GLES3 后端与双平台构建
+
+- `core/contracts/GLApi.h`：函数指针表。放在 core 是因为 `platform` 不能引用 `visual`：
+  平台负责装载、visual 负责消费，二者只在这张表上相遇。
+- `visual/GLBackend.*`：GLES3 风格（vertex/fragment shader、VAO、VBO、纹理上传、scissor），
+  覆盖 8a 的 5 种算子。
+- `platform/desktop/gl/GLContext.*`：WGL 隐藏窗口 + 3.3 core 上下文 + 入口点装载。
+- `host/RenderGlProbe.cpp`：同一 DrawList 分别走软件与 GL，逐像素比较；实测 **0 个不一致像素**。
+- Android：`cmake --preset android-debug`（NDK r27d, arm64-v8a）能编出 `krkr_visual` / `krkr_platform`。
+
+两个踩过的点：
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| GL 画完什么都没有，`glDrawArrays` 无效果 | core profile 下没有绑定 VAO 是无效操作 | 后端自己持有 VAO，`Initialize` 里创建并绑定 |
+| Clang(NDK) 编不过 vendored tjs | `register`、取临时量地址、dependent base 的未限定查找、`std::binary_function` 已移除 | 前三个用编译参数，`binary_function` 在 prelude 补 libc++ 版本；`tjsHashSearch.h` 加 `this->` 记入 `tjs/VENDOR.md` #3 |
+
 ## 5. 已知问题 / 技术债
 
 | # | 问题 | 处理 |
@@ -626,6 +656,12 @@ CMake（技术债 #38）与分层一一对应：`krkr_tjs`、`krkr_tjs_host`（�
 | 47 | `System.personalPath` / `savedGamesPath` 需要宿主注入 | `EngineRuntime` 提供了 `SetPersonalDirectory` / `SetSavedGamesDirectory`，Android 侧由第 11 步的 JNI 填；未注入时脚本读取显式失败 |
 | 48 | `CompatProfile.preludeScript` 为空 | 参照实现会注入 `CompoundStorageMedia` 一类脚本级 stub；按"有证据才加"的原则留空，加之前先确认触发它的游戏与行为 |
 | 49 | CTest 的 `real_startup` 处于 DISABLED | 与 #46 同一件事：`Window` 落地后改为启用，作为真游戏的回归闸门 |
+| 57 | GL 后端只覆盖 5 种算子 | `ltPs*` 家族 16 种按规格需软件兜底（离屏合成后再上传）；在此之前这些图层会被跳过并计数 |
+| 58 | 纹理缓存以 `Texture*` 为键，无 LRU、无句柄复用 | 8b 只验证正确性；等接入真实素材（8d/图片解码）时改成"纹理对象 + 引用计数 + LRU" |
+| 59 | Android 无 EGL/ANativeWindow，GL 后端只在桌面验证过 | 8c；`GLContext`/`GLApi` 接口保持不变，Android 侧换成 EGL + `ANativeWindow` |
+| 54 | 8a 只支持轴对齐 + 最近邻；旋转/斜切项被跳过 | 双线性与仿射属 8b/8d；跳过会记入 `RenderStats::itemsSkipped`，不会画错 |
+| 55 | Android 呈现目标未接 ERenderTarget 到 ANativeWindow/EGL | 8c；当前 `Present` 返回 false 并记录一次原因 |
+| 56 | 没有图像解码与字体 | 8a 用程序生成的纹理验证管线；PNG 需引入 stb_image（vendored），TLG 参照 `LoadTLG.cpp` |
 | 51 | 调试器只有观察平面（事件流），没有断点/单步 | `ENABLE_DEBUGGER` 钩子已验证可编译（规格 §8），但暂停语义需要与 tick 模型一起设计；当前定位问题靠事件 + trace |
 | 52 | `krkr_debug` 只支持 `--summary` / `--filter`，无 `--follow` | 事件文件在进程退出后才有完整内容；实时跟随等 D4 的会话层 |
 | 53 | 事件未带线程标识 | 目前单线程（脚本在调用线程执行）；第 8/9 步引入 worker 后补 `thread` 字段 |

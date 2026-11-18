@@ -52,6 +52,20 @@ namespace TJS {
     extern void TJSReleaseRegex();
 }
 
+// C++17 移除了 std::binary_function，上游 tjsArray.cpp 仍以它为基类。
+// libc++（NDK）下补回同名模板；libstdc++ 的 <functional> 仍提供它，故只在 libc++ 生效。
+#if __cplusplus >= 201703L && defined(_LIBCPP_VERSION)
+#include <functional>
+namespace std {
+    template <typename Arg1, typename Arg2, typename Result>
+    struct binary_function {
+        using first_argument_type = Arg1;
+        using second_argument_type = Arg2;
+        using result_type = Result;
+    };
+}
+#endif
+
 // tjs2 的若干头（如 tjsError.h）假设 tjs.h 已经被包含。强制在这里定好顺序，
 // 免得为了"改 include 顺序"去改权威实现。
 #include "tjs/tjs.h"

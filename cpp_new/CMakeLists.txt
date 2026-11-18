@@ -48,6 +48,14 @@ target_compile_options(krkr_tjs PUBLIC
   "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/FI${KRKR_PRELUDE}>")
 target_link_libraries(krkr_tjs PUBLIC krkr_tjs_host)
 
+# Clang（NDK）比 GCC 严格：vendored tjs 有 C++17 非法的 register、取临时量地址，
+# 以及 dependent base 的未限定查找（上游只被 MSVC/GCC 编过）。用编译参数兼容，
+# 不改 tjs/ 源码（ARCHITECTURE §4.2：工具链差异一律走垫层参数）。
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  target_compile_options(krkr_tjs PUBLIC
+    -Wno-register -Wno-address-of-temporary -fdelayed-template-parsing)
+endif()
+
 # -----------------------------------------------------------------------------
 # core：基座（日志、存储、对外 API）。不引用 shim / platform / tjs。
 # -----------------------------------------------------------------------------
@@ -74,15 +82,27 @@ target_include_directories(krkr_core PUBLIC "${KRKR_ROOT}")
 # -----------------------------------------------------------------------------
 # visual：合成与位图（渲染第 8a 片）。软件后端是像素权威，GL 后端后补。
 # -----------------------------------------------------------------------------
-add_library(krkr_visual STATIC visual/Surface.cpp)
+add_library(krkr_visual STATIC
+  visual/Surface.cpp visual/Blend.cpp visual/SoftwareBackend.cpp visual/GLBackend.cpp)
 target_include_directories(krkr_visual PUBLIC "${KRKR_ROOT}")
 target_link_libraries(krkr_visual PUBLIC krkr_core)
 
 # -----------------------------------------------------------------------------
-# platform：平台能力实现（当前仅有空目录，见技术债 #39）。
+# platform：平台能力实现（呈现目标）。visual 与 platform 互不引用，
+# 二者只通过 core/contracts/IRenderTarget.h 相遇。
 # -----------------------------------------------------------------------------
-add_library(krkr_platform INTERFACE)
-target_link_libraries(krkr_platform INTERFACE krkr_core)
+add_library(krkr_platform STATIC platform/desktop/PpmTarget.cpp)
+target_include_directories(krkr_platform PUBLIC "${KRKR_ROOT}")
+target_link_libraries(krkr_platform PUBLIC krkr_core)
+
+if(WIN32)
+  target_sources(krkr_platform PRIVATE
+    platform/desktop/win32/Win32WindowTarget.cpp
+    platform/desktop/gl/GLContext.cpp)
+  target_link_libraries(krkr_platform PRIVATE opengl32)
+elseif(ANDROID)
+  target_sources(krkr_platform PRIVATE platform/android/AndroidTarget.cpp)
+endif()
 
 # -----------------------------------------------------------------------------
 # shim：垫层（TJS 门面、脚本装载、原生类桥接、宿主符号）。
@@ -128,8 +148,11 @@ target_include_directories(krkr_engine PUBLIC "${KRKR_ROOT}")
 target_link_libraries(krkr_engine PUBLIC krkr_shim krkr_core krkr_tjs)
 
 # -----------------------------------------------------------------------------
-# 测试台（host/ 不属于引擎产物）
+# 测试台（host/ 不属于引擎产物）。Android 上只编库，避免把测试台塞进 APK。
 # -----------------------------------------------------------------------------
+option(KRKR_BUILD_TOOLS "Build test benches and register ctest cases" ON)
+
+if(KRKR_BUILD_TOOLS)
 add_executable(tjs_probe host/TjsProbe.cpp)
 target_link_libraries(tjs_probe PRIVATE krkr_engine krkr_debugger)
 
@@ -146,11 +169,22 @@ add_executable(xp3pack host/Xp3Pack.cpp)
 target_link_libraries(xp3pack PRIVATE krkr_core)
 
 add_executable(render_probe host/RenderProbe.cpp)
-target_link_libraries(render_probe PRIVATE krkr_visual)
+target_link_libraries(render_probe PRIVATE krkr_visual krkr_platform)
+
+if(WIN32)
+  add_executable(render_window host/RenderWindow.cpp)
+  target_link_libraries(render_window PRIVATE krkr_visual krkr_platform)
+
+  add_executable(render_gl_probe host/RenderGlProbe.cpp)
+  target_link_libraries(render_gl_probe PRIVATE krkr_visual krkr_platform)
+endif()
+
+endif() # KRKR_BUILD_TOOLS
 
 # -----------------------------------------------------------------------------
 # 断言（ctest）。断言脚本在 host/fixtures/demo，末尾抛 "<name>-ok" 表示通过。
 # -----------------------------------------------------------------------------
+if(KRKR_BUILD_TOOLS)
 enable_testing()
 
 set(KRKR_FIXTURES "${KRKR_ROOT}/host/fixtures")
@@ -185,6 +219,12 @@ add_test(NAME startup_state COMMAND krkr_next --path-file "${KRKR_FIXTURE_ROOT_F
 
 add_test(NAME render_surface
   COMMAND render_probe "${CMAKE_BINARY_DIR}/render_probe.ppm")
+
+if(WIN32)
+  # 没有可用 GL 的环境（CI 无显示）记 skip，而不是失败。
+  add_test(NAME render_gl COMMAND render_gl_probe)
+  set_tests_properties(render_gl PROPERTIES SKIP_RETURN_CODE 77)
+endif()
 
 foreach(script t_scripts t_system t_debug t_plugins
                t_repro t_alias t_spread t_exit)
@@ -221,3 +261,4 @@ if(EXISTS "${KRKR_REAL_ROOT_FILE}")
     set_tests_properties(real_startup PROPERTIES DISABLED TRUE)
   endif()
 endif()
+endif() # KRKR_BUILD_TOOLS
