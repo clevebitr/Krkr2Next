@@ -146,7 +146,6 @@ namespace krkr::io {
         }
     } // namespace
 
-
     class Storage::Impl {
     public:
         std::filesystem::path root;

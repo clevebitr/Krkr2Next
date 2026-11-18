@@ -1,4 +1,4 @@
-#include "core/env/app/EngineRuntime.h"
+#include "core/api/EngineRuntime.h"
 
 #include <cctype>
 #include <cstddef>
@@ -182,6 +182,52 @@ namespace krkr::env {
     krkr::log::Info("startup: script size=", size, " head=", headText);
   }
 
+
+  void EngineRuntime::SetLaunchArguments(std::vector<std::string> arguments) {
+    launchArguments_ = std::move(arguments);
+    krkr::log::Info("host: launch arguments count=", launchArguments_.size());
+  }
+
+  std::vector<std::string> EngineRuntime::GetLaunchArguments() const {
+    return launchArguments_;
+  }
+
+  void EngineRuntime::Inform(const std::string &text) {
+    krkr::log::Info("script: ", text);
+  }
+
+  void EngineRuntime::InformError(const std::string &text) {
+    krkr::log::Error("script: ", text);
+  }
+
+  void EngineRuntime::RequestExit() {
+    if (!exitRequested_.exchange(true)) {
+      krkr::log::Info("script: exit requested");
+    }
+  }
+
+  void EngineRuntime::SetTitle(const std::string &title) {
+    title_ = title;
+    krkr::log::Info("host: title=\"", title_, "\"");
+  }
+
+  std::string EngineRuntime::GetTitle() const { return title_; }
+
+  int EngineRuntime::GetSurfaceWidth() const { return surfaceWidth_; }
+
+  int EngineRuntime::GetSurfaceHeight() const { return surfaceHeight_; }
+
+  void EngineRuntime::SetSurfaceSize(int width, int height) {
+    if (width > 0 && height > 0) {
+      surfaceWidth_ = width;
+      surfaceHeight_ = height;
+    }
+  }
+
+  std::string EngineRuntime::GetVersionInformation() const {
+    return "cpp_new (KiriKiri2 compatible runtime)";
+  }
+
   EngineResult EngineRuntime::Tick(double deltaSeconds) {
     if (!gameOpen_) {
       lastError_ = "Tick before OpenGame";
@@ -197,6 +243,11 @@ namespace krkr::env {
     if (GetStartupState() != EngineStartupState::Succeeded) {
       lastError_ = "engine startup is still running";
       return EngineResult::StartupPending;
+    }
+
+    if (exitRequested_.load()) {
+      lastError_ = "game requested exit";
+      return EngineResult::GameTerminated;
     }
 
     ++frameCount_;

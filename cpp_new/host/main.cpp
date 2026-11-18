@@ -4,7 +4,7 @@
 #include <fstream>
 #include <string>
 
-#include "core/env/app/EngineRuntime.h"
+#include "core/api/EngineRuntime.h"
 #include "core/log/Logger.h"
 
 namespace {
@@ -55,7 +55,6 @@ void PrintStartupLogs(krkr::log::Logger &logger) {
 
 } // namespace
 
-
 int main(int argc, char **argv) {
     if(argc < 2) {
         std::printf("usage:krkr_next <game_dir|game.xp3> [log_file]\n");
@@ -92,7 +91,6 @@ int main(int argc, char **argv) {
         }
     }
     
-
     krkr::env::EngineRuntime *engine = krkr::env::EngineRuntime::Create();
     if(engine == nullptr) {
         std::printf("create failed\n");

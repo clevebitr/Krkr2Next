@@ -7,8 +7,11 @@
 #include <system_error>
 #include <unordered_map>
 
+#include <cctype>
+
 #include "core/io/IoName.h"
 #include "core/io/PathUtil.h"
+#include "core/log/Logger.h"
 
 namespace krkr::io {
 
@@ -125,6 +128,8 @@ class Xp3Index::Impl {
 
     std::vector<Xp3Entry> entries;
     std::unordered_map<std::string, std::size_t> byKey;
+    // 兼容性索引：Windows 文件系统不区分大小写，而脚本中的名字大小写常与包内不一致。
+    std::unordered_map<std::string, std::size_t> byLowerKey;
 
     void Fail(const std::string &message) { lastError = message; }
 
@@ -292,6 +297,15 @@ bool Xp3Index::Impl::ParseEntries(const std::vector<std::uint8_t> &buffer) {
       entry.segments.push_back(segment);
     }
 
+    std::string lowerKey = entry.key;
+    for (char &ch : lowerKey) {
+      const unsigned char byte = static_cast<unsigned char>(ch);
+      if (byte < 0x80) {
+        ch = static_cast<char>(std::tolower(byte));
+      }
+    }
+    byLowerKey.emplace(lowerKey, entries.size());
+
     const auto inserted = byKey.emplace(entry.key, entries.size());
     if (!inserted.second) {
       ++duplicateCount;
@@ -316,6 +330,7 @@ bool Xp3Index::Load(const std::string &archivePathUtf8) {
   impl_->lastError.clear();
   impl_->entries.clear();
   impl_->byKey.clear();
+  impl_->byLowerKey.clear();
   impl_->duplicateCount = 0;
 
   const std::filesystem::path path = PathFromUtf8(archivePathUtf8);
@@ -348,11 +363,25 @@ bool Xp3Index::Load(const std::string &archivePathUtf8) {
 const std::vector<Xp3Entry> &Xp3Index::GetEntries() const { return impl_->entries; }
 
 const Xp3Entry *Xp3Index::Find(const std::string &name) const {
-  const auto it = impl_->byKey.find(NormalizeStorageName(name));
-  if (it == impl_->byKey.end()) {
+  const std::string key = NormalizeStorageName(name);
+  const auto exact = impl_->byKey.find(key);
+  if (exact != impl_->byKey.end()) {
+    return &impl_->entries[exact->second];
+  }
+
+  std::string lowerKey = key;
+  for (char &ch : lowerKey) {
+    const unsigned char byte = static_cast<unsigned char>(ch);
+    if (byte < 0x80) {
+      ch = static_cast<char>(std::tolower(byte));
+    }
+  }
+  const auto relaxed = impl_->byLowerKey.find(lowerKey);
+  if (relaxed == impl_->byLowerKey.end()) {
     return nullptr;
   }
-  return &impl_->entries[it->second];
+  krkr::log::Debug("Xp3Index: case-insensitive hit for \"", name, "\"");
+  return &impl_->entries[relaxed->second];
 }
 
 std::uint64_t Xp3Index::GetArchiveSize() const { return impl_->archiveSize; }

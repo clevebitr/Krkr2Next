@@ -1,0 +1,311 @@
+# 渲染规格（第 8 步需求书）— cpp_new
+
+> 目标：把"KiriKiri 的合成到底要做什么"写成可执行的清单，并确认代码从哪取。
+>
+> 证据来源（都是实测读过的文件，不是猜的）：
+>
+> | 主题 | 文件 |
+> |---|---|
+> | 图层类型枚举（29 种） | `F:/Projetcs/krkrz_gl/visual/drawable.h:21-55` |
+> | 图层参数/接口 | `visual/LayerIntf.h`（`SetOpacity` / `SetType` / `SetClip` / `SetFace` …） |
+> | 软件合成算子（权威数学） | `visual/tvpgl.c` |
+> | GL 渲染器结构（10.4k 行） | `F:/Projetcs/krkrz_gl/visual/opengl/*` |
+> | GL Canvas 的默认 shader | `visual/opengl/CanvasIntf.cpp:48-78` |
+> | 图层位图 / 遮罩存储 | `visual/LayerBitmapIntf.h`（`tTVPBaseBitmap(w,h,bpp=32)`，`SetPointMask`） |
+> | 局部更新区域 | `visual/LayerManager.h:246` `tTVPComplexRect UpdateRegion` |
+> | TLG5/TLG6 解码 | `visual/LoadTLG.cpp` |
+> | 许可 | `krkrz/LICENSE` = BSD 3-clause 风格（保留版权声明、不得用作者名背书） |
+
+---
+
+## 0. 选型确认（结论）
+
+**不整搬任何引擎的渲染器。三块分开取源：**
+
+| 取什么 | 从哪取 | 条款/方式 |
+|---|---|---|
+| **合成数学（算子语义）** | `krkrz/visual/tvpgl.c`（BSD-3） | 逐算子对照抄，含定点舍入 |
+| **GL 抽象结构** | `krkrz_gl/visual/opengl/*`（Canvas / Texture / ShaderProgram / VertexBuffer / Matrix32 / FBO / Offscreen） | 只抄**接口切分与渲染流程**，实现自己写 |
+| **平台接线（EGL / 窗口 / swap）** | **自家** `Krkr2Next/cpp/core/visual/ogl/krkr_egl_context.cpp`（577 行，真机验证过） | 直接搬 |
+| **图片解码** | `stb_image.h`（单文件、public domain） + 自写 TLG（`LoadTLG.cpp` 参照） | vendored |
+
+**不采用：**
+
+- `Kirikiroid2`（2024 停更；`cpp/core/visual` 就是它的后裔 —— 同一份代码，零增量）
+- `krkrsdl2` 的 SDL2 平台层（Android 上要带 SDL2 + 它的 Java glue；而"零拷贝 SurfaceTexture"SDL 不管）
+- `krkrsdl2` 的 Android 平台实现：`visual/opengl/OpenGLPlatformAndroid.cpp` **只有 34 行，是 stub**；同目录 Win32 版 1038 行 —— 说明这块在这个 fork 里没被实现过
+- cocos2d-x、`SDL_Renderer`、bgfx
+
+---
+
+## 1. 数据模型
+
+### 1.1 Layer（可见的绘制单元）
+
+| 参数 | 语义 | 备注 |
+|---|---|---|
+| `Visible` | 是否参与合成 | 关闭 = 整层跳过 |
+| `Opacity` | 0..255 全局透明度 | 乘到源 alpha 上 |
+| `Type` | `tTVPLayerType`（29 种，见 §3） | 决定混合方程 |
+| `Left/Top/Width/Height` | 目标矩形（窗口坐标） | |
+| `ImageLeft/ImageTop` | 源位图上的偏移 | 与上者组合出 uv 偏移 |
+| `Clip*` | 裁剪矩形 | 层内裁剪，等价 scissor |
+| `Matrix`（`t2DAffineMatrix`，6 个 float） | 仿射：缩放/旋转/平移 | 非单位阵时走 affine 采样路径 |
+| `Face`（`tTVPDrawFace`） | `dfBoth` / `dfMain` / `dfMask` | 决定画颜色通道还是遮罩通道 |
+| `HitType` | `htMask` / `htProvince` | 命中测试，**与渲染无关**，第 9 步（输入）用 |
+| `Province` | 命中区域位图 | 同上 |
+
+### 1.2 位图与遮罩
+
+- 图层位图固定 **32bpp**：`tTVPBaseBitmap(w, h, bpp = 32)`（`LayerBitmapIntf.h:149`）。
+- **遮罩不是独立通道**：`SetPointMask(x, y, mask)` 与 `SetPointMain(x, y, color)` 都在同一个 32bpp 位图上 —— 遮罩就是 alpha 通道的一种解释。
+- 因此"画遮罩"= 用 `dfMask` 面把 alpha 当灰度值写/读。
+
+### 1.3 树与窗口
+
+- 图层树 `LayerTreeOwner`，顶层挂到 `Window`。
+- 只有**顶层**才需要真正提交到屏幕；中间层可以渲染到 FBO/离屏位图（`Offscreen`）。
+
+---
+
+## 2. 变换与采样
+
+三种路径，按图层参数自动选择（不是三套 API）：
+
+| 路径 | 触发条件 | 采样 |
+|---|---|---|
+| 直接拷贝 | 无缩放、无旋转、整像素对齐 | 1:1，无插值 |
+| `Stretch` | 目标尺寸 ≠ 源尺寸，无旋转 | 最近邻 / 双线性（`InterpStretch*`） |
+| `Affine` / `LinTrans` | 有旋转/斜切（Matrix 非单位阵） | 双线性（`InterpLinTrans*`） |
+| `UnivTrans` | 通用变换（`tTVPUnivTrans`） | 预留，真实游戏少见 |
+
+**规格要点**：三种路径的混合方程**完全相同**，只是采样不同。实现上应该"同一份 blend 代码 + 三种采样器"，而不是三套渲染通路 —— 这是 krkrz `xStretchxBlend` / `xLinTransxBlend` 命名法的由来。
+
+---
+
+## 3. 混合算子（29 种图层类型）
+
+`tTVPLayerType`（`visual/drawable.h`）按值分组：
+
+| 值 | 类型 | 语义 | GL 可行性 |
+|---:|---|---|---|
+| 0 | `ltBinder` | 不画自己，只画子层 | 直接支持（跳过本层） |
+| 1 | `ltCoverRect` / `ltOpaque` | 不透明覆盖 | `glBlendFunc(ONE, ZERO)` |
+| 2 | `ltTransparent` / `ltAlpha` | 标准 alpha 混合 | `SRC_ALPHA, ONE_MINUS_SRC_ALPHA` |
+| 3 | `ltAdditive` | 加法 | `SRC_ALPHA, ONE` |
+| 4 | `ltSubtractive` | 减法 | 需 shader 或 `glBlendEquation(GL_FUNC_REVERSE_SUBTRACT)` |
+| 5 | `ltMultiplicative` | 乘法 | `DST_COLOR, ZERO`（预乘近似） |
+| 6 | `ltEffect` | 效果层（子层合成后整体作用） | 需 FBO |
+| 7 | `ltFilter` | 滤镜层（同上，可带滤镜参数） | 需 FBO + shader |
+| 8 | `ltDodge` | 颜色减淡（非 PS 版） | shader |
+| 9 | `ltDarken` | 变暗 | shader（`GL_MIN` 可近似） |
+| 10 | `ltLighten` | 变亮 | shader（`GL_MAX` 可近似） |
+| 11 | `ltScreen` | 滤色 | `ONE_MINUS_DST_COLOR, ONE` |
+| 12 | `ltAddAlpha` | 加法 alpha（alpha 也相加） | `ONE, ONE` |
+| 13–28 | `ltPsNormal` … `ltPsExclusion` | Photoshop 家族 16 种 | **GL 无固定管线，必须 shader 或软件兜底** |
+
+**结论（关键）**：krkrz 的 GL 路径只实现了 **5 种**（`tTVPBlendMode`：`bmDisable/ bmOpaque / bmAlpha / bmAdd / bmAddWithAlpha`，见 `CanvasIntf.h:18`），Photoshop 家族只在软件路径（`tvpgl.c` 的 `TVPPs*Blend`）里存在。
+
+→ cpp_new 必须**两层都做**：GL 后端覆盖常用 5~12 种；遇到 `ltPs*` 必须能**回落到软件合成**，否则某些游戏的光效/立绘会画错。
+
+### 3.1 数学定义（8-bit，直通 alpha）
+
+以 `src`（源，可带逐像素 alpha 与图层 opacity）、`dst`（目标）为像素，`As` = 源 alpha × opacity：
+
+```
+Opaque      : out = src
+Alpha       : out.rgb = src.rgb*As + dst.rgb*(1-As)
+              out.a   = As + dst.a*(1-As)
+Add         : out.rgb = min(dst.rgb + src.rgb*As, 255)
+Sub         : out.rgb = max(dst.rgb - src.rgb*As, 0)
+Mul         : out.rgb = dst.rgb * (src.rgb*As + (1-As)) / 255
+Screen      : out.rgb = 255 - (255-dst.rgb)*(255-src.rgb*As)/255
+AddAlpha    : out.rgb = min(dst.rgb + src.rgb*As, 255); out.a = min(dst.a + As, 255)
+Ps*         : 按 Photoshop 定义（tvpgl.c 里 TVPPs*Blend 逐个实现）
+```
+
+⚠️ **定点舍入必须照抄 `tvpgl.c`**。KiriKiri 用的是 `(x + (x >> 8) + 128) >> 8` 之类的快速舍入，标准公式直接除 255 会**差 1**，逐像素断言会失败。软件后端先按 tvpgl 抄，GL 后端接受 ±1 的误差（断言时给容差）。
+
+---
+
+## 4. 遮罩 / Clip / Face
+
+| 机制 | 语义 | 实现 |
+|---|---|---|
+| `Clip` | 矩形裁剪 | `glScissor`（软件后端 = 逐行跳过） |
+| `Mask`（`dfMask`） | 用 alpha 通道当灰度蒙版 | 每个像素 `src.a *= mask`；GL 用第二张贴图 + shader 乘法 |
+| `Face` | 只画 main / 只画 mask / 都画 | 决定写哪个通道 |
+| `ltEffect` / `ltFilter` | 先合成子层到离屏，再整体作用 | 需要 FBO + 一次额外 pass |
+
+---
+
+## 5. 局部更新（脏矩形）
+
+- `tTVPComplexRect UpdateRegion`（`LayerManager.h:246`）维护"本帧哪些矩形变了"。
+- 规格：**没有变化的区域不应该重画**。真机上这条直接决定续航。
+- 对 cpp_new 的约束：draw list 里每一项都带自己的脏矩形；后端可以只清/画这些矩形（`glScissor`）。
+- 第一阶段（8a/8b）**允许整屏重画**，但 draw list 的数据结构必须能表达脏矩形，否则以后要重构。
+
+---
+
+## 6. 资源与纹理
+
+| 格式 | 谁在用 | 解码难度 |
+|---|---|---|
+| PNG | `LoadPNG.cpp` | `stb_image` 直接搞定 |
+| JPEG | `LoadJPEG.cpp` | 同上 |
+| **TLG5** | KiriKiri 主格式 | zlib 块 + 逐行预测（`TVPTLG5DecompressSlide`）。**我们已经有 puff，可直接用** |
+| **TLG6** | KiriKiri 主格式 | 分块 + 自定义编码，比 TLG5 复杂得多，先不做 |
+| 压缩纹理（ETC/PVR） | 老树 `RenderManager_ogl` 里有 | 可选，不做也能跑 |
+
+纹理上传规格：一律转 **RGBA8**、**预乘与否必须统一**（建议 GL 侧用非预乘 + `SRC_ALPHA, ONE_MINUS_SRC_ALPHA`，与软件后端一致，便于逐像素比对）。
+
+---
+
+## 7. 字体与文字
+
+- `PrerenderedFont`：把字形渲染进一张位图（atlas），之后当普通纹理贴。
+- 规格：文字 = **一堆带 uv 的四边形**，与图片走同一条 draw list。所以渲染器不需要"懂文字"。
+- 字体光栅化本身（FreeType）是第 7 步之后的事，第 8 步只需能吃现成的字形位图。
+
+---
+
+## 8. 视频叠加
+
+- `VideoOvlIntf`：视频帧作为一张纹理贴到某个矩形上，混合模式 `ltOpaque`。
+- 对第 8 步的要求：**只要支持"外部提供的 RGBA/YUV 纹理上传"即可**，不需要解码。
+
+---
+
+## 9. GL 后端的最小形态（来自 krkrz Canvas）
+
+`CanvasIntf.cpp:48-78` 的默认 shader 就是最小可用管线：
+
+```glsl
+// vertex
+attribute vec2 a_pos; attribute vec2 a_texCoord;
+uniform mat4 a_modelMat4; uniform vec2 a_size;
+void main(){
+  mat4 ortho = mat4(vec4(2.0/a_size.x,0,0,0), vec4(0,-2.0/a_size.y,0,0),
+                    vec4(0,0,-1,0), vec4(-1,1,0,1));
+  gl_Position = ortho * a_modelMat4 * vec4(a_pos, 0.0, 1.0);
+  v_texCoord = a_texCoord;
+}
+// fragment
+precision mediump float; varying vec2 v_texCoord;
+uniform sampler2D s_tex0; uniform float a_opacity;
+void main(){ vec4 c = texture2D(s_tex0, v_texCoord); c.a *= a_opacity; gl_FragColor = c; }
+```
+
+即：**一个四边形批 + 一个 shader + `glBlendFunc` 切模式 + `glScissor` 切 clip**。KiriKiri 的复杂度全在"合成策略"和"算子正确性"，不在 GL 本身 —— 这就是为什么它可以用 200 行 GL 代码 + 一套状态机表达。
+
+krkrz 的结构（`visual/opengl/`，10.4k 行）值得照抄的部分：
+
+| 接口 | 职责 |
+|---|---|
+| `CanvasIntf` | 状态栈（矩阵/clip/culling）、draw call、混合模式 |
+| `TextureIntf` | 纹理创建/上传/虚拟纹理（大图分块） |
+| `ShaderProgramIntf` | 编译/链接/参数绑定 |
+| `VertexBufferIntf` + `VertexBinderIntf` | 顶点数据与属性绑定 |
+| `Matrix32Intf` / `Matrix44Intf` | 2D/3D 矩阵，暴露给 TJS（`Matrix32` 类） |
+| `GLFrameBufferObject` | FBO（离屏渲染 / 遮罩 / effect 层） |
+| `OffscreenIntf` | 离屏表面（渲染到纹理） |
+| `OpenGLScreen` | 帧缓冲区、swap、scissor、vsync |
+
+---
+
+### 9.1 dst-dependent 算子（Ps* 家族）的难点（旧树实测）
+
+Photoshop 家族（Overlay / HardLight / SoftLight / ColorDodge / …）需要**读取目标像素**才能算。
+旧树 `RenderManager_ogl.cpp` 的做法（实测）：
+
+- 探测 `GL_EXT_shader_framebuffer_fetch` / `ARM_` / `NV_` 扩展（第 258–261 行）；
+- 能用则在 fragment shader 里直接读 framebuffer（`TEST_SHADER_BLTO(PsOverlayBlend)` 等，第 4127–4136 行）；
+- 不能用（大量 Android 设备）就得另一条路：渲染到 FBO / ping-pong 纹理。
+
+**两条路径 + 设备差异 + 无对照测试 = “平台层一团糟”的主要来源。**
+
+cpp_new 的规避方式：
+
+1. 软件后端先把这些算子按 `tvpgl.c` 实现（权威、可断言）；
+2. GL 后端**只走一条路**：dst-dependent 算子一律渲染到离屏 FBO（不探测扩展、不做 shader 变体分叉）。
+   代价是多一次离屏 pass，收益是行为可预测；
+3. 将来真要提速，再拿实测数据决定要不要加 `framebuffer_fetch` 快速路径。
+
+---
+
+## 10. 平台接线（用自家的）
+
+| 平台 | 来源 | 状态 |
+|---|---|---|
+| Android | **自家** `krkr_egl_context.cpp`（577 行） | 真机验证过，支持 `eglMakeCurrent(EGL_NO_SURFACE)` + 换 surface（SurfaceTexture 零拷贝需要） |
+| krkrz 的 Android | `OpenGLPlatformAndroid.cpp` | **34 行 stub，不可用** |
+| Windows（仅测试台） | krkrz `OpenGLPlatformWin32.cpp`（1038 行）或 SDL2 | 只在开发机上用，不进产品 |
+
+---
+
+## 11. cpp_new 的落地设计
+
+```
+引擎（Layer/合成策略）  ──►  DrawList（数据，无 GL）  ──┬──► SoftwareBackend  （像素权威，可断言）
+                                                        └──► GLBackend        （GLES3，手机上跑）
+```
+
+### 11.1 DrawList（稳定接口，后续不改）
+
+```cpp
+struct DrawItem {
+  std::uint32_t textureId;        // 0 = 纯色填充
+  std::uint32_t maskTextureId;    // 0 = 无遮罩
+  float vertices[4][2];           // 目标坐标（已含仿射）
+  float uvs[4][2];
+  std::uint32_t blend;            // tTVPLayerType 的原值
+  std::uint32_t opacity;          // 0..255
+  Rect clip;                      // 裁剪
+  Rect dirty;                     // 脏矩形（第一阶段可等于 clip）
+};
+struct DrawList { std::vector<DrawItem> items; std::uint32_t clearColor; };
+```
+
+### 11.2 为什么这么切
+
+- "合成策略"（谁画在谁上面、矩阵怎么来）是**业务逻辑**，放引擎侧，可以在没有 GL 的机器上测。
+- "算子正确性"用软件后端做**像素断言**（权威 = `tvpgl.c`）。
+- GL 后端只做"翻译"，出错面小；调试时可以把同一帧的软件输出与 GL 输出**逐像素 diff**，一眼看出是算子错还是 GL 状态错。
+
+### 11.3 断言策略
+
+| 断言 | 判据 |
+|---|---|
+| 尺寸 / 坐标 | 精确相等 |
+| 背景纯色 | 精确相等 |
+| 不透明贴图 | 精确相等（无插值路径） |
+| alpha 混合 / 加法 / 乘法 | 与 tvpgl.c 照抄的软件后端精确相等；GL 允许 ±1 |
+| 缩放 / 旋转 | 允许 ±2（双线性实现有差异） |
+| Ps* 家族 | 只与软件后端比，GL 要求回落 |
+
+---
+
+## 12. 分片与验收
+
+| 片 | 内容 | 验收 | 需要手机？ |
+|---|---|---|---|
+| 8a | DrawList + `SoftwareBackend` + PPM 输出 | 用 `Storage` 读真包里的 `title_bg.png`（3.1 MB，已验证可读），输出 PPM，尺寸与指定像素断言通过 | 否 |
+| 8b | `GLBackend`（GLES3）：纹理上传、四边形批、5~12 种 blend、scissor | 同一 DrawList，GL 输出与软件后端差 ≤1/像素 | 桌面 GL 即可 |
+| 8c | EGL + SurfaceTexture（真机一帧） | 手机上出现 8b 那张图；旋转/改变尺寸不崩 | 是 |
+| 8d | 遮罩（dfMask）+ Clip + effect/filter 层（FBO） | 遮罩与 effect 各一条像素断言 | 否（软件后端） |
+| 8e | 脏矩形 + 差分更新 | 只改动 1 个矩形时，绘制项数/像素数下降（计数断言） | 否 |
+
+---
+
+## 13. 不做 / 已知差距（写下来防止以后返工）
+
+| 项 | 为什么现在不做 |
+|---|---|
+| TLG6 | 解码复杂度高；真机游戏里 TLG5/PNG 足够先跑起来 |
+| ETC/PVR 压缩纹理 | 内存优化，不是功能；等纹理内存吃紧再做 |
+| `UnivTrans` 通用变换 | 真实游戏罕见 |
+| Photoshop 16 种在 GL 里原生实现 | 先用软件兜底，正确性优先 |
+| 多线程合成 / 光栅化 | 先单线程跑对，再谈性能 |
+| `Province` 命中区域 | 属于输入/命中测试（第 9 步） |
+| 字体光栅化 | 第 7 步以后；第 8 步只吃现成字形位图 |

@@ -8,121 +8,66 @@
 
 ## 0. 一句话现状
 
-入口容器 + 路径校验 + 日志 + 启动状态 + 存储层（目录 / XP3 索引 / 读取 / auto-path）都立起来了：
-**真游戏（`おっぱいスパイ学園`，4.7 GB 的 `data.xp3`）能从文件夹启动，`startup.tjs` 13022 字节从包内读出。**
-还没有：脚本虚拟机、线程、渲染、输入、音频。
-
----
+四层结构已落地（`tjs` / `shim` / `platform` / `core`），脚本引擎可执行真实游戏的启动脚本：
+`startup.tjs` 通过 `Scripts.eval`、`Storages`、`System` 三个桥接类，已推进到加载
+`system/Initialize.tjs`（该文件第 1 行触发当前未知缺口）。渲染层尚未动工，规格见
+`cpp_new/docs/render-spec.md`。
 
 ## 1. 现在能跑什么
 
-```bash
-cd /storage/emulated/0/Download/AppProjects/Krkr2Next
-
-# 归档后端（6b/6c）的源文件。从 6c 起主程序也必须带它们，
-# 否则启 .xp3 包时链接不上。puff.c 是 zlib 官方参考实现（zlib license）。
-ARCH="cpp_new/core/io/archive/Xp3Index.cpp cpp_new/core/io/archive/Xp3Stream.cpp \
-      cpp_new/core/io/archive/Inflate.cpp cpp_new/core/io/archive/third_party/puff.c"
-
-clang++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp_new \
-  cpp_new/host/main.cpp \
-  cpp_new/core/env/app/EngineRuntime.cpp \
-  cpp_new/core/log/Logger.cpp \
-  cpp_new/core/io/PathUtil.cpp cpp_new/core/io/IoName.cpp \
-  cpp_new/core/io/DirectoryBackend.cpp cpp_new/core/io/Storage.cpp $ARCH \
-  -o $TMPDIR/krkr_next
-
-$TMPDIR/krkr_next <game_dir|game.xp3> [log_file]
-$TMPDIR/krkr_next --path-file <file> [log_file]   # 日文/中文路径在 Windows 上走这个
-# 环境变量：KRKR_LOG_LEVEL=debug|info|warn|error|off
-#           KRKR_LOG_MAX_BYTES=<数字>   （仅测轮转用，生产固定 4 MiB）
-
-# io 的独立测试台（目录模式 18 条检查 + 归档模式 --extract）
-# ⚠️ Storage.cpp 从 6d 起会打日志，必须带 Logger.cpp
-clang++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp_new \
-  cpp_new/host/StorageProbe.cpp cpp_new/core/log/Logger.cpp \
-  cpp_new/core/io/PathUtil.cpp cpp_new/core/io/IoName.cpp \
-  cpp_new/core/io/DirectoryBackend.cpp cpp_new/core/io/Storage.cpp $ARCH \
-  -o $TMPDIR/storage_probe
-$TMPDIR/storage_probe <game_dir>
-$TMPDIR/storage_probe --path-file <file> --extract <name> <out>
-
-# XP3 夹具打包器（6d，只写 raw 段）
-clang++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp_new \
-  cpp_new/host/Xp3Pack.cpp cpp_new/core/io/PathUtil.cpp \
-  -o $TMPDIR/xp3pack
-$TMPDIR/xp3pack <out.xp3> <file> [<file> ...]
-
-# XP3 索引测试台（6b）
-clang++ -std=c++20 -Wall -Wextra -Wpedantic -I cpp_new \
-  cpp_new/host/Xp3Probe.cpp \
-  cpp_new/core/io/archive/Xp3Index.cpp cpp_new/core/io/IoName.cpp cpp_new/core/io/PathUtil.cpp \
-  -o $TMPDIR/xp3_probe
-$TMPDIR/xp3_probe <archive> [--list | --find <name>] [--path-file <file>]
+```
+TJS=生成清单: cpp_new/tjs/*.cpp 去除 tjsDebug.cpp 与 tjsRegExp.cpp
+SHIM=cpp_new/shim/engine/TjsEngine.cpp
+     cpp_new/shim/tjs_host/{TjsHostShim,TjsRegExpShim}.cpp
+     cpp_new/shim/classes/{TjsStorages,TjsScripts,TjsSystem}.cpp
+     cpp_new/shim/TjsBridge.cpp cpp_new/shim/text/TjsText.cpp
+IO =cpp_new/core/io/{PathUtil,IoName,DirectoryBackend,Storage}.cpp
+     cpp_new/core/io/archive/{Xp3Index,Xp3Stream,Inflate}.cpp
+     cpp_new/core/io/archive/third_party/puff.c
+FLAGS=-std=c++20 -w -fpermissive -DUNICODE -D_UNICODE -DTJS_NO_REGEXP
+      -include cpp_new/shim/tjs_host/tjs_prelude.h
+      -I cpp_new -I cpp_new/shim/tjs_host/generated -I cpp_new/shim/tjs_host
 ```
 
-只用 Termux 里的 `clang++`，**不需要 NDK / cmake / Gradle / 手机**。反馈时间 < 10 秒。
+四个产物：
 
-已验证用例（2024-11 本轮）：
+| 产物 | 组成 | 用途 |
+|---|---|---|
+| `build/tjs_probe.exe` | `host/TjsProbe.cpp` + SHIM + IO + `core/log` + `core/api` + TJS | 脚本层断言 |
+| `build/krkr_next.exe` | `host/main.cpp` + `core/api` + `core/log` + IO | 引擎入口与路径校验 |
+| `build/storage_probe.exe` | `host/StorageProbe.cpp` + `core/log` + IO | 存储层断言（18 项） |
+| `build/xp3_probe.exe`、`build/xp3pack.exe` | `host/Xp3Probe.cpp`、`host/Xp3Pack.cpp` | 包解析与夹具生成 |
 
-| # | 输入 | 结果 | 判定 |
-|---|---|---|---|
-| 1 | `games/demo`（目录 + `startup.tjs`） | `root=".../games/demo/" kind=1 startup=2` rc=0 | ✅ |
-| 2 | `games/demo/` | 与 1 **逐字相同** | ✅ |
-| 3 | `games/demo/../demo` | 与 1 **逐字相同**（`..` 被吃掉） | ✅ |
-| 4 | `games/nope`（不存在） | `-4 does not exist`，`startup=0` | ✅ |
-| 5 | `GAME.XP3`（0 字节假包） | `-4 file is too short to be an XP3 archive`、`startup=3` | ✅ 6c 后的正确行为 |
-| 6 | `readme.txt` | `-4 既不是目录也不是已知包` | ✅ |
-| 7 | `""` | `-1 game root is empty` rc=1 | ✅ |
-| 8 | 无参数 | usage rc=2 | ✅ |
-| 9 | 180 帧后 | `frames=180` | ✅ |
-| 10 | 目录缺 `startup.tjs` | `-4 startup script not found`、`startup=3` | ✅ |
-
-第 1/2/3 条的输出**必须逐字相同**（绝对路径 + 尾斜杠），用 `sort -u | wc -l` 应得 1。
-
----
+静态检查：`python cpp_new/tools/check_layer_deps.py cpp_new`（要求 0 违规）。
 
 ## 2. 文件约定
 
+分层与依赖方向以 `cpp_new/docs/ARCHITECTURE.md` 为准，提交前运行
+`python cpp_new/tools/check_layer_deps.py cpp_new`。
+
 ```
 cpp_new/
-├── host/main.cpp                     本地测试台 = 未来的 Kotlin 宿主（只用来启动，不进引擎）
-└── core/
-    ├── env/app/
-    │   ├── EngineRuntime.h           入口契约（不透明句柄 + 启动状态机）
-    │   └── EngineRuntime.cpp         实现
-    ├── io/
-    │   ├── IOStream.h                IStream 接口（Read/Seek/GetSize/GetPosition）
-    │   ├── DirectoryBackend.h/.cpp   目录后端：一个路径 -> 一个只读流
-    │   ├── Storage.h/.cpp            门面：根目录 + 名字 -> 流（名字归一化在这里）
-    │   ├── IoName.h/.cpp             名字归一化（目录后端和归档后端共用）
-    │   ├── PathUtil.h/.cpp           UTF-8 <-> filesystem::path（全引擎唯一实现）
-    │   └── archive/
-    │       ├── Xp3Index.h/.cpp       XP3 索引解析（只读目录表）
-    │       ├── Xp3Stream.h/.cpp      从包里按条目读字节（段缓存 + 解压）
-    │       ├── Inflate.h/.cpp        zlib/deflate 解压封装（以后换实现只改这里）
-    │       └── third_party/
-    │           └── puff.c/.h         zlib 官方参考实现（840 行，zlib license）
-    └── log/
-        ├── LogLevel.h                级别枚举 + 名字/解析
-        ├── Logger.h                  进程内唯一日志器（pimpl，只露接口）
-        └── Logger.cpp                文件 sink / 轮转 / 内存环
-
-host/StorageProbe.cpp                 io 的独立测试台（不进引擎，单独编一个可执行）
-host/Xp3Probe.cpp                     XP3 索引测试台（6b）
-host/Xp3Pack.cpp                      XP3 夹具打包器（6d，只写 raw 段）
+├── tjs/                        权威实现（krkrz 原样，差异见 tjs/VENDOR.md 待补）
+├── shim/                       垫层
+│   ├── engine/TjsEngine.*      tjs 引擎门面（编码入口、异常映射）
+│   ├── text/TjsText.*          编码转换（UTF-8 <-> tjs_char、脚本源解码）
+│   ├── classes/Tjs{System,Scripts,Storages}.*   TJS 原生类桥接
+│   ├── tjs_host/               宿主符号、prelude、targetver、生成的日期词表
+│   └── TjsBridge.*             原生类共享上下文
+├── platform/                   抽象层（android / desktop / stubs）
+├── core/
+│   ├── contracts/IScriptHost.h 脚本层对宿主的契约
+│   ├── api/EngineRuntime.*     对外 API 与生命周期
+│   ├── io/                     存储、XP3、名字与路径
+│   ├── log/                    日志
+│   └── module/ debug/          预留：模块注册表、调试接线
+├── host/                       测试台（不属于引擎产物）
+├── tools/                      代码生成与静态检查
+└── docs/                       ARCHITECTURE.md、render-spec.md
 ```
 
-- `host/main.cpp` **不属于引擎**，它扮演的是 `NativeEngine.kt` 的角色。引擎永远是库，不是可执行文件。
-- 引擎内部的所有辅助函数写进 **匿名 namespace**（文件私有），不要新增全局符号。
-- ✅ **已定：namespace 叫 `krkr::env`，目录保持 `env`**（符合 N1：namespace = 目录名）。
-  不能叫 `krkr::environ`：`environ` 是 C 运行时的全局变量名，Windows 的 MinGW 还把它写成宏
-  （`stdlib.h:709: #define environ _environ`），宏会把 `krkr::environ` 撕成 `krkr::_environ()`，
-  Windows 上**编译直接失败**（`namespace name required before '(' token`）。
-- ✅ `GetLastError()` 已改名 `GetLastErrorText()`：`windows.h` 用
-  `#define GetLastError GetLastError` 占住了这个名字。C ABI 的 `engine_get_last_error()` 不动。
-
----
+`host/main.cpp` 不属于引擎，对应 Kotlin 宿主的角色。引擎内部辅助函数写入匿名 namespace，
+不新增全局符号。
 
 ## 3. 总计划
 
@@ -137,8 +82,12 @@ host/Xp3Pack.cpp                      XP3 夹具打包器（6d，只写 raw 段�
 | 6b | 存储层·XP3 索引 | 解析 XP3 目录表：文件名 → 偏移/大小（`Xp3Index` + `xp3_probe`） | ✅ 完成 |
 | 6c | 存储层·XP3 读取 | 段表 + zlib 解压（puff）+ `Xp3Stream`；包内字节与 zlib 参照一致 | ✅ 完成 |
 | 6d | 存储层·auto-path | 目录模式自动挂载 `*.xp3`；**散装 > 补丁包 > 其它包**（`Xp3Pack` 造夹具验证） | ✅ 完成 |
-| 7 | **脚本虚拟机** | 接 TJS2，跑 `startup.tjs` | ⬅ **下一步**（大） |
-| 8 | 渲染 | EGL + GLES3 surface，一帧提交给宿主（零拷贝 SurfaceTexture） | 待做（大） |
+| 7a | 脚本内核 | vendored krkrz tjs2 + 垫层（prelude / host shim / 生成词表），能解析并执行脚本 | ✅ 完成 |
+| 7b | TJS ↔ 引擎桥 | `Storages`、`Scripts`（eval/exec/evalStorage/execStorage）已接入 | ✅ 完成 |
+| 7c | TJS ↔ 引擎桥（System） | `getArgument` / `inform` / `informError` / `exit` / `title` / `versionInformation` / `desktopWidth·Height` | ✅ 完成 |
+| 7d | TJS ↔ 引擎桥（缺口修复） | 原生类注册方式修正（`tTJSVariant` 的 objthis 必须为空）+ XP3 大小写回退 | ✅ 完成 |
+| 7e | **TJS ↔ 引擎桥（续）** | `Console`、`Debug`，随后定位 `system/Initialize.tjs` 第 1 行缺口，再 `Plugins` | ⬅ **下一步** |
+| 8 | 渲染 | 见 **`cpp_new/docs/render-spec.md`**（需求书已就绪）：DrawList + 软件后端 + GLES3 后端 + EGL/SurfaceTexture，分 8a–8e | 待做（大） |
 | 9 | 输入 | 指针 / 按键 / 文本 → 脚本事件 | 待做 |
 | 10 | 音频 | 至少 WAVE + OGG | 待做 |
 | 11 | 换回去 | 用 `cpp_new` 替换 `bridge/engine_api/` 的实现，签名不变，Kotlin 不动 | 待做 |
@@ -147,7 +96,7 @@ host/Xp3Pack.cpp                      XP3 夹具打包器（6d，只写 raw 段�
 
 ---
 
-## 4. 已完成的步骤记录（第 3–6d 步）
+## 4. 已完成的步骤记录
 
 ### 4.1 第 3 步：文件系统校验（`6c1c0a2` 一类的提交）
 
@@ -361,6 +310,97 @@ Storage(root)
 
 ---
 
+### 4.10 TJS2 的引入方式（7a）
+
+`core/tjs2/` 为 krkrz 原样拷贝，**不承载任何适配逻辑**。差异全部位于 `core/script/`：
+
+| 位置 | 职责 |
+|---|---|
+| `TjsEngine.h/.cpp` | 门面：上层仅见 UTF-8，不引用 tjs2 类型 |
+| `TjsHostShim.cpp` | 宿主符号：调试设施空实现、窄字符转换改为 UTF-8 |
+| `TjsRegExpShim.cpp` | 未引入 oniguruma，`RegExp` 不可用 |
+| `shim/tjs_prelude.h` | `-include` 前置：清理 Win32 宏、补齐标准头与数学常量、固定包含顺序 |
+| `generated/tjsDateWordMap.cc` | 由 `tools/gen_tjs_date_word_map.py` 生成（上游本就在构建期生成） |
+
+vendored 源码仅有两处修改，均属上游在非 MSVC 工具链下从未编译的分支：
+
+| 文件 | 修改 | 原因 |
+|---|---|---|
+| `tjsArray.cpp` | `stream>Write(` → `stream.Write(` | 上游拼写错误，仅存在于非 CRLF 分支 |
+| `tjsConfig.cpp` | `TJSRestoreFPUE()` 内 `if(!TJSFPUInit)` 补 `#if` 守卫 | 该变量只在 MSVC 分支声明 |
+
+编译参数即垫层开关：
+
+```
+-DUNICODE -D_UNICODE -DTJS_NO_REGEXP
+-include core/script/shim/tjs_prelude.h
+-I core/script/generated -I core/script/shim
+排除 tjsDebug.cpp、tjsRegExp.cpp
+```
+
+`Storages` 桥（7b 的第一个类）语义：`isExistentStorage` / `getPlacedPath` /
+`extractStorage*` 直接映射到 `krkr::io::Storage`；`addAutoPath` / `removeAutoPath` /
+`clearArchiveCache` 接受调用并记录，不改变挂载表（挂载集合在打开游戏时确定）。
+
+### 4.11 Scripts 桥与真实的脚本推进（7b）
+
+`core/script/TjsScripts.cpp` 实现 `eval`、`exec`、`evalStorage`、`execStorage`、`getTraceString`，
+全部经由 `krkr::io::Storage` 读取脚本，编码转换集中在 `TjsText.cpp`。原生类共享的依赖
+（引擎实例、存储实例）收拢在 `TjsBridge` 单例，替代此前的文件级指针。
+
+实测：真游戏 `startup.tjs`（13022 字节，UTF-16LE）由原先在第 1 行失败并因缺少 `Scripts` 中断，
+推进到第 142 行：
+
+```
+==== An exception occured at py_startup.tjs(142) ====
+#(142) var local0 = System.getArgument("-debugwin") != "no";
+```
+
+即 `Scripts.eval("@if(kirikiriz)1@endif")` 已正确求值，前 141 行脚本已执行。
+下一个缺口是 `System`。
+
+### 4.12 System 桥与宿主抽象（7c）
+
+脚本层通过 `core/script/ScriptHost.h` 定义对宿主的最小契约（启动参数、输出、退出请求、
+标题、表面尺寸、版本信息），引擎入口 `EngineRuntime` 实现该契约。方向为
+"脚本层依赖接口、env 层提供实现"，桥接实现不感知窗口与生命周期细节。
+
+`EngineResult` 新增 `GameTerminated = -6`（与 ABI 的 `ENGINE_RESULT_GAME_TERMINATED` 一致）：
+`System.exit()` 置位退出请求，`Tick` 返回该码。
+
+实测：真游戏 `startup.tjs` 由第 142 行继续执行，当前缺口推进到匿名函数内部：
+
+```
+An exception occured at py_startup.tjs(6)[(function expression) (anonymous)]
+#(6)     Scripts.new9Storage(*);
+```
+
+该方法名疑似脚本侧自定义别名，需先确认真实语义再决定是补齐别名字符串
+还是实现对应功能。
+
+### 4.13 三层结构落地（重构）
+
+目录按 `cpp_new/docs/ARCHITECTURE.md` 重排：`tjs/`（权威实现）、`shim/`（垫层）、
+`platform/`（抽象层，骨架已建）、`core/`（基座）。契约 `IScriptHost` 由垫层下沉至
+`core/contracts`，`EngineRuntime` 迁至 `core/api`，`core/script`、`core/env`、`core/base`、
+`core/utils` 已移除。`tools/check_layer_deps.py` 校验依赖方向，当前 0 违规。
+
+### 4.14 原生类注册缺陷（真脚本第三个缺口）
+
+现象：脚本保存原生方法后覆盖同名成员，再经别名调用原方法即失败。
+
+```tjs
+Scripts.new9Storage = Scripts.execStorage;
+Scripts.execStorage = function(arg0) { Scripts.new9Storage(*); };
+```
+
+根因：注册时使用了 `tTJSVariant(cls, cls)`，把类对象同时作为 objthis。
+权威实现的标准范式是 `tTJSVariant(dsp, NULL)`，objthis 必须为空（见 `tjs/tjs.cpp:151-154`）。
+修正后上述模式恢复正常，`typeof` 也不再返回 `Object`。
+
+同时修正：`Xp3Index` 增加大小写不敏感回退，对齐 Windows 文件系统语义
+（真脚本请求 `system/Initialize.tjs`，包内为 `system\initialize.tjs`）。
+
 ## 5. 已知问题 / 技术债
 
 | # | 问题 | 处理 |
@@ -397,6 +437,16 @@ Storage(root)
 | 30 | 包内目录条目（`xxx.xp3>dir/` 形式的 auto-path 前缀）**未实现** | 这个语义属于 TJS `Storages` 的 `>` 分隔符，第 7 步以后才需要；目前 `ArchiveRootOrder` / `PatchPriorityEnd` 两个策略开关也只是文档级别 |
 | 31 | 目录挂载点每次 `Open` 都做一次 `exists()`，未缓存命中结果 | 每次开文件多一次 stat；现在每帧只开一两个文件，不管。等有目录枚举/大量小文件需求时再加缓存 |
 | 32 | `storage_probe` 的编译命令**必须带 `Logger.cpp`** | `Storage.cpp` 从 6d 起会打日志，漏了就是一片 `undefined reference to krkr::log::Logger::Instance()` |
+| 33 | TJS2 未引入 oniguruma，`RegExp` 不可用 | 访问 `RegExp` 时得到"未定义"错误而非崩溃。真实脚本对正则依赖较低；需要时引入 oniguruma 并移除 `TJS_NO_REGEXP` |
+| 34 | `Storages.addAutoPath` 等接受但不生效 | 挂载集合在打开游戏时确定；脚本运行期动态挂载尚未支持 |
+| 35 | `TjsEngine` 的脚本执行发生在调用线程（当前为测试台主线程） | 第 8 步之后若接入 tick 线程需重新评估取消与超时 |
+| 36 | tjs2 以 `-fpermissive -w` 编译 | 上游为 MSVC 编写，GCC 下存在大量无害告警；收敛告警属独立任务 |
+| 37 | 大小写不敏感回退只作用于 XP3，目录挂载仍严格区分大小写 | 目录模式命中失败时未做枚举比对；若游戏目录混用大小写会暴露 |
+| 38 | 尚未建立 CMake 目标，仅以脚本检查层间依赖 | 四层可独立编译的目标待补（`krkr_tjs`/`krkr_core`/`krkr_platform`/`krkr_shim`） |
+| 39 | `platform/` 仅有空目录 | 首个落地项为平台信息与剪贴板；渲染表面接线属第 8 步 |
+| 40 | 脚本错误消息可能为空串 | 原生方法返回 `TJS_E_FAIL` 时脚本侧得到无消息异常，排查困难；需在桥接层补充上下文 |
+
+
 
 ### 技术债 #10 的触发条件（写下来，免得以后变成"当年为什么没人想过"）
 
@@ -449,3 +499,41 @@ Storage(root)
 | 宿主用**一条 HandlerThread** 同时跑 `openGame` 和 tick | `EngineSession.kt:19 / 442 / 984` | 在调用线程上阻塞 = 阻塞 tick。这是“不能阻塞”的真实原因，不是接口洁癖 |
 | 宿主每帧轮询启动状态 | `engine_get_startup_state` + `pollStartupState()` | 引擎只需一个可查询的字段，**不需要回调/事件管道** |
 | 启动期 tick 返回 `-7` 会被宿主忽略而不算失败 | `EngineSession.kt:369` | `StartupPending` 必须是 `-7`，不能用 `InvalidState` |
+
+## 11. 交接：新对话起点
+
+### 当前可运行状态
+
+```
+python cpp_new/tools/check_layer_deps.py cpp_new        # 期望 0 违规
+```
+
+四个测试台的构建命令见 §1。断言脚本位于 `build/games/demo/`：`t_scripts.tjs`、`t_system.tjs`、
+`t_repro.tjs`，通过 `build/tjs_probe.exe <脚本> build/demo_root.txt` 执行；末尾主动抛出
+`<name>-ok` 表示全部断言通过。
+
+真实游戏验证：`build/tjs_probe.exe build/py_startup.tjs build/real_root.txt`
+（`build/py_startup.tjs` 为真包 `startup.tjs` 的 UTF-8 转码副本，`build/real_root.txt` 内为游戏目录）。
+
+### 已知失败点与下一步
+
+真脚本当前停在 `system/Initialize.tjs` 第 1 行，桥接层日志：
+
+```
+[error] Scripts: system/Initialize.tjs:            （消息为空，见技术债 #40）
+```
+
+建议顺序：
+
+1. 在桥接层补充空消息场景的上下文（脚本名、行号、被调用名），否则后续每个缺口都难以定位；
+2. 定位 `system/Initialize.tjs` 第 1 行所需的能力（极可能是 `Plugins`）；
+3. 实现 `Console` 与 `Debug`（映射日志层，无控制台窗口时显式记录"平台不支持"）；
+4. 实现 `Plugins.link/unlink/getList`（静态注册先行，`.so` 加载后置）；
+5. 补 CMake 目标与 `platform` 首个能力（技术债 #38、#39）。
+
+### 纪律提醒
+
+- 修改前先读 `cpp_new/docs/ARCHITECTURE.md`：判定归属层，先补下层契约，再写桥接。
+- 不修改 `tjs/`；新增补丁需附"上游在目标工具链无法编译"的证据，并登记于 §4.10。
+- 注释遵循 `AGENTS.md` §11。
+- 每步结束运行层间检查与全部测试台，回归不过不得继续。
