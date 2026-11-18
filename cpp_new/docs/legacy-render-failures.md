@@ -5,7 +5,7 @@
 > 「`tTVPBaseBitmap` + 29 种 blend」，失败点却在「插件 → `RenderManager_ogl` → GL」这条旁路。
 >
 > 证据全部来自本仓库的 `cpp/`（老树，已冻结见 `cpp/FROZEN.md`）与 `~/AppProjects/krkrz`（上游），行号可查。
-> 老树里已有的探针清单与未解决条目在 `compat/recon/render-issues.md`（本次分析与之互补：
+> 老树里已有的探针清单与未解决条目在 `docs/compat/recon/render-issues.md`（本次分析与之互补：
 > 那份记录"哪些探针已埋"，本文说明"为什么它们照不到这些路径"）。
 
 ---

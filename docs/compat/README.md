@@ -1,5 +1,9 @@
 # 兼容层（compat）
 
+> 位置说明：本文档原在仓库根的 `compat/`，2025-11 并入 `docs/compat/`（代码里没有引用该目录）。
+> 同目录 `recon/` 是老树的渲染/IO/插件/KAG 脚本差异取证记录，其中
+> `recon/render-issues.md` 与 `cpp_new/docs/legacy-render-failures.md` 互补。
+
 本目录是**兼容层**
 
 ## 1. 两套兼容层

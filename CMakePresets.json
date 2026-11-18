@@ -18,8 +18,7 @@
         "VCPKG_TARGET_TRIPLET": "arm64-android",
         "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/vcpkg/triplets",
         "CMAKE_EXPORT_COMPILE_COMMANDS": true,
-        "BUILD_TOOLS": false,
-        "ENABLE_TESTS": false
+        "BUILD_TOOLS": false
       }
     },
     {
@@ -45,8 +44,7 @@
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-linux",
         "CMAKE_EXPORT_COMPILE_COMMANDS": true,
-        "BUILD_TOOLS": true,
-        "ENABLE_TESTS": true
+        "BUILD_TOOLS": true
       },
       "condition": {
         "type": "equals",

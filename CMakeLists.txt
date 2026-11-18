@@ -66,7 +66,6 @@ if(ANDROID)
     endif()
 endif()
 
-option(ENABLE_TESTS "enable tests (excluded on Android)" ON)
 option(BUILD_TOOLS "build tools (excluded on Android)" ON)
 option(BUILD_ENGINE_API "build engine_api bridge library" ON)
 
@@ -138,13 +137,6 @@ add_subdirectory(${KRKR2CORE_PATH})
 add_subdirectory(${KRKR2PLUGIN_PATH})
 if(BUILD_ENGINE_API)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/bridge/engine_api)
-endif()
-
-if(ENABLE_TESTS AND NOT ANDROID)
-    enable_testing()
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
-        add_subdirectory(tests)
-    endif()
 endif()
 
 if(BUILD_TOOLS AND NOT ANDROID)

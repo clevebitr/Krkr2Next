@@ -68,9 +68,10 @@ INCLUDES=(
 if (( $# > 0 )); then
     FILES=("$@")
 else
-    FILES=(
-        "$ROOT/tests/unit-tests/engine_api/abi-layout.cpp"
-    )
+    # 原先这里检查 tests/unit-tests/engine_api/abi-layout.cpp。
+    # 该文件已迁入 bridge（engine_api/src/abi_layout_guard.cpp）并改为 static_assert，
+    # 由 bridge 的每次构建检查，不再需要这里的语法探针。
+    FILES=()
 fi
 
 fail=0
