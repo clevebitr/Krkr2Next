@@ -148,6 +148,22 @@ namespace krkr::io {
 
     class Storage::Impl {
     public:
+        // 调试观察点。挂接为空时不产生事件。
+        void Emit(krkr::debug::EventKind kind, const std::string &name,
+                  const std::string &detail, std::int64_t size, bool ok,
+                  int line = 0) {
+            krkr::debug::DebugEvent event;
+            event.kind = kind;
+            event.channel = "io";
+            event.name = name;
+            event.detail = detail;
+            event.size = size;
+            event.ok = ok;
+            event.line = line;
+            krkr::debug::Emit(sink, std::move(event));
+        }
+
+        krkr::debug::IDebugSink *sink = nullptr;
         std::filesystem::path root;
         std::string rootUtf8;
         std::string lastError;
@@ -226,12 +242,16 @@ namespace krkr::io {
     std::unique_ptr<IStream> Storage::Open(const std::string &nameUtf8) {
         if(!impl_->mounted) {
             impl_->lastError = "storage is not mounted";
+            impl_->Emit(krkr::debug::EventKind::StorageOpen, nameUtf8, "unmounted", -1,
+                        false);
             return nullptr;
         }
 
         const std::string name = NormalizeStorageName(nameUtf8);
         if(name.empty()) {
             impl_->lastError = "empty file name";
+            impl_->Emit(krkr::debug::EventKind::StorageOpen, nameUtf8, "invalid-name", -1,
+                        false);
             return nullptr;
         }
 
@@ -251,11 +271,16 @@ namespace krkr::io {
                 if(entry == nullptr) {
                     continue; // 这个包里没有 -> 看下一个
                 }
+                const std::int64_t entrySize = static_cast<std::int64_t>(entry->orgSize);
                 auto stream = Xp3Stream::Open(mount.path, *entry, error);
                 if(stream == nullptr) {
                     impl_->lastError = error;
+                    impl_->Emit(krkr::debug::EventKind::StorageOpen, nameUtf8, "xp3",
+                                entrySize, false);
                     return nullptr;
                 }
+                impl_->Emit(krkr::debug::EventKind::StorageOpen, nameUtf8, "xp3",
+                            entrySize, true);
                 impl_->lastError.clear();
                 krkr::log::Debug("open \"", nameUtf8, "\" -> mount[", i, "]",
                                  mount.kind == Mount::Kind::Xp3 ? " xp3"
@@ -271,8 +296,12 @@ namespace krkr::io {
             auto stream = OpenDirectoryFile(fullPath, error);
             if(stream == nullptr) {
                 impl_->lastError = error;
+                impl_->Emit(krkr::debug::EventKind::StorageOpen, nameUtf8, "dir", -1, false);
                 return nullptr;
             }
+            const std::int64_t directorySize = stream->GetSize();
+            impl_->Emit(krkr::debug::EventKind::StorageOpen, nameUtf8, "dir", directorySize,
+                        true);
             impl_->lastError.clear();
             krkr::log::Debug("open \"", nameUtf8, "\" -> mount[", i, "]",
                              mount.kind == Mount::Kind::Xp3 ? " xp3" : " dir");
@@ -281,12 +310,31 @@ namespace krkr::io {
 
         impl_->lastError = "\"" + nameUtf8 + "\" not found in any of " +
             std::to_string(impl_->mounts.size()) + " mount(s)";
+        impl_->Emit(krkr::debug::EventKind::StorageOpen, nameUtf8, "miss", -1, false);
         krkr::log::Warn("open \"", nameUtf8, "\" -> not found in ",
                         impl_->mounts.size(), " mount(s)");
         return nullptr;
     }
 
     const std::string &Storage::GetRootUtf8() const { return impl_->rootUtf8; }
+
+    void Storage::SetDebugSink(krkr::debug::IDebugSink *sink) { impl_->sink = sink; }
+
+    std::vector<std::string> Storage::DescribeMounts() const {
+        std::vector<std::string> out;
+        out.reserve(impl_->mounts.size());
+        for(const Mount &mount : impl_->mounts) {
+            if(mount.kind == Mount::Kind::Xp3) {
+                const std::size_t entries =
+                    mount.index != nullptr ? mount.index->GetEntries().size() : 0;
+                out.push_back("xp3 " + mount.pathUtf8 + " (" + std::to_string(entries) +
+                              " entries)");
+            } else {
+                out.push_back("dir " + mount.pathUtf8);
+            }
+        }
+        return out;
+    }
 
     const char *Storage::GetLastErrorText() const {
         return impl_->lastError.c_str();

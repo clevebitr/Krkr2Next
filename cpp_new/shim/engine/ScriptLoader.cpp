@@ -1,9 +1,11 @@
 #include "shim/engine/ScriptLoader.h"
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
 
+#include "core/contracts/DebugServices.h"
 #include "core/io/Storage.h"
 #include "core/log/Logger.h"
 #include "shim/TjsBridge.h"
@@ -69,6 +71,16 @@ void RunScriptBytes(Engine &engine, const std::string &bytes, const std::string 
   }
   const std::wstring wideName = WideFromUtf8(scriptName);
 
+  krkr::debug::IDebugSink *sink = GetContext().services.debug;
+  krkr::debug::DebugEvent begin;
+  begin.kind = krkr::debug::EventKind::ScriptBegin;
+  begin.channel = "script";
+  begin.name = scriptName;
+  begin.size = static_cast<std::int64_t>(bytes.size());
+  begin.ok = bytecode;
+  krkr::debug::Emit(sink, begin);
+  const auto started = std::chrono::steady_clock::now();
+
   try {
     if (bytecode) {
       tjs->LoadByteCode(reinterpret_cast<const tjs_uint8 *>(bytes.data()), bytes.size(),
@@ -84,12 +96,31 @@ void RunScriptBytes(Engine &engine, const std::string &bytes, const std::string 
     }
   } catch (const TJS::eTJS &e) {
     // 记录带定位信息的上下文，然后原样重抛：虚拟机负责转成脚本侧异常并保留 trace。
-    krkr::log::Error(DescribeScriptException(e, context));
+    const std::string text = DescribeScriptException(e, context);
+    krkr::log::Error(text);
+    krkr::debug::DebugEvent failure;
+    failure.kind = krkr::debug::EventKind::ScriptFailure;
+    failure.channel = "script";
+    failure.name = scriptName;
+    failure.detail = text;
+    if (const auto *located = dynamic_cast<const TJS::eTJSScriptError *>(&e)) {
+      failure.line = located->GetSourceLine();
+    }
+    krkr::debug::Emit(sink, failure);
     throw;
   } catch (const std::exception &e) {
     krkr::log::Error(context, ": ", e.what());
     ThrowScriptException(context, e.what());
   }
+
+  const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - started);
+  krkr::debug::DebugEvent end;
+  end.kind = krkr::debug::EventKind::ScriptEnd;
+  end.channel = "script";
+  end.name = scriptName;
+  end.size = elapsed.count();
+  krkr::debug::Emit(sink, end);
 }
 
 void RunScriptFromStorage(Engine &engine, const std::string &name, ScriptMode mode,

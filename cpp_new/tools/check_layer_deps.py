@@ -6,7 +6,9 @@
   platform 不得引用 shim/ tjs/ engine/
   shim     不得引用 platform/ engine/（通过 core/contracts 取得能力）
   tjs      不得引用任何 cpp_new 内其他层
-  engine   装配根：可引用 shim/ tjs/ core/ platform/，不得引用 host/
+  engine   装配根：可引用 shim/ tjs/ core/ platform/ debugger/，不得引用 host/
+  visual   合成与位图：可引用 core/，不得引用 shim/ tjs/ engine/ debugger/ host/
+  debugger 调试器子包：可引用 engine/ core/，不得引用 host/；任何下层都不得引用它
   host     测试台：不受限
 
 用法：python cpp_new/tools/check_layer_deps.py [cpp_new 根目录]
@@ -17,11 +19,13 @@ import re
 import sys
 
 FORBIDDEN = {
-    'core': ('shim/', 'platform/', 'tjs/', 'engine/', 'host/'),
-    'platform': ('shim/', 'tjs/', 'engine/', 'host/'),
-    'shim': ('platform/', 'engine/', 'host/'),
-    'tjs': ('shim/', 'platform/', 'core/', 'engine/', 'host/'),
+    'core': ('shim/', 'platform/', 'tjs/', 'engine/', 'debugger/', 'visual/', 'host/'),
+    'platform': ('shim/', 'tjs/', 'engine/', 'debugger/', 'visual/', 'host/'),
+    'shim': ('platform/', 'engine/', 'debugger/', 'host/'),
+    'visual': ('shim/', 'tjs/', 'engine/', 'debugger/', 'platform/', 'host/'),
+    'tjs': ('shim/', 'platform/', 'core/', 'engine/', 'debugger/', 'host/'),
     'engine': ('host/',),
+    'debugger': ('host/'),
     'host': (),
 }
 

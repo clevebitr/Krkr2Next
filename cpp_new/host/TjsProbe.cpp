@@ -11,6 +11,7 @@
 #include "core/io/PathUtil.h"
 #include "core/io/Storage.h"
 #include "core/log/Logger.h"
+#include "debugger/agent/EventRecorder.h"
 #include "engine/ScriptRuntime.h"
 #include "shim/classes/TjsPlugins.h"
 #include "shim/engine/TjsEngine.h"
@@ -55,6 +56,7 @@ class ProbeHost final : public krkr::script::ILaunchArguments,
       services.platform = this;
       services.paths = this;
       services.window = this;
+      services.debug = debugSink_;
       return services;
     }
 
@@ -115,6 +117,8 @@ class ProbeHost final : public krkr::script::ILaunchArguments,
 
     bool IsExitRequested() const { return exitRequested_; }
 
+    void SetDebugSink(krkr::debug::IDebugSink *sink) { debugSink_ = sink; }
+
     void SetExecutablePath(const std::string &path) { executablePath_ = path; }
     void SetDataDirectory(const std::string &path) {
       dataDirectory_ = path;
@@ -128,6 +132,7 @@ class ProbeHost final : public krkr::script::ILaunchArguments,
     std::vector<std::string> arguments_;
     std::string executablePath_;
     std::string dataDirectory_;
+    krkr::debug::IDebugSink *debugSink_ = nullptr;
     std::string title_;
     bool exitRequested_ = false;
     std::chrono::steady_clock::time_point startTime_ = std::chrono::steady_clock::now();
@@ -196,12 +201,23 @@ int main(int argc, char **argv) {
   std::printf("root     = %s\n", root.c_str());
   std::printf("bytes    = %zu\n", script.size());
 
+  // 事件记录由环境变量开启（KRKR_DEBUG_EVENTS=<file>），不影响正常路径。
+  const std::unique_ptr<krkr::debugger::EventRecorder> recorder =
+      krkr::debugger::EventRecorder::FromEnvironment();
+  if (recorder != nullptr) {
+    krkr::log::Logger::Instance().SetDebugSink(recorder.get());
+    storage.SetDebugSink(recorder.get());
+  }
+
   // 断言用的静态插件：覆盖 Plugins.link 的命中路径（注册表与 TJS 无关）。
   krkr::script::RegisterStaticPlugin("probe_static.dll");
 
   ProbeHost host(argc, argv);
   host.SetExecutablePath(argv[0]);
   host.SetDataDirectory(root);
+  if (recorder != nullptr) {
+    host.SetDebugSink(recorder.get());
+  }
   krkr::engine::ScriptRuntime runtime;
   std::string error;
   if (!runtime.Startup(&storage, host.Services(), &error)) {

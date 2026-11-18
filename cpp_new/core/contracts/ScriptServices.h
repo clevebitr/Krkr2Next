@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "core/contracts/DebugServices.h"
+
 namespace krkr::script {
   // 脚本层需要宿主提供的能力，按用途拆成小接口。
   //
@@ -66,7 +68,9 @@ namespace krkr::script {
   };
 
   // 宿主能力集合。空指针 = 该能力未提供。
+  // debug 是观察平面：不为空时下层发送调试事件（未挂接时只多一次空指针检查）。
   struct HostServices {
+    krkr::debug::IDebugSink *debug = nullptr;
     ILaunchArguments *arguments = nullptr;
     IOutput *output = nullptr;
     IAppControl *appControl = nullptr;

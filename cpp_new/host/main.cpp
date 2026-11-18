@@ -3,11 +3,13 @@
 #include <cstdlib>
 #include <utility>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "core/api/EngineRuntime.h"
 #include "core/log/Logger.h"
+#include "debugger/agent/EventRecorder.h"
 #include "engine/ScriptRuntime.h"
 
 namespace {
@@ -98,6 +100,14 @@ int main(int argc, char **argv) {
     if(engine == nullptr) {
         std::printf("create failed\n");
         return 1;
+    }
+
+    // 事件记录由环境变量开启（KRKR_DEBUG_EVENTS=<file>），未开启时零开销。
+    const std::unique_ptr<krkr::debugger::EventRecorder> recorder =
+        krkr::debugger::EventRecorder::FromEnvironment();
+    if (recorder != nullptr) {
+        krkr::log::Logger::Instance().SetDebugSink(recorder.get());
+        engine->AttachDebugSink(recorder.get());
     }
 
     // 装配根与产品入口共用：脚本运行时由宿主注入，引擎侧不引用 shim/tjs。

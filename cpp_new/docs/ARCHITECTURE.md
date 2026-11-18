@@ -13,9 +13,11 @@
 ```
 tjs/        权威实现。krkrz 原样拷贝，不承载适配逻辑。
 shim/       垫层。连接抽象层与权威实现，承载 TJS 原生类桥接与脚本装载。
+visual/     合成与位图。软件后端是像素权威；GL 后端后补（docs/render-spec.md）。
 platform/   抽象层。实现平台能力（Android / 桌面），不感知 TJS。
 core/       基座。日志、存储、能力契约、对外 API。
 engine/     装配层。装配脚本引擎、兼容声明与原生类注册表；引擎侧唯一的"接线处"。
+debugger/   调试器子包。实现调试契约（事件流与执行控制），由宿主注入；引擎不依赖它。
 host/       测试台。不属于引擎产物。
 tools/      代码生成、构建与静态检查。
 docs/       规格与约束文档。
@@ -27,20 +29,24 @@ docs/       规格与约束文档。
 |---|---|---|
 | `tjs/` | 提供脚本解释器与内置类 | 承载平台适配、引擎调用、日志输出 |
 | `shim/` | TJS 原生类注册、编码转换、宿主符号提供 | 直接访问文件系统、窗口、线程原语 |
+| `visual/` | 位图、合成算子、场景数据；软件后端作为像素权威 | 引用 `shim/`、`tjs/`、平台实现 |
 | `platform/` | 实现 `core/contracts` 的能力接口 | 引用 `shim/` 或 `tjs/` 的任何头 |
 | `core/` | 基座服务、能力契约、模块注册、对外 API | 引用 `shim/`、`platform/`、`tjs/`、`engine/` |
 | `engine/` | 装配引擎与原生类、应用兼容声明、把脚本运行时注入 `core/api` | 承载平台或 TJS 适配逻辑（那属于 `shim/`） |
+| `debugger/` | 实现 `core/contracts/DebugServices.h` 的事件与控制接口，提供录制/回放与协议 | 被任何下层引用；改变运行时语义 |
 | `host/` | 可执行的测试台与断言脚本 | 被引擎产物链接 |
 
 ## 3. 依赖方向
 
 ```
 platform ──► core
-shim     ──► core (contracts, log) 、tjs
+shim     ──► core (contracts, log) 、tjs、visual
+visual   ──► core
 tjs      ──► 无源码依赖（宿主符号在链接期由 shim 提供）
 core     ──► 无上层依赖
 engine   ──► shim、core、platform
-host     ──► engine、core
+debugger ──► engine、core（只实现契约，不被任何层引用）
+host     ──► engine、debugger、core
 ```
 
 规则：
@@ -52,6 +58,8 @@ host     ──► engine、core
    因此缺少平台实现时 `shim/` 仍可独立编译与测试。
 4. 装配只发生在 `engine/`：`shim/` 提供"装什么"的入口（注册函数），`engine/` 决定"装哪些、按什么顺序"。
    新增原生类时改 `engine/CompatProfile.cpp` 的列表，不要在 `shim/` 里做自注册。
+5. 调试与可观测性走 `core/contracts/DebugServices.h`：下层只发事件/读控制接口，
+   实现全部在 `debugger/`（规格见 `docs/debugger-spec.md`）。缝合点必须"空指针即跳过"。
 
 ## 4. 权威实现的约束
 

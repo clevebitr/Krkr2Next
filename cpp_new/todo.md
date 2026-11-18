@@ -17,8 +17,13 @@
 ## 1. 现在能跑什么
 
 ```bash
-bash cpp_new/tools/run_probes.sh            # CMake 配置 + 构建 + CTest 全部断言
+bash cpp_new/tools/run_probes.sh            # CMake 配置 + 构建 + CTest 全部断言（19 项）
 python cpp_new/tools/check_layer_deps.py cpp_new   # 期望 0 违规
+
+# 调试事件（可选）：录制 → 汇总 / 过滤
+KRKR_DEBUG_EVENTS=build/events.jsonl build/cmake/debug/bin/krkr_next --path-file build/real_root.txt
+build/cmake/debug/bin/krkr_debug --summary build/events.jsonl
+build/cmake/debug/bin/krkr_debug --filter "ev=script.fail" build/events.jsonl
 ```
 
 CMake 目标与分层一一对应（`cpp_new/CMakeLists.txt`）：`krkr_tjs` / `krkr_tjs_host` /
@@ -62,6 +67,7 @@ cpp_new/
 ├── engine/                     装配层（唯一同时依赖 shim 与 core 的地方）
 │   ├── ScriptRuntime.*         引擎 + 原生类 + 兼容声明的装配，实现 core 的 IScriptRuntime
 │   └── CompatProfile.*         "声称支持什么"：预处理器值、原生类列表、脚本前奏
+├── debugger/                   调试器子包（规格见 docs/debugger-spec.md，尚未实现）
 ├── platform/                   抽象层（当前仅有目标骨架，见技术债 #39）
 ├── core/
 │   ├── contracts/ScriptServices.h  宿主能力的小接口集合
@@ -73,7 +79,7 @@ cpp_new/
 ├── host/                       测试台（不属于引擎产物）
 │   └── fixtures/demo/          断言脚本与存储层夹具
 ├── tools/                      代码生成、构建与静态检查
-└── docs/                       ARCHITECTURE.md、render-spec.md
+└── docs/                       ARCHITECTURE.md、render-spec.md、debugger-spec.md
 ```
 
 `host/main.cpp` 不属于引擎，对应 Kotlin 宿主的角色。引擎内部辅助函数写入匿名 namespace，
@@ -98,8 +104,9 @@ cpp_new/
 | 7d | TJS ↔ 引擎桥（缺口修复） | 原生类注册方式修正（`tTJSVariant` 的 objthis 必须为空）+ XP3 大小写回退 | ✅ 完成 |
 | 7e | **TJS ↔ 引擎桥（续）** | 诊断上下文（#40）、字节码脚本、`Debug`/`Console`、`Plugins` | ✅ 完成 |
 | 7f | **装配根与 CMake** | `engine/` 装配层、`ScriptLoader`、能力接口拆分、`CompatProfile`、CMake 目标 + CTest；产品入口与测试台共用装配 | ✅ 完成 |
+| 7h | **调试器子包** | `debugger/`：事件契约 + JSONL 录制 + `krkr_debug` 前端（D1 精简版）；断点/单步/DAP 见规格 §5、§9 | ✅ D1 完成 |
 | 7g | **`Initialize.tjs` 的运行面** | `Storages` 挂载面（`addAutoPath`、`addArchive`、`commitSavedata`…）、`System` 其余成员；当前首个缺口是 `Window`（渲染第 8 步的最小面） | ⬅ **下一步** |
-| 8 | 渲染 | 见 **`cpp_new/docs/render-spec.md`**（需求书已就绪）：DrawList + 软件后端 + GLES3 后端 + EGL/SurfaceTexture，分 8a–8e | 待做（大） |
+| 8 | 渲染 | 见 **`cpp_new/docs/render-spec.md`**：`visual/Surface` 软件合成已起（8a 起步），GLES3 后端与 EGL 未动 | 🔄 8a 进行中 |
 | 9 | 输入 | 指针 / 按键 / 文本 → 脚本事件 | 待做 |
 | 10 | 音频 | 至少 WAVE + OGG | 待做 |
 | 11 | 换回去 | 用 `cpp_new` 替换 `bridge/engine_api/` 的实现，签名不变，Kotlin 不动 | 待做 |
@@ -541,6 +548,31 @@ CMake（技术债 #38）与分层一一对应：`krkr_tjs`、`krkr_tjs_host`（�
 
 实测：真游戏从 `System.arcPath` 一路推进到 `Member "Window" does not exist`（第 8 步的门槛）。
 
+### 4.21 调试器子包（D1 精简版）
+
+结构见 `docs/debugger-spec.md` §12。要点：
+
+- 事件契约在 `core/contracts/DebugServices.h`，通过 `HostServices::debug` 传递，
+  **没有新增装配参数**，`ScriptContext` 自动带出；未挂接时各发送点只有一次空指针检查。
+- 事件源四处：`ScriptLoader`（begin/end/fail）、`Storage`（open + `DescribeMounts`）、
+  `Logger`（log.line）、`EngineRuntime`（state/failure/mount/exit）。
+- `debugger/agent/EventRecorder` 写 JSON Lines，`debugger/cli` 的 `krkr_debug` 做汇总与过滤；
+  `KRKR_DEBUG_EVENTS=<file>` 开启，未设置时整条链路不参与。
+- CTest 新增 5 项（录制 1 + 事件断言 4），当前 19/19 通过。
+
+刻意不做控制平面：断点/单步需要上游 `ENABLE_DEBUGGER` 钩子（§5 已验证），
+但它引入"暂停阻塞引擎线程"的语义，应与第 9 步的 tick/输入模型一起设计。
+
+### 4.22 调试器子包与渲染 8a 起步
+
+- 调试器（7h）按规格 §12 落地 D1 精简版：事件契约 + JSONL 录制 + `krkr_debug`
+  汇总/过滤，CTest 5 项；断点/单步与 DAP 保留为后续阶段。
+- 渲染（第 8 步）从 8a 的像素权威开始：`visual/Surface`（RGBA8888、FillRect、
+  `Composite` 的 Opaque/Alpha/Additive/Subtractive/Multiplicative、`SavePpm`），
+  `host/RenderProbe.cpp` 用手算期望值断言，`ctest` 项 `render_surface`。
+  尚未做：DrawList（等 `Window`/`Layer` 形状确定）、纹理与采样、其余 24 种图层类型、
+  PNG 解码（需引入 stb_image）。
+
 ## 5. 已知问题 / 技术债
 
 | # | 问题 | 处理 |
@@ -594,6 +626,9 @@ CMake（技术债 #38）与分层一一对应：`krkr_tjs`、`krkr_tjs_host`（�
 | 47 | `System.personalPath` / `savedGamesPath` 需要宿主注入 | `EngineRuntime` 提供了 `SetPersonalDirectory` / `SetSavedGamesDirectory`，Android 侧由第 11 步的 JNI 填；未注入时脚本读取显式失败 |
 | 48 | `CompatProfile.preludeScript` 为空 | 参照实现会注入 `CompoundStorageMedia` 一类脚本级 stub；按"有证据才加"的原则留空，加之前先确认触发它的游戏与行为 |
 | 49 | CTest 的 `real_startup` 处于 DISABLED | 与 #46 同一件事：`Window` 落地后改为启用，作为真游戏的回归闸门 |
+| 51 | 调试器只有观察平面（事件流），没有断点/单步 | `ENABLE_DEBUGGER` 钩子已验证可编译（规格 §8），但暂停语义需要与 tick 模型一起设计；当前定位问题靠事件 + trace |
+| 52 | `krkr_debug` 只支持 `--summary` / `--filter`，无 `--follow` | 事件文件在进程退出后才有完整内容；实时跟随等 D4 的会话层 |
+| 53 | 事件未带线程标识 | 目前单线程（脚本在调用线程执行）；第 8/9 步引入 worker 后补 `thread` 字段 |
 | 50 | CTest 的断言以仓库根为工作目录 | 断言脚本里的相对路径（`build/debug_probe.log`）依赖这一点，改工作目录会破坏 `t_debug` |
 
 

@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "core/contracts/DebugServices.h"
 #include "core/contracts/IScriptRuntime.h"
 #include "core/contracts/ScriptServices.h"
 #include "core/io/Storage.h"
@@ -73,6 +74,11 @@ namespace krkr::env {
       bool AttachScriptRuntime(krkr::script::IScriptRuntime *runtime);
       void DetachScriptRuntime();
 
+      // 调试观察平面：挂接后引擎状态、失败、挂载表、退出请求都会产生事件。
+      // 不挂接时各发送点只做一次空指针检查。
+      void AttachDebugSink(krkr::debug::IDebugSink *sink);
+      krkr::debug::IDebugSink *GetDebugSink() const { return debugSink_; }
+
       // 宿主环境（路径、参数）由嵌入方提供；未设置的路径在脚本读取时显式失败。
       void SetExecutablePath(const std::string &pathUtf8);
       void SetPersonalDirectory(const std::string &pathUtf8);
@@ -123,6 +129,7 @@ namespace krkr::env {
 
       void RunStartupWork();
       void FailStartup(const std::string &reason);
+      void SetStartupState(EngineStartupState state);
 
       std::string   gameRoot_;
       std::string   lastError_;
@@ -130,6 +137,7 @@ namespace krkr::env {
       std::string   personalDirectory_;
       std::string   savedGamesDirectory_;
       std::unique_ptr<krkr::io::Storage> storage_;
+      krkr::debug::IDebugSink *debugSink_ = nullptr;
       krkr::script::IScriptRuntime *scriptRuntime_ = nullptr;
       std::uint64_t frameCount_ = 0;
       GameKind      gameKind_   = GameKind::None;

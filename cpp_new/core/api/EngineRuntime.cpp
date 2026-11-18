@@ -155,18 +155,28 @@ namespace krkr::env {
   }
 
   void EngineRuntime::RunStartupWork() {
-    startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Running));
+    SetStartupState(EngineStartupState::Running);
     krkr::log::Info("startup: running");
 
     storage_ = std::make_unique<krkr::io::Storage>(gameRoot_);
     if (!storage_->Mounted()) {
       lastError_ = storage_->GetLastErrorText();
-      startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Failed));
+      SetStartupState(EngineStartupState::Failed);
       krkr::log::Error(lastError_);
       return;
     }
     krkr::log::Info("startup: storage mounted (archive=",
                     storage_->IsArchive() ? 1 : 0, ")");
+    if (debugSink_ != nullptr) {
+      storage_->SetDebugSink(debugSink_);
+      for (const std::string &mount : storage_->DescribeMounts()) {
+        krkr::debug::DebugEvent event;
+        event.kind = krkr::debug::EventKind::StorageMount;
+        event.channel = "io";
+        event.name = mount;
+        krkr::debug::Emit(debugSink_, event);
+      }
+    }
 
     if (scriptRuntime_ != nullptr) {
       std::string error;
@@ -178,7 +188,7 @@ namespace krkr::env {
         FailStartup(error);
         return;
       }
-      startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Succeeded));
+      SetStartupState(EngineStartupState::Succeeded);
       krkr::log::Info("startup: script executed");
       return;
     }
@@ -187,7 +197,7 @@ namespace krkr::env {
     std::unique_ptr<krkr::io::IStream> stream = storage_->Open("startup.tjs");
     if (stream == nullptr) {
       lastError_ = storage_->GetLastErrorText();
-      startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Failed));
+      SetStartupState(EngineStartupState::Failed);
       krkr::log::Error(lastError_);
       return;
     }
@@ -197,7 +207,7 @@ namespace krkr::env {
     const std::int64_t got = stream->Read(head, static_cast<std::int64_t>(sizeof(head)));
     if (got < 0) {
       lastError_ = "cannot read startup script";
-      startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Failed));
+      SetStartupState(EngineStartupState::Failed);
       krkr::log::Error(lastError_);
       return;
     }
@@ -210,10 +220,18 @@ namespace krkr::env {
       }
     }
 
-    startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Succeeded));
+    SetStartupState(EngineStartupState::Succeeded);
     krkr::log::Info("startup: script size=", size, " head=", headText);
   }
 
+
+  void EngineRuntime::AttachDebugSink(krkr::debug::IDebugSink *sink) {
+    debugSink_ = sink;
+    if (storage_ != nullptr) {
+      storage_->SetDebugSink(sink);
+    }
+    krkr::log::Info("host: debug sink attached=", sink != nullptr);
+  }
 
   bool EngineRuntime::AttachScriptRuntime(krkr::script::IScriptRuntime *runtime) {
     if (gameOpen_) {
@@ -253,6 +271,7 @@ namespace krkr::env {
     services.platform = this;
     services.paths = this;
     services.window = this;
+    services.debug = debugSink_;
     return services;
   }
 
@@ -311,6 +330,10 @@ namespace krkr::env {
   void EngineRuntime::RequestExit() {
     if (!exitRequested_.exchange(true)) {
       krkr::log::Info("script: exit requested");
+      krkr::debug::DebugEvent event;
+      event.kind = krkr::debug::EventKind::ExitRequested;
+      event.channel = "engine";
+      krkr::debug::Emit(debugSink_, event);
     }
   }
 
@@ -403,8 +426,27 @@ namespace krkr::env {
 
   void EngineRuntime::FailStartup(const std::string &reason) {
     lastError_ = reason;
-    startupState_.store(static_cast<std::uint32_t>(EngineStartupState::Failed));
+    SetStartupState(EngineStartupState::Failed);
     krkr::log::Error(lastError_);
+    krkr::debug::DebugEvent event;
+    event.kind = krkr::debug::EventKind::EngineFailure;
+    event.channel = "engine";
+    event.name = "startup";
+    event.detail = reason;
+    krkr::debug::Emit(debugSink_, event);
+  }
+
+  void EngineRuntime::SetStartupState(EngineStartupState state) {
+    const EngineStartupState previous = GetStartupState();
+    startupState_.store(static_cast<std::uint32_t>(state));
+    if (previous == state) {
+      return;
+    }
+    krkr::debug::DebugEvent event;
+    event.kind = krkr::debug::EventKind::EngineState;
+    event.channel = "engine";
+    event.detail = std::to_string(static_cast<int>(state));
+    krkr::debug::Emit(debugSink_, event);
   }
 
   EngineResult EngineRuntime::Tick(double deltaSeconds) {

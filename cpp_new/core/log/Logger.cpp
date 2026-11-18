@@ -15,6 +15,7 @@ namespace krkr::log {
     struct Logger::Impl {
         mutable std::mutex mutex;
         Level level = Level::Info;
+        krkr::debug::IDebugSink *debugSink = nullptr;
         std::uint64_t frame = 0;
         std::size_t maxFileBytes = kDefaultMaxFileBytes;
 
@@ -159,6 +160,11 @@ namespace krkr::log {
         return impl_->filePath;
     }
 
+    void Logger::SetDebugSink(krkr::debug::IDebugSink *sink) {
+        std::lock_guard<std::mutex> lock(impl_->mutex);
+        impl_->debugSink = sink;
+    }
+
     void Logger::SetMaxFileBytes(std::size_t bytes) {
         std::lock_guard<std::mutex> lock(impl_->mutex);
         impl_->maxFileBytes = bytes;
@@ -183,6 +189,15 @@ namespace krkr::log {
         const std::string line = impl_->ComposeLine(level, message);
         impl_->pending += line;
         impl_->PushRing(line);
+
+        if(impl_->debugSink != nullptr) {
+            krkr::debug::DebugEvent event;
+            event.kind = krkr::debug::EventKind::LogLine;
+            event.frame = impl_->frame;
+            event.channel = std::string(LevelName(level));
+            event.detail = message;
+            impl_->debugSink->OnDebugEvent(event);
+        }
 
         if(level == Level::Warn || level == Level::Error) {
             impl_->FlushLocked();

@@ -7,6 +7,7 @@
 #include <sstream>
 #include <utility>
 
+#include "core/contracts/DebugServices.h"
 #include "core/log/LogLevel.h"
 
 namespace krkr::log {
@@ -32,6 +33,9 @@ namespace krkr::log {
       std::uint64_t GetFrame() const;
 
       std::size_t Drain(char *out, std::size_t capacity);
+
+      // 调试观察点：非空时每条日志额外产生一条 log.line 事件。
+      void SetDebugSink(krkr::debug::IDebugSink *sink);
 
       // 取最近若干条完整日志行（不消耗环形缓冲），供脚本侧 Debug.getLastLog 使用。
       std::string GetRecentLines(std::size_t maxLines) const;
