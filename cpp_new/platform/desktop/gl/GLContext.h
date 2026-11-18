@@ -1,31 +1,27 @@
 #pragma once
 
-#include "core/contracts/GLApi.h"
+#include "core/contracts/IGLContext.h"
 
 namespace krkr::platform {
   // 桌面 GL（Windows/WGL）上下文：隐藏窗口 + OpenGL 3.3 core。
   //
-  // 只服务 8b 的验证：给 GLBackend 一个可渲染的上下文与函数指针表。
-  // 8c 的 Android 侧换成 EGL，接口（上下文 + GLApi）保持不变。
-  class GLContext final {
+  // 服务 8b 的验证：给 GLBackend 一个可渲染的上下文与函数指针表。
+  // Android 侧是 EGLContext，两者都实现 krkr::render::IGLContext。
+  class GLContext final : public krkr::render::IGLContext {
     public:
       GLContext(int width, int height);
-      ~GLContext();
+      ~GLContext() override;
 
       GLContext(const GLContext &) = delete;
       GLContext &operator = (const GLContext &) = delete;
 
-      bool IsValid() const;
-      const char *GetLastErrorText() const { return lastError_; }
+      bool IsValid() const override;
+      int GetWidth() const override { return width_; }
+      int GetHeight() const override { return height_; }
 
-      // 载入入口点到 api；返回 false 表示驱动/上下文不完整。
-      bool LoadApi(krkr::render::GLApi &api);
-
-      bool MakeCurrent();
-      bool SwapBuffers();
-
-      int GetWidth() const { return width_; }
-      int GetHeight() const { return height_; }
+      bool LoadApi(krkr::render::GLApi &api) override;
+      bool MakeCurrent() override;
+      bool SwapBuffers() override;
 
     private:
       class Impl;

@@ -101,7 +101,11 @@ if(WIN32)
     platform/desktop/gl/GLContext.cpp)
   target_link_libraries(krkr_platform PRIVATE opengl32)
 elseif(ANDROID)
-  target_sources(krkr_platform PRIVATE platform/android/AndroidTarget.cpp)
+  target_sources(krkr_platform PRIVATE
+    platform/android/AndroidTarget.cpp
+    platform/android/AndroidGLContext.cpp
+    platform/android/AndroidSurface.cpp)
+  target_link_libraries(krkr_platform PRIVATE EGL GLESv3 android log)
 endif()
 
 # -----------------------------------------------------------------------------

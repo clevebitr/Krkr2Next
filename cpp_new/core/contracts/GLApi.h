@@ -119,6 +119,55 @@ namespace krkr::render {
     GLenum (*CheckFramebufferStatus)(GLenum) = nullptr;
     void (*DeleteFramebuffers)(GLsizei, const GLuint *) = nullptr;
 
+
+// 需要装载的入口点清单：平台各自的 loader 用这个宏展开，避免两边漏项。
+#define KRKR_GL_FUNCTION_LIST(X) \
+  X(ClearColor, "glClearColor") \
+  X(Clear, "glClear") \
+  X(Viewport, "glViewport") \
+  X(Enable, "glEnable") \
+  X(Disable, "glDisable") \
+  X(Scissor, "glScissor") \
+  X(BlendFuncSeparate, "glBlendFuncSeparate") \
+  X(BlendEquation, "glBlendEquation") \
+  X(GetError, "glGetError") \
+  X(PixelStorei, "glPixelStorei") \
+  X(ReadPixels, "glReadPixels") \
+  X(GenTextures, "glGenTextures") \
+  X(DeleteTextures, "glDeleteTextures") \
+  X(BindTexture, "glBindTexture") \
+  X(TexParameteri, "glTexParameteri") \
+  X(TexImage2D, "glTexImage2D") \
+  X(ActiveTexture, "glActiveTexture") \
+  X(GenVertexArrays, "glGenVertexArrays") \
+  X(BindVertexArray, "glBindVertexArray") \
+  X(GenBuffers, "glGenBuffers") \
+  X(BindBuffer, "glBindBuffer") \
+  X(BufferData, "glBufferData") \
+  X(EnableVertexAttribArray, "glEnableVertexAttribArray") \
+  X(VertexAttribPointer, "glVertexAttribPointer") \
+  X(DrawArrays, "glDrawArrays") \
+  X(CreateShader, "glCreateShader") \
+  X(ShaderSource, "glShaderSource") \
+  X(CompileShader, "glCompileShader") \
+  X(GetShaderiv, "glGetShaderiv") \
+  X(GetShaderInfoLog, "glGetShaderInfoLog") \
+  X(DeleteShader, "glDeleteShader") \
+  X(CreateProgram, "glCreateProgram") \
+  X(AttachShader, "glAttachShader") \
+  X(LinkProgram, "glLinkProgram") \
+  X(GetProgramiv, "glGetProgramiv") \
+  X(GetProgramInfoLog, "glGetProgramInfoLog") \
+  X(UseProgram, "glUseProgram") \
+  X(GetUniformLocation, "glGetUniformLocation") \
+  X(Uniform1i, "glUniform1i") \
+  X(Uniform1f, "glUniform1f") \
+  X(Uniform4f, "glUniform4f") \
+  X(GenFramebuffers, "glGenFramebuffers") \
+  X(BindFramebuffer, "glBindFramebuffer") \
+  X(FramebufferTexture2D, "glFramebufferTexture2D") \
+  X(CheckFramebufferStatus, "glCheckFramebufferStatus") \
+  X(DeleteFramebuffers, "glDeleteFramebuffers")
     bool IsComplete() const {
       return Clear != nullptr && GenTextures != nullptr && CreateProgram != nullptr &&
              GenVertexArrays != nullptr && BindVertexArray != nullptr &&

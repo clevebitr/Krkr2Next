@@ -106,7 +106,7 @@ cpp_new/
 | 7f | **装配根与 CMake** | `engine/` 装配层、`ScriptLoader`、能力接口拆分、`CompatProfile`、CMake 目标 + CTest；产品入口与测试台共用装配 | ✅ 完成 |
 | 7h | **调试器子包** | `debugger/`：事件契约 + JSONL 录制 + `krkr_debug` 前端（D1 精简版）；断点/单步/DAP 见规格 §5、§9 | ✅ D1 完成 |
 | 7g | **`Initialize.tjs` 的运行面** | `Storages` 挂载面（`addAutoPath`、`addArchive`、`commitSavedata`…）、`System` 其余成员；当前首个缺口是 `Window`（渲染第 8 步的最小面） | ⬅ **下一步** |
-| 8 | 渲染 | 见 **`cpp_new/docs/render-spec.md`**：8a（软件后端）+ 8b（GLES3 后端，桌面 GL 逐像素对齐）完成；8c（EGL/ANativeWindow）待做 | 🔄 8c 待做 |
+| 8 | 渲染 | 见 **`cpp_new/docs/render-spec.md`**：8a 软件后端、8b GLES3 后端、8c EGL/ANativeWindow 代码完成；8c 真机一帧仍待 JNI 接线 | 🔄 8c 待真机 |
 | 9 | 输入 | 指针 / 按键 / 文本 → 脚本事件 | 待做 |
 | 10 | 音频 | 至少 WAVE + OGG | 待做 |
 | 11 | 换回去 | 用 `cpp_new` 替换 `bridge/engine_api/` 的实现，签名不变，Kotlin 不动 | 待做 |
@@ -603,6 +603,20 @@ CMake（技术债 #38）与分层一一对应：`krkr_tjs`、`krkr_tjs_host`（�
 | GL 画完什么都没有，`glDrawArrays` 无效果 | core profile 下没有绑定 VAO 是无效操作 | 后端自己持有 VAO，`Initialize` 里创建并绑定 |
 | Clang(NDK) 编不过 vendored tjs | `register`、取临时量地址、dependent base 的未限定查找、`std::binary_function` 已移除 | 前三个用编译参数，`binary_function` 在 prelude 补 libc++ 版本；`tjsHashSearch.h` 加 `this->` 记入 `tjs/VENDOR.md` #3 |
 
+### 4.25 渲染 8c：EGL 上下文与 surface 生命周期
+
+- `core/contracts/IGLContext.h`：桌面向 WGL、Android 向 EGL 各自实现，`host/engine` 只认接口。
+- `platform/android/AndroidGLContext`：`eglGetDisplay/Initialize/BindAPI(ES3)/ChooseConfig/
+  CreateWindowSurface/CreateContext(3)`，`Resize` 重建 surface；入口点用
+  `eglGetProcAddress` + `dlsym` 装载。
+- `platform/android/AndroidSurface`：`krkr_android_surface_attach/resize/detach/valid` 与
+  `GetAndroidGLContext()`，是 JNI 唯一需要认识的入口。
+- 两个平台的加载器共用 `core/contracts/GLApi.h` 的 `KRKR_GL_FUNCTION_LIST` X-macro，
+  新增入口点只改一处，不会一边有一边没有。
+
+验证：Android arm64 构建通过，`libkrkr_platform.a` 内含 `krkr_android_surface_attach` 与
+`GetAndroidGLContext()`；桌面 `render_gl` 仍 21/21 通过。
+
 ## 5. 已知问题 / 技术债
 
 | # | 问题 | 处理 |
@@ -658,7 +672,9 @@ CMake（技术债 #38）与分层一一对应：`krkr_tjs`、`krkr_tjs_host`（�
 | 49 | CTest 的 `real_startup` 处于 DISABLED | 与 #46 同一件事：`Window` 落地后改为启用，作为真游戏的回归闸门 |
 | 57 | GL 后端只覆盖 5 种算子 | `ltPs*` 家族 16 种按规格需软件兜底（离屏合成后再上传）；在此之前这些图层会被跳过并计数 |
 | 58 | 纹理缓存以 `Texture*` 为键，无 LRU、无句柄复用 | 8b 只验证正确性；等接入真实素材（8d/图片解码）时改成"纹理对象 + 引用计数 + LRU" |
-| 59 | Android 无 EGL/ANativeWindow，GL 后端只在桌面验证过 | 8c；`GLContext`/`GLApi` 接口保持不变，Android 侧换成 EGL + `ANativeWindow` |
+| 59 | Android 的 EGL 路径只做过编译验证 | 缺 JNI 接线（`surfaceCreated/Changed/Destroyed` → `krkr_android_surface_*`）与真机一帧；`IGLContext` 已在桌面被完整验证 |
+| 60 | `AndroidTarget`（像素路径）在 Android 上仍是显式失败 | Android 主路径走 GL；软件兜底（`ltPs*`）需要"离屏 Surface → 纹理"的桥，等 8d |
+| 61 | EGL surface 生命周期没有跨线程保护 | `AndroidSurface` 用互斥锁保护 attach/detach，但渲染线程与 UI 线程的时序需在 JNI 层按 Android 约定串行化 |
 | 54 | 8a 只支持轴对齐 + 最近邻；旋转/斜切项被跳过 | 双线性与仿射属 8b/8d；跳过会记入 `RenderStats::itemsSkipped`，不会画错 |
 | 55 | Android 呈现目标未接 ERenderTarget 到 ANativeWindow/EGL | 8c；当前 `Present` 返回 false 并记录一次原因 |
 | 56 | 没有图像解码与字体 | 8a 用程序生成的纹理验证管线；PNG 需引入 stb_image（vendored），TLG 参照 `LoadTLG.cpp` |

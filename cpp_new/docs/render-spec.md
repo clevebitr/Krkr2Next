@@ -338,6 +338,14 @@ struct DrawList { std::vector<DrawItem> items; std::uint32_t clearColor; };
 11. **SDL 的位置**：如果以后接 SDL，它是 `IRenderTarget` 的另一个实现（+ GL context provider），
     不改渲染核心；不要为了 SDL 把它的类型引进 `visual/`。
 
+### 14.2 8c 的边界
+
+- 代码侧完成：EGL 上下文、surface 生命周期接口、两个平台共用一份 GL 入口点清单
+  （`KRKR_GL_FUNCTION_LIST`，避免桌面/Android 漏项）。
+- **未完成：JNI 接线与真机验证**。`bridge/engine_api` 目前仍是老实现，`surfaceCreated /
+  surfaceChanged / surfaceDestroyed` 需要调到 `krkr_android_surface_*`；
+  在那之前 8c 只能保证"NDK 下编译通过、符号存在"。
+
 ### 14.1 当前落地（8a 第一刀）
 
 | 组成 | 位置 | 说明 |
@@ -347,9 +355,12 @@ struct DrawList { std::vector<DrawItem> items; std::uint32_t clearColor; };
 | 软件后端 | `visual/SoftwareBackend.*` | 轴对齐 + 最近邻；返回 `RenderStats`（画了多少、跳过多少） |
 | GL 后端 | `visual/GLBackend.*` | GLES3 风格（shader + VAO + 缓冲区）；5 种算子 |
 | GL 入口点表 | `core/contracts/GLApi.h` | 平台装载、visual 消费；放在 core 是因为 visual 与 platform 互不引用 |
-| GL 上下文 | `platform/desktop/gl/GLContext.*` | WGL 3.3 core + 隐藏窗口 + 函数装载；Android 换成 EGL（8c），接口不变 |
+| GL 上下文契约 | `core/contracts/IGLContext.h` | `IsValid / MakeCurrent / SwapBuffers / LoadApi`；桌面与 Android 各自实现 |
+| 桌面 GL | `platform/desktop/gl/GLContext.*` | WGL 3.3 core + 隐藏窗口 + 函数装载 |
+| Android GL | `platform/android/AndroidGLContext.*` | EGL(ES3) + `ANativeWindow`；`Resize` 重建 surface |
+| Android 表面桥 | `platform/android/AndroidSurface.*` | `krkr_android_surface_attach/resize/detach/valid` + `GetAndroidGLContext()`，供 JNI 调用 |
 | GL 验收 | `host/RenderGlProbe.cpp` | 同一 DrawList 走软件/GL 两条路，逐像素比较；无 GL 环境退出码 77 → CTest skip |
 | 呈现目标 | `platform/desktop/PpmTarget.*` | 离屏 PPM，CI 用 |
 | 窗口目标 | `platform/desktop/win32/Win32WindowTarget.*` | Win32 + GDI，`host/RenderWindow` 手工验证 |
-| Android 目标 | `platform/android/AndroidTarget.*` | 8c 前显式失败（记录一次原因）；GL 后端已能在 NDK 下编译 |
+| Android 像素目标 | `platform/android/AndroidTarget.*` | 软件路径的占位：`Present` 显式失败（Android 走 GL 路径） |
 | 断言 | `host/RenderProbe.cpp` | 原语 + DrawList 两条通道，手算期望值 |

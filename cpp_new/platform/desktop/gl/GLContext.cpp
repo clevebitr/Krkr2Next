@@ -166,55 +166,11 @@ bool GLContext::LoadApi(krkr::render::GLApi &api) {
     return address;
   };
 
-  // GL 宏赋值：每个入口点都按同一形式取出，缺任何一个都能在 IsComplete 里发现。
-#define KRKR_LOAD(field, name) api.field = reinterpret_cast<decltype(api.field)>(load(name))
-  KRKR_LOAD(ClearColor, "glClearColor");
-  KRKR_LOAD(Clear, "glClear");
-  KRKR_LOAD(Viewport, "glViewport");
-  KRKR_LOAD(Enable, "glEnable");
-  KRKR_LOAD(Disable, "glDisable");
-  KRKR_LOAD(Scissor, "glScissor");
-  KRKR_LOAD(BlendFuncSeparate, "glBlendFuncSeparate");
-  KRKR_LOAD(BlendEquation, "glBlendEquation");
-  KRKR_LOAD(GetError, "glGetError");
-  KRKR_LOAD(PixelStorei, "glPixelStorei");
-  KRKR_LOAD(ReadPixels, "glReadPixels");
-  KRKR_LOAD(GenTextures, "glGenTextures");
-  KRKR_LOAD(DeleteTextures, "glDeleteTextures");
-  KRKR_LOAD(BindTexture, "glBindTexture");
-  KRKR_LOAD(TexParameteri, "glTexParameteri");
-  KRKR_LOAD(TexImage2D, "glTexImage2D");
-  KRKR_LOAD(ActiveTexture, "glActiveTexture");
-  KRKR_LOAD(GenVertexArrays, "glGenVertexArrays");
-  KRKR_LOAD(BindVertexArray, "glBindVertexArray");
-  KRKR_LOAD(GenBuffers, "glGenBuffers");
-  KRKR_LOAD(BindBuffer, "glBindBuffer");
-  KRKR_LOAD(BufferData, "glBufferData");
-  KRKR_LOAD(EnableVertexAttribArray, "glEnableVertexAttribArray");
-  KRKR_LOAD(VertexAttribPointer, "glVertexAttribPointer");
-  KRKR_LOAD(DrawArrays, "glDrawArrays");
-  KRKR_LOAD(CreateShader, "glCreateShader");
-  KRKR_LOAD(ShaderSource, "glShaderSource");
-  KRKR_LOAD(CompileShader, "glCompileShader");
-  KRKR_LOAD(GetShaderiv, "glGetShaderiv");
-  KRKR_LOAD(GetShaderInfoLog, "glGetShaderInfoLog");
-  KRKR_LOAD(DeleteShader, "glDeleteShader");
-  KRKR_LOAD(CreateProgram, "glCreateProgram");
-  KRKR_LOAD(AttachShader, "glAttachShader");
-  KRKR_LOAD(LinkProgram, "glLinkProgram");
-  KRKR_LOAD(GetProgramiv, "glGetProgramiv");
-  KRKR_LOAD(GetProgramInfoLog, "glGetProgramInfoLog");
-  KRKR_LOAD(UseProgram, "glUseProgram");
-  KRKR_LOAD(GetUniformLocation, "glGetUniformLocation");
-  KRKR_LOAD(Uniform1i, "glUniform1i");
-  KRKR_LOAD(Uniform1f, "glUniform1f");
-  KRKR_LOAD(Uniform4f, "glUniform4f");
-  KRKR_LOAD(GenFramebuffers, "glGenFramebuffers");
-  KRKR_LOAD(BindFramebuffer, "glBindFramebuffer");
-  KRKR_LOAD(FramebufferTexture2D, "glFramebufferTexture2D");
-  KRKR_LOAD(CheckFramebufferStatus, "glCheckFramebufferStatus");
-  KRKR_LOAD(DeleteFramebuffers, "glDeleteFramebuffers");
-#undef KRKR_LOAD
+  // 入口点清单在 core/contracts/GLApi.h 的 KRKR_GL_FUNCTION_LIST 里，
+  // 桌面与 Android 的 loader 展开同一份清单，避免两边漏项。
+#define KRKR_GL_POINT(field, name)   api.field = reinterpret_cast<decltype(api.field)>(load(name));
+  KRKR_GL_FUNCTION_LIST(KRKR_GL_POINT)
+#undef KRKR_GL_POINT
 
   if (!api.IsComplete()) {
     lastError_ = "required GL entry points are missing";
