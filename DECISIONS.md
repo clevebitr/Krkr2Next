@@ -91,3 +91,17 @@ R1 覆盖：`dfMask`/`holdAlpha`/`ltAddAlpha` 语义、TLG/PNG 解码、`tTVPCom
 - `check_port_drift.py`：清单 `compat/upstream/aetherkiri_ports.json` 已在提交 `8578e07` 删除，改为「缺失即跳过（rc=2）」，`check_static.sh` 显式报告跳过项。
 - CI 仍在用的脚本一律保留（check_static/check_jni_symbols/check_port_drift/check_syntax/check_qualification/check_gl_symbols/verify_engine_so/restore_cubism_sdk/build_engine_android/patch_cubism_sdk/gen_embedded_shaders）。
 - 未跟踪的 `cpp/core/extension/krkrMsgImpl.cpp`（老树消息系统草稿，技术债 #6）**未纳入提交**，留待确认后删除。
+
+## 2026-11-18 — bridge/app 拆为 submodule，删除 krkrMsgImpl 草稿
+
+bridge/ 与 app/ 拆为独立仓库（submodule），并删除废弃草稿。
+
+- 删除 `cpp/core/extension/krkrMsgImpl.cpp`（老树消息系统搬运草稿，技术债 #6；已被 `vendor/krkrz/msg` 的生成消息表取代，从未接入构建）。
+- 拆分方式：`git subtree split -P bridge` / `-P app` 保留各自路径历史（87 / 71 个提交），各加仓库级 `.gitignore` 后推到新仓库：
+  - `https://github.com/clevebitr/Krkr2Next-bridge`（`engine_api`：C ABI + JNI 薄壳）
+  - `https://github.com/clevebitr/Krkr2Next-app`（Kotlin/Compose 宿主、Gradle 工程）
+- 父仓库改 gitlink（`.gitmodules`），并要求：子仓库改动先在子仓库提交，再回父仓库提交指针。
+- CI：两处 `actions/checkout@v4` 加 `submodules: recursive`（两个子仓库均为 public，无需 token）。
+- `build.sh`：启动前检查 `bridge/.git`、`app/.git`，缺失即提示 `git submodule update --init --recursive` 并退出 2。
+- 已知耦合（暂不解决）：`bridge/engine_api` 仍 `#include` 老树头（`../../cpp/...`），因此子仓库不能脱离父仓库布局单独构建；第 11 步切到 `cpp_new` 后这条耦合自然消失。
+- 验证：`git clone --recurse-submodules` 落地正常（`app/gradlew`、`bridge/engine_api/include/engine_api.h` 存在）；父仓库已推送到 `origin/main`（`00b44dd`）。
